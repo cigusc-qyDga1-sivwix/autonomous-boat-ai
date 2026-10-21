@@ -5,6 +5,8 @@ on:
       - '.github/workflows/wakamatsu-live-probe.yml'
       - 'scripts/probe_wakamatsu_preview.py'
   workflow_dispatch:
+  schedule:
+    - cron: '*/5 9-14 * * *'
 
 permissions:
   contents: read
@@ -22,7 +24,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          python scripts/probe_wakamatsu_preview.py | tee wakamatsu-preview-result.json
+          python scripts/probe_wakamatsu_preview.py --races 7,8,9,10,11,12 | tee wakamatsu-preview-result.json
       - name: Preserve fetched data or error for diagnosis
         if: always()
         uses: actions/upload-artifact@v4

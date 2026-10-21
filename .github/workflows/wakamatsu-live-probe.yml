@@ -1,0 +1,33 @@
+name: Wakamatsu Live Exhibition Probe
+on:
+  push:
+    paths:
+      - '.github/workflows/wakamatsu-live-probe.yml'
+      - 'scripts/probe_wakamatsu_preview.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Fetch current Wakamatsu exhibition source
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/probe_wakamatsu_preview.py | tee wakamatsu-preview-result.json
+      - name: Preserve fetched data or error for diagnosis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wakamatsu-preview-probe
+          path: wakamatsu-preview-result.json
+          if-no-files-found: warn
+          retention-days: 7

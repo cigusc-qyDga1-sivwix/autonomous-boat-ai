@@ -82,3 +82,21 @@ GitHub Actionsのcronには実行遅延があり、毎レースの締切10分前
 - BOATERSの利用規約 第8条(3)(5) は用途制限とスクレイピング等による取得禁止を規定しているため、**ボタン押下を起点とした自動収集も行わない**。外部提供データの再利用が必要なときは、BOATERS運営会社から明示的な使用許可・データAPI利用条件を得てから、承認された連携方式を別途実装する。
 - 関連コード: app/boaters-reference.js, app/boaters-reference.css。テスト: app/tests/boaters-reference.test.js。
 - 規約: https://boaters-boatrace.com/info/terms
+
+
+## v1.5 展示をチェック → 展開を再評価 → 試験3連単8点（2026-10-22）
+
+このバージョンで **「BOATERSとBOAT LABの予想比較」ではなく「外部の展示指標を参考にBOAT LABの予想ロジックを改善する」** ワークフローへ方向転換。
+
+1. 場・レースの予想詳細で「BOATERSの展示項目を見る」リンクを開く（本人の操作による通常のウェブ閲覧のみ、ページ内容はコピー/自動収集しない）。
+2. 「展開を再評価する」→「取得済みデータで再予想（8点）」を押すと、**BOAT LABが独立に取得した**全国勝率・平均ST・モーター連対率・コース・展示タイム/展示STの有効項目から、条件付き3連単8点/仮想50,000円を再計算。
+3. 競艇場公式など、利用条件を確認した**権利上利用可能な独立データ**があれば、1周・回り足・直線タイムを6艇分入力して追加補正できる。6艇が揃わない項目は計算に使わない。BOATERSからの手動一括転記/転載やスクレイピングを認める仕組みではない。
+4. 勝ち筋は「先マイ／差し／まくり差し」などの試験シナリオ別。1着艇の選定に応じて2着・3着を条件付きで再評価する。ただし統計モデルは**未訓練・未校正**で、実際の確率や優位性を示さない。
+5. この端末内の試算は正式な発走前固定予想・GitHub保存記録・公式照合収支を変更しない。締切後の試算は「事後シミュレーション」と明記する。
+6. BOATERSの元の展示指標の多くは各競艇場の公式発表に由来するが、**現時点でBOATERSからアプリへ直接取り込んではいない**。自動連携にはBOATERS運営の明示的な許諾が必要。今後は競艇場公式等の許可された取得方法とデータの取得時刻の固定を検証する。
+
+実装: app/forecast-reanalysis.js、app/forecast-reanalysis.css。
+テスト: app/tests/forecast-reanalysis.test.js、app/tests/boaters-reference.test.js。
+
+参考: BOATERS独自展示の説明 https://boaters-boatrace.com/guide/original-exhibition-data
+利用規約 https://boaters-boatrace.com/info/terms

@@ -137,6 +137,42 @@
     const filtered=allRaces().filter(r=>(state.venue==='全場'||r.venue===state.venue)&&(state.classification==='ALL'||r.classification===state.classification));
     return `${head('レース・買い目',`${dateDisplay(data.event_date)} / ${data.mode==='auto-live'?'全国の発走前固定済み予想':'保存済み予想'} / 各Rの仮想5万円配分`)}<div class="filter-bar"><div class="segmented">${['ALL','WATCH','SKIP'].map(v=>`<button data-filter-status="${v}" class="${state.classification===v?'active':''}">${v==='ALL'?'すべて':v}</button>`).join('')}</div>${venueSelect(state.venue)}</div><div class="race-grid">${filtered.map(tile).join('')||'<div class="no-data">該当するレースはありません</div>'}</div>${data.mode==='auto-live'&&data.unforecast_races?.length?`<div class="notice warn">${data.unforecast_races.length}Rは締切前の予想を固定できなかったため、買い目を表示しません。結果を見てから予想を追加することもありません。</div>`:''}<p class="footer-disclaimer">BUYが0件なのは、オッズによる採算チェックを完了していないため。SKIPレースも研究目的で予想を保持しています。</p>`;
   }
+  function raceWeatherHTML(r) {
+    const actual=r.weather_used||(r.weather_observed?.wind_speed!=null?
+      {...r.weather_observed,source:'boatrace_preview',site_observed:true,
+       source_label:'展示時の場内観測（非公式API経由）'}:null);
+    const selected=actual||(data.venue_weather||{})[r.venue];
+    if(!selected)return '<p class="muted text-sm">気象情報未取得。風・波による補正は行っていません。</p>';
+    const frozen=!!actual;
+    const observed=!!selected.site_observed;
+    const source=observed?'場内展示時の観測（非公式API経由）':
+      frozen?'発走前に取得した周辺気象予報':'現在の周辺気象予報（発走前予想には未反映）';
+    const wind=selected.wind_speed!=null?escape(selected.wind_speed)+'m/s':'未取得';
+    const dir=selected.wind_direction_degrees!=null?escape(selected.wind_direction_degrees)+'°':selected.wind_direction_number!=null?'方向コード'+escape(selected.wind_direction_number):'未取得';
+    const gust=selected.wind_gust!=null?escape(selected.wind_gust)+'m/s':'—';
+    const wave=selected.wave_height!=null?escape(selected.wave_height)+'cm':'未取得';
+    const temp=selected.air_temperature!=null?escape(selected.air_temperature)+'℃':'—';
+    const rain=selected.precipitation_mm!=null?escape(selected.precipitation_mm)+'mm/h':'—';
+    const adjusted=r.weather_adjustment;
+    const status=!frozen?'この気象データは既存の固定予想を変えていません。':
+      adjusted?.applied?'気象による不確実性補正を試験的に適用しました。':'通常条件または旧モデルのため、気象による重みの変更はありません。';
+    const issued=selected.issued_at_utc?formatJst(selected.issued_at_utc):'';
+    const time=selected.forecast_hour_jst?selected.forecast_hour_jst.slice(11,16)+' JST':'';
+    return `<div class="race-weather-detail">
+      <div class="race-weather-kind"><strong>🌦 ${escape(source)}</strong><span>${escape(time)}</span></div>
+      <div class="race-weather-values">
+        <span><b>🌬 ${wind}</b><small>風速</small></span>
+        <span><b>${dir}</b><small>風向</small></span>
+        <span><b>${gust}</b><small>突風</small></span>
+        <span><b>🌊 ${wave}</b><small>波高</small></span>
+        <span><b>${temp}</b><small>気温</small></span>
+        <span><b>${rain}</b><small>降水量</small></span>
+      </div>
+      <p>${escape(status)} ${escape(adjusted?.why||'')} ${issued?'（予報取得 '+escape(issued)+'）':''}</p>
+      <p class="race-weather-caution">${observed?'場内観測は展示時点の値であり、レース本番時の実測を保証しません。':'周辺予報は会場水面の現地実測ではありません。風向とコース有利不利の関係は未校正です。'}
+      ${selected.source==='open-meteo'?'<a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Weather data by Open-Meteo.com (CC BY 4.0) ↗</a>':''}</p>
+    </div>`;
+  }
   function detail(r) {
     const w=weatherFor(r.venue,r.cutoff_jst),c=compute(r);
     const external=window.BoatExternalReference;
@@ -168,7 +204,7 @@
     ${r.point_reason?`<div class="notice"><strong>点数を選んだ理由：</strong>${escape(r.point_reason)} ／ ${r.bets.length}点。これは未校正の相対指標で、実測的中確率ではありません。</div>`:''}
     <div class="detail-grid"><section class="card card-pad"><div class="section-head"><h2 class="section-title">3連単フォーメーション</h2>${pill(`${r.bets.length}点 / 仮想`,'pending')}</div><div class="feature-card"><span class="feature-label">SCENARIO / 展開の中心</span><strong>${escape(r.scenario)}</strong><p>着順連動型の仮説。1着の勝ち筋と2・3着の残り方を検証する。</p></div><table class="bets-table"><thead><tr><th>評価</th><th>3連単</th><th>仮想金額</th></tr></thead><tbody>${r.bets.map((b,i)=>`<tr class="${i<3?'top-bet':''}"><td>${i<3?'本線':i<6?'対抗':'穴'}</td><td>${escape(b.combination)}</td><td class="amount">${money(b.virtual_yen)}</td></tr>`).join('')}</tbody></table><div class="detail-total"><span>合計 / ${r.bets.length}点</span><strong>${money(c.stake)}</strong></div><div class="notice warn">実際の購入は0円。${r.phase==='exhibition'?'展示は取得時点の値を反映。':'展示は未反映。'} オッズは未反映。この金額は精度比較用の仮想配分です。</div></section>
     <div><section class="card card-pad bottom-margin"><h3>レース情報</h3><div class="meta-list"><div class="meta"><span>開催</span><b>${escape(r.venue)}</b></div><div class="meta"><span>対象日</span><b>${dateDisplay(data.event_date)}</b></div><div class="meta"><span>締切予定</span><b>${escape(r.cutoff_jst)} JST</b></div><div class="meta"><span>予想区分</span><b>${escape(r.classification)}</b></div><div class="meta"><span>展示データ</span><b>${r.phase==='exhibition'?'反映済み（非公式）':'未反映'}</b></div><div class="meta"><span>オッズ</span><b>未反映</b></div></div></section>
-    <section class="card card-pad bottom-margin"><h3>気象補正メモ</h3>${w?`<div class="weather-box"><div class="weather-symbol">≋</div><div class="weather-body"><strong>${escape(w.wind)}</strong><p>${escape(w.note)}</p></div></div>`:'<p class="muted text-sm">気象見通し未登録</p>'}<p class="help">${data.mode==='auto-live'?'展示時点に場内で取得された非公式気象データがある場合のみ表示。展示前の時間別予報はまだ未接続。':'同じ時間帯の周辺予報を参照。予報の風向はレース水面の風向と一致するとは限りません。'}</p></section>
+    <section class="card card-pad bottom-margin"><h3>🌦 レース気象と試験補正</h3>${data.mode==='auto-live'?raceWeatherHTML(r):(w?`<div class="weather-box"><div class="weather-symbol">≋</div><div class="weather-body"><strong>${escape(w.wind)}</strong><p>${escape(w.note)}</p></div></div>`:'<p class="muted text-sm">気象見通し未登録</p>')}</section>
     <section class="card card-pad"><h3>結果照合</h3><div class="meta-list"><div class="meta"><span>現在の状態</span>${finishPill(r)}</div>${c.record?`<div class="meta"><span>${officialFor(r)?'公式確定着順':'手入力着順'}</span><b>${escape(c.record.finish)}</b></div><div class="meta"><span>仮想払戻</span><b>${money(c.payout)}</b></div>`:''}</div><button class="btn btn-soft" style="width:100%;margin-top:15px" data-action="settle-this" data-race="${escape(r.venue)}|${r.race}">照合する →</button></section></div></div>`;
   }
   function formatJst(iso) {

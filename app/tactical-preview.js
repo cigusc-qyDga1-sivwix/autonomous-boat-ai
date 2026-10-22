@@ -26,6 +26,7 @@ function defaults(r){
  const courses=racers.map((x,i)=>Number(x.course??x.entry_course??i+1));
  const permutation=new Set(courses).size===6&&courses.every(x=>Number.isInteger(x)&&x>=1&&x<=6);
  const wind=r.weather_used||r.weather_observed||{};
+ const venue=window.BoatVenueGeometry?.get(r.venue);
  return {
   boats:racers.map((x,i)=>{
    const c=permutation?courses[i]:i+1;
@@ -34,9 +35,11 @@ function defaults(r){
     st:courseAverage(x,c)};
   }),
   wind:n(wind.wind_speed),wave:n(wind.wave_height),relativeWind:'unknown',
+  startWidthM:venue?.startWidthM??null,turn1WidthM:venue?.turn1WidthM??null,
   source:permutation&&r.phase==='exhibition'?'展示時の進入':'枠番または取得済み進入'
  };
 }
+function validWidth(value){const v=n(value);return v!==null&&v>=20&&v<=100;}
 function normalise(cfg){
  if(!cfg||!Array.isArray(cfg.boats)||cfg.boats.length!==6)return null;
  const courses=cfg.boats.map(b=>Number(b.course));
@@ -46,6 +49,8 @@ function normalise(cfg){
   kind:kinds.some(k=>k[0]===b.kind)?b.kind:'follow',
   st:validST(b.st)?Number(b.st):null})),
   wind:n(cfg.wind),wave:n(cfg.wave),
+  startWidthM:validWidth(cfg.startWidthM)?Number(cfg.startWidthM):null,
+  turn1WidthM:validWidth(cfg.turn1WidthM)?Number(cfg.turn1WidthM):null,
   relativeWind:['unknown','head','tail','cross'].includes(cfg.relativeWind)?cfg.relativeWind:'unknown',
   source:String(cfg.source||'手動設定').slice(0,60)};
 }
@@ -73,11 +78,13 @@ function analyze(r,config){
  const rank={};sorted.forEach((b,i)=>{rank[b.lane]=i+1;});
  const wind=clamp(cfg.wind??0,0,30),wave=clamp(cfg.wave??0,0,50);
  const uncertainty=clamp((wind/7+wave/14)/2,0,1);
- return {cfg,boats,rank,order:sorted.map(b=>b.lane),
+ const geometry=window.BoatVenueGeometry?.layout({venue:r.venue,startWidthM:cfg.startWidthM,turn1WidthM:cfg.turn1WidthM})||
+   {available:false,markY:182,narrowingPx:0,quality:'unavailable',note:'水面形状未取得'};
+ return {cfg,boats,rank,order:sorted.map(b=>b.lane),geometry,
    uncertainty,wind,wave,
    summary:'試算バック隊形 '+sorted.slice(0,3).map(b=>b.lane).join('-')+
       ' ／ スタート先行想定 '+[...boats].sort((a,b)=>a.st-b.st)[0].lane+'号艇',
-   note:'風・波は旋回の膨らみと不確実性の表現に反映。風向と艇番の有利不利は未校正のため勝手に断定しません。'
+   note:'風・波は旋回の膨らみと不確実性の表現に反映。会場別1マーク配置は模式的で、勝率への補正は未校正です。'
  };
 }
 function trajectory(b,rank,plan){
@@ -86,14 +93,16 @@ function trajectory(b,rank,plan){
  const startY=147+c*18;
  const outer=(b.kind==='makuri'?45:b.kind==='makuri-zashi'?24:b.kind==='sashi'?-20:b.kind==='escape'?-31:0);
  const directional=plan.cfg.relativeWind==='cross'?plan.wind*.9:plan.cfg.relativeWind==='tail'?plan.wind*.4:plan.cfg.relativeWind==='head'?-plan.wind*.4:0;
- const xTurn=542+outer+plan.uncertainty*12+directional;
- const yTurn=170+outer*.3+plan.uncertainty*20+(plan.cfg.relativeWind==='cross'?plan.wind*.4:0);
+ const narrowed=plan.geometry?.narrowingPx||0;
+ const xTurn=542+outer+plan.uncertainty*12+directional+narrowed*.18;
+ const yTurn=(plan.geometry?.markY??182)-12+outer*.3+plan.uncertainty*20+
+   (plan.cfg.relativeWind==='cross'?plan.wind*.4:0);
  const leadX=435+clamp((.17-b.st)*380,-30,30);
  const backY=36+rank*24;
  const exitX=210+rank*11;
  return 'M'+startX+' '+startY+
- ' C'+(startX+110)+' '+(startY-5)+' '+leadX+' '+(startY-2)+' 470 '+(177+c*9)+
- ' C525 '+(175+c*8)+' '+(xTurn+6)+' '+(yTurn+30)+' '+xTurn+' '+yTurn+
+ ' C'+(startX+110)+' '+(startY-5)+' '+leadX+' '+(startY-2)+' 470 '+(177+c*9+narrowed*.38)+
+ ' C525 '+(175+c*8+narrowed*.38)+' '+(xTurn+6)+' '+(yTurn+30)+' '+xTurn+' '+yTurn+
  ' C'+(xTurn-16)+' '+(yTurn-63)+' 463 '+(backY+12)+' 426 '+backY+
  ' C357 '+backY+' 280 '+backY+' '+exitX+' '+backY;
 }
@@ -109,7 +118,11 @@ function drawControls(r,plan){
    '<label>進入別ST<input data-plan-st="'+b.lane+'" inputmode="decimal" type="number" min=".01" max=".40" step=".01" value="'+(b.st===null?'':b.st.toFixed(2))+'" placeholder="未取得"></label>'+
    '<label>攻め方<select data-plan-kind="'+b.lane+'">'+kinds.map(k=>'<option value="'+k[0]+'"'+(k[0]===b.kind?' selected':'')+'>'+k[1]+'</option>').join('')+'</select></label></div>';
  }
- html+='</div><div class="plan-environment">'+input('wind','風速（m/s）',plan.cfg.wind,0,30,.1)+input('wave','波高（cm）',plan.cfg.wave,0,50,1)+
+ html+='</div><div class="plan-venue-header">🌊 '+esc(r.venue||'会場未取得')+'の1マーク水面幅：'+esc(plan.geometry.available?'自動参考配置':'未取得')+
+  ' <small>'+(plan.geometry.quality==='official_text_crosschecked'?'公式テキスト照合':'暫定値・要公式確認')+'</small></div>'+
+  '<div class="plan-environment">'+input('startWidthM','スタート地点のスタンド側幅（m）',plan.cfg.startWidthM,20,100,.1)+
+  input('turn1WidthM','1マークのスタンド側幅（m）',plan.cfg.turn1WidthM,20,100,.1)+
+  input('wind','風速（m/s）',plan.cfg.wind,0,30,.1)+input('wave','波高（cm）',plan.cfg.wave,0,50,1)+
  '<label>水面に対する風<select data-plan-env="relativeWind">'+[
  ['unknown','向き未判定'],['head','向かい風'],['tail','追い風'],['cross','横風']
  ].map(a=>'<option value="'+a[0]+'"'+(plan.cfg.relativeWind===a[0]?' selected':'')+'>'+a[1]+'</option>').join('')+'</select></label></div>';
@@ -122,8 +135,8 @@ function svgHTML(r,plan){
  '<text x="83" y="295" fill="#c4ebf2" font-size="12">START</text>'+
  '<path d="M175 30H454" stroke="#7abed0" stroke-dasharray="9 5" fill="none"/>'+
  '<text x="290" y="20" fill="#bdeaf4" font-size="13">← BACK</text>'+
- '<circle cx="560" cy="182" r="10" fill="#ffae37" stroke="#fff2b8" stroke-width="2"/>'+
- '<text x="585" y="179" fill="#ffc77d" font-size="13">1M</text>'+
+ '<circle cx="560" cy="'+plan.geometry.markY+'" r="10" fill="#ffae37" stroke="#fff2b8" stroke-width="2" data-plan-mark="1"/>'+
+ '<text x="585" y="'+(plan.geometry.markY-3)+'" fill="#ffc77d" font-size="13" data-plan-mark-label="1">1M</text>'+
  '<text x="16" y="30" fill="#bdeaf4" font-size="10">TACTICAL VIEW / EXPERIMENT</text>';
  for(const b of plan.boats)s+='<path data-plan-path="'+b.lane+'" d="'+trajectory(b,plan.rank[b.lane],plan)+'" fill="none" stroke="transparent"/>';
  for(const b of plan.boats)s+='<g data-plan-boat="'+b.lane+'"><path d="M-21 -5 L-32 0 L-21 5" stroke="'+color[b.lane-1]+'" stroke-width="2" fill="none"/>'+
@@ -177,6 +190,9 @@ function mount(root,r){
   card.querySelector('[data-plan-result]').textContent=plan.summary;
   card.querySelector('[data-plan-story]').textContent=plan.note+' ST：'+plan.boats.map(b=>b.lane+'号艇 '+b.st.toFixed(2)+' ['+b.origin+']').join(' / ');
   plan.boats.forEach(b=>paths[b.lane].setAttribute('d',trajectory(b,plan.rank[b.lane],plan)));
+  const mark=svg.querySelector('[data-plan-mark="1"]'),label=svg.querySelector('[data-plan-mark-label="1"]');
+  if(mark)mark.setAttribute('cy',String(plan.geometry.markY));
+  if(label)label.setAttribute('y',String(plan.geometry.markY-3));
   paint();
  }
  function paint(){
@@ -209,8 +225,9 @@ function mount(root,r){
   if(env){
    if(env==='relativeWind')state.cfg.relativeWind=node.value;
    else{
-    const v=n(node.value),limit=env==='wind'?30:50;
-    if(v!==null&&(v<0||v>limit))return;
+    const v=n(node.value),limit=env==='wind'?30:env==='wave'?50:100;
+    const minimum=(env==='startWidthM'||env==='turn1WidthM')?20:0;
+    if(v!==null&&(v<minimum||v>limit))return;
     state.cfg[env]=v;
    }
   }else if(which){

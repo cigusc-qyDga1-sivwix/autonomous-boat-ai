@@ -7,7 +7,7 @@ import pytest
 
 from scripts.venue_weather import VENUE_POINTS, VARIABLES, parse_batch, weather_at
 from scripts.autonomous_daily import (build, prediction, condition_weights,
-                                      preview_complete, weather_for_prediction)
+                                      preview_complete, weather_for_prediction, integrate_official)
 
 JST = ZoneInfo("Asia/Tokyo")
 CLOCK = datetime(2026, 10, 22, 8, 30, tzinfo=JST)
@@ -80,6 +80,9 @@ def test_weather_is_reflected_in_early_baseline_without_exhibition():
     assert snap["weather_used"]["wind_speed"] == 7.0
     assert snap["weather_adjustment"]["applied"] is True
     assert snap["weather_adjustment"]["uncertainty_exponent"] < 1
+    assert snap["weather_ab"]["generated_pre_cutoff"] is True
+    assert 4 <= len(snap["weather_ab"]["control_bets"]) <= 12
+    assert sum(b["virtual_yen"] for b in snap["weather_ab"]["control_bets"]) == 50000
     assert snap["point_reason"].find("気象補正試験") >= 0
     assert display["weather_venue_count"]==1
     assert display["forecast_races"][0]["weather_used"]["site_observed"] is False
@@ -137,3 +140,51 @@ def test_no_backfilled_weather_after_cutoff():
     assert frozen["race_records"]["18-1"]["versions"][0]==historic
     assert ui["forecast_races"][0]["weather_used"] is None
     assert ui["forecast_races"][0]["weather_adjustment"]["applied"] is False
+
+
+
+def test_official_settlement_scores_weather_and_control_only_from_frozen_snapshot():
+    weather=parse_batch(forecast_payload("18"),["18"],CLOCK)
+    race=synthetic_race()
+    ledger,view,_=build(None,{"programs":{"stadiums":{
+        "18":{"races":{"1":race}},
+    }}},CLOCK,"fixture",weather)
+    original=deepcopy(ledger["race_records"]["18-1"]["versions"][0])
+    winning=original["bets"][0]["combination"]
+    official={
+        "date":"2026-10-22",
+        "results":{"18-1":{"finish":winning,"payout_per_100":1350}},
+        "reviews":{}, "cancellations":{},
+        "source_url":"https://www.boatrace.jp/owpc/pc/race/pay?hd=20261022",
+        "retrieved_at_utc":"2026-10-22T02:30:00+00:00",
+    }
+    finished=integrate_official(
+        ledger,view,official,datetime(2026,10,22,11,30,tzinfo=JST))
+    comparison=finished["official_results"]["2026-10-22|徳山|1"]["weather_comparison"]
+    assert comparison["source"]=="pre_cutoff_shadow_frozen"
+    assert comparison["weather_hit"] is True
+    assert comparison["weather_payout"]>0
+    assert comparison["weather_minus_control_yen"] == (
+        comparison["weather_payout"]-comparison["control_payout"])
+    assert finished["weather_backtest"]["races"]==1
+    assert finished["weather_backtest"]["weather_hits"]==1
+    assert ledger["race_records"]["18-1"]["versions"][0]==original
+
+
+def test_old_snapshot_has_no_retroactive_weather_ab_evaluation():
+    ledger,view,_=build(None,{"programs":{"stadiums":{
+        "18":{"races":{"1":synthetic_race()}},
+    }}},CLOCK,"fixture")
+    key="18-1"
+    # Simulate a pre-weather v0.3 snapshot; results must not fabricate shadow bets.
+    snap=ledger["race_records"][key]["versions"][0]
+    snap.pop("weather_ab",None)
+    pay={"date":"2026-10-22",
+         "results":{key:{"finish":"1-2-3","payout_per_100":1520}},
+         "reviews":{},"cancellations":{},
+         "source_url":"https://www.boatrace.jp/owpc/pc/race/pay?hd=20261022",
+         "retrieved_at_utc":"2026-10-22T02:30:00+00:00"}
+    integrated=integrate_official(
+        ledger,view,pay,datetime(2026,10,22,11,30,tzinfo=JST))
+    assert integrated["weather_backtest"]["races"]==0
+    assert integrated["official_results"]["2026-10-22|徳山|1"]["weather_comparison"] is None

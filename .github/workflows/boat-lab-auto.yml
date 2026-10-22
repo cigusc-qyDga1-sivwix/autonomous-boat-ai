@@ -46,6 +46,10 @@ jobs:
           git add app/data/live/
           if ! git diff --cached --quiet; then
             git commit -m 'data: automatic nationwide forecast snapshots and results'
+            # Human edits or a new workflow commit may have landed since checkout.
+            # Replay our data-only commit on top of the latest default branch.
+            git fetch origin main
+            git rebase origin/main
             git push origin HEAD:main
           fi
       - name: Configure Pages

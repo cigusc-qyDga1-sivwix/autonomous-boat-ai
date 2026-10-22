@@ -19,6 +19,9 @@
   let results = {};
   let autoResults = {};
   let lastLiveUpdate = '';
+  let resultsRefreshBusy = false;
+  let resultsRefreshNotice = '';
+  let resultsRefreshIsError = false;
   let favorites = [];
   let toastTimer = null;
 
@@ -168,9 +171,39 @@
     <section class="card card-pad bottom-margin"><h3>気象補正メモ</h3>${w?`<div class="weather-box"><div class="weather-symbol">≋</div><div class="weather-body"><strong>${escape(w.wind)}</strong><p>${escape(w.note)}</p></div></div>`:'<p class="muted text-sm">気象見通し未登録</p>'}<p class="help">${data.mode==='auto-live'?'展示時点に場内で取得された非公式気象データがある場合のみ表示。展示前の時間別予報はまだ未接続。':'同じ時間帯の周辺予報を参照。予報の風向はレース水面の風向と一致するとは限りません。'}</p></section>
     <section class="card card-pad"><h3>結果照合</h3><div class="meta-list"><div class="meta"><span>現在の状態</span>${finishPill(r)}</div>${c.record?`<div class="meta"><span>${officialFor(r)?'公式確定着順':'手入力着順'}</span><b>${escape(c.record.finish)}</b></div><div class="meta"><span>仮想払戻</span><b>${money(c.payout)}</b></div>`:''}</div><button class="btn btn-soft" style="width:100%;margin-top:15px" data-action="settle-this" data-race="${escape(r.venue)}|${r.race}">照合する →</button></section></div></div>`;
   }
+  function formatJst(iso) {
+    if(!iso)return '未確認';
+    const d=new Date(iso);
+    if(Number.isNaN(d.getTime()))return '未確認';
+    return d.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',
+      hour:'2-digit',minute:'2-digit',hour12:false})+' JST';
+  }
+  function resultsRefreshControl() {
+    const imported=!!readJSON(STORE_DATA,null);
+    const published=data?.updated_at_utc?formatJst(data.updated_at_utc):'未取得';
+    const official=data?.official_pay_info;
+    const officialAt=official?.retrieved_at_utc?formatJst(official.retrieved_at_utc):'未確認';
+    const failed=official?.source_status==='FETCH_FAILED';
+    const message=resultsRefreshNotice||(imported?
+      '手動インポート中です。自動照合に戻すにはデータ管理で「元の予想に戻す」を選んでね。':
+      'ボタンを押すと最新の公開済み公式照合データを再読み込みします。');
+    return `<div class="results-refresh" aria-label="公式結果の更新">
+      <div class="results-refresh-main">
+        <div class="results-refresh-copy"><strong>🔄 公式結果をチェック</strong>
+          <span>公開データ更新 ${escape(published)} ／ 公式ページ確認 ${escape(officialAt)}</span></div>
+        <button type="button" class="btn btn-primary results-refresh-button"
+          data-action="refresh-official-results" ${resultsRefreshBusy?'disabled aria-busy="true"':''}>
+          ${resultsRefreshBusy?'⏳ 更新を確認中…':'↻ 結果を更新'}
+        </button>
+      </div>
+      <p class="results-refresh-status ${resultsRefreshIsError?'is-error':''}" role="status" aria-live="polite">${escape(resultsRefreshBusy?'最新の公開データを取得しています…':message)}</p>
+      ${failed?'<p class="results-refresh-hint">直近の自動収集では公式サイトへのアクセスに失敗しています。未確認レースは的中・不的中として計上しません。</p>':''}
+      <p class="results-refresh-hint">結果はサーバー側の定期収集で更新されます。このボタンは最新の公開済み結果を再読み込みします。公式サイトへの即時取得を開始するものではありません。</p>
+    </div>`;
+  }
   function resultsPage() {
     const races=allRaces();
-    if(!races.length)return head('結果照合','発走前に保存した予想のみ結果と照合します')+'<div class="no-data">予想データがまだありません。次の取得結果を確認してください。</div>';
+    if(!races.length)return head('結果照合','発走前に保存した予想のみ結果と照合します')+resultsRefreshControl()+'<div class="no-data">予想データがまだありません。次の取得結果を確認してください。</div>';
     const r=findRace(state.resultVenue,state.resultRace)||races[0];
     const c=compute(r),settled=races.filter(x=>!!recordFor(x));
     const live=data.mode==='auto-live', verified=officialStats(races);
@@ -184,7 +217,7 @@
     }).join('')}</div>`:'<div class="no-data">未照合です。公式払戻が掲載されると自動反映されます。</div>';
     const selected=state.resultVenue, raceSelect=state.resultRace;
     const form=`<form id="result-form" class="result-form"><div class="form-row"><div class="field"><label for="result-venue">競艇場</label><select id="result-venue" class="select input">${getVenues().map(v=>`<option value="${escape(v)}" ${selected===v?'selected':''}>${escape(v)}</option>`).join('')}</select></div><div class="field"><label for="result-race">レース</label><select id="result-race" class="select input">${races.filter(x=>x.venue===selected).map(x=>`<option value="${x.race}" ${raceSelect===x.race?'selected':''}>${x.race}R</option>`).join('')}</select></div></div><div class="feature-card"><span class="feature-label">保存済み予想 / ${escape(r.classification)}</span><strong>${escape(r.bets.slice(0,3).map(b=>b.combination).join(' / '))}</strong><p>${escape(r.scenario)}</p></div><div class="field"><label for="finish">3連単（確定着順）</label><div class="form-row" style="gap:8px">${[0,1,2].map(i=>`<select id="finish-${i}" class="select input" style="width:calc(33.3% - 6px);min-width:0" aria-label="${i+1}着"><option value="">${i+1}着</option>${[1,2,3,4,5,6].map(n=>`<option value="${n}" ${c.record?.finish?.split('-')[i]===String(n)?'selected':''}>${n}号艇</option>`).join('')}</select>`).join('')}</div></div><div class="field"><label for="payout">3連単払戻（100円あたり）</label><input id="payout" class="input" inputmode="numeric" type="number" min="100" max="10000000" step="10" required placeholder="例：2430" value="${c.record?c.record.payout_per_100:''}"></div><p class="help">${hasOfficial?'公式結果を取得済み。手入力で変更はできません。':issue?'返還・中止・不一致があるため、手入力で収支を確定できません。':'公式結果未取得の場合だけ暫定的に手入力できます。公式照合済み成績には含みません。'}</p><button type="submit" class="btn btn-primary" ${hasOfficial||issue?'disabled':''}>${live?'暫定結果を保存':'結果を照合・保存'}</button>${results[raceKey(r)]&&!hasOfficial?'<button type="button" data-action="delete-result" class="btn btn-danger">手入力を取り消す</button>':''}</form>`;
-    return `${head('結果照合',live?'BOATRACE公式払戻から自動照合・発走前予想は変更しません':'手入力の仮想照合',pill(live?verified.count+'R 公式確認':settled.length+'R 入力済み','local'))}${header}<div class="results-layout"><section class="card card-pad"><div class="section-head"><h2 class="section-title">${live?'レース結果の確認':'結果を入力'}</h2>${pill(hasOfficial?'公式確認済み':issue?'要確認':'未確認','local')}</div>${issue?`<div class="notice warn">このレースは${escape(issue.reason||'追加確認')}。自動の仮想収支には含めません。</div>`:''}${form}</section><section class="card card-pad"><div class="section-head"><h2 class="section-title">照合履歴</h2><span class="text-xs muted">${settled.length}R</span></div>${recent}</section></div>`;
+    return `${head('結果照合',live?'BOATRACE公式払戻から自動照合・発走前予想は変更しません':'手入力の仮想照合',pill(live?verified.count+'R 公式確認':settled.length+'R 入力済み','local'))}${resultsRefreshControl()}${header}<div class="results-layout"><section class="card card-pad"><div class="section-head"><h2 class="section-title">${live?'レース結果の確認':'結果を入力'}</h2>${pill(hasOfficial?'公式確認済み':issue?'要確認':'未確認','local')}</div>${issue?`<div class="notice warn">このレースは${escape(issue.reason||'追加確認')}。自動の仮想収支には含めません。</div>`:''}${form}</section><section class="card card-pad"><div class="section-head"><h2 class="section-title">照合履歴</h2><span class="text-xs muted">${settled.length}R</span></div>${recent}</section></div>`;
   }
   function analysis() {
     const live=data.mode==='auto-live';
@@ -232,6 +265,7 @@
     const row=e.target.closest('[data-race]');if(row){const [v,n]=row.dataset.race.split('|');let r=findRace(v,n);if(!r)return;if(row.dataset.action==='settle-this'){state.resultVenue=v;state.resultRace=Number(n);go('results');return;}if(row.dataset.action==='copy-bets'){copyBets(r);return;}state.raceDetail=r;state.showExternalAnalysis=false;state.reanalysisResult=null;state.reanalysisExtras={};state.view='races';render();window.scrollTo(0,0);return;}
     const btn=e.target.closest('[data-action]');if(!btn)return;
     switch(btn.dataset.action){
+      case 'refresh-official-results':void refreshOfficialResults();break;
       case 'analyze-saved-race':state.showExternalAnalysis=!state.showExternalAnalysis;render();break;
       case 'run-reanalysis':{
         const r=state.raceDetail,engine=window.BoatReanalysis;

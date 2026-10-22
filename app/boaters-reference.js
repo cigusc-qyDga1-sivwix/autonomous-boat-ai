@@ -59,5 +59,9 @@
       ' この分析は保存済み買い目や発走前固定記録を変更しません。</div></div>';
     return html;
   }
-  window.BoatExternalReference={linkFor,analysisHTML};
+  function predictionLinkFor(venue,date,race){
+    const url=linkFor(venue,date,race);
+    return url.endsWith('/race-detail')?url.slice(0,-'/race-detail'.length)+'/race-prediction':url;
+  }
+  window.BoatExternalReference={linkFor,predictionLinkFor,analysisHTML};
 })();

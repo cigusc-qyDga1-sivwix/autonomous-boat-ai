@@ -30,6 +30,7 @@ VENUES = {
 }
 STAKES = [12000, 10000, 8000, 6000, 5000, 4000, 3000, 2000]
 COURSE = [1.75, 1.27, 1.05, 0.90, 0.79, 0.69]
+SAFE_MARGIN_SECONDS = 120  # Avoid a Git commit landing after cutoff.
 
 
 def stable_hash(value: dict) -> str:
@@ -154,8 +155,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     if phase not in ("baseline", "exhibition"):
         raise ValueError("Unknown phase")
     cutoff = cutoff_of(race)
-    if cutoff is None or now.astimezone(JST) >= cutoff:
-        raise ValueError("No new snapshots on or after cutoff")
+    if cutoff is None or now.astimezone(JST) >= cutoff - timedelta(seconds=SAFE_MARGIN_SECONDS):
+        raise ValueError("Too late to safely commit prediction before cutoff")
     if not valid_entrants(race):
         raise ValueError("Missing six confirmed entrants")
     if phase == "exhibition" and not preview_complete(race):
@@ -250,7 +251,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str) 
             if record["venue_code"] != venue_code or record["race"] != n:
                 raise ValueError("Recorded race identity mismatch")
             phases = {entry["phase"] for entry in record["versions"]}
-            if now.astimezone(JST) < cutoff and valid_entrants(race):
+            if now.astimezone(JST) < cutoff - timedelta(seconds=SAFE_MARGIN_SECONDS) and valid_entrants(race):
                 if "baseline" not in phases:
                     record["versions"].append(prediction(race, VENUES[venue_code], n,
                                                          "baseline", now, source_url))
@@ -259,7 +260,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str) 
                     record["versions"].append(prediction(race, VENUES[venue_code], n,
                                                          "exhibition", now, source_url))
                     new_exhibition += 1
-            record["payouts"] = payout_records(race) or record.get("payouts", [])
+            if now.astimezone(JST) >= cutoff:
+                record["payouts"] = payout_records(race) or record.get("payouts", [])
     # Preserve previous records even if a subsequent source request is incomplete.
     ledger["last_updated_at_utc"] = now.astimezone(UTC).isoformat()
     ledger["source_url"] = source_url

@@ -1,4 +1,4 @@
-const CACHE='boat-lab-static-v2';
+const CACHE='boat-lab-static-v3';
 const ASSETS=['./','./index.html','./styles.css','./app.js','./venue-board.js','./venue-board.css','./manifest.webmanifest','./icons/mark.svg','./icons/app-192.png','./data/2026-10-22.json'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(Promise.all([caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))),self.clients.claim()])));

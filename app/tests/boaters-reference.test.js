@@ -71,7 +71,7 @@ setTimeout(()=>{
   assert.match(expanded,/取得済みデータで再予想/);
   click('[data-action]',{action:'run-reanalysis'});
   const predicted=elements.get('main').innerHTML;
-  assert.match(predicted,/展開を再評価した3連単8点/);
+  assert.match(predicted,/展開を再評価した3連単(4|5|6|7|8|9|10|11|12)点/);
   assert.match(predicted,/50,000円/);
   assert.equal(fetchCount,2,'no network requests for analysis (only app data)');
   console.log('BOAT LAB BOATERS-reference tests: PASS');

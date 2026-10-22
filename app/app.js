@@ -146,7 +146,7 @@
     const frozen=!!actual;
     const observed=!!selected.site_observed;
     const source=observed?'場内展示時の観測（非公式API経由）':
-      frozen?'発走前に取得した周辺気象予報':'現在の周辺気象予報（発走前予想には未反映）';
+      frozen?'発走前に取得した周辺気象予報':'最新取得分の周辺気象予報（発走前予想には未反映）';
     const wind=selected.wind_speed!=null?escape(selected.wind_speed)+'m/s':'未取得';
     const dir=selected.wind_direction_degrees!=null?escape(selected.wind_direction_degrees)+'°':selected.wind_direction_number!=null?'方向コード'+escape(selected.wind_direction_number):'未取得';
     const gust=selected.wind_gust!=null?escape(selected.wind_gust)+'m/s':'—';

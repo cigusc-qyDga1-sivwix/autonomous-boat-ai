@@ -37,6 +37,9 @@ jobs:
           set -euo pipefail
           python scripts/autonomous_daily.py | tee boat-lab-daily-status.json
           python -m json.tool app/data/live/latest.json > /dev/null
+          # Read-only forecast diagnostics; does not modify frozen predictions.
+          python scripts/forecast_audit.py --input app/data/live/latest.json --out app/data/live/audit-latest.json
+          python -m json.tool app/data/live/audit-latest.json > /dev/null
       - name: Persist predictions and immutable version history
         shell: bash
         run: |

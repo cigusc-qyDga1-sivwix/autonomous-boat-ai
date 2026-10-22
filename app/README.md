@@ -11,7 +11,7 @@ GitHub Pages: https://cigusc-qydga1-sivwix.github.io/autonomous-boat-ai/
 - 予想はPlackett–Luceに基づく未訓練・未校正の試験用ヒューリスティック。勝率・モーター2連対率・平均ST・コース、展示の簡易重みを使用。気象は記録と表示のみで、学習済み水面補正ではない。
 - 3連単8点・合計50,000円の仮想金額。オッズでの採算判断は未実施。
 - 予想時刻・SHA256・2段階のスナップショットを日付別JSONおよびGitコミットに保存。結果データは予想計算に渡さない。締切後は新規予想を作らない。
-- 非公式結果・3連単払戻が出たら、既に発走前固定されたレースのみ照合。結果から後出しで買い目を追加しない。
+- 結果照合はBOATRACE公式「本日の払戻金一覧」（https://www.boatrace.jp/owpc/pc/race/pay?hd=YYYYMMDD）を正解として使用。日付・競艇場コード・R番号・3連単・100円配当を照合。発走前固定予想のみ仮想収支に計上。
 - iPhoneは起動時と画面復帰時に最新を取得。アプリを開いている間は5分間隔で確認。通知・自動購入なし。
 
 ## ファイル構成
@@ -55,3 +55,18 @@ GitHub Actionsのcronには実行遅延があり、毎レースの締切10分前
 ソース: app/venue-board.js, app/venue-board.css
 テスト: app/tests/venue-board.test.js, app/tests/venue-navigation.test.js
 
+
+
+## v1.3 BOATRACE公式払戻の自動結果照合（2026-10-22）
+
+- https://www.boatrace.jp/owpc/pc/race/pay の当日払戻を read-only で取得。原則、予想取得と同じ10分間隔の実行中に確認する（GitHub Actions・公式公開の遅延あり）。
+- scripts/official_pay.py でHTMLの場コード・レース番号・対象年月日を厳格に一致させ、3連単の組番と100円当たりの配当を抽出。開催場と日付が不一致、レイアウト変更、数値異常は自動照合しない。
+- scripts/autonomous_daily.py は**発走前の買い目を先に固定**し、その後にのみ公式払戻を取得。結果を予想側の特徴量として使用しない。
+- 返還（返）、レース中止、同着など複数の払戻が疑われる場合、公式の値の訂正・相違があった場合は**要確認**とし、見かけ上の的中/不的中・回収率に含めない。
+- app/data/live/latest.json の official_results は **verified=true、source=boatrace_official_pay** のみ。手入力は別扱いで、公式結果を優先。
+- 画面の「結果照合」では公式照合件数、3連単的中数、仮想払戻・仮想回収率、公式ページへのリンクを表示。場別全12Rにも公式的中マークを表示。
+- GitHub上の予想バージョン、SHA256、発走前時刻、公式払戻の取得時刻・元ページURLを保持。
+- 手入力は公式未取得時のみ暫定扱い。ユーザー提供結果は正式な自動検証成績には加算しない。
+- 公式ページ・GitHub Actionsが取得できなかった場合は「未確認」と表示し、仮想払戻0円と決めつけない。
+
+テスト: tests/test_official_pay.py、app/tests/official-settlement.test.js。

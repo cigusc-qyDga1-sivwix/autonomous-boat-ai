@@ -117,6 +117,10 @@
     var ready=held.reduce(function (a,v) {return a+v.ready;},0);
     var expo=held.reduce(function (a,v) {return a+v.exhibition;},0);
     var view=sorted(all,opts);
+    var official=Object.values(data.official_results||{}).filter(v=>v.source==='boatrace_official_pay'&&v.verified===true);
+    var payout=official.reduce((sum,v)=>sum+(v.virtual_payout||0),0);
+    var invested=official.reduce((sum,v)=>sum+(v.virtual_stake||0),0);
+    var hits=official.filter(v=>v.hit).length;
     var date=esc(data.event_date||'—');
     var latest=data.updated_at_utc ? new Date(data.updated_at_utc).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}) : '取得時刻不明';
     var stale=opts.today && opts.today !== data.event_date;
@@ -128,6 +132,7 @@
       '<div class="venue-hero"><div class="venue-hero-overline">BOAT LAB · AI予想ダッシュボード</div>' +
       '<h1>今日の開催一覧 <span>🚤</span></h1><p>'+date+' ・ 全国のレースを選んで予想を見る</p>' +
       '<div class="venue-hero-stats"><span><strong>'+held.length+'</strong>場 情報あり</span><span><strong>'+racing+'</strong>場 締切予定あり</span><span><strong>'+ready+'</strong>R 予想</span><span><strong>'+expo+'</strong>R 展示反映</span></div></div>' +
+      (data.mode==='auto-live'?'<button type="button" class="venue-official-summary" data-view="results" aria-label="公式結果の照合画面を開く"><span>✅ BOATRACE公式照合 <b>'+official.length+'R</b></span><span>的中 <b>'+hits+'R</b></span><span>仮想回収 <b>'+(invested?(100*payout/invested).toFixed(1)+'%':'—')+'</b></span><span>詳細を見る →</span></button>':'') +
       (stale?'<div class="notice warn"><strong>過去日のデータです。</strong> 最新データはまだ取得できていません。対象日を確認してね。</div>':'') +
       '<div class="venue-board-head"><div><h2>開催場を選択</h2><p>カードをタップ → 全12R → 買い目・仮想配分</p></div>' +
       '<label class="venue-sort-label">並べ替え<select data-venue-sort aria-label="開催場の並べ替え">' +
@@ -142,21 +147,38 @@
       '新着は約10分間隔の取得設定ですが、遅延・欠損があります。BUY判断と実投票は行いません。</p></div>';
   }
 
-  function raceStatus(r,slot,now) {
-    if(!r)return slot && slot.unforecast ? badge('予想未固定','missing') : badge('情報未取得','idle');
+  function officialForSlot(data,venue,number,forecast) {
+    var k=data.event_date+'|'+venue+'|'+number;
+    var issue=data.settlement_alerts&&data.settlement_alerts[k];
+    if(issue)return {review:true,reason:issue.reason};
+    var value=data.official_results&&data.official_results[k];
+    if(!forecast||!value||value.source!=='boatrace_official_pay'||value.verified!==true)return null;
+    if(value.snapshot_sha256&&forecast.sha256&&value.snapshot_sha256!==forecast.sha256)return null;
+    return value;
+  }
+  function raceStatus(r,slot,now,data,venue,number) {
+    var outcome=officialForSlot(data,venue,number,r);
+    if(outcome&&outcome.review)return badge('要確認','missing');
+    if(outcome)return badge(outcome.hit?'公式 的中':'公式 不的中',outcome.hit?'ready':'idle');
+    if(!r)return slot&&slot.unforecast?badge('予想未固定','missing'):badge('情報未取得','idle');
     if(r.phase==='exhibition')return badge('展示反映','ready');
     if(r.classification==='SKIP')return badge('SKIP','missing');
-    if (slot && slot.cutoff && slot.cutoff<=now) return badge('展示前固定','watch');
+    if(slot&&slot.cutoff&&slot.cutoff<=now)return badge('展示前固定','watch');
     return badge('展示前予想','watch');
   }
-  function raceTile(venue,number,slot,now) {
-    var r=slot && slot.forecast;
-    var cutoff=slot && slot.cutoff;
+  function raceTile(venue,number,slot,now,data) {
+    var r=slot&&slot.forecast;
+    var cutoff=slot&&slot.cutoff;
+    var outcome=officialForSlot(data,venue,number,r);
+    var payInfo=outcome && !outcome.review ?
+      '<div class="venue-race-result">公式3連単 '+esc(outcome.finish)+' ／ 払戻 '+Number(outcome.payout_per_100).toLocaleString('ja-JP')+'円</div>':
+      outcome&&outcome.review?'<div class="venue-race-result">公式結果：返還・中止などの確認待ち</div>':'';
     return '<div class="venue-race'+(r?' venue-race-available':' venue-race-empty')+'">' +
-      '<div class="venue-race-top"><b>'+number+'R</b>'+raceStatus(r,slot,now)+'</div>' +
+      '<div class="venue-race-top"><b>'+number+'R</b>'+raceStatus(r,slot,now,data,venue,number)+'</div>' +
       '<div class="venue-race-cutoff"><span>締切予定</span><strong>'+esc(cutoff||'—')+'</strong></div>' +
       (r?'<div class="venue-race-main">'+esc(r.bets.slice(0,2).map(function (b){return b.combination;}).join(' / '))+'</div>' +
           '<div class="venue-race-scene">'+esc(r.scenario||'展開予想あり')+'</div>' +
+          payInfo+
           '<button type="button" class="venue-race-action" data-race="'+esc(venue)+'|'+number+'">買い目 '+r.bets.length+'点を見る →</button>' :
           '<p class="venue-race-muted">'+(slot&&slot.unforecast?'発走前の予想を固定できませんでした':'締切・出走表未取得')+'</p>') +
       '</div>';
@@ -165,12 +187,12 @@
     var x=recordStatus(data,venue,opts.now);
     var map={};
     x.slots.forEach(function (v) {map[v.race]=v;});
-    var allRaces=Array.from({length:12},function (_,i) {return raceTile(venue,i+1,map[i+1],opts.now);}).join('');
+    var allRaces=Array.from({length:12},function (_,i) {return raceTile(venue,i+1,map[i+1],opts.now,data);}).join('');
     var rawDay=x.day?x.day+'日目':'開催日目未取得';
     return '<div class="venue-detail-board">' +
       '<button type="button" class="venue-back" data-action="back-overview">← 開催一覧へ戻る</button>' +
       '<div class="venue-detail-hero"><span class="venue-detail-symbol">'+x.icon+'</span><div><div class="venue-hero-overline">BOAT LAB / '+esc(data.event_date)+'</div><h1>'+esc(venue)+' <small>全12R</small></h1><p>'+esc(x.grade||'グレード未取得')+' ・ '+esc(rawDay)+' ・ 自動予想 '+x.ready+'/12R ・ 展示反映 '+x.exhibition+'R</p></div></div>' +
-      '<div class="venue-race-legend"><span>'+badge('展示反映','ready')+' 実測展示あり</span><span>'+badge('展示前','watch')+' 出走表中心</span><span>'+badge('未固定','missing')+' 後出し予想なし</span></div>' +
+      '<div class="venue-race-legend"><span>'+badge('公式 的中','ready')+' 公式払戻で的中</span><span>'+badge('展示反映','ready')+' 実測展示あり</span><span>'+badge('展示前','watch')+' 出走表中心</span><span>'+badge('未固定','missing')+' 後出し予想なし</span></div>' +
       '<div class="venue-race-grid">'+allRaces+'</div>' +
       '<div class="notice">全12Rを表示していますが、データが来ていないレースや締切前の予想がなかったレースは買い目を作りません。表示時刻はJST・予定値で、公式の締切を優先してください。</div></div>';
   }

@@ -50,7 +50,7 @@ setTimeout(()=>{
  assert.match(home,/風7\.3m\/s/);
  click('[data-open-venue]',{openVenue:race.venue});
  const list=elements.get('main').innerHTML;
- assert.match(list,/現在の周辺予報/);
+ assert.match(list,/最終取得時点の周辺予報/);
  assert.match(list,/気象補正試験/);
  assert.match(list,/風7\.3m\/s/);
  click('[data-race]',{race:race.venue+'|'+race.race});

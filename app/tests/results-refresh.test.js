@@ -30,7 +30,7 @@ const localStorage={getItem(){return null},setItem(){},removeItem(){}};
 const fetch=async(url,opts)=>{
  calls.push({url,opts});
  if(throws)throw Error('Offline');
- if(hold)await new Promise(r=>{hold=r});
+ if(hold)await new Promise(r=>{hold(r)});
  return {ok:true,json:async()=>deep(response)};
 };
 const ctx=vm.createContext({window,document,localStorage,fetch,navigator:{},
@@ -62,9 +62,6 @@ async function main(){
  response=newVersion;
  // Race in-flight: mark busy; don't allow an overlapping manual refresh.
  let resolvePending;
- let gated=false;
- const first=fetch;
- // The original closure calls hold when hold is a function; direct resolve is handled below.
  hold=(resolve)=>{resolvePending=resolve};
  const update=window.BoatLab.refreshOfficialResults();
  assert.match(ui.innerHTML,/更新を確認中/);

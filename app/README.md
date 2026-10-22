@@ -70,3 +70,15 @@ GitHub Actionsのcronには実行遅延があり、毎レースの締切10分前
 - 公式ページ・GitHub Actionsが取得できなかった場合は「未確認」と表示し、仮想払戻0円と決めつけない。
 
 テスト: tests/test_official_pay.py、app/tests/official-settlement.test.js。
+
+
+## v1.4 BOATERSへのレース別リンクとローカル比較（2026-10-22）
+
+レース詳細画面に「BOATERS レース情報」「BOATERS AI予想」「取得済みデータを分析」を設置しました。
+
+- 競艇場・日付・レース番号からBOATERSの該当ページのURLを作り、本人のタップで外部サイトを開く（転送・スクレイピングなし）。
+- 「取得済みデータを分析」は**BOAT LAB側で独立に収集・保存済みの選手実績、モーター連対率、平均ST、展示ST・展示タイム、場内気象**を比較する。外部BOATERSページからの取得ではない。
+- 予想の買い目、仮想配分、発走前固定スナップショットや結果照合は変更しない。
+- BOATERSの利用規約 第8条(3)(5) は用途制限とスクレイピング等による取得禁止を規定しているため、**ボタン押下を起点とした自動収集も行わない**。外部提供データの再利用が必要なときは、BOATERS運営会社から明示的な使用許可・データAPI利用条件を得てから、承認された連携方式を別途実装する。
+- 関連コード: app/boaters-reference.js, app/boaters-reference.css。テスト: app/tests/boaters-reference.test.js。
+- 規約: https://boaters-boatrace.com/info/terms

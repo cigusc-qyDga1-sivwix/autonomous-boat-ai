@@ -17,7 +17,10 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
-from scripts.official_pay import fetch_official_pay
+if __package__:
+    from .official_pay import fetch_official_pay
+else:
+    from official_pay import fetch_official_pay
 
 JST = ZoneInfo("Asia/Tokyo")
 UTC = timezone.utc

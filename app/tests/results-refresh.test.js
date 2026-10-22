@@ -2,7 +2,7 @@
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
-const saved=JSON.parse(fs.readFileSync('app/data/live/latest.json','utf8'));
+const saved=require('./fixtures/frozen-official-data.js');
 const deep=x=>JSON.parse(JSON.stringify(x));
 const officialEntry=Object.entries(saved.official_results||{}).find(([,v])=>
   v.verified===true && v.source==='boatrace_official_pay');

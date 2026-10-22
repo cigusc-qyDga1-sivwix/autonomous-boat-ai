@@ -178,7 +178,12 @@
  }
  function officialURL(raw,ctx){
    if(!window.BoatResultReader?.parseOfficialUrl)throw Error('公式URLを解析するモジュールがありません');
-   const info=window.BoatResultReader.parseOfficialUrl(raw.trim());
+   // The bare pay-page URL supplied by users refers to their currently shown
+   // race day. Resolve it explicitly, never guess the computer's local date.
+   let value=String(raw||'').trim();
+   if(/^https:\/\/(?:www\.)?boatrace\.jp\/owpc\/pc\/race\/pay\/?$/i.test(value))
+     value='https://www.boatrace.jp/owpc/pc/race/pay?hd='+ctx.date.replaceAll('-','');
+   const info=window.BoatResultReader.parseOfficialUrl(value);
    if(info.date!==ctx.date)throw Error('URLの対象日 '+info.date+' が表示中の予想日 '+ctx.date+' と異なります。');
    return info;
  }
@@ -262,6 +267,7 @@
    inputUrl=String(text||'').trim();rows=[];working=true;setMessage('公式払戻の公開済み一括データを確認中…');onUpdate();
    try{
      const info=officialURL(inputUrl,ctx);
+     inputUrl=info.url;
      const url='./data/live/official-pay/'+info.date+'.json?refresh='+Date.now();
      const res=await fetch(url,{cache:'no-store'});
      if(!res.ok)throw Error('この日の全場公式払戻データはまだ公開されていません。上の「結果を更新」で最新を確認してね。');
@@ -298,7 +304,7 @@
      '<button type="button" class="btn btn-soft" data-action="batch-image-read" '+(imageFile&&!working?'':'disabled')+'>🔍 画像を一括読み取り</button>'+
      '<p class="batch-hint">端末内でOCR。画像はBOAT LABに送信しません。初回はOCRソフト・日本語データのダウンロードが必要。複数場の表では列ずれに注意。</p></div>';
    html+='<div class="batch-source"><strong>② BOATRACE公式払戻一覧URL</strong>'+
-     '<input type="url" id="batch-url" placeholder="https://www.boatrace.jp/owpc/pc/race/pay?hd=20261023" value="'+esc(inputUrl)+'" inputmode="url" autocomplete="off"/>'+
+     '<input type="url" id="batch-url" placeholder="https://www.boatrace.jp/owpc/pc/race/pay?hd='+ctx.date.replaceAll('-','')+'" value="'+esc(inputUrl)+'" inputmode="url" autocomplete="off"/>'+
      '<button type="button" class="btn btn-soft" data-action="batch-url-read" '+(working?'disabled':'')+'>🔗 公式結果をまとめて確認</button>'+
      '<p class="batch-hint">公式URLの日付をチェックし、GitHub側で公式ページを取得・公開したデータを読む方式。公開前の結果をその場で直接スクレイピングするものではありません。</p>'+
      '<details class="batch-fallback"><summary>画像からコピーした文字を貼って読み取る</summary>'+

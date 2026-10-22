@@ -239,6 +239,10 @@
       <p class="results-refresh-hint">結果はサーバー側の定期収集で更新されます。このボタンは最新の公開済み結果を再読み込みします。公式サイトへの即時取得を開始するものではありません。</p>
     </div>`;
   }
+  function currentReaderContext(){
+    const r=findRace(state.resultVenue,state.resultRace)||allRaces()[0];
+    return r?{date:data.event_date,venue:r.venue,race:r.race,sha256:r.sha256}:null;
+  }
   function resultsPage() {
     const races=allRaces();
     if(!races.length)return head('結果照合','発走前に保存した予想のみ結果と照合します')+resultsRefreshControl()+'<div class="no-data">予想データがまだありません。次の取得結果を確認してください。</div>';
@@ -247,6 +251,8 @@
     const live=data.mode==='auto-live', verified=officialStats(races);
     const issue=resultIssue(r), hasOfficial=!!officialFor(r);
     const issues=Object.keys(data.settlement_alerts||{}).length;
+    const reader=window.BoatResultReader;
+    const readPanel=reader?reader.render({date:data.event_date,venue:r.venue,race:r.race,sha256:r.sha256}):'';
     const officialUrl='https://www.boatrace.jp/owpc/pc/race/pay?hd='+data.event_date.replaceAll('-','');
     const header=live?`<div class="metrics" style="margin-bottom:16px">${metric('公式照合',verified.count+'R','公式払戻で検証済み','✓')}${metric('3連単的中',verified.hits+'R',verified.count?pct(verified.hitRate):'未確認','◎')}${metric('仮想回収率',verified.returnRate===null?'—':pct(verified.returnRate),'公式照合済みのみ','↗',verified.returnRate>=1?'positive':'')}${metric('仮想収支',verified.count?(verified.profit>=0?'+':'')+money(verified.profit):'—','正式BUYとは別','¥',verified.profit>=0?'positive':'negative')}</div><div class="notice">公式払戻：<a href="${escape(officialUrl)}" target="_blank" rel="noopener noreferrer">BOATRACE 本日の払戻金一覧 ↗</a> ／ ${issues}R 要確認。未公表・返還・レース中止は収支対象外。手入力は正式成績には算入しません。</div>`:'';
     const recent=settled.length?`<div class="result-list">${settled.slice().reverse().map(x=>{
@@ -255,7 +261,7 @@
     }).join('')}</div>`:'<div class="no-data">未照合です。公式払戻が掲載されると自動反映されます。</div>';
     const selected=state.resultVenue, raceSelect=state.resultRace;
     const form=`<form id="result-form" class="result-form"><div class="form-row"><div class="field"><label for="result-venue">競艇場</label><select id="result-venue" class="select input">${getVenues().map(v=>`<option value="${escape(v)}" ${selected===v?'selected':''}>${escape(v)}</option>`).join('')}</select></div><div class="field"><label for="result-race">レース</label><select id="result-race" class="select input">${races.filter(x=>x.venue===selected).map(x=>`<option value="${x.race}" ${raceSelect===x.race?'selected':''}>${x.race}R</option>`).join('')}</select></div></div><div class="feature-card"><span class="feature-label">保存済み予想 / ${escape(r.classification)}</span><strong>${escape(r.bets.slice(0,3).map(b=>b.combination).join(' / '))}</strong><p>${escape(r.scenario)}</p></div><div class="field"><label for="finish">3連単（確定着順）</label><div class="form-row" style="gap:8px">${[0,1,2].map(i=>`<select id="finish-${i}" class="select input" style="width:calc(33.3% - 6px);min-width:0" aria-label="${i+1}着"><option value="">${i+1}着</option>${[1,2,3,4,5,6].map(n=>`<option value="${n}" ${c.record?.finish?.split('-')[i]===String(n)?'selected':''}>${n}号艇</option>`).join('')}</select>`).join('')}</div></div><div class="field"><label for="payout">3連単払戻（100円あたり）</label><input id="payout" class="input" inputmode="numeric" type="number" min="100" max="10000000" step="10" required placeholder="例：2430" value="${c.record?c.record.payout_per_100:''}"></div><p class="help">${hasOfficial?'公式結果を取得済み。手入力で変更はできません。':issue?'返還・中止・不一致があるため、手入力で収支を確定できません。':'公式結果未取得の場合だけ暫定的に手入力できます。公式照合済み成績には含みません。'}</p><button type="submit" class="btn btn-primary" ${hasOfficial||issue?'disabled':''}>${live?'暫定結果を保存':'結果を照合・保存'}</button>${results[raceKey(r)]&&!hasOfficial?'<button type="button" data-action="delete-result" class="btn btn-danger">手入力を取り消す</button>':''}</form>`;
-    return `${head('結果照合',live?'BOATRACE公式払戻から自動照合・発走前予想は変更しません':'手入力の仮想照合',pill(live?verified.count+'R 公式確認':settled.length+'R 入力済み','local'))}${resultsRefreshControl()}${header}<div class="results-layout"><section class="card card-pad"><div class="section-head"><h2 class="section-title">${live?'レース結果の確認':'結果を入力'}</h2>${pill(hasOfficial?'公式確認済み':issue?'要確認':'未確認','local')}</div>${issue?`<div class="notice warn">このレースは${escape(issue.reason||'追加確認')}。自動の仮想収支には含めません。</div>`:''}${form}</section><section class="card card-pad"><div class="section-head"><h2 class="section-title">照合履歴</h2><span class="text-xs muted">${settled.length}R</span></div>${recent}</section></div>`;
+    return `${head('結果照合',live?'BOATRACE公式払戻から自動照合・発走前予想は変更しません':'手入力の仮想照合',pill(live?verified.count+'R 公式確認':settled.length+'R 入力済み','local'))}${resultsRefreshControl()}${header}${readPanel}<div class="results-layout"><section class="card card-pad"><div class="section-head"><h2 class="section-title">${live?'レース結果の確認':'結果を入力'}</h2>${pill(hasOfficial?'公式確認済み':issue?'要確認':'未確認','local')}</div>${issue?`<div class="notice warn">このレースは${escape(issue.reason||'追加確認')}。自動の仮想収支には含めません。</div>`:''}${form}</section><section class="card card-pad"><div class="section-head"><h2 class="section-title">照合履歴</h2><span class="text-xs muted">${settled.length}R</span></div>${recent}</section></div>`;
   }
   function weaknessDiagnosis() {
     if(data.mode!=='auto-live')return '';
@@ -352,6 +358,34 @@
     const row=e.target.closest('[data-race]');if(row){const [v,n]=row.dataset.race.split('|');let r=findRace(v,n);if(!r)return;if(row.dataset.action==='settle-this'){state.resultVenue=v;state.resultRace=Number(n);go('results');return;}if(row.dataset.action==='copy-bets'){copyBets(r);return;}state.raceDetail=r;state.showExternalAnalysis=false;state.reanalysisResult=null;state.reanalysisExtras={};state.view='races';render();window.scrollTo(0,0);return;}
     const btn=e.target.closest('[data-action]');if(!btn)return;
     switch(btn.dataset.action){
+      case 'read-result-image':{
+        const reader=window.BoatResultReader,ctx=currentReaderContext();
+        if(reader&&ctx)void reader.readImage(ctx,()=>render());
+        break;
+      }
+      case 'read-result-url':{
+        const reader=window.BoatResultReader,ctx=currentReaderContext();
+        if(!reader||!ctx)break;
+        reader.useUrl(el('result-official-url')?.value||'',ctx,autoResults,data.settlement_alerts||{});
+        render();
+        break;
+      }
+      case 'apply-result-read':{
+        const reader=window.BoatResultReader,ctx=currentReaderContext();
+        if(!reader||!ctx)break;
+        const r=findRace(ctx.venue,ctx.race);
+        if(!r||officialFor(r)||resultIssue(r)){toast('公式照合済み・要確認レースは上書きできません');break;}
+        try{
+          const v=reader.apply(ctx);
+          if(!v){toast('読み取り結果を確認してね');break;}
+          render();
+          const digits=v.finish.split('-');
+          for(let i=0;i<3;i++)if(el('finish-'+i))el('finish-'+i).value=digits[i];
+          if(el('payout'))el('payout').value=String(v.payout_per_100);
+          toast('候補を入力したよ。元画像と見比べて保存してね');
+        }catch(error){toast(error.message||'読み取り候補を反映できませんでした');}
+        break;
+      }
       case 'refresh-official-results':void refreshOfficialResults();break;
       case 'analyze-saved-race':state.showExternalAnalysis=!state.showExternalAnalysis;render();break;
       case 'run-reanalysis':{
@@ -387,6 +421,13 @@
     }
   });
   document.addEventListener('change',async e=>{
+    if(e.target.matches('#result-image-file')){
+      const reader=window.BoatResultReader,ctx=currentReaderContext();
+      if(!reader||!ctx)return;
+      try{reader.fileSelected(e.target.files?.[0],ctx);render();}
+      catch(error){toast(error.message||'画像を選択できませんでした');}
+      return;
+    }
     if(e.target.matches('[data-venue-sort]')){state.boardSort=e.target.value;render();return;}
     if(e.target.matches('[data-filter-venue]')){state.venue=e.target.value;render();}
     if(e.target.matches('#result-venue')){state.resultVenue=e.target.value;state.resultRace=1;render();}

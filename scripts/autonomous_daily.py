@@ -716,6 +716,30 @@ def main():
     # Failure of the official website must not make up results or erase forecasts.
     try:
         pay = fetch_official_pay(compact)
+        # Publish an independently verified, date-scoped FULL official payoff
+        # table for batch reconciliation of multiple venues/races. This is
+        # official evidence only; no prediction data and no raw HTML.
+        pay_path = args.out_dir / "official-pay" / f"{day}.json"
+        old_pay = json.loads(pay_path.read_text(encoding="utf-8")) if pay_path.exists() else {}
+        if old_pay.get("date") == day:
+            # Do not lose previously verified races when an official response is
+            # temporarily sparse. Conflicting published values are quarantined.
+            conflict = dict(old_pay.get("conflicts") or {})
+            old_results = old_pay.get("results") or {}
+            for key, v in old_results.items():
+                new_value = pay["results"].get(key)
+                if new_value and new_value != v:
+                    conflict[key] = {"previous": v, "incoming": new_value}
+                    pay["results"].pop(key, None)
+                    pay.setdefault("reviews", {})[key] = {"reason": "official_correction_conflict"}
+                elif not new_value and key not in pay.get("reviews", {}) and key not in pay.get("cancellations", {}) and key not in conflict:
+                    pay["results"][key] = v
+            pay["conflicts"] = conflict
+            for key in conflict:
+                pay["results"].pop(key, None)
+        pay["evidence_type"] = "official_boatrace_pay_snapshot"
+        pay["status"] = "verified_by_server_fetch"
+        write_json(pay_path, pay)
         webapp = integrate_official(ledger, webapp, pay, now)
         summary["official_pay"] = webapp["official_pay_info"]
     except Exception as exc:

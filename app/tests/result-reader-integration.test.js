@@ -2,9 +2,9 @@
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
-const data=JSON.parse(fs.readFileSync('app/data/live/latest.json','utf8'));
+const data=require('./fixtures/frozen-official-data.js');
 const fixture=JSON.parse(JSON.stringify(data));
-const target=fixture.forecast_races[0];
+const target=fixture.forecast_races.find(r=>!fixture.official_results[fixture.event_date+'|'+r.venue+'|'+r.race]);
 const targetKey=fixture.event_date+'|'+target.venue+'|'+target.race;
 delete fixture.official_results[targetKey];
 delete fixture.settlement_alerts[targetKey];

@@ -172,7 +172,7 @@
     try{
       const imported=readJSON(STORE_DATA,null);
       if(imported){try{data=normalizeData(imported);state.origin='利用者が読み込んだJSON（発走前固定・出典は未検証）';}catch{localStorage.removeItem(STORE_DATA);}}
-      if(!data){const response=await fetch('./data/2026-10-22.json',{cache:'no-cache'});if(!response.ok)throw Error(`HTTP ${response.status}`);data=normalizeData(await response.json());}
+      if(!data){if(window.BOAT_LAB_BOOTSTRAP){data=normalizeData(window.BOAT_LAB_BOOTSTRAP);}else{const response=await fetch('./data/2026-10-22.json',{cache:'no-cache'});if(!response.ok)throw Error(`HTTP ${response.status}`);data=normalizeData(await response.json());}}
       state.resultVenue=getVenues()[0];render();
       if('serviceWorker' in navigator&&['https:','http:'].includes(location.protocol))navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
     }catch(error){el('main').innerHTML=`<section class="card card-pad"><h1>データを読み込めませんでした</h1><p class="muted">${escape(error.message)}</p><p>アプリはHTTPSまたはローカルHTTPサーバー上で開いてください。ダウンロードしたHTMLを直接開くと、ブラウザの制限で予想データを取得できない場合があります。</p></section>`;}

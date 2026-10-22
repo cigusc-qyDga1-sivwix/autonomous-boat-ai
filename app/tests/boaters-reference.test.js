@@ -60,7 +60,7 @@ setTimeout(()=>{
   const detail=elements.get('main').innerHTML;
   assert.match(detail,/BOATERSの展示項目を見る/);
   assert.match(detail,/出走表・モーターを確認/);
-  assert.match(detail,/利用規約/);
+  assert.match(detail,/外部サイトを無断で読み取ることはしません/);
   assert.match(detail,/展開を再評価する/);
   const expected=refs.linkFor(r.venue,data.event_date,r.race);
   assert.ok(detail.includes(expected));

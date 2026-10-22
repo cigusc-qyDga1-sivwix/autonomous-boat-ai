@@ -35,6 +35,15 @@ setTimeout(()=>{
   assert.equal(data.forecast_races.length,raw.forecast_races.length);
   assert.match(elements.get('main').innerHTML,/AI予想ダッシュボード/);
   assert.match(elements.get('main').innerHTML,/全国開催|自動取得/);
-  assert.equal(window.BoatLab.stats(data.forecast_races).examined,0);
+  const officialEntries=Object.entries(data.official_results||{});
+  const verifiedCount=data.forecast_races.filter(r=>{
+    const k=data.event_date+'|'+r.venue+'|'+r.race;
+    const p=data.official_results?.[k];
+    return p?.source==='boatrace_official_pay'&&p.verified===true&&
+      (!p.snapshot_sha256||p.snapshot_sha256===r.sha256)&&!data.settlement_alerts?.[k];
+  }).length;
+  assert.equal(window.BoatLab.officialStats(data.forecast_races).count,verifiedCount);
+  assert.equal(window.BoatLab.stats(data.forecast_races).examined,verifiedCount);
+  assert.ok(officialEntries.length>=verifiedCount);
   console.log('BOAT LAB nationwide live app smoke: PASS');
 },100);

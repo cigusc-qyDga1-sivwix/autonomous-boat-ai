@@ -13,3 +13,4 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install -e '.[test]'
       - run: python -m pytest -q
+      - run: python scripts/forecast_audit.py --input app/data/live/latest.json --out /tmp/forecast-audit-smoke.json

@@ -15,6 +15,7 @@ const localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k
 const window={scrollTo(){}};
 const context=vm.createContext({window,document,localStorage,fetch:async()=>({ok:true,json:async()=>data}),
   navigator:{},location:{protocol:'file:'},setTimeout,clearTimeout,console,Blob,URL,Date,Intl});
+vm.runInContext(fs.readFileSync('app/race-visual.js','utf8'),context);
 vm.runInContext(fs.readFileSync('app/venue-board.js','utf8'),context);
 vm.runInContext(fs.readFileSync('app/app.js','utf8'),context);
 function click(selector,node){
@@ -32,6 +33,12 @@ setTimeout(()=>{
   const selected=data.forecast_races[0];
   click('[data-race]',{dataset:{race:venue+'|'+selected.race}});
   assert.match(main.innerHTML,/3連単フォーメーション/);
+  assert.match(main.innerHTML,/🚤 出走表/);
+  assert.match(main.innerHTML,/全国勝率/);
+  assert.match(main.innerHTML,/モーター/);
+  assert.match(main.innerHTML,/展開予想アニメ/);
+  assert.match(main.innerHTML,/第1ターンマーク/);
+  assert.equal((main.innerHTML.match(/data-sim-boat="/g)||[]).length,6);
   click('[data-action]',{dataset:{action:'back-overview'}});
   assert.match(main.innerHTML,/今日の開催一覧/);
   click('[data-favorite-venue]',{dataset:{favoriteVenue:'桐生'}});

@@ -208,3 +208,13 @@ Open-Meteo: https://open-meteo.com/ , https://open-meteo.com/en/docs
 
 実装: app/batch-result-reader.js, app/batch-result-reader.css, scripts/autonomous_daily.py。
 テスト: app/tests/batch-result-reader.test.js, app/tests/batch-result-integration.test.js。
+
+## v2.1 展開アニメのブラッシュアップ（2026-10-23）
+
+- 最初のアニメは上位3つの買い目ごとにバック側の3連単順位を描くだけだった。新しい版では**本線の1着艇と2着艇に基づく4種類の旋回仮説**を区別する：①先マイ逃げ、②差し、センター・アウトのまくり、まくり差し。
+- 例：1-3-2は逃げ、2-1-3は差し、3-1-5はまくり差し、4-5-1はまくりという説明上の分類（現地実況での決まり手を予測・断定するものではない）。
+- 複数の3連単買い目を選ぶと、順位だけでなく1M手前の膨らみ方・ターンの経路も変わる。艇の番号色は白黒赤青黄緑。
+- **スタート / 1マーク / バック** の3場面へ直接移動する操作、タイムラインのドラッグ、0.5倍 / 1倍 / 1.5倍速、再生 / 一時停止 / 最初から、各場面の説明・予想着順の強調を追加。
+- 画面はiPhoneで縦表示を想定したレスポンシブSVG。元の出走表は艇番、選手名、全国勝率、モーター2連対率の4項目のまま。
+- あくまでも **すでに作成した買い目を説明する模式図**。実際の進入・スタート展示動画・艇速・旋回半径・風・艇間距離による物理シミュレーションではない。4〜6番手の順序も便宜的な描写であり予想の対象外。アニメを見ても予想買い目、SHA256、結果照合、払戻成績は変更されない。
+- 実装: app/race-visual.js、app/styles.css。テスト: app/tests/race-visual.test.js、app/tests/race-visual-controls.test.js。

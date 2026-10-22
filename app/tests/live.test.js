@@ -7,7 +7,8 @@ assert.ok(raw.forecast_races.length>0);
 assert.ok(raw.forecast_races.length<=288);
 for(const r of raw.forecast_races){
   assert.ok(r.sha256 && r.frozen_at_utc);
-  assert.equal(r.bets.length,8);
+  assert.ok(r.bets.length>=4&&r.bets.length<=12);
+  if(r.point_count!==undefined)assert.equal(r.point_count,r.bets.length);
   assert.equal(r.bets.reduce((a,b)=>a+b.virtual_yen,0),50000);
   assert.ok(['baseline','exhibition'].includes(r.phase));
 }

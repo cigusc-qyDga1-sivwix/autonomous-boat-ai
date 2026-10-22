@@ -19,8 +19,10 @@ from zoneinfo import ZoneInfo
 
 if __package__:
     from .official_pay import fetch_official_pay
+    from .venue_weather import fetch_weather, weather_at, VENUE_POINTS
 else:
     from official_pay import fetch_official_pay
+    from venue_weather import fetch_weather, weather_at, VENUE_POINTS
 
 JST = ZoneInfo("Asia/Tokyo")
 UTC = timezone.utc
@@ -77,8 +79,8 @@ def preview_complete(race: dict) -> bool:
     if not isinstance(preview, dict):
         return False
     racers = preview.get("racers") or {}
-    if number(preview.get("wind_speed")) is None or number(preview.get("wave_height")) is None:
-        return False
+    # Complete racer exhibition and venue weather arrive independently.
+    # Lack of on-water observation must not hide otherwise complete exhibition.
     return all(
         isinstance(racers.get(str(i)), dict) and all(
             number(racers[str(i)].get(field)) is not None
@@ -205,8 +207,92 @@ def allocate_stakes(ranked: list[tuple[str, float]]) -> list[dict]:
     assert sum(row["virtual_yen"] for row in bets) == VIRTUAL_BUDGET_YEN
     return bets
 
+def weather_for_prediction(race: dict, nearby_forecast: dict | None) -> tuple[dict | None, dict | None]:
+    """Return track observation and selected input with unambiguous provenance.
+
+    A current source preview may have partial racecourse weather even while
+    its 6 competitors' exhibitions are incomplete. Prefer track wind to nearby
+    weather-grid estimates only if available *before cutoff*.
+    """
+    preview = race.get("preview")
+    preview = preview if isinstance(preview, dict) else {}
+    wind = number(preview.get("wind_speed"))
+    wave = number(preview.get("wave_height"))
+    observed = None
+    if wind is not None or wave is not None:
+        observed = {
+            "wind_speed": wind,
+            "wind_direction_number": number(preview.get("wind_direction_number")),
+            "wave_height": wave,
+            "weather_number": number(preview.get("weather_number")),
+            "air_temperature": number(preview.get("air_temperature")),
+            "water_temperature": number(preview.get("water_temperature")),
+        }
+    if observed and wind is not None and 0 <= wind <= 65:
+        return observed, {
+            **observed, "source": "boatrace_preview",
+            "source_label": "展示時の場内観測（非公式API経由）",
+            "site_observed": True,
+            "source_note": "発走時の実測ではなく、取得時点の展示観測",
+        }
+    if nearby_forecast and number(nearby_forecast.get("wind_speed")) is not None:
+        return observed, {
+            **nearby_forecast,
+            "wave_height": observed.get("wave_height") if observed else None,
+            "wave_source": "boatrace_preview" if observed and observed.get("wave_height") is not None else "unavailable",
+        }
+    return observed, None
+
+
+def condition_weights(weights: list[float], weather: dict | None) -> tuple[list[float], dict]:
+    """Conservative, provisional broadening in rough conditions.
+
+    NO per-course headwind claims: wind bearing relative to each racecourse
+    straight is unverified. No fitted accuracy gain is claimed. Only the
+    concentration of relative head weights is flattened slightly for
+    strong wind / high waves; later A/B results must validate this.
+    """
+    if not weather:
+        return weights, {
+            "applied": False, "why": "気象値未取得・既存の相対評価を維持",
+            "uncertainty_exponent": 1.0,
+        }
+    speed = number(weather.get("wind_speed"))
+    gust = number(weather.get("wind_gust"))
+    wave = number(weather.get("wave_height"))
+    alpha = 1.0
+    signals = []
+    if speed is not None and speed >= 8:
+        alpha *= .82
+        signals.append(f"風速{speed:g}m/s・強風")
+    elif speed is not None and speed >= 6:
+        alpha *= .87
+        signals.append(f"風速{speed:g}m/s")
+    elif speed is not None and speed >= 4:
+        alpha *= .93
+        signals.append(f"風速{speed:g}m/s")
+    if gust is not None and gust >= 12:
+        alpha *= .95
+        signals.append(f"突風{gust:g}m/s")
+    if wave is not None and wave >= 8:
+        alpha *= .93
+        signals.append(f"波高{wave:g}cm")
+    elif wave is not None and wave >= 4:
+        alpha *= .96
+        signals.append(f"波高{wave:g}cm")
+    alpha = max(.77, alpha)
+    return [max(.06, value) ** alpha for value in weights], {
+        "applied": alpha < .999,
+        "why": "・".join(signals) + "：頭候補の確信度を抑えて展開分岐を試験評価"
+        if signals else "気象値あり・通常条件のため相対評価を維持",
+        "uncertainty_exponent": round(alpha, 3),
+        "method": "weather-uncertainty-shrinkage-experimental-untrained-v0",
+        "limitation": "風向からコース有利不利を機械的に推定しない。効果は未検証",
+    }
+
+
 def prediction(race: dict, venue: str, race_number: int, phase: str,
-               now: datetime, source_url: str) -> dict:
+               now: datetime, source_url: str, nearby_weather: dict | None = None) -> dict:
     if phase not in ("baseline", "exhibition"):
         raise ValueError("Unknown phase")
     cutoff = cutoff_of(race)
@@ -217,24 +303,18 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     if phase == "exhibition" and not preview_complete(race):
         raise ValueError("Incomplete exhibition readings")
     weights, racers = features(race, phase)
-    ranked = combinations(weights)
+    observed, selected_weather = weather_for_prediction(race, nearby_weather)
+    weathered, weather_adjustment = condition_weights(weights, selected_weather)
+    ranked = combinations(weathered)
     bets = allocate_stakes(ranked)
-    count, reason, concentration, gap = point_count(weights)
+    count, reason, concentration, gap = point_count(weathered)
+    if weather_adjustment['applied']:
+        reason += ' ／ 気象補正試験：' + weather_adjustment['why']
     leader = racers[int(ranked[0][0][0]) - 1]
     follower = racers[int(ranked[0][0][2]) - 1]
-    weather = None
-    if phase == "exhibition":
-        p = race["preview"]
-        weather = {
-            "wind_speed": number(p.get("wind_speed")),
-            "wind_direction_number": number(p.get("wind_direction_number")),
-            "wave_height": number(p.get("wave_height")),
-            "weather_number": number(p.get("weather_number")),
-            "air_temperature": number(p.get("air_temperature")),
-            "water_temperature": number(p.get("water_temperature")),
-        }
+    weather = observed
     body = {
-        "model_version": "heuristic-0.3-flex4to12-untrained",
+        "model_version": "heuristic-0.4-weather-uncertainty-test-untrained",
         "point_count": count,
         "point_reason": reason,
         "head_weight_concentration": round(concentration, 4),
@@ -252,13 +332,18 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         "bets": bets,
         "racers": racers,
         "weather_observed": weather,
-        "evidence": "直前情報あり" if phase == "exhibition" else "出走表のみ・直前気象なし",
+        "weather_used": selected_weather,
+        "weather_adjustment": weather_adjustment,
+        "evidence": ("展示・場内気象あり" if weather and selected_weather and selected_weather.get("site_observed") else
+                     "近隣予報（現地実測ではない）" if selected_weather else
+                     "気象未取得") + ("・展示あり" if phase == "exhibition" else "・展示前"),
         "classification": "WATCH",  # No validated edge or live odds; never BUY automatically.
     }
     return {**body, "sha256": stable_hash(body)}
 
 
-def build(existing: dict | None, payload: dict, now: datetime, source_url: str) -> tuple[dict, dict]:
+def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
+          weather_by_venue: dict | None = None) -> tuple[dict, dict, dict]:
     if now.tzinfo is None:
         raise ValueError("Timezone-aware now is mandatory")
     local_day = now.astimezone(JST).date().isoformat()
@@ -268,6 +353,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str) 
     }
     records = ledger["race_records"]
     venues_seen = set()
+    weather_by_venue = weather_by_venue or {}
     new_baseline, new_exhibition = 0, 0
     race_source = (payload.get("programs") or {}).get("stadiums") or {}
     for venue_code, stadium in race_source.items():
@@ -293,14 +379,15 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str) 
             if record["venue_code"] != venue_code or record["race"] != n:
                 raise ValueError("Recorded race identity mismatch")
             phases = {entry["phase"] for entry in record["versions"]}
+            nearby = weather_at(weather_by_venue.get(venue_code), cutoff)
             if now.astimezone(JST) < cutoff - timedelta(seconds=SAFE_MARGIN_SECONDS) and valid_entrants(race):
                 if "baseline" not in phases:
                     record["versions"].append(prediction(race, VENUES[venue_code], n,
-                                                         "baseline", now, source_url))
+                                                         "baseline", now, source_url, nearby))
                     new_baseline += 1
                 if "exhibition" not in phases and preview_complete(race):
                     record["versions"].append(prediction(race, VENUES[venue_code], n,
-                                                         "exhibition", now, source_url))
+                                                         "exhibition", now, source_url, nearby))
                     new_exhibition += 1
             # Results are NEVER taken from the unofficial preview API.
             # Official pay-page evidence is attached only after forecasts are generated.
@@ -323,7 +410,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str) 
             "model_version", "phase", "frozen_at_utc", "sha256",
             "racers", "weather_observed", "evidence", "source_url"
         )}
-        for extra in ("point_count", "point_reason", "head_weight_concentration", "head_weight_gap"):
+        for extra in ("point_count", "point_reason", "head_weight_concentration", "head_weight_gap",
+                      "weather_used", "weather_adjustment"):
             if extra in current:
                 r[extra] = current[extra]
         r["version_count"] = len(versions)
@@ -345,6 +433,13 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str) 
         "listed_races": sum(len(s.get("races", {})) for s in race_source.values()
                             if isinstance(s, dict)),
         "venues_with_races": len(venues_seen),
+        "weather_venue_count": len(set(weather_by_venue)&venues_seen),
+        "venue_weather": {
+            VENUES[code]: weather_at(weather, now.astimezone(JST))
+            for code, weather in weather_by_venue.items()
+            if code in venues_seen and code in VENUES and weather_at(weather, now.astimezone(JST))
+        },
+        "weather_source_note": "場内実測は展示時だけ。周辺値はOpen-Meteo近隣気象予報で実測ではない。",
         "disclaimer": "非公式・数分遅延あり。展示動画と直前オッズは未対応。BUY判定は実施しません。仮想5万円は検証用で、実投票ではありません。",
     }
     status = {"event_date": local_day, "source": source_url,
@@ -352,7 +447,9 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str) 
               "forecast_races": len(latest_races),
               "missed_or_unavailable": len(unavailable),
               "new_baseline": new_baseline, "new_exhibition": new_exhibition,
-              "official_results": len(official_results)}
+              "official_results": len(official_results),
+              "weather_venues": len(set(weather_by_venue)&venues_seen),
+              "weather_coverage": f"{len(set(weather_by_venue)&venues_seen)}/{len(venues_seen)}"}
     return ledger, out, status
 
 
@@ -502,7 +599,25 @@ def main():
         source, source_url = retrieve(compact)
     path = args.out_dir / f"{day}.json"
     previous = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
-    ledger, webapp, summary = build(previous, source, now, source_url)
+    # Forecast weather is fetched only for venues actually hosting races today.
+    # A failed provider request is reported; never synthesize wind readings.
+    active = [
+        code for code, stadium in ((source.get("programs") or {}).get("stadiums") or {}).items()
+        if code in VENUES and isinstance(stadium, dict) and stadium.get("races")
+    ]
+    nearby_forecasts = {}
+    weather_error = None
+    if not args.input_json:
+        try:
+            nearby_forecasts = fetch_weather(active, now)
+        except Exception as exc:
+            weather_error = str(exc)
+    ledger, webapp, summary = build(previous, source, now, source_url, nearby_forecasts)
+    if weather_error:
+        summary["weather_error"] = weather_error
+        webapp["weather_fetch_status"] = "UNAVAILABLE"
+    else:
+        webapp["weather_fetch_status"] = "OK" if nearby_forecasts else "NO_DATA"
     # Read official payouts only AFTER the pre-cutoff forecast has been frozen.
     # Failure of the official website must not make up results or erase forecasts.
     try:

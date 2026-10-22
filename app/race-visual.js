@@ -35,18 +35,48 @@
    const order=top.concat([1,2,3,4,5,6].filter(x=>!top.includes(x)));
    const rank={};order.forEach((x,i)=>rank[x]=i+1);return rank;
  }
- function path(lane,rank){
-   const begin=164+lane*17,approach=190+lane*8,back=44+rank*17,turnX=551+rank*2,turnY=166+rank*3.3;
-   return 'M 108 '+begin+' C 228 '+(begin-4)+' 366 '+approach+' 478 '+approach+
-     ' C 534 '+approach+' '+(turnX+21)+' '+(turnY+18)+' '+turnX+' '+turnY+
-     ' C '+(turnX-11)+' '+(turnY-43)+' 500 '+back+' 450 '+back+
-     ' C 392 '+back+' 306 '+back+' '+(236+rank*16)+' '+back;
+ function tacticFor(combo){
+   if(!valid(combo))return {id:'escape',label:'逃げ・先マイ'};
+   const [head,second]=combo.split('-').map(Number);
+   if(head===1)return {id:'escape',label:'逃げ・先マイ'};
+   if(head===2)return {id:'sashi',label:'差し'};
+   if(second<=2)return {id:'makuri-zashi',label:'まくり差し'};
+   return {id:'makuri',label:'まくり'};
+ }
+ function path(lane,rank,tactic='escape',leader=1){
+   // Distinct attack patterns are an illustration, NOT kinematic predictions.
+   // Start is lower left; around 1M at the right; exit travels left up the back.
+   const begin=160+lane*17,back=50+rank*21;
+   const active=lane===leader;
+   let entry=192+lane*8;
+   let bulge=550+rank*2,corner=182+rank*3;
+   if(active && tactic==='escape'){entry=189;bulge=539;corner=183;}
+   else if(active && tactic==='sashi'){entry=215;bulge=533;corner=202;}
+   else if(active && tactic==='makuri'){entry=259;bulge=577;corner=229;}
+   else if(active && tactic==='makuri-zashi'){entry=253;bulge=544;corner=191;}
+   else if(rank>=4){entry+=7;bulge+=8;corner+=9;}
+   const midX=active&&tactic==='makuri-zashi'?493:515;
+   const midY=active&&tactic==='makuri-zashi'?187:corner-36;
+   return 'M108 '+begin+
+      ' C206 '+(begin-4)+' 338 '+entry+' 466 '+entry+
+      ' C526 '+(entry-4)+' '+(bulge+20)+' '+(corner+25)+' '+bulge+' '+corner+
+      ' C'+(bulge-7)+' '+(corner-37)+' '+midX+' '+midY+' 445 '+back+
+      ' C375 '+back+' 294 '+back+' '+(239+rank*17)+' '+back;
  }
  function explanation(combo){
-   const p=combo.split('-').map(Number);
-   const first=p[0]===1?'①が先マイして逃げる想定':p[0]===2?'②が差し込む想定':
-     p[0]<=4?'センター勢が仕掛ける想定':'外側の艇が浮上する想定';
-   return first+' → '+p[1]+'号艇が2着 → '+p[2]+'号艇が3着の仮説';
+   if(!valid(combo))return '展開情報が不足しています';
+   const [a,b,c]=combo.split('-').map(Number);
+   return tacticFor(combo).label+'を想定 → '+a+'号艇が先頭 → '+b+'号艇が2着に浮上 → '+c+'号艇の3着残存を検証';
+ }
+ function stageTexts(combo){
+   if(!valid(combo))return ['スタートの攻防','1Mのターン','バックでの予想隊形'];
+   const [a,b,c]=combo.split('-').map(Number);
+   const tactic=tacticFor(combo);
+   return [
+     a+'号艇の仕掛けを想定。各艇のST差・実際の進入を再現したものではありません。',
+     a+'号艇の'+tactic.label+'から、'+b+'号艇の残り方を評価する仮説。',
+     'バック側で'+a+'–'+b+'–'+c+'の隊形を想定。4〜6番手の順序は予想対象外。'
+   ];
  }
  function glyph(lane){
    const color=colors[lane-1],txt=texts[lane-1];
@@ -58,34 +88,48 @@
  function animationHTML(r){
    const picks=options(r);
    if(!picks.length)return '<section class="card card-pad">アニメ再生に使える買い目がありません。</section>';
-   const combo=picks[0],order=ranks(combo);
-   let html='<section class="card card-pad boat-sim" data-boat-sim aria-label="予想展開アニメーション">'+
-     '<div class="section-head"><div><h2 class="section-title">🎬 展開予想アニメ</h2><p class="boat-sim-mini">スタート → 第1ターンマーク → バックストレッチ</p></div><span class="boat-sim-tag">模式図</span></div>'+
-     '<p class="boat-sim-disclaimer">再現する買い目を選んで、6艇の動きとバック側の予想隊形を確認できるよ。</p>'+
+   const combo=picks[0],order=ranks(combo),tactic=tacticFor(combo);
+   let html='<section class="card card-pad boat-sim boat-sim-v3" data-boat-sim aria-label="予想展開アニメーション">'+
+     '<div class="section-head"><div><h2 class="section-title">🎬 展開予想アニメ</h2><p class="boat-sim-mini">スタート → 第1ターンマーク → バックストレッチ</p></div><span class="boat-sim-tag">動きのある模式図</span></div>'+
+     '<div class="boat-sim-narrative"><span>想定する攻め方 <b data-sim-tactic>'+tactic.label+'</b></span><strong data-sim-forecast>予想着順 '+combo+'</strong></div>'+
+     '<p class="boat-sim-disclaimer">本線・対抗の買い目で動きが切り替わるよ。先頭の「逃げ／差し／まくり／まくり差し」の経路を描き分けている。</p>'+
      '<div class="boat-sim-picks" role="group" aria-label="再現する買い目">';
    picks.forEach((pick,i)=>{
      html+='<button type="button" data-sim-pick="'+pick+'" aria-pressed="'+(i===0)+'" class="'+(i===0?'active':'')+'">'+(i===0?'本線':'展開'+(i+1))+' <strong>'+pick+'</strong></button>';
    });
    html+='</div><div class="boat-sim-water"><svg viewBox="0 0 680 315" preserveAspectRatio="xMidYMid meet" role="img" aria-label="六艇がスタートし第一ターンマークを回ってバックストレッチに進む模式図">'+
-     '<defs><pattern id="sim-waves" patternUnits="userSpaceOnUse" width="42" height="28"><path d="M0 19 Q 11 13 21 19 T42 19" stroke="#5cb4c8" opacity=".14" fill="none"/></pattern></defs>'+
+     '<defs><pattern id="sim-waves" patternUnits="userSpaceOnUse" width="42" height="28"><path d="M0 19 Q 11 13 21 19 T42 19" stroke="#5cb4c8" opacity=".16" fill="none"/></pattern></defs>'+
      '<rect width="680" height="315" fill="#08384e" rx="13"/><rect width="680" height="315" rx="13" fill="url(#sim-waves)"/>'+
-     '<path d="M96 164 V276" stroke="#d1f3f8" stroke-width="2.5" stroke-dasharray="8 6"/>'+
-     '<text x="62" y="289" fill="#b7e0e8" font-weight="700" font-size="13">START</text>'+
-     '<text x="340" y="285" fill="#b7e0e8" text-anchor="middle" font-size="14">スタート → 1M</text>'+
-     '<path d="M164 30 H459" stroke="#a3d7e3" stroke-width="1.8" stroke-dasharray="9 6"/>'+
+     '<path d="M96 159 V281" stroke="#d1f3f8" stroke-width="2.5" stroke-dasharray="8 6"/>'+
+     '<text x="54" y="292" fill="#b7e0e8" font-weight="700" font-size="13">START</text>'+
+     '<path d="M137 281 L477 281" stroke="#a7e6f0" stroke-width="1.5" stroke-dasharray="5 8" opacity=".6"/>'+
+     '<text x="336" y="301" fill="#b7e0e8" text-anchor="middle" font-size="13">START → 1M</text>'+
+     '<path d="M164 31 H459" stroke="#a3d7e3" stroke-width="1.8" stroke-dasharray="9 6"/>'+
      '<text x="312" y="19" text-anchor="middle" fill="#b7e0e8" font-size="13">← BACK STRETCH</text>'+
-     '<circle cx="558" cy="175" r="27" stroke="#f4a541" stroke-width="1.3" stroke-dasharray="4 5" fill="none" opacity=".5"/>'+
-     '<circle cx="558" cy="175" r="8" fill="#ffa936" stroke="#fff2ba" stroke-width="2"/>'+
+     '<circle cx="558" cy="175" r="31" stroke="#f4a541" stroke-width="1.3" stroke-dasharray="4 5" fill="none" opacity=".5"/>'+
+     '<circle cx="558" cy="175" r="9" fill="#ffa936" stroke="#fff2ba" stroke-width="2"/>'+
      '<text x="592" y="176" fill="#ffd49b" font-size="14" font-weight="800">1M</text>'+
-     '<text x="17" y="29" fill="#bfe4e9" font-size="10" letter-spacing="1.4">BOAT LAB / REPLAY</text>';
-   for(let lane=1;lane<=6;lane++)html+='<path data-sim-path="'+lane+'" d="'+path(lane,order[lane])+'" stroke="transparent" fill="none"/>';
+     '<text x="17" y="30" fill="#bfe4e9" font-size="10" letter-spacing="1.4">BOAT LAB / TACTICAL VIEW</text>';
+   // Each registered boat follows its own scenario-specific Bezier path.
+   for(let lane=1;lane<=6;lane++)html+='<path data-sim-path="'+lane+'" d="'+path(lane,order[lane],tactic.id,Number(combo[0]))+'" stroke="transparent" fill="none"/>';
    for(let lane=1;lane<=6;lane++)html+=glyph(lane);
    return html+'</svg><div class="boat-sim-stage" data-sim-stage>START / スタート想定</div></div>'+
+     '<div class="boat-sim-phase" role="group" aria-label="アニメの場面に移動">'+
+     '<button type="button" data-sim-jump="start" class="active" aria-pressed="true"><small>01</small> スタート</button>'+
+     '<button type="button" data-sim-jump="turn" aria-pressed="false"><small>02</small> 第1ターンマーク</button>'+
+     '<button type="button" data-sim-jump="back" aria-pressed="false"><small>03</small> バック</button>'+
+     '</div>'+
      '<div class="boat-sim-timeline"><input type="range" data-sim-slider min="0" max="1000" value="0" step="1" aria-label="アニメの再生位置"/>'+
      '<div class="boat-sim-steps"><span>スタート</span><span>1マーク</span><span>バック</span></div></div>'+
-     '<div class="boat-sim-controls"><div class="boat-sim-buttons"><button type="button" data-sim-control="play">▶ 再生</button><button type="button" data-sim-control="pause">Ⅱ 一時停止</button><button type="button" data-sim-control="restart">↻ 最初から</button></div><strong data-sim-order>本線：'+combo+'</strong></div>'+
-     '<p class="boat-sim-story" data-sim-story>'+explanation(combo)+'</p>'+
-     '<p class="boat-sim-disclaimer">※ AIの予想買い目を視覚化する試作アニメ。実際の進入・艇速・ターン角度・航跡を測定したものではありません。固定予想や結果照合は変更しません。</p></section>';
+     '<div class="boat-sim-controls"><div class="boat-sim-buttons"><button type="button" data-sim-control="play">▶ 再生</button><button type="button" data-sim-control="pause">Ⅱ 一時停止</button><button type="button" data-sim-control="restart">↻ 最初から</button></div>'+
+     '<div class="boat-sim-speeds" role="group" aria-label="アニメ再生速度"><span>速度</span>'+
+     '<button type="button" data-sim-speed="0.5" aria-pressed="false">0.5×</button>'+
+     '<button type="button" data-sim-speed="1" aria-pressed="true" class="active">1×</button>'+
+     '<button type="button" data-sim-speed="1.5" aria-pressed="false">1.5×</button></div>'+
+     '</div>'+
+     '<div class="boat-sim-outcome"><span>バック想定</span><strong data-sim-order>'+combo+'</strong><span>1着 → 2着 → 3着</span></div>'+
+     '<p class="boat-sim-story" aria-live="polite" data-sim-story>'+stageTexts(combo)[0]+'</p>'+
+     '<p class="boat-sim-disclaimer">※ 予想済み3連単の「どういう形でそうなるか」を表す<strong>説明用アニメ</strong>。艇速や実際のターン軌道を予測する計算、展示動画解析は未実装です。4〜6番手の表示は便宜上の隊列です。元の固定買い目や結果照合は変更しません。</p></section>';
  }
  function dispose(){
    if(current?.raf!==null&&current?.raf!==undefined&&typeof cancelAnimationFrame==='function')cancelAnimationFrame(current.raf);
@@ -94,55 +138,99 @@
  function mount(root,r){
    dispose();
    if(!root||typeof root.querySelector!=='function'||typeof requestAnimationFrame!=='function')return;
-   const card=root.querySelector('[data-boat-sim]');
-   if(!card)return;
+   const card=root.querySelector('[data-boat-sim]');if(!card)return;
    const svg=card.querySelector('svg'),range=card.querySelector('[data-sim-slider]');
    if(!svg||!range)return;
    const paths=[],boats=[];
-   for(let i=1;i<=6;i++){paths.push(svg.querySelector('[data-sim-path="'+i+'"]'));boats.push(svg.querySelector('[data-sim-boat="'+i+'"]'));}
+   for(let i=1;i<=6;i++){
+     paths.push(svg.querySelector('[data-sim-path="'+i+'"]'));
+     boats.push(svg.querySelector('[data-sim-boat="'+i+'"]'));
+   }
    if(paths.some(p=>!p||typeof p.getTotalLength!=='function')||boats.some(b=>!b))return;
-   const stage=card.querySelector('[data-sim-stage]'),caption=card.querySelector('[data-sim-story]'),orderLabel=card.querySelector('[data-sim-order]');
-   const state={combo:options(r)[0],position:0,running:false,raf:null,last:null};current=state;
+   const stage=card.querySelector('[data-sim-stage]'),caption=card.querySelector('[data-sim-story]');
+   const orderLabel=card.querySelector('[data-sim-order]'),tacticLabel=card.querySelector('[data-sim-tactic]');
+   const forecastLabel=card.querySelector('[data-sim-forecast]');
+   const state={combo:options(r)[0],position:0,running:false,raf:null,last:null,speed:1};
+   current=state;
+   function phaseIndex(t){return t<.4?0:t<.73?1:2;}
    function update(){
      const t=clamp(state.position,0,1);
      paths.forEach((p,i)=>{
-       const len=p.getTotalLength(),pos=p.getPointAtLength(t*len);
+       const len=p.getTotalLength();
+       const pos=p.getPointAtLength(t*len);
        const prev=p.getPointAtLength(clamp(t*len-1,0,len)),next=p.getPointAtLength(clamp(t*len+1,0,len));
        const deg=Math.atan2(next.y-prev.y,next.x-prev.x)*180/Math.PI;
        boats[i].setAttribute('transform','translate('+pos.x.toFixed(2)+' '+pos.y.toFixed(2)+') rotate('+deg.toFixed(1)+')');
      });
      range.value=String(Math.round(t*1000));
-     stage.textContent=t<.4?'START / スタートの攻防':t<.73?'1M / 第1ターンマーク':'BACK / バック側の想定隊形';
+     const phase=phaseIndex(t);
+     stage.textContent=['START / スタートの攻防','1M / 第1ターンマーク','BACK / バック側の想定隊形'][phase];
      orderLabel.textContent='予想：'+state.combo;
+     caption.textContent=stageTexts(state.combo)[phase];
+     const phaseButtons=card.querySelectorAll('[data-sim-jump]');
+     if(phaseButtons)phaseButtons.forEach(button=>{
+       const selected=button.dataset.simJump===['start','turn','back'][phase];
+       button.classList.toggle('active',selected);button.setAttribute('aria-pressed',String(selected));
+     });
    }
    function tick(time){
      if(current!==state||!state.running)return;
-     if(state.last!==null)state.position=clamp(state.position+(time-state.last)/8500,0,1);
+     if(state.last!==null)state.position=clamp(state.position+(time-state.last)/8500*state.speed,0,1);
      state.last=time;update();
      if(state.position>=1){state.running=false;state.raf=null;state.last=null;return;}
      state.raf=requestAnimationFrame(tick);
    }
-   function pause(){state.running=false;state.last=null;if(state.raf!==null)cancelAnimationFrame(state.raf);state.raf=null;}
-   function play(){if(state.running)return;if(state.position>=1)state.position=0;state.running=true;state.last=null;state.raf=requestAnimationFrame(tick);}
+   function pause(){
+     state.running=false;state.last=null;
+     if(state.raf!==null&&typeof cancelAnimationFrame==='function')cancelAnimationFrame(state.raf);
+     state.raf=null;
+   }
+   function play(){
+     if(state.running)return;
+     if(state.position>=1)state.position=0;
+     state.running=true;state.last=null;state.raf=requestAnimationFrame(tick);
+   }
    function restart(){pause();state.position=0;update();play();}
    function select(combo){
      if(!options(r).includes(combo))return;
      pause();state.position=0;state.combo=combo;
-     const ranksByLane=ranks(combo);
-     paths.forEach((p,i)=>p.setAttribute('d',path(i+1,ranksByLane[i+1])));
-     card.querySelectorAll('[data-sim-pick]').forEach(btn=>{
-       const active=btn.dataset.simPick===combo;btn.classList.toggle('active',active);btn.setAttribute('aria-pressed',String(active));
+     const ranking=ranks(combo),tactic=tacticFor(combo);
+     paths.forEach((p,i)=>p.setAttribute('d',path(i+1,ranking[i+1],tactic.id,Number(combo[0]))));
+     card.querySelectorAll('[data-sim-pick]').forEach(button=>{
+       const selected=button.dataset.simPick===combo;
+       button.classList.toggle('active',selected);button.setAttribute('aria-pressed',String(selected));
      });
-     caption.textContent=explanation(combo);update();play();
+     if(tacticLabel)tacticLabel.textContent=tactic.label;
+     if(forecastLabel)forecastLabel.textContent='予想着順 '+combo;
+     update();play();
    }
-   card.addEventListener('click',e=>{
-     const btn=e.target.closest('[data-sim-control],[data-sim-pick]');if(!btn)return;
-     if(btn.dataset.simPick){select(btn.dataset.simPick);return;}
-     const action=btn.dataset.simControl;
-     if(action==='play')play();else if(action==='pause')pause();else if(action==='restart')restart();
+   function jump(phase){
+     const progress={start:0,turn:.60,back:.96}[phase];
+     if(progress===undefined)return;
+     pause();state.position=progress;update();
+   }
+   function speed(value){
+     const v=Number(value);if(![.5,1,1.5].includes(v))return;
+     state.speed=v;state.last=null;
+     const buttons=card.querySelectorAll('[data-sim-speed]');
+     if(buttons)buttons.forEach(button=>{
+       const selected=Number(button.dataset.simSpeed)===v;
+       button.classList.toggle('active',selected);button.setAttribute('aria-pressed',String(selected));
+     });
+   }
+   card.addEventListener('click',event=>{
+     const button=event.target.closest('[data-sim-control],[data-sim-pick],[data-sim-jump],[data-sim-speed]');
+     if(!button)return;
+     if(button.dataset.simPick){select(button.dataset.simPick);return;}
+     if(button.dataset.simJump){jump(button.dataset.simJump);return;}
+     if(button.dataset.simSpeed){speed(button.dataset.simSpeed);return;}
+     const action=button.dataset.simControl;
+     if(action==='play')play();
+     else if(action==='pause')pause();
+     else if(action==='restart')restart();
    });
    range.addEventListener('input',()=>{pause();state.position=clamp(Number(range.value)/1000,0,1);update();});
    update();
  }
- window.BoatRaceVisual={entryHTML,animationHTML,mount,dispose,ranks,path,options,explanation};
+ window.BoatRaceVisual={entryHTML,animationHTML,mount,dispose,ranks,path,options,explanation,tacticFor,stageTexts};
 })();

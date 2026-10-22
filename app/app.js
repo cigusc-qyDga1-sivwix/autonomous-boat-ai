@@ -5,6 +5,7 @@
   'use strict';
   const STORE_RESULTS = 'boatlab-results-v1';
   const STORE_DATA = 'boatlab-imported-dataset-v1';
+  const STORE_FAVORITES = 'boatlab-favorite-venues-v1';
   const dateDisplay = s => /^\d{4}-\d{2}-\d{2}$/.test(s) ? s.replace(/-/g, '/') : s;
   const money = n => `${Number(n || 0).toLocaleString('ja-JP')}円`;
   const pct = v => `${(v * 100).toFixed(1)}%`;
@@ -13,11 +14,12 @@
   const raceKey = r => `${data.event_date}|${r.venue}|${r.race}`;
   const el = id => document.getElementById(id);
   const titles = {overview:'ダッシュボード',races:'レース・買い目',results:'結果照合',analysis:'成績分析',settings:'データ管理'};
-  const state = {view:'overview',venue:'全場',classification:'ALL',raceDetail:null,resultVenue:'鳴門',resultRace:1,origin:'GitHubで発走前固定した予想のローカル写し'};
+  const state = {view:'overview',venue:'全場',classification:'ALL',boardFilter:'all',boardSort:'official',raceDetail:null,resultVenue:'鳴門',resultRace:1,origin:'GitHubで発走前固定した予想のローカル写し'};
   let data = null;
   let results = {};
   let autoResults = {};
   let lastLiveUpdate = '';
+  let favorites = [];
   let toastTimer = null;
 
   function readJSON(key, fallback) {
@@ -79,7 +81,15 @@
     return bands.map(b=>`<div class="weather-box"><div class="weather-symbol">≋</div><div class="weather-body"><strong>${escape(b.from)}–${escape(b.to)} ・ ${escape(b.wind)}</strong><p>${escape(b.note)}</p></div></div>`).join('');
   }
   function raceRow(r) {return `<button type="button" class="race-row" data-race="${escape(r.venue)}|${r.race}"><span class="race-no">${r.race}R</span><span class="race-info"><strong>${escape(r.venue)}・${escape(r.scenario)}</strong><small>${escape(r.bets.slice(0,2).map(b=>b.combination).join(' / '))}</small></span><span class="race-time">${escape(r.cutoff_jst)}</span>${pill(r.classification)}</button>`;}
+  function boardOptions() {
+    const current = new Date();
+    const jp = new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit',hour12:false});
+    const parts = new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(current);
+    const extract = part => parts.find(p=>p.type===part)?.value || '';
+    return {now:jp.format(current),today:extract('year')+'-'+extract('month')+'-'+extract('day'),favorites,filter:state.boardFilter,sort:state.boardSort};
+  }
   function overview() {
+    if(window.BoatVenueBoard) return window.BoatVenueBoard.renderHome(data,boardOptions());
     const all=allRaces();const recorded=stats(all);const countWatch=all.filter(r=>r.classification==='WATCH').length;const countSkip=all.filter(r=>r.classification==='SKIP').length;const isLive=data.mode==='auto-live';const dayJst=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());const stale=isLive&&dayJst!==data.event_date;const updated=isLive&&data.updated_at_utc?new Date(data.updated_at_utc).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}):'未確認';
     const nowJst=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());const soon=all.filter(r=>r.classification==='WATCH' && (data.mode!=='auto-live'||r.cutoff_jst>nowJst)).sort((a,b)=>a.cutoff_jst.localeCompare(b.cutoff_jst)).slice(0,6);
     return `${head('AI予想ダッシュボード',`${dateDisplay(data.event_date)} ・ ${getVenues().length}場 / ${data.mode==='auto-live'?'全国開催・自動取得（非公式）':'展示前の固定予想'}` ,`<button class="btn btn-white" data-action="export-results">↧ 結果CSV</button>`)}
@@ -93,6 +103,7 @@
   function tile(r) {return `<button type="button" class="race-tile" data-race="${escape(r.venue)}|${r.race}"><div class="tile-top"><span class="tile-r">${escape(r.venue)} ${r.race}R</span>${pill(r.classification)}</div><div class="tile-time">締切予定 ${escape(r.cutoff_jst)} · ${r.bets.length}点 · ${r.phase==='exhibition'?'展示反映':r.phase==='baseline'?'展示前':'保存済み'}</div><div class="tile-bets">${escape(r.bets.slice(0,2).map(b=>b.combination).join(' / '))}</div><div class="tile-scenario">${escape(r.scenario)}</div><div class="tile-foot"><span>${finishPill(r)}</span><strong>詳細を見る ↗</strong></div></button>`;}
   function races() {
     if(state.raceDetail) return detail(state.raceDetail);
+    if(state.venue!=='全場' && window.BoatVenueBoard) return window.BoatVenueBoard.renderVenue(data,state.venue,boardOptions());
     const filtered=allRaces().filter(r=>(state.venue==='全場'||r.venue===state.venue)&&(state.classification==='ALL'||r.classification===state.classification));
     return `${head('レース・買い目',`${dateDisplay(data.event_date)} / ${data.mode==='auto-live'?'全国の発走前固定済み予想':'保存済み予想'} / 各Rの仮想5万円配分`)}<div class="filter-bar"><div class="segmented">${['ALL','WATCH','SKIP'].map(v=>`<button data-filter-status="${v}" class="${state.classification===v?'active':''}">${v==='ALL'?'すべて':v}</button>`).join('')}</div>${venueSelect(state.venue)}</div><div class="race-grid">${filtered.map(tile).join('')||'<div class="no-data">該当するレースはありません</div>'}</div>${data.mode==='auto-live'&&data.unforecast_races?.length?`<div class="notice warn">${data.unforecast_races.length}Rは締切前の予想を固定できなかったため、買い目を表示しません。結果を見てから予想を追加することもありません。</div>`:''}<p class="footer-disclaimer">BUYが0件なのは、オッズによる採算チェックを完了していないため。SKIPレースも研究目的で予想を保持しています。</p>`;
   }
@@ -136,12 +147,16 @@
   function exportResultsCSV(){const header=['date','venue','race','classification','cutoff_jst','finish','payout_per_100','is_hit','stake_yen','virtual_payout_yen','virtual_profit_yen','recorded_at','source'];const body=allRaces().map(r=>{let c=compute(r);return [data.event_date,r.venue,r.race,r.classification,r.cutoff_jst,c.record?.finish||'',c.record?.payout_per_100??'',c.record?Number(c.hit):'',c.record?c.stake:'',c.payout??'',c.profit??'',c.record?.recorded_at||'',c.record?'manual':''];});const csv=[header,...body].map(a=>a.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');download(`boatlab-results-${data.event_date}.csv`,'\uFEFF'+csv,'text/csv;charset=utf-8');toast('結果CSVを書き出したよ');}
   function copyBets(r){const s=`${data.event_date} ${r.venue} ${r.race}R ${r.cutoff_jst} [${r.classification}] ${r.phase==='exhibition'?'展示反映':'展示前'}予想\n${r.scenario}\n${r.bets.map((b,i)=>`${i+1}. ${b.combination} ${money(b.virtual_yen)}`).join('\n')}\n合計 ${money(r.bets.reduce((s,b)=>s+b.virtual_yen,0))} / 研究用・仮想`;if(navigator.clipboard?.writeText)navigator.clipboard.writeText(s).then(()=>toast('買い目をコピーしたよ'),()=>toast('コピーできませんでした'));else {const t=document.createElement('textarea');t.value=s;document.body.append(t);t.select();document.execCommand('copy');t.remove();toast('買い目をコピーしたよ');}}
   document.addEventListener('click',e=>{
-    const nav=e.target.closest('[data-view]');if(nav){go(nav.dataset.view);return;}
+    const nav=e.target.closest('[data-view]');if(nav){if(nav.dataset.view==='races')state.venue='全場';go(nav.dataset.view);return;}
+    const venueOpen=e.target.closest('[data-open-venue]');if(venueOpen){if(venueOpen.disabled)return;state.venue=venueOpen.dataset.openVenue;state.raceDetail=null;state.view='races';render();window.scrollTo(0,0);return;}
+    const fav=e.target.closest('[data-favorite-venue]');if(fav){const name=fav.dataset.favoriteVenue;favorites=favorites.includes(name)?favorites.filter(x=>x!==name):favorites.concat([name]);try{localStorage.setItem(STORE_FAVORITES,JSON.stringify(favorites));}catch{}render();return;}
+    const boardFilter=e.target.closest('[data-venue-filter]');if(boardFilter){state.boardFilter=boardFilter.dataset.venueFilter;render();return;}
     const row=e.target.closest('[data-race]');if(row){const [v,n]=row.dataset.race.split('|');let r=findRace(v,n);if(!r)return;if(row.dataset.action==='settle-this'){state.resultVenue=v;state.resultRace=Number(n);go('results');return;}if(row.dataset.action==='copy-bets'){copyBets(r);return;}state.raceDetail=r;state.view='races';render();window.scrollTo(0,0);return;}
     const btn=e.target.closest('[data-action]');if(!btn)return;
     switch(btn.dataset.action){
       case 'go-races':go('races');break;
       case 'back-races':state.raceDetail=null;render();break;
+      case 'back-overview':state.venue='全場';go('overview');break;
       case 'export-results':exportResultsCSV();break;
       case 'export-predictions':download(`boatlab-predictions-${data.event_date}.json`,JSON.stringify(data,null,2),'application/json');toast('予想データを保存したよ');break;
       case 'export-backup':download(`boatlab-backup-${data.event_date}.json`,JSON.stringify({version:1,date:data.event_date,results},null,2),'application/json');toast('バックアップを書き出したよ');break;
@@ -151,6 +166,7 @@
     }
   });
   document.addEventListener('change',async e=>{
+    if(e.target.matches('[data-venue-sort]')){state.boardSort=e.target.value;render();return;}
     if(e.target.matches('[data-filter-venue]')){state.venue=e.target.value;render();}
     if(e.target.matches('#result-venue')){state.resultVenue=e.target.value;state.resultRace=1;render();}
     if(e.target.matches('#result-race')){state.resultRace=Number(e.target.value);render();}
@@ -194,6 +210,9 @@
   }
   async function init(){
     results=readJSON(STORE_RESULTS,{});
+    favorites=readJSON(STORE_FAVORITES,window.BoatVenueBoard?.DEFAULT_FAVORITES||[]);
+    if(!Array.isArray(favorites))favorites=[];
+    favorites=favorites.filter(x=>typeof x==='string');
     try{
       const imported=readJSON(STORE_DATA,null);
       if(imported){try{data=normalizeData(imported);state.origin='利用者が読み込んだJSON（発走前固定・出典は未検証）';}catch{localStorage.removeItem(STORE_DATA);}}

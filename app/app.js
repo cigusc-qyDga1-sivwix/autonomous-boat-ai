@@ -268,7 +268,9 @@
   }
   function resultsPage() {
     const races=allRaces();
-    if(!races.length)return head('結果照合','発走前に保存した予想のみ結果と照合します')+resultsRefreshControl()+'<div class="no-data">予想データがまだありません。次の取得結果を確認してください。</div>';
+    if(!races.length)return head('結果照合','公式払戻の一括確認ができます')+resultsRefreshControl()+
+      (window.BoatBatchReader?.render(batchContext())||'')+
+      '<div class="no-data">まだ発走前に固定した予想がないため、照合できる買い目はありません。公式一覧の掲載レースを確認することはできます。</div>';
     const r=findRace(state.resultVenue,state.resultRace)||races[0];
     const c=compute(r),settled=races.filter(x=>!!recordFor(x));
     const live=data.mode==='auto-live', verified=officialStats(races);

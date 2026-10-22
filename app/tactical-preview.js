@@ -85,8 +85,9 @@ function trajectory(b,rank,plan){
  const startX=b.group==='dash'?60:113;
  const startY=147+c*18;
  const outer=(b.kind==='makuri'?45:b.kind==='makuri-zashi'?24:b.kind==='sashi'?-20:b.kind==='escape'?-31:0);
- const xTurn=542+outer+plan.uncertainty*12;
- const yTurn=170+outer*.3+plan.uncertainty*20;
+ const directional=plan.cfg.relativeWind==='cross'?plan.wind*.9:plan.cfg.relativeWind==='tail'?plan.wind*.4:plan.cfg.relativeWind==='head'?-plan.wind*.4:0;
+ const xTurn=542+outer+plan.uncertainty*12+directional;
+ const yTurn=170+outer*.3+plan.uncertainty*20+(plan.cfg.relativeWind==='cross'?plan.wind*.4:0);
  const leadX=435+clamp((.17-b.st)*380,-30,30);
  const backY=36+rank*24;
  const exitX=210+rank*11;
@@ -221,7 +222,7 @@ function mount(root,r){
     if(other&&other!==b)other.course=b.course;
     b.course=dest;
     // A manually-entered course ST does not silently travel to the new course.
-    b.st=null;
+    b.st=courseAverage(list(r)[b.lane-1]||{},dest);
    }else if(node.dataset.planGroup)b.group=node.value==='dash'?'dash':'slow';
    else if(node.dataset.planKind){if(kinds.some(k=>k[0]===node.value))b.kind=node.value;}
    else if(node.dataset.planSt){

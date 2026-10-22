@@ -135,4 +135,5 @@ def test_no_backfilled_weather_after_cutoff():
       "18":{"races":{"1":synthetic_race()}}
     }}},late,"fixture",venue)
     assert frozen["race_records"]["18-1"]["versions"][0]==historic
-    assert "weather_used" not in ui["forecast_races"][0]
+    assert ui["forecast_races"][0]["weather_used"] is None
+    assert ui["forecast_races"][0]["weather_adjustment"]["applied"] is False

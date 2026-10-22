@@ -17,6 +17,8 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
+from scripts.official_pay import fetch_official_pay
+
 JST = ZoneInfo("Asia/Tokyo")
 UTC = timezone.utc
 SOURCE = "https://boatraceopenapi.github.io/api/v1"
@@ -199,23 +201,6 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     return {**body, "sha256": stable_hash(body)}
 
 
-def payout_records(race: dict) -> list[dict]:
-    result = race.get("result")
-    if not isinstance(result, dict):
-        return []
-    payouts = (result.get("payouts") or {}).get("trifecta") or []
-    cleaned = []
-    for p in payouts:
-        combo = str(p.get("combination", ""))
-        amount = number(p.get("amount"))
-        parts = combo.split("-")
-        if len(parts) == 3 and len(set(parts)) == 3 and all(
-            x in "123456" and len(x) == 1 for x in parts
-        ) and amount is not None and amount >= 100:
-            cleaned.append({"combination": combo, "amount": int(amount)})
-    return cleaned
-
-
 def build(existing: dict | None, payload: dict, now: datetime, source_url: str) -> tuple[dict, dict]:
     if now.tzinfo is None:
         raise ValueError("Timezone-aware now is mandatory")
@@ -260,8 +245,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str) 
                     record["versions"].append(prediction(race, VENUES[venue_code], n,
                                                          "exhibition", now, source_url))
                     new_exhibition += 1
-            if now.astimezone(JST) >= cutoff:
-                record["payouts"] = payout_records(race) or record.get("payouts", [])
+            # Results are NEVER taken from the unofficial preview API.
+            # Official pay-page evidence is attached only after forecasts are generated.
     # Preserve previous records even if a subsequent source request is incomplete.
     ledger["last_updated_at_utc"] = now.astimezone(UTC).isoformat()
     ledger["source_url"] = source_url
@@ -283,12 +268,9 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str) 
         )}
         r["version_count"] = len(versions)
         latest_races.append(r)
-        if record.get("payouts"):
-            p = record["payouts"][0]
-            official_results[f"{local_day}|{record['venue']}|{record['race']}"] = {
-                "finish": p["combination"], "payout_per_100": p["amount"],
-                "source": "unofficial-api", "recorded_at": ledger["last_updated_at_utc"]
-            }
+        p = record.get("official_pay")
+        if p and p.get("verified") and not record.get("official_conflict") and not record.get("official_review"):
+            official_results[f"{local_day}|{record['venue']}|{record['race']}"] = dict(p)
     latest_races.sort(key=lambda r: (r["cutoff_jst"], r["venue"], r["race"]))
     out = {
         "event_date": local_day,
@@ -312,6 +294,120 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str) 
               "new_baseline": new_baseline, "new_exhibition": new_exhibition,
               "official_results": len(official_results)}
     return ledger, out, status
+
+
+
+def integrate_official(ledger: dict, view: dict, pay: dict,
+                       now: datetime) -> dict:
+    """Attach verified official results ONLY to previously frozen forecasts.
+
+    Validation occurs independently after predictions have been generated; the
+    official page is not a feature source. A correction/conflict requires manual
+    review instead of silently changing completed simulated results.
+    """
+    if pay.get("date") != ledger.get("event_date"):
+        raise ValueError("Official payoff date does not match prediction date")
+    records = ledger["race_records"]
+    processed = 0
+    alerts = {}
+    for key, issue in pay.get("reviews", {}).items():
+        rec = records.get(key)
+        if rec and rec.get("versions"):
+            rec["official_review"] = issue.get("reason", "review")
+            alerts[f"{ledger['event_date']}|{rec['venue']}|{rec['race']}"] = {
+                "status": "review", "reason": "返還・異常払戻の確認が必要",
+                "source_url": pay["source_url"],
+            }
+    for key, issue in pay.get("cancellations", {}).items():
+        rec = records.get(key)
+        if rec and rec.get("versions"):
+            rec["official_review"] = "cancelled"
+            alerts[f"{ledger['event_date']}|{rec['venue']}|{rec['race']}"] = {
+                "status": "cancelled", "reason": "レース中止",
+                "source_url": pay["source_url"],
+            }
+    for key, payout in pay.get("results", {}).items():
+        rec = records.get(key)
+        if not rec or not rec.get("versions") or rec.get("official_review"):
+            continue
+        cutoff = datetime.fromisoformat(rec["versions"][-1]["cutoff_iso_jst"])
+        if now.astimezone(JST) < cutoff:
+            continue
+        combo = payout["finish"]
+        amount = payout["payout_per_100"]
+        if not isinstance(amount, int) or amount < 100 or amount % 10 != 0:
+            continue
+        if not isinstance(combo, str) or len(combo.split("-")) != 3:
+            continue
+        previous = rec.get("official_pay")
+        if previous and (previous["finish"], previous["payout_per_100"]) != (combo, amount):
+            rec["official_conflict"] = {
+                "previous": [previous["finish"], previous["payout_per_100"]],
+                "current": [combo, amount],
+                "detected_at_utc": now.astimezone(UTC).isoformat(),
+            }
+            alerts[f"{ledger['event_date']}|{rec['venue']}|{rec['race']}"] = {
+                "status": "conflict", "reason": "公式結果の値が以前の取得値と不一致",
+                "source_url": pay["source_url"],
+            }
+            continue
+        if not previous:
+            rec["official_pay"] = {
+                "finish": combo, "payout_per_100": amount, "verified": True,
+                "source": "boatrace_official_pay", "source_url": pay["source_url"],
+                "recorded_at": pay["retrieved_at_utc"],
+            }
+            processed += 1
+
+    # Current official evidence only. A stale unofficial datum is NEVER used.
+    results = {}
+    base = ledger["event_date"]
+    for rec in records.values():
+        if not rec.get("versions"):
+            continue
+        key = f"{base}|{rec['venue']}|{rec['race']}"
+        if rec.get("official_conflict"):
+            alerts[key] = {
+                "status": "conflict", "reason": "公式払戻に差異あり",
+                "source_url": pay["source_url"],
+            }
+            continue
+        if rec.get("official_review"):
+            if key not in alerts:
+                alerts[key] = {
+                    "status": "review", "reason": "返還・中止・払戻の確認待ち",
+                    "source_url": pay["source_url"],
+                }
+            continue
+        p = rec.get("official_pay")
+        if not p or not p.get("verified"):
+            continue
+        snap = rec["versions"][-1]
+        stake = sum(b["virtual_yen"] for b in snap["bets"])
+        winning_bet = next((b for b in snap["bets"] if b["combination"] == p["finish"]), None)
+        paid = winning_bet["virtual_yen"] * p["payout_per_100"] // 100 if winning_bet else 0
+        first_second = any(b["combination"][:3] == p["finish"][:3] for b in snap["bets"])
+        head = any(b["combination"][0] == p["finish"][0] for b in snap["bets"])
+        results[key] = {
+            **p, "hit": bool(winning_bet), "virtual_stake": stake,
+            "virtual_payout": paid, "virtual_profit": paid - stake,
+            "head_captured": head, "first_second": first_second,
+            "third_miss": bool(first_second and not winning_bet),
+            "snapshot_phase": snap["phase"], "snapshot_sha256": snap["sha256"],
+        }
+
+    view["official_results"] = results
+    view["settlement_alerts"] = alerts
+    view["official_pay_info"] = {
+        "source_url": pay["source_url"],
+        "retrieved_at_utc": pay["retrieved_at_utc"],
+        "verified_on_page": len(pay["results"]),
+        "confirmed_forecast_results": len(results),
+        "needs_review": len(alerts),
+        "pending_on_page": pay.get("pending_count", 0),
+        "newly_confirmed": processed,
+    }
+    return view
 
 
 def retrieve(day: str) -> tuple[dict, str]:
@@ -347,6 +443,23 @@ def main():
     path = args.out_dir / f"{day}.json"
     previous = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
     ledger, webapp, summary = build(previous, source, now, source_url)
+    # Read official payouts only AFTER the pre-cutoff forecast has been frozen.
+    # Failure of the official website must not make up results or erase forecasts.
+    try:
+        pay = fetch_official_pay(compact)
+        webapp = integrate_official(ledger, webapp, pay, now)
+        summary["official_pay"] = webapp["official_pay_info"]
+    except Exception as exc:
+        summary["official_pay_error"] = str(exc)
+        # A fetch failure does not invalidate previously verified official results.
+        preserved = {
+            "date": day, "results": {}, "reviews": {}, "cancellations": {},
+            "source_url": f"https://www.boatrace.jp/owpc/pc/race/pay?hd={compact}",
+            "retrieved_at_utc": now.astimezone(UTC).isoformat(),
+        }
+        integrate_official(ledger, webapp, preserved, now)
+        webapp["official_pay_info"]["source_status"] = "FETCH_FAILED"
+        webapp["official_pay_info"]["error"] = str(exc)
     # A successful GET with no scheduled races still writes a factual empty dashboard.
     write_json(path, ledger)
     write_json(args.out_dir / "latest.json", webapp)

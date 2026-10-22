@@ -19,7 +19,7 @@ const buttons=Array.from({length:3},(_,i)=>({
 let clickHandler=null,inputHandler=null;
 const slider={value:'0',addEventListener:(event,handler)=>{if(event==='input')inputHandler=handler}};
 const stage={textContent:''},caption={textContent:''},result={textContent:''};
-const svg={querySelector(query)=>{
+const svg={querySelector(query){
  const m=query.match(/\[data-sim-(?:path|boat)="(\d)"\]/);
  if(!m)return null;
  return query.includes('path')?paths[Number(m[1])-1]:boats[Number(m[1])-1];

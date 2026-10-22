@@ -81,7 +81,9 @@ def test_results_added_only_to_existing_pre_cutoff_prediction():
     past, ui, _ = build(original, data(race(finished=True)),
                         datetime(2026,10,22,11,0,tzinfo=JST), "fixture")
     assert past["race_records"]["18-1"]["versions"][0] == frozen
-    assert ui["official_results"]["2026-10-22|徳山|1"]["finish"] == "2-1-3"
+    # An unofficial result can be present in the daily feed, but must never
+    # count toward official confirmed settlements.
+    assert ui["official_results"] == {}
 
 
 def test_incomplete_exhibition_rejected():

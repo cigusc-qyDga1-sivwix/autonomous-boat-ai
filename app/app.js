@@ -47,7 +47,28 @@
   function allRaces() { return [...data.forecast_races].sort((a,b)=>a.venue.localeCompare(b.venue,'ja') || a.race-b.race); }
   function getVenues() { return [...new Set(allRaces().map(r=>r.venue))]; }
   function findRace(venue,race) {return allRaces().find(r=>r.venue===venue && r.race===Number(race));}
-  function recordFor(r) {return results[raceKey(r)] || autoResults[raceKey(r)] || null;}
+  function officialFor(r) {
+    const v=autoResults[raceKey(r)];
+    if(!v||data?.mode!=='auto-live'||v.source!=='boatrace_official_pay'||v.verified!==true)return null;
+    if(v.snapshot_sha256 && r.sha256 && v.snapshot_sha256!==r.sha256)return null;
+    if(!isCombo(v.finish)||!Number.isSafeInteger(v.payout_per_100)||v.payout_per_100<100)return null;
+    return v;
+  }
+  function resultIssue(r) {return data?.settlement_alerts?.[raceKey(r)] || null;}
+  function recordFor(r) {return resultIssue(r)?null:(officialFor(r)||results[raceKey(r)]||null);}
+  function officialStats(races) {
+    const verified=races.filter(r=>!!officialFor(r)&&!resultIssue(r));
+    let hits=0,invested=0,paid=0,heads=0,firstSeconds=0,thirdMiss=0;
+    for(const r of verified){
+      const c=compute(r);if(!c.record)continue;
+      hits+=Number(c.hit);invested+=c.stake;paid+=c.payout;
+      heads+=Number(c.headCaptured);firstSeconds+=Number(c.firstSecond);
+      if(c.firstSecond&&!c.hit)thirdMiss++;
+    }
+    return {count:verified.length,hits,invested,paid,profit:paid-invested,
+      hitRate:verified.length?hits/verified.length:0,
+      returnRate:invested?paid/invested:null,heads,firstSeconds,thirdMiss};
+  }
   function compute(r) {
     const record=recordFor(r),stake=r.bets.reduce((s,b)=>s+b.virtual_yen,0);
     if (!record) return {record:null,stake,payout:null,hit:null,profit:null};
@@ -67,7 +88,13 @@
     return {count:races.length,examined,hits,invested,paid,profit:paid-invested,hitRate:examined?hits/examined:0,returnRate:invested?paid/invested:null,heads,firstSeconds,thirdMiss};
   }
   function pill(text,cls) {return `<span class="pill ${cls||String(text).toLowerCase()}">${escape(text)}</span>`;}
-  function finishPill(r) {const c=compute(r);return c.record?pill(c.hit?'的中':'不的中',c.hit?'hit':'miss'):pill('未照合','pending');}
+  function finishPill(r) {
+    const issue=resultIssue(r);
+    if(issue)return pill(issue.status==='cancelled'?'レース中止':'公式・要確認','pending');
+    const c=compute(r);
+    if(!c.record)return pill('未照合','pending');
+    return pill((officialFor(r)?'公式 ':'')+(c.hit?'的中':'不的中'),c.hit?'hit':'miss');
+  }
   function head(title,subtitle,actions='') {return `<div class="page-heading"><div><div class="page-eyebrow">BOAT LAB / ${escape(data.event_date)}</div><h1>${escape(title)}</h1><p>${escape(subtitle)}</p></div>${actions?`<div class="right-controls">${actions}</div>`:''}</div>`;}
   function metric(label,value,sub,mark='',cls='') {return `<div class="card metric"><div class="metric-top"><span>${escape(label)}</span><span class="metric-mark">${escape(mark)}</span></div><strong class="metric-value ${cls}">${escape(value)}</strong><span class="metric-sub">${escape(sub)}</span></div>`;}
   function venueSelect(selected,attr='data-filter-venue') {return `<select class="select" ${attr} aria-label="競艇場を選択"><option value="全場" ${selected==='全場'?'selected':''}>全競艇場</option>${getVenues().map(v=>`<option value="${escape(v)}" ${selected===v?'selected':''}>${escape(v)}</option>`).join('')}</select>`;}

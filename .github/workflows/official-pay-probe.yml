@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - 'scripts/probe_official_pay.py'
+      - 'scripts/official_pay.py'
       - '.github/workflows/official-pay-probe.yml'
   workflow_dispatch:
 permissions:
@@ -16,5 +17,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Inspect official payout HTML read-only
-        run: python scripts/probe_official_pay.py
+      - name: Parse official payout page with strict checks
+        run: python scripts/official_pay.py 20261022

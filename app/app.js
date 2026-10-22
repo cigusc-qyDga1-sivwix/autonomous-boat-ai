@@ -14,7 +14,7 @@
   const raceKey = r => `${data.event_date}|${r.venue}|${r.race}`;
   const el = id => document.getElementById(id);
   const titles = {overview:'ダッシュボード',races:'レース・買い目',results:'結果照合',analysis:'成績分析',settings:'データ管理'};
-  const state = {view:'overview',venue:'全場',classification:'ALL',boardFilter:'all',boardSort:'official',raceDetail:null,resultVenue:'鳴門',resultRace:1,origin:'GitHubで発走前固定した予想のローカル写し'};
+  const state = {view:'overview',venue:'全場',classification:'ALL',boardFilter:'all',boardSort:'official',raceDetail:null,showExternalAnalysis:false,resultVenue:'鳴門',resultRace:1,origin:'GitHubで発走前固定した予想のローカル写し'};
   let data = null;
   let results = {};
   let autoResults = {};
@@ -136,8 +136,23 @@
   }
   function detail(r) {
     const w=weatherFor(r.venue,r.cutoff_jst),c=compute(r);
+    const external=window.BoatExternalReference;
+    const externalUrl=external?external.linkFor(r.venue,data.event_date,r.race):'https://boaters-boatrace.com/race';
+    const predictionUrl=external?external.predictionLinkFor(r.venue,data.event_date,r.race):'https://boaters-boatrace.com/race';
+    const referencePanel=`<section class="external-reference-card" aria-label="外部サイトの参考情報">
+      <div class="external-header"><div><span class="external-eyebrow">EXTERNAL REFERENCE</span><h2>🔎 外部情報・比較ツール</h2></div><span class="external-status">手動確認</span></div>
+      <p>選択中の${escape(r.venue)} ${r.race}RをBOATERSで開けます。利用規約により、サイトの自動読み取り・転送は行いません。</p>
+      <div class="external-action-row">
+        <a class="external-btn external-btn-primary" href="${escape(externalUrl)}" target="_blank" rel="noopener noreferrer">↗ BOATERS レース情報</a>
+        <a class="external-btn external-btn-white" href="${escape(predictionUrl)}" target="_blank" rel="noopener noreferrer">↗ BOATERS AI予想</a>
+        <button type="button" class="external-btn external-btn-white" data-action="analyze-saved-race" aria-expanded="${state.showExternalAnalysis?'true':'false'}">${state.showExternalAnalysis?'✕ 比較を閉じる':'📊 取得済みデータを分析'}</button>
+      </div>
+      ${state.showExternalAnalysis && external?external.analysisHTML(r):''}
+      <p class="external-footnote">※ 比較ボタンはBOAT LABに保存済みのデータのみを使います。BOATERSのデータを取得したり、予想・固定買い目を書き換えたりしません。</p>
+    </section>`;
     return `<button class="back-btn" data-action="back-races">← レース一覧へ戻る</button><div class="detail-header"><div><div class="page-eyebrow">FORECAST DETAILS / ${escape(data.event_date)}</div><h1 class="detail-title">${escape(r.venue)} ${r.race}R <span style="font-size:17px;vertical-align:middle">${pill(r.classification)}</span></h1><div class="detail-sub">締切予定 ${escape(r.cutoff_jst)} JST　 ·　 ${r.phase==='exhibition'?'展示数値反映':r.phase==='baseline'?'展示前':'保存済み'}・結果未使用</div></div><button class="btn btn-primary" data-action="copy-bets" data-race="${escape(r.venue)}|${r.race}">⎘ 買い目をコピー</button></div>
     ${r.phase?`<div class="notice">${escape(r.evidence||'')} ・ 発走前保存 ${escape(r.frozen_at_utc||'未記録')} ・ SHA256 ${escape((r.sha256||'').slice(0,18))}…${r.weather_observed?`<br>場内風速 ${escape(r.weather_observed.wind_speed)}m/s ／ 波高 ${escape(r.weather_observed.wave_height)}cm（非公式・取得時点）`:''}<br>予想モデル：未学習・確率未校正。展示動画とオッズは未反映。</div>`:''}
+    ${referencePanel}
     <div class="detail-grid"><section class="card card-pad"><div class="section-head"><h2 class="section-title">3連単フォーメーション</h2>${pill(`${r.bets.length}点 / 仮想`,'pending')}</div><div class="feature-card"><span class="feature-label">SCENARIO / 展開の中心</span><strong>${escape(r.scenario)}</strong><p>着順連動型の仮説。1着の勝ち筋と2・3着の残り方を検証する。</p></div><table class="bets-table"><thead><tr><th>評価</th><th>3連単</th><th>仮想金額</th></tr></thead><tbody>${r.bets.map((b,i)=>`<tr class="${i<3?'top-bet':''}"><td>${i<3?'本線':i<6?'対抗':'穴'}</td><td>${escape(b.combination)}</td><td class="amount">${money(b.virtual_yen)}</td></tr>`).join('')}</tbody></table><div class="detail-total"><span>合計 / ${r.bets.length}点</span><strong>${money(c.stake)}</strong></div><div class="notice warn">実際の購入は0円。${r.phase==='exhibition'?'展示は取得時点の値を反映。':'展示は未反映。'} オッズは未反映。この金額は精度比較用の仮想配分です。</div></section>
     <div><section class="card card-pad bottom-margin"><h3>レース情報</h3><div class="meta-list"><div class="meta"><span>開催</span><b>${escape(r.venue)}</b></div><div class="meta"><span>対象日</span><b>${dateDisplay(data.event_date)}</b></div><div class="meta"><span>締切予定</span><b>${escape(r.cutoff_jst)} JST</b></div><div class="meta"><span>予想区分</span><b>${escape(r.classification)}</b></div><div class="meta"><span>展示データ</span><b>${r.phase==='exhibition'?'反映済み（非公式）':'未反映'}</b></div><div class="meta"><span>オッズ</span><b>未反映</b></div></div></section>
     <section class="card card-pad bottom-margin"><h3>気象補正メモ</h3>${w?`<div class="weather-box"><div class="weather-symbol">≋</div><div class="weather-body"><strong>${escape(w.wind)}</strong><p>${escape(w.note)}</p></div></div>`:'<p class="muted text-sm">気象見通し未登録</p>'}<p class="help">${data.mode==='auto-live'?'展示時点に場内で取得された非公式気象データがある場合のみ表示。展示前の時間別予報はまだ未接続。':'同じ時間帯の周辺予報を参照。予報の風向はレース水面の風向と一致するとは限りません。'}</p></section>
@@ -194,7 +209,7 @@
     document.querySelectorAll('[data-view]').forEach(b=>{b.classList.toggle('active',b.dataset.view===state.view);if(b.dataset.view===state.view)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
     main.innerHTML=({overview,races,results:resultsPage,analysis,settings})[state.view]();
   }
-  function go(view) {state.view=view;state.raceDetail=null;render();window.scrollTo({top:0,behavior:'instant'});}
+  function go(view) {state.view=view;state.raceDetail=null;state.showExternalAnalysis=false;render();window.scrollTo({top:0,behavior:'instant'});}
   function toast(message){const node=el('toast');node.textContent=message;node.classList.add('show');if(toastTimer)clearTimeout(toastTimer);toastTimer=setTimeout(()=>node.classList.remove('show'),3200);}
   function download(name,content,type='text/plain;charset=utf-8') {const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
   function exportResultsCSV(){const header=['date','venue','race','classification','cutoff_jst','finish','payout_per_100','is_hit','stake_yen','virtual_payout_yen','virtual_profit_yen','recorded_at','source'];const body=allRaces().map(r=>{let c=compute(r);return [data.event_date,r.venue,r.race,r.classification,r.cutoff_jst,c.record?.finish||'',c.record?.payout_per_100??'',c.record?Number(c.hit):'',c.record?c.stake:'',c.payout??'',c.profit??'',c.record?.recorded_at||'',c.record?'manual':''];});const csv=[header,...body].map(a=>a.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');download(`boatlab-results-${data.event_date}.csv`,'\uFEFF'+csv,'text/csv;charset=utf-8');toast('結果CSVを書き出したよ');}
@@ -204,9 +219,10 @@
     const venueOpen=e.target.closest('[data-open-venue]');if(venueOpen){if(venueOpen.disabled)return;state.venue=venueOpen.dataset.openVenue;state.raceDetail=null;state.view='races';render();window.scrollTo(0,0);return;}
     const fav=e.target.closest('[data-favorite-venue]');if(fav){const name=fav.dataset.favoriteVenue;favorites=favorites.includes(name)?favorites.filter(x=>x!==name):favorites.concat([name]);try{localStorage.setItem(STORE_FAVORITES,JSON.stringify(favorites));}catch{}render();return;}
     const boardFilter=e.target.closest('[data-venue-filter]');if(boardFilter){state.boardFilter=boardFilter.dataset.venueFilter;render();return;}
-    const row=e.target.closest('[data-race]');if(row){const [v,n]=row.dataset.race.split('|');let r=findRace(v,n);if(!r)return;if(row.dataset.action==='settle-this'){state.resultVenue=v;state.resultRace=Number(n);go('results');return;}if(row.dataset.action==='copy-bets'){copyBets(r);return;}state.raceDetail=r;state.view='races';render();window.scrollTo(0,0);return;}
+    const row=e.target.closest('[data-race]');if(row){const [v,n]=row.dataset.race.split('|');let r=findRace(v,n);if(!r)return;if(row.dataset.action==='settle-this'){state.resultVenue=v;state.resultRace=Number(n);go('results');return;}if(row.dataset.action==='copy-bets'){copyBets(r);return;}state.raceDetail=r;state.showExternalAnalysis=false;state.view='races';render();window.scrollTo(0,0);return;}
     const btn=e.target.closest('[data-action]');if(!btn)return;
     switch(btn.dataset.action){
+      case 'analyze-saved-race':state.showExternalAnalysis=!state.showExternalAnalysis;render();break;
       case 'go-races':go('races');break;
       case 'back-races':state.raceDetail=null;render();break;
       case 'back-overview':state.venue='全場';go('overview');break;

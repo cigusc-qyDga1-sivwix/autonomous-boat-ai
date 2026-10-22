@@ -445,6 +445,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                             if isinstance(s, dict)),
         "venues_with_races": len(venues_seen),
         "weather_venue_count": len(set(weather_by_venue)&venues_seen),
+        "weather_fixed_race_count": sum(bool(r.get("weather_used")) for r in latest_races),
+        "weather_adjusted_race_count": sum(bool((r.get("weather_adjustment") or {}).get("applied")) for r in latest_races),
         "venue_weather": {
             VENUES[code]: weather_at(weather, now.astimezone(JST))
             for code, weather in weather_by_venue.items()

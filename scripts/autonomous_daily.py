@@ -81,12 +81,34 @@ def preview_complete(race: dict) -> bool:
     racers = preview.get("racers") or {}
     # Complete racer exhibition and venue weather arrive independently.
     # Lack of on-water observation must not hide otherwise complete exhibition.
+    # A six-boat preview is usable only with physical exhibition times.
+    # Negative start timing (F) is valid source data, but must NOT earn a speed bonus.
     return all(
-        isinstance(racers.get(str(i)), dict) and all(
-            number(racers[str(i)].get(field)) is not None
-            for field in ("course_number", "start_timing", "exhibition_time")
-        ) for i in range(1, 7)
+        isinstance(racers.get(str(i)), dict)
+        and number(racers[str(i)].get("course_number")) is not None
+        and 1 <= number(racers[str(i)].get("course_number")) <= 6
+        and number(racers[str(i)].get("exhibition_time")) is not None
+        and 5.0 <= number(racers[str(i)].get("exhibition_time")) <= 10.0
+        and number(racers[str(i)].get("start_timing")) is not None
+        and -.5 <= number(racers[str(i)].get("start_timing")) <= .5
+        for i in range(1, 7)
     )
+
+
+def valid_average_st(value) -> float | None:
+    """0.00 / out-of-range average ST can be an unfilled source field.
+
+    Neutralize rather than assuming an impossible persistent perfect start.
+    This does not imply exhibition ST=0.00 is invalid.
+    """
+    v = number(value)
+    return v if v is not None and .01 <= v <= .40 else None
+
+
+def usable_exhibition_st(value) -> float | None:
+    """Exhibition F (negative ST) is timing evidence, not a fast legal start."""
+    v = number(value)
+    return v if v is not None and 0 <= v <= .50 else None
 
 
 def features(race: dict, phase: str) -> tuple[list[float], list[dict]]:
@@ -95,6 +117,8 @@ def features(race: dict, phase: str) -> tuple[list[float], list[dict]]:
     prev_racers = preview.get("racers") or {}
     expo_times = [number((prev_racers.get(str(i)) or {}).get("exhibition_time"))
                   for i in range(1, 7)]
+    if not all(t is not None and 5.0 <= t <= 10.0 for t in expo_times):
+        expo_times = [None] * 6
     reference = min(t for t in expo_times if t is not None) if all(
         t is not None for t in expo_times) else None
     weights, detail = [], []
@@ -105,7 +129,8 @@ def features(race: dict, phase: str) -> tuple[list[float], list[dict]]:
         course = max(1, min(6, course))
         win = number(racer.get("national_win_rate"), 4.5)
         motor = number(racer.get("motor_top_2_percent"), 30.0)
-        avg_st = number(racer.get("average_start_timing"), .17)
+        measured_avg_st = valid_average_st(racer.get("average_start_timing"))
+        avg_st = measured_avg_st if measured_avg_st is not None else .17
         f_count = number(racer.get("flying_count"), 0)
         score = COURSE[course - 1] * (1 + .11 * (win - 4.5)
                                      + .004 * (motor - 30)
@@ -113,17 +138,20 @@ def features(race: dict, phase: str) -> tuple[list[float], list[dict]]:
         score *= 0.96 ** min(3, max(0, f_count))
         if phase == "exhibition" and reference is not None:
             expo = number(pr.get("exhibition_time"))
-            est = number(pr.get("start_timing"))
-            # Mild, capped adjustments: exhibition ST is not a race-day guarantee.
+            est = usable_exhibition_st(pr.get("start_timing"))
+            # Exhibition F is never rewarded as "an exceptionally quick start".
             score *= max(.75, min(1.23, 1 + .7 * (reference - expo)))
-            score *= max(.90, min(1.10, 1 + .18 * (.16 - est)))
+            if est is not None:
+                score *= max(.90, min(1.10, 1 + .18 * (.16 - est)))
         weights.append(max(.12, score))
         detail.append({
             "lane": i,
             "name": str(racer.get("name", "")).strip(),
             "course": course,
             "national_win_rate": number(racer.get("national_win_rate")),
-            "average_start_timing": number(racer.get("average_start_timing")),
+            "average_start_timing": measured_avg_st,
+            "average_start_timing_source_value": number(racer.get("average_start_timing")),
+            "average_start_timing_imputed": measured_avg_st is None,
             "motor_top_2_percent": number(racer.get("motor_top_2_percent")),
             "exhibition_st": number(pr.get("start_timing")) if phase == "exhibition" else None,
             "exhibition_time": number(pr.get("exhibition_time")) if phase == "exhibition" else None,
@@ -316,7 +344,20 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     follower = racers[int(ranked[0][0][2]) - 1]
     weather = observed
     body = {
-        "model_version": "heuristic-0.4-weather-uncertainty-test-untrained",
+        "model_version": "heuristic-0.5-st-quality-weather-test-untrained",
+        "data_quality": {
+            "average_start_timing_imputed_count": sum(
+                bool(r.get("average_start_timing_imputed")) for r in racers
+            ),
+            "exhibition_f_count": sum(
+                isinstance(r.get("exhibition_st"), (int, float)) and
+                r["exhibition_st"] < 0 for r in racers
+            ),
+            "motor_zero_percent_count": sum(
+                r.get("motor_top_2_percent") == 0 for r in racers
+            ),
+            "notes": "平均STの0.00は中立補完、展示Fは速いSTとして加点しない",
+        },
         "point_count": count,
         "point_reason": reason,
         "head_weight_concentration": round(concentration, 4),
@@ -422,7 +463,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
             "racers", "weather_observed", "evidence", "source_url"
         )}
         for extra in ("point_count", "point_reason", "head_weight_concentration", "head_weight_gap",
-                      "weather_used", "weather_adjustment", "weather_ab"):
+                      "weather_used", "weather_adjustment", "weather_ab", "data_quality"):
             if extra in current:
                 r[extra] = current[extra]
         r["version_count"] = len(versions)

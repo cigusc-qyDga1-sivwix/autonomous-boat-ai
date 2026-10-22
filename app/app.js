@@ -4,6 +4,7 @@
 (() => {
   'use strict';
   const STORE_RESULTS = 'boatlab-results-v1';
+  const STORE_BATCH_OFFICIAL = 'boatlab-batch-official-v1';
   const STORE_DATA = 'boatlab-imported-dataset-v1';
   const STORE_FAVORITES = 'boatlab-favorite-venues-v1';
   const dateDisplay = s => /^\d{4}-\d{2}-\d{2}$/.test(s) ? s.replace(/-/g, '/') : s;
@@ -18,6 +19,7 @@
   let data = null;
   let results = {};
   let autoResults = {};
+  let batchOfficial = {};
   let lastLiveUpdate = '';
   let resultsRefreshBusy = false;
   let resultsRefreshNotice = '';
@@ -51,13 +53,25 @@
   function getVenues() { return [...new Set(allRaces().map(r=>r.venue))]; }
   function findRace(venue,race) {return allRaces().find(r=>r.venue===venue && r.race===Number(race));}
   function officialFor(r) {
-    const v=autoResults[raceKey(r)];
-    if(!v||data?.mode!=='auto-live'||v.source!=='boatrace_official_pay'||v.verified!==true)return null;
-    if(v.snapshot_sha256 && r.sha256 && v.snapshot_sha256!==r.sha256)return null;
-    if(!isCombo(v.finish)||!Number.isSafeInteger(v.payout_per_100)||v.payout_per_100<100)return null;
+    const k=raceKey(r),published=autoResults[k],imported=batchOfficial[k];
+    if(!data||data.mode!=='auto-live')return null;
+    if(published&&imported&&(published.finish!==imported.finish||
+      published.payout_per_100!==imported.payout_per_100))return null;
+    const v=published||imported;
+    if(!v||v.source!=='boatrace_official_pay'||v.verified!==true)return null;
+    if(v.snapshot_sha256&&(!r.sha256||v.snapshot_sha256!==r.sha256))return null;
+    if(!isCombo(v.finish)||!Number.isSafeInteger(v.payout_per_100)||
+      v.payout_per_100<100||v.payout_per_100>10000000||v.payout_per_100%10)return null;
     return v;
   }
-  function resultIssue(r) {return data?.settlement_alerts?.[raceKey(r)] || null;}
+  function resultIssue(r) {
+    const k=raceKey(r),published=autoResults[k],imported=batchOfficial[k];
+    if(data?.settlement_alerts?.[k])return data.settlement_alerts[k];
+    if(published&&imported&&(published.finish!==imported.finish||
+      published.payout_per_100!==imported.payout_per_100))
+      return {status:'conflict',reason:'公式確認済みの値が保存済みデータと一致しません'};
+    return null;
+  }
   function recordFor(r) {return resultIssue(r)?null:(officialFor(r)||results[raceKey(r)]||null);}
   function officialStats(races) {
     const verified=races.filter(r=>!!officialFor(r)&&!resultIssue(r));
@@ -239,6 +253,15 @@
       <p class="results-refresh-hint">結果はサーバー側の定期収集で更新されます。このボタンは最新の公開済み結果を再読み込みします。公式サイトへの即時取得を開始するものではありません。</p>
     </div>`;
   }
+  function batchContext() {
+    return {date:data.event_date,races:allRaces(),
+      officialResults:{...batchOfficial,...autoResults},
+      alerts:data.settlement_alerts||{}};
+  }
+  function persistBatchOfficial() {
+    try{localStorage.setItem(STORE_BATCH_OFFICIAL,JSON.stringify(batchOfficial));return true;}
+    catch{toast('公式一括照合の端末内保存に失敗しました');return false;}
+  }
   function currentReaderContext(){
     const r=findRace(state.resultVenue,state.resultRace)||allRaces()[0];
     return r?{date:data.event_date,venue:r.venue,race:r.race,sha256:r.sha256}:null;
@@ -253,6 +276,9 @@
     const issues=Object.keys(data.settlement_alerts||{}).length;
     const reader=window.BoatResultReader;
     const readPanel=reader?reader.render({date:data.event_date,venue:r.venue,race:r.race,sha256:r.sha256}):'';
+    const batchPanel=window.BoatBatchReader?.render({
+      date:data.event_date,races,officialResults:{...batchOfficial,...autoResults},alerts:data.settlement_alerts||{}
+    })||'';
     const officialUrl='https://www.boatrace.jp/owpc/pc/race/pay?hd='+data.event_date.replaceAll('-','');
     const header=live?`<div class="metrics" style="margin-bottom:16px">${metric('公式照合',verified.count+'R','公式払戻で検証済み','✓')}${metric('3連単的中',verified.hits+'R',verified.count?pct(verified.hitRate):'未確認','◎')}${metric('仮想回収率',verified.returnRate===null?'—':pct(verified.returnRate),'公式照合済みのみ','↗',verified.returnRate>=1?'positive':'')}${metric('仮想収支',verified.count?(verified.profit>=0?'+':'')+money(verified.profit):'—','正式BUYとは別','¥',verified.profit>=0?'positive':'negative')}</div><div class="notice">公式払戻：<a href="${escape(officialUrl)}" target="_blank" rel="noopener noreferrer">BOATRACE 本日の払戻金一覧 ↗</a> ／ ${issues}R 要確認。未公表・返還・レース中止は収支対象外。手入力は正式成績には算入しません。</div>`:'';
     const recent=settled.length?`<div class="result-list">${settled.slice().reverse().map(x=>{
@@ -261,7 +287,7 @@
     }).join('')}</div>`:'<div class="no-data">未照合です。公式払戻が掲載されると自動反映されます。</div>';
     const selected=state.resultVenue, raceSelect=state.resultRace;
     const form=`<form id="result-form" class="result-form"><div class="form-row"><div class="field"><label for="result-venue">競艇場</label><select id="result-venue" class="select input">${getVenues().map(v=>`<option value="${escape(v)}" ${selected===v?'selected':''}>${escape(v)}</option>`).join('')}</select></div><div class="field"><label for="result-race">レース</label><select id="result-race" class="select input">${races.filter(x=>x.venue===selected).map(x=>`<option value="${x.race}" ${raceSelect===x.race?'selected':''}>${x.race}R</option>`).join('')}</select></div></div><div class="feature-card"><span class="feature-label">保存済み予想 / ${escape(r.classification)}</span><strong>${escape(r.bets.slice(0,3).map(b=>b.combination).join(' / '))}</strong><p>${escape(r.scenario)}</p></div><div class="field"><label for="finish">3連単（確定着順）</label><div class="form-row" style="gap:8px">${[0,1,2].map(i=>`<select id="finish-${i}" class="select input" style="width:calc(33.3% - 6px);min-width:0" aria-label="${i+1}着"><option value="">${i+1}着</option>${[1,2,3,4,5,6].map(n=>`<option value="${n}" ${c.record?.finish?.split('-')[i]===String(n)?'selected':''}>${n}号艇</option>`).join('')}</select>`).join('')}</div></div><div class="field"><label for="payout">3連単払戻（100円あたり）</label><input id="payout" class="input" inputmode="numeric" type="number" min="100" max="10000000" step="10" required placeholder="例：2430" value="${c.record?c.record.payout_per_100:''}"></div><p class="help">${hasOfficial?'公式結果を取得済み。手入力で変更はできません。':issue?'返還・中止・不一致があるため、手入力で収支を確定できません。':'公式結果未取得の場合だけ暫定的に手入力できます。公式照合済み成績には含みません。'}</p><button type="submit" class="btn btn-primary" ${hasOfficial||issue?'disabled':''}>${live?'暫定結果を保存':'結果を照合・保存'}</button>${results[raceKey(r)]&&!hasOfficial?'<button type="button" data-action="delete-result" class="btn btn-danger">手入力を取り消す</button>':''}</form>`;
-    return `${head('結果照合',live?'BOATRACE公式払戻から自動照合・発走前予想は変更しません':'手入力の仮想照合',pill(live?verified.count+'R 公式確認':settled.length+'R 入力済み','local'))}${resultsRefreshControl()}${header}${readPanel}<div class="results-layout"><section class="card card-pad"><div class="section-head"><h2 class="section-title">${live?'レース結果の確認':'結果を入力'}</h2>${pill(hasOfficial?'公式確認済み':issue?'要確認':'未確認','local')}</div>${issue?`<div class="notice warn">このレースは${escape(issue.reason||'追加確認')}。自動の仮想収支には含めません。</div>`:''}${form}</section><section class="card card-pad"><div class="section-head"><h2 class="section-title">照合履歴</h2><span class="text-xs muted">${settled.length}R</span></div>${recent}</section></div>`;
+    return `${head('結果照合',live?'BOATRACE公式払戻から自動照合・発走前予想は変更しません':'手入力の仮想照合',pill(live?verified.count+'R 公式確認':settled.length+'R 入力済み','local'))}${resultsRefreshControl()}${header}${batchPanel}<details class="individual-legacy"><summary>1Rずつの入力・読み取り（必要なときだけ）</summary>${readPanel}</details><div class="results-layout"><section class="card card-pad"><div class="section-head"><h2 class="section-title">${live?'レース結果の確認':'結果を入力'}</h2>${pill(hasOfficial?'公式確認済み':issue?'要確認':'未確認','local')}</div>${issue?`<div class="notice warn">このレースは${escape(issue.reason||'追加確認')}。自動の仮想収支には含めません。</div>`:''}${form}</section><section class="card card-pad"><div class="section-head"><h2 class="section-title">照合履歴</h2><span class="text-xs muted">${settled.length}R</span></div>${recent}</section></div>`;
   }
   function weaknessDiagnosis() {
     if(data.mode!=='auto-live')return '';
@@ -348,7 +374,7 @@
   function go(view) {state.view=view;state.raceDetail=null;state.showExternalAnalysis=false;state.reanalysisResult=null;state.reanalysisExtras={};render();window.scrollTo({top:0,behavior:'instant'});}
   function toast(message){const node=el('toast');node.textContent=message;node.classList.add('show');if(toastTimer)clearTimeout(toastTimer);toastTimer=setTimeout(()=>node.classList.remove('show'),3200);}
   function download(name,content,type='text/plain;charset=utf-8') {const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
-  function exportResultsCSV(){const header=['date','venue','race','classification','cutoff_jst','finish','payout_per_100','is_hit','stake_yen','virtual_payout_yen','virtual_profit_yen','recorded_at','source'];const body=allRaces().map(r=>{let c=compute(r);return [data.event_date,r.venue,r.race,r.classification,r.cutoff_jst,c.record?.finish||'',c.record?.payout_per_100??'',c.record?Number(c.hit):'',c.record?c.stake:'',c.payout??'',c.profit??'',c.record?.recorded_at||'',c.record?'manual':''];});const csv=[header,...body].map(a=>a.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');download(`boatlab-results-${data.event_date}.csv`,'\uFEFF'+csv,'text/csv;charset=utf-8');toast('結果CSVを書き出したよ');}
+  function exportResultsCSV(){const header=['date','venue','race','classification','cutoff_jst','finish','payout_per_100','is_hit','stake_yen','virtual_payout_yen','virtual_profit_yen','recorded_at','source'];const body=allRaces().map(r=>{let c=compute(r);return [data.event_date,r.venue,r.race,r.classification,r.cutoff_jst,c.record?.finish||'',c.record?.payout_per_100??'',c.record?Number(c.hit):'',c.record?c.stake:'',c.payout??'',c.profit??'',c.record?.recorded_at||'',c.record?(c.record.source||'manual'):''];});const csv=[header,...body].map(a=>a.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');download(`boatlab-results-${data.event_date}.csv`,'\uFEFF'+csv,'text/csv;charset=utf-8');toast('結果CSVを書き出したよ');}
   function copyBets(r){const s=`${data.event_date} ${r.venue} ${r.race}R ${r.cutoff_jst} [${r.classification}] ${r.phase==='exhibition'?'展示反映':'展示前'}予想（${r.bets.length}点）\n${r.scenario}\n${r.bets.map((b,i)=>`${i+1}. ${b.combination} ${money(b.virtual_yen)}`).join('\n')}\n合計 ${money(r.bets.reduce((s,b)=>s+b.virtual_yen,0))} / 研究用・仮想`;if(navigator.clipboard?.writeText)navigator.clipboard.writeText(s).then(()=>toast('買い目をコピーしたよ'),()=>toast('コピーできませんでした'));else {const t=document.createElement('textarea');t.value=s;document.body.append(t);t.select();document.execCommand('copy');t.remove();toast('買い目をコピーしたよ');}}
   document.addEventListener('click',e=>{
     const nav=e.target.closest('[data-view]');if(nav){if(nav.dataset.view==='races')state.venue='全場';go(nav.dataset.view);return;}
@@ -358,6 +384,57 @@
     const row=e.target.closest('[data-race]');if(row){const [v,n]=row.dataset.race.split('|');let r=findRace(v,n);if(!r)return;if(row.dataset.action==='settle-this'){state.resultVenue=v;state.resultRace=Number(n);go('results');return;}if(row.dataset.action==='copy-bets'){copyBets(r);return;}state.raceDetail=r;state.showExternalAnalysis=false;state.reanalysisResult=null;state.reanalysisExtras={};state.view='races';render();window.scrollTo(0,0);return;}
     const btn=e.target.closest('[data-action]');if(!btn)return;
     switch(btn.dataset.action){
+      case 'batch-image-read':{
+        const ctx=batchContext(),reader=window.BoatBatchReader;
+        if(reader)void reader.readImage(ctx,()=>{if(state.view==='results')render()});
+        break;
+      }
+      case 'batch-url-read':{
+        const reader=window.BoatBatchReader;
+        if(reader)void reader.readURL(el('batch-url')?.value||'',batchContext(),()=>{if(state.view==='results')render()});
+        break;
+      }
+      case 'batch-text-read':{
+        try{
+          const text=el('batch-ocr-text')?.value||'';
+          window.BoatBatchReader?.parseText(text,batchContext());render();
+        }catch(e){toast(e.message||'テキストを読み取れませんでした');}
+        break;
+      }
+      case 'batch-apply':{
+        const reader=window.BoatBatchReader;
+        if(!reader)break;
+        try{
+          const ctx=batchContext(),updates=reader.selectedUpdates(ctx,el('main'));
+          const official=updates.filter(x=>x.kind==='url').length;
+          const draft=updates.filter(x=>x.kind==='image').length;
+          const ask=official?
+            updates.length+'Rの公式確認済み結果を、この端末に一括反映する？':
+            updates.length+'Rを画像からの暫定結果として保存する？ 公式の確定成績には加えないよ。';
+          if(typeof confirm==='function'&&!confirm(ask))break;
+          const at=new Date().toISOString();
+          for(const item of updates){
+            if(item.kind==='url'){
+              batchOfficial[item.key]={finish:item.finish,payout_per_100:item.payout_per_100,
+                source:'boatrace_official_pay',verified:true,snapshot_sha256:item.snapshot_sha256,
+                source_url:item.source_url,recorded_at:item.source_timestamp||at,
+                imported_from:'published_daily_official_pay_snapshot'};
+            }else{
+              results[item.key]={finish:item.finish,payout_per_100:item.payout_per_100,
+                recorded_at:at,source:'image_ocr_unverified'};
+            }
+          }
+          if(official)persistBatchOfficial();
+          if(draft)persistResults();
+          reader.clearResults(ctx);
+          render();
+          toast(official?official+'Rの公式結果を反映したよ':draft+'Rを暫定照合として保存したよ');
+        }catch(e){toast(e.message||'一括照合できませんでした');}
+        break;
+      }
+      case 'batch-clear':{
+        window.BoatBatchReader?.clearResults(batchContext());render();break;
+      }
       case 'read-result-image':{
         const reader=window.BoatResultReader,ctx=currentReaderContext();
         if(reader&&ctx)void reader.readImage(ctx,()=>render());
@@ -421,6 +498,16 @@
     }
   });
   document.addEventListener('change',async e=>{
+    if(e.target.matches('#batch-image')){
+      try{window.BoatBatchReader?.imageSelected(e.target.files?.[0],batchContext());render();}
+      catch(err){toast(err.message||'画像を選択できませんでした');}
+      return;
+    }
+    if(e.target.matches('#batch-venue')){
+      try{window.BoatBatchReader?.setVenue(e.target.value,batchContext());render();}
+      catch(err){toast(err.message||'開催場が正しくありません');}
+      return;
+    }
     if(e.target.matches('#result-image-file')){
       const reader=window.BoatResultReader,ctx=currentReaderContext();
       if(!reader||!ctx)return;
@@ -529,6 +616,8 @@
   }
   async function init(){
     results=readJSON(STORE_RESULTS,{});
+    batchOfficial=readJSON(STORE_BATCH_OFFICIAL,{});
+    if(!batchOfficial||typeof batchOfficial!=='object'||Array.isArray(batchOfficial))batchOfficial={};
     favorites=readJSON(STORE_FAVORITES,window.BoatVenueBoard?.DEFAULT_FAVORITES||[]);
     if(!Array.isArray(favorites))favorites=[];
     favorites=favorites.filter(x=>typeof x==='string');

@@ -4,7 +4,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from scripts.autonomous_daily import build, prediction, preview_complete, valid_entrants
+from scripts.autonomous_daily import (build, prediction, preview_complete, valid_entrants,
+                                     point_count, combinations, allocate_stakes)
 
 JST = ZoneInfo("Asia/Tokyo")
 
@@ -35,8 +36,11 @@ def test_before_cutoff_baseline_and_immutability():
     assert summary["new_exhibition"] == 0
     assert len(ui["forecast_races"]) == 1
     old = original["race_records"]["18-1"]["versions"][0]
-    assert len(old["bets"]) == 8
+    assert 4 <= len(old["bets"]) <= 12
     assert sum(b["virtual_yen"] for b in old["bets"]) == 50000
+    assert old["point_count"] == len(old["bets"])
+    assert old["point_reason"]
+    assert all(b["virtual_yen"] >= 1000 and b["virtual_yen"] % 1000 == 0 for b in old["bets"])
     assert old["phase"] == "baseline"
     assert old["frozen_at_utc"] < "2026-10-22T10:00:00"
     assert old["sha256"]
@@ -94,3 +98,58 @@ def test_incomplete_exhibition_rejected():
     ledger, ui, stats = build(None, data(r), datetime(2026,10,22,9,0,tzinfo=JST), "fixture")
     assert stats["new_exhibition"] == 0
     assert ui["forecast_races"][0]["phase"] == "baseline"
+
+
+
+def test_point_count_changes_with_relative_head_uncertainty():
+    confident = [20.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    unclear = [1.0] * 6
+    n4, reason4, *_ = point_count(confident)
+    n12, reason12, *_ = point_count(unclear)
+    assert n4 == 4
+    assert n12 == 12
+    assert "相対重み" in reason4 and "分岐" in reason12
+    for weights, desired in ((confident, 4), (unclear, 12)):
+        combos = combinations(weights)
+        assert len(combos) == desired
+        assert len({c for c, _ in combos}) == desired
+        bets = allocate_stakes(combos)
+        assert len(bets) == desired
+        assert sum(b["virtual_yen"] for b in bets) == 50_000
+        assert all(b["virtual_yen"] >= 1000 and b["virtual_yen"] % 1000 == 0 for b in bets)
+
+
+def test_sizing_thresholds_cover_middle_counts():
+    # These synthetic profiles deliberately target different certainty bands.
+    examples = [
+        [2.0, 1.5, 1.4, 1.3, 1.2, 1.1],
+        [3.0, 1.5, 1.4, 1.3, 1.2, 1.1],
+        [4.0, 1.5, 1.4, 1.3, 1.2, 1.1],
+        [6.0, 1.5, 1.4, 1.3, 1.2, 1.1],
+    ]
+    counts = [point_count(w)[0] for w in examples]
+    assert all(4 <= n <= 12 for n in counts)
+    assert len(set(counts)) >= 2
+
+
+def test_existing_8_point_snapshot_is_never_rewritten():
+    now = datetime(2026, 10, 22, 8, 30, tzinfo=JST)
+    ledger, _, _ = build(None, data(race()), now, "fixture")
+    snap = ledger["race_records"]["18-1"]["versions"][0]
+    # An earlier pre-v0.3 8-point snapshot remains historically immutable.
+    legacy = dict(snap)
+    legacy.pop("point_count", None)
+    legacy.pop("point_reason", None)
+    legacy.pop("head_weight_concentration", None)
+    legacy.pop("head_weight_gap", None)
+    legacy["model_version"] = "heuristic-0.2-untrained"
+    legacy["bets"] = [{"combination": c, "virtual_yen": v}
+                      for c, v in zip(
+                          ["1-2-3", "2-1-3", "1-3-2", "3-1-2", "1-2-4", "2-3-1", "4-1-2", "1-4-2"],
+                          [12000, 10000, 8000, 6000, 5000, 4000, 3000, 2000])]
+    ledger["race_records"]["18-1"]["versions"] = [legacy]
+    persisted, view, status = build(ledger, data(race()), datetime(2026,10,22,8,40,tzinfo=JST), "fixture")
+    assert persisted["race_records"]["18-1"]["versions"] == [legacy]
+    assert view["forecast_races"][0]["bets"] == legacy["bets"]
+    assert len(view["forecast_races"][0]["bets"]) == 8
+    assert status["new_baseline"] == 0

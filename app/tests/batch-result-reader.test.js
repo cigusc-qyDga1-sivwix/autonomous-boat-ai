@@ -84,6 +84,8 @@ async function testURL(){
   assert.equal(snap.kind,'url');
   assert.ok(requests[0].url.includes('./data/live/official-pay/2026-10-22.json?refresh='));
   assert.equal(requests[0].opts.cache,'no-store');
+  await R.readURL('https://www.boatrace.jp/owpc/pc/race/pay',ctx,()=>{});
+  assert.equal(R.snapshot().rows.length,24,'bare official pay URL should resolve displayed date');
   await R.readURL('https://www.boatrace.jp/owpc/pc/race/pay?hd=20261021',ctx,()=>{});
   assert.equal(R.snapshot().rows.length,0);
   assert.match(R.snapshot().message,/対象日/);

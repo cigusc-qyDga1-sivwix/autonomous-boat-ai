@@ -303,6 +303,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     if phase == "exhibition" and not preview_complete(race):
         raise ValueError("Incomplete exhibition readings")
     weights, racers = features(race, phase)
+    # Freeze a fair-weather control *before* seeing the official result.
+    control_bets = allocate_stakes(combinations(weights))
     observed, selected_weather = weather_for_prediction(race, nearby_weather)
     weathered, weather_adjustment = condition_weights(weights, selected_weather)
     ranked = combinations(weathered)
@@ -334,6 +336,15 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         "weather_observed": weather,
         "weather_used": selected_weather,
         "weather_adjustment": weather_adjustment,
+        "weather_ab": ({
+            "control_model": "same_features_without_weather",
+            "control_bets": control_bets,
+            "control_point_count": len(control_bets),
+            "weather_point_count": len(bets),
+            "different_combinations": len({b["combination"] for b in control_bets}
+                                         ^ {b["combination"] for b in bets}),
+            "generated_pre_cutoff": True,
+        } if selected_weather else None),
         "evidence": ("展示・場内気象あり" if weather and selected_weather and selected_weather.get("site_observed") else
                      "近隣予報（現地実測ではない）" if selected_weather else
                      "気象未取得") + ("・展示あり" if phase == "exhibition" else "・展示前"),
@@ -411,7 +422,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
             "racers", "weather_observed", "evidence", "source_url"
         )}
         for extra in ("point_count", "point_reason", "head_weight_concentration", "head_weight_gap",
-                      "weather_used", "weather_adjustment"):
+                      "weather_used", "weather_adjustment", "weather_ab"):
             if extra in current:
                 r[extra] = current[extra]
         r["version_count"] = len(versions)
@@ -545,14 +556,54 @@ def integrate_official(ledger: dict, view: dict, pay: dict,
         paid = winning_bet["virtual_yen"] * p["payout_per_100"] // 100 if winning_bet else 0
         first_second = any(b["combination"][:3] == p["finish"][:3] for b in snap["bets"])
         head = any(b["combination"][0] == p["finish"][0] for b in snap["bets"])
+        baseline_control = snap.get("weather_ab")
+        weather_comparison = None
+        if baseline_control and baseline_control.get("generated_pre_cutoff"):
+            alternative = baseline_control.get("control_bets") or []
+            if alternative and all(
+                isinstance(b.get("virtual_yen"), int) and b.get("combination")
+                for b in alternative
+            ) and sum(b["virtual_yen"] for b in alternative) == 50000:
+                control_hit = next((b for b in alternative if b["combination"] == p["finish"]), None)
+                control_paid = (
+                    control_hit["virtual_yen"] * p["payout_per_100"] // 100
+                    if control_hit else 0
+                )
+                weather_comparison = {
+                    "control_hit": bool(control_hit),
+                    "control_payout": control_paid,
+                    "control_profit": control_paid - 50000,
+                    "weather_hit": bool(winning_bet),
+                    "weather_payout": paid,
+                    "weather_profit": paid - stake,
+                    "weather_minus_control_yen": paid - control_paid,
+                    "control_point_count": len(alternative),
+                    "weather_point_count": len(snap["bets"]),
+                    "source": "pre_cutoff_shadow_frozen",
+                }
         results[key] = {
             **p, "hit": bool(winning_bet), "virtual_stake": stake,
             "virtual_payout": paid, "virtual_profit": paid - stake,
             "head_captured": head, "first_second": first_second,
             "third_miss": bool(first_second and not winning_bet),
             "snapshot_phase": snap["phase"], "snapshot_sha256": snap["sha256"],
+            "weather_comparison": weather_comparison,
         }
 
+    comparable = [
+        r["weather_comparison"] for r in results.values()
+        if r.get("weather_comparison") is not None
+    ]
+    view["weather_backtest"] = {
+        "races": len(comparable),
+        "weather_hits": sum(bool(r["weather_hit"]) for r in comparable),
+        "control_hits": sum(bool(r["control_hit"]) for r in comparable),
+        "weather_payout": sum(r["weather_payout"] for r in comparable),
+        "control_payout": sum(r["control_payout"] for r in comparable),
+        "virtual_stake_per_model": len(comparable) * 50_000,
+        "weather_minus_control_yen": sum(r["weather_minus_control_yen"] for r in comparable),
+        "model_note": "発走前固定の気象補正あり・なしの試験比較。配当・結果はBOATRACE公式確定後に照合",
+    }
     view["official_results"] = results
     view["settlement_alerts"] = alerts
     view["official_pay_info"] = {

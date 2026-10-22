@@ -97,6 +97,8 @@
       '<strong>—</strong><span>—</span>';
     var stateText = !entry.active ? '情報未取得' :
       next ? '締切予定' : '本日の最終締切';
+    var venueWx = (opts.weatherByVenue||{})[entry.name];
+    var weatherSummary = venueWx && venueWx.wind_speed != null ? '🌬 風'+esc(venueWx.wind_speed)+'m/s・近隣予報' : '';
     var status = isDisabled ? badge('未取得','idle') :
       entry.exhibition ? badge('展示 '+entry.exhibition+'R','ready') :
       entry.ready ? badge('予想 '+entry.ready+'R','watch') : badge('未固定','missing');
@@ -107,6 +109,7 @@
       '<span class="venue-meta">'+badge(title,entry.grade?'grade':'muted')+'<span>'+esc(day)+'</span></span>' +
       '<span class="venue-cutoff-caption">'+esc(stateText)+'</span>' +
       '<span class="venue-next">'+upcoming+'</span>' +
+      (weatherSummary?'<span class="venue-card-weather">'+weatherSummary+'</span>':'') +
       '<span class="venue-progress">'+status+'<span>'+ (isDisabled?'—':'予想 '+entry.ready+'/12R') +'</span></span>' +
       '</button></article>';
   }
@@ -121,6 +124,7 @@
     var payout=official.reduce((sum,v)=>sum+(v.virtual_payout||0),0);
     var invested=official.reduce((sum,v)=>sum+(v.virtual_stake||0),0);
     var hits=official.filter(v=>v.hit).length;
+    var weatherCount=Object.keys(data.venue_weather||{}).length;
     var date=esc(data.event_date||'—');
     var latest=data.updated_at_utc ? new Date(data.updated_at_utc).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}) : '取得時刻不明';
     var stale=opts.today && opts.today !== data.event_date;
@@ -132,6 +136,7 @@
       '<div class="venue-hero"><div class="venue-hero-overline">BOAT LAB · AI予想ダッシュボード</div>' +
       '<h1>今日の開催一覧 <span>🚤</span></h1><p>'+date+' ・ 全国のレースを選んで予想を見る</p>' +
       '<div class="venue-hero-stats"><span><strong>'+held.length+'</strong>場 情報あり</span><span><strong>'+racing+'</strong>場 締切予定あり</span><span><strong>'+ready+'</strong>R 予想</span><span><strong>'+expo+'</strong>R 展示反映</span></div></div>' +
+      (weatherCount?'<p class="venue-weather-coverage">🌦 開催中の周辺気象予報 '+weatherCount+'/'+held.length+'場取得済み（会場水面の実測ではありません） ・ <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Weather data by Open-Meteo.com ↗</a></p>':'') +
       (data.mode==='auto-live'?'<button type="button" class="venue-official-summary" data-view="results" aria-label="公式結果の照合画面を開く"><span>✅ BOATRACE公式照合 <b>'+official.length+'R</b></span><span>的中 <b>'+hits+'R</b></span><span>仮想回収 <b>'+(invested?(100*payout/invested).toFixed(1)+'%':'—')+'</b></span><span>詳細を見る →</span></button>':'') +
       (stale?'<div class="notice warn"><strong>過去日のデータです。</strong> 最新データはまだ取得できていません。対象日を確認してね。</div>':'') +
       '<div class="venue-board-head"><div><h2>開催場を選択</h2><p>カードをタップ → 全12R → 買い目・仮想配分</p></div>' +
@@ -140,7 +145,7 @@
         return '<option value="'+p[0]+'"'+(p[0]===sort?' selected':'')+'>'+p[1]+'</option>';
       }).join('')+'</select></label></div>' +
       '<div class="venue-filters">'+filters+'</div>' +
-      '<div class="venue-card-grid">'+view.map(function (v) {return card(v,opts);}).join('')+'</div>' +
+      '<div class="venue-card-grid">'+view.map(function (v) {return card(v,Object.assign({},opts,{weatherByVenue:data.venue_weather||{}}));}).join('')+'</div>' +
       (!view.length?'<div class="no-data">該当する競艇場がありません。</div>':'') +
       '<div class="venue-legend"><span>✅ 展示反映</span><span>📝 展示前予想</span><span>⚓ 情報未取得</span></div>' +
       '<p class="venue-disclaimer">最終取得 '+esc(latest)+' JST。締切は非公式データの予定値。グレード・開催日目は取得できた場合のみ表示します。灰色の場は「休催」ではなく開催情報未取得です。'+
@@ -170,6 +175,11 @@
     var r=slot&&slot.forecast;
     var cutoff=slot&&slot.cutoff;
     var outcome=officialForSlot(data,venue,number,r);
+    var eventWx=r&&r.weather_used;
+    var weather=(eventWx || (r&&r.weather_observed&&r.weather_observed.wind_speed!=null&&Object.assign({site_observed:true},r.weather_observed)) || (data.venue_weather||{})[venue]);
+    var weatherLabel=weather ? (eventWx?(eventWx.site_observed?'予想時の場内展示':'予想時の周辺予報'):
+      r&&r.weather_observed?'予想時の場内展示':'現在の近隣予報・予想未反映') : '';
+    var weatherInfo=weather && weather.wind_speed!=null ? '<div class="venue-race-weather">🌬 '+esc(weatherLabel)+' 風'+esc(weather.wind_speed)+'m/s'+(weather.wave_height!=null?' ／ 波'+esc(weather.wave_height)+'cm':'')+(r&&r.weather_adjustment&&r.weather_adjustment.applied?' ／ 気象補正試験':'')+'</div>':'';
     var payInfo=outcome && !outcome.review ?
       '<div class="venue-race-result">公式3連単 '+esc(outcome.finish)+' ／ 払戻 '+Number(outcome.payout_per_100).toLocaleString('ja-JP')+'円</div>':
       outcome&&outcome.review?'<div class="venue-race-result">公式結果：返還・中止などの確認待ち</div>':'';
@@ -178,7 +188,7 @@
       '<div class="venue-race-cutoff"><span>締切予定</span><strong>'+esc(cutoff||'—')+'</strong></div>' +
       (r?'<div class="venue-race-main">'+esc(r.bets.slice(0,2).map(function (b){return b.combination;}).join(' / '))+'</div>' +
           '<div class="venue-race-scene">'+esc(r.scenario||'展開予想あり')+'</div>' +
-          payInfo+
+          weatherInfo+payInfo+
           '<button type="button" class="venue-race-action" data-race="'+esc(venue)+'|'+number+'">買い目 '+r.bets.length+'点を見る →</button>' :
           '<p class="venue-race-muted">'+(slot&&slot.unforecast?'発走前の予想を固定できませんでした':'締切・出走表未取得')+'</p>') +
       '</div>';
@@ -193,6 +203,7 @@
       '<button type="button" class="venue-back" data-action="back-overview">← 開催一覧へ戻る</button>' +
       '<div class="venue-detail-hero"><span class="venue-detail-symbol">'+x.icon+'</span><div><div class="venue-hero-overline">BOAT LAB / '+esc(data.event_date)+'</div><h1>'+esc(venue)+' <small>全12R</small></h1><p>'+esc(x.grade||'グレード未取得')+' ・ '+esc(rawDay)+' ・ 自動予想 '+x.ready+'/12R ・ 展示反映 '+x.exhibition+'R</p></div></div>' +
       '<div class="venue-race-legend"><span>'+badge('公式 的中','ready')+' 公式払戻で的中</span><span>'+badge('展示反映','ready')+' 実測展示あり</span><span>'+badge('展示前','watch')+' 出走表中心</span><span>'+badge('未固定','missing')+' 後出し予想なし</span></div>' +
+      ((data.venue_weather||{})[venue]?'<div class="venue-current-weather">🌦 現在の周辺予報：風'+esc(data.venue_weather[venue].wind_speed)+'m/s・突風'+esc(data.venue_weather[venue].wind_gust??'—')+'m/s・降水'+esc(data.venue_weather[venue].precipitation_mm??'—')+'mm/h　（現地実測ではありません） <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Weather data by Open-Meteo.com ↗</a></div>':'') +
       '<div class="venue-race-grid">'+allRaces+'</div>' +
       '<div class="notice">全12Rを表示していますが、データが来ていないレースや締切前の予想がなかったレースは買い目を作りません。表示時刻はJST・予定値で、公式の締切を優先してください。</div></div>';
   }

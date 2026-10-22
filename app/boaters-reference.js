@@ -63,5 +63,11 @@
     const url=linkFor(venue,date,race);
     return url.endsWith('/race-detail')?url.slice(0,-'/race-detail'.length)+'/race-prediction':url;
   }
-  window.BoatExternalReference={linkFor,predictionLinkFor,analysisHTML};
+  function exhibitionLinkFor(venue,date,race){
+    const url=linkFor(venue,date,race);
+    return url.endsWith('/race-detail')
+      ?url.slice(0,-'/race-detail'.length)+'/last-minute?last-minute-content=original-tenji'
+      :url;
+  }
+  window.BoatExternalReference={linkFor,predictionLinkFor,exhibitionLinkFor,analysisHTML};
 })();

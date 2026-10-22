@@ -1,0 +1,20 @@
+name: BOAT LAB official payout probe
+on:
+  push:
+    paths:
+      - 'scripts/probe_official_pay.py'
+      - '.github/workflows/official-pay-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Inspect official payout HTML read-only
+        run: python scripts/probe_official_pay.py

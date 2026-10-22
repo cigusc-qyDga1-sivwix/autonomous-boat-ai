@@ -33,7 +33,9 @@ VENUES = {
     "16": "児島", "17": "宮島", "18": "徳山", "19": "下関", "20": "若松",
     "21": "芦屋", "22": "福岡", "23": "唐津", "24": "大村",
 }
-STAKES = [12000, 10000, 8000, 6000, 5000, 4000, 3000, 2000]
+VIRTUAL_BUDGET_YEN = 50_000
+MIN_POINTS, MAX_POINTS = 4, 12
+STAKE_UNIT_YEN = 1_000
 COURSE = [1.75, 1.27, 1.05, 0.90, 0.79, 0.69]
 SAFE_MARGIN_SECONDS = 120  # Avoid a Git commit landing after cutoff.
 
@@ -128,32 +130,80 @@ def features(race: dict, phase: str) -> tuple[list[float], list[dict]]:
     return weights, detail
 
 
+def point_count(weights: list[float]) -> tuple[int, str, float, float]:
+    """Choose 4–12 trifecta scenarios from *uncalibrated relative* head weights.
+
+    All thresholds are provisional rules for controlled comparisons. These are
+    not measured hit probabilities. Concentration and leader/runner-up gap
+    decide how much 2nd/3rd-place branching to retain.
+    """
+    if len(weights) != 6 or any(not math.isfinite(x) or x <= 0 for x in weights):
+        raise ValueError("Need six positive finite head weights")
+    ordered = sorted(weights, reverse=True)
+    total = sum(ordered)
+    head_share = ordered[0] / total
+    gap = (ordered[0] - ordered[1]) / total
+    thresholds = [
+        (.40, .14, 4), (.36, .10, 5), (.33, .07, 6),
+        (.30, .05, 7), (.28, .04, 8), (.26, .025, 9),
+        (.245, .015, 10), (.23, .010, 11),
+    ]
+    count = next((n for share, lead, n in thresholds
+                  if head_share >= share and gap >= lead), MAX_POINTS)
+    label = ("主導権が比較的明確・買い目を集中" if count <= 6 else
+             "対抗ラインと2・3着の分岐を重視" if count <= 9 else
+             "先頭争いが接近・展開分岐を広めに検証")
+    reason = f"{label}（頭評価の相対重み {head_share:.1%}・次点差 {gap:.1%}、未校正）"
+    return count, reason, head_share, gap
+
+
 def combinations(weights: list[float]) -> list[tuple[str, float]]:
     total = sum(weights)
+    count, _, _, _ = point_count(weights)
     ranked = []
     for a, b, c in permutations(range(6), 3):
-        prob = (weights[a] / total) * (weights[b] / (total - weights[a])) * (
+        probability_like_weight = (weights[a] / total) * (weights[b] / (total - weights[a])) * (
             weights[c] / (total - weights[a] - weights[b]))
-        ranked.append((f"{a+1}-{b+1}-{c+1}", prob))
+        ranked.append((f"{a+1}-{b+1}-{c+1}", probability_like_weight))
     ranked.sort(key=lambda item: (-item[1], item[0]))
-    # Preserve some plausible alternate winners; still an uncalibrated baseline.
-    selected = ranked[:6]
-    heads = {s[0][0] for s in selected}
-    for runner, _ in sorted(enumerate(weights, start=1), key=lambda x: -x[1])[:3]:
-        if str(runner) not in heads:
-            extra = next((row for row in ranked if row[0][0] == str(runner)), None)
-            if extra:
-                selected.append(extra)
-                heads.add(str(runner))
-        if len(selected) >= 8:
-            break
-    for row in ranked:
-        if len(selected) >= 8:
-            break
-        if row not in selected:
-            selected.append(row)
-    return selected[:8]
+    selected = ranked[:count]
+    # With reasonably competitive second head, protect its best scenario rather
+    # than allowing all 4–12 combinations to share the same leading boat.
+    heads = {row[0][0] for row in selected}
+    runner_up = sorted(enumerate(weights, start=1), key=lambda x: -x[1])[1]
+    if len(heads) == 1 and runner_up[1] >= .62 * max(weights):
+        alternative = next((row for row in ranked if row[0][0] == str(runner_up[0])), None)
+        if alternative:
+            selected[-1] = alternative
+            selected.sort(key=lambda item: (-item[1], item[0]))
+    return selected
 
+
+def allocate_stakes(ranked: list[tuple[str, float]]) -> list[dict]:
+    """Non-flat descending allocations in 1000-yen units, exactly ¥50,000."""
+    count = len(ranked)
+    if not MIN_POINTS <= count <= MAX_POINTS:
+        raise ValueError("Selection must contain 4–12 unique trifectas")
+    if len({x[0] for x in ranked}) != count:
+        raise ValueError("Duplicate trifecta")
+    budget_units = VIRTUAL_BUDGET_YEN // STAKE_UNIT_YEN
+    residual_units = budget_units - count
+    strengths = [max(0.0, score) ** .8 for _, score in ranked]
+    denom = sum(strengths)
+    if denom <= 0:
+        raise ValueError("Invalid combination weights")
+    quotas = [residual_units * strength / denom for strength in strengths]
+    awarded = [int(math.floor(quota)) for quota in quotas]
+    leftover = residual_units - sum(awarded)
+    order = sorted(range(count), key=lambda i: (-(quotas[i] - awarded[i]), i))
+    for i in order[:leftover]:
+        awarded[i] += 1
+    bets = [
+        {"combination": combination, "virtual_yen": (1 + awarded[i]) * STAKE_UNIT_YEN}
+        for i, (combination, _) in enumerate(ranked)
+    ]
+    assert sum(row["virtual_yen"] for row in bets) == VIRTUAL_BUDGET_YEN
+    return bets
 
 def prediction(race: dict, venue: str, race_number: int, phase: str,
                now: datetime, source_url: str) -> dict:
@@ -168,8 +218,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         raise ValueError("Incomplete exhibition readings")
     weights, racers = features(race, phase)
     ranked = combinations(weights)
-    bets = [{"combination": combo, "virtual_yen": STAKES[i]}
-            for i, (combo, _) in enumerate(ranked)]
+    bets = allocate_stakes(ranked)
+    count, reason, concentration, gap = point_count(weights)
     leader = racers[int(ranked[0][0][0]) - 1]
     follower = racers[int(ranked[0][0][2]) - 1]
     weather = None
@@ -184,7 +234,11 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
             "water_temperature": number(p.get("water_temperature")),
         }
     body = {
-        "model_version": "heuristic-0.2-untrained",
+        "model_version": "heuristic-0.3-flex4to12-untrained",
+        "point_count": count,
+        "point_reason": reason,
+        "head_weight_concentration": round(concentration, 4),
+        "head_weight_gap": round(gap, 4),
         "phase": phase,
         "venue": venue,
         "race": race_number,
@@ -269,6 +323,9 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str) 
             "model_version", "phase", "frozen_at_utc", "sha256",
             "racers", "weather_observed", "evidence", "source_url"
         )}
+        for extra in ("point_count", "point_reason", "head_weight_concentration", "head_weight_gap"):
+            if extra in current:
+                r[extra] = current[extra]
         r["version_count"] = len(versions)
         latest_races.append(r)
         p = record.get("official_pay")
@@ -280,7 +337,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str) 
         "mode": "auto-live",
         "updated_at_utc": ledger["last_updated_at_utc"],
         "timezone": "Asia/Tokyo",
-        "method": "国内24場対応・未訓練Plackett–Luceヒューリスティック／展示前・展示後の発走前固定",
+        "method": "全国24場対応・未訓練Plackett–Luceヒューリスティック／4〜12点・展示前後の発走前固定",
         "freeze_reference": "GitHub app/data/live/{date}.json のcommit履歴＋SHA256",
         "forecast_races": latest_races,
         "official_results": official_results,

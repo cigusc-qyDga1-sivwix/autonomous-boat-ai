@@ -1,7 +1,7 @@
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
-const data=JSON.parse(fs.readFileSync('app/data/live/latest.json','utf8'));
+const data=require('./fixtures/frozen-official-data.js');
 const verifiedRace=data.forecast_races.find(r=>{
   const p=data.official_results?.[data.event_date+'|'+r.venue+'|'+r.race];
   return p?.verified===true && p?.source==='boatrace_official_pay' &&

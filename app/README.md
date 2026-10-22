@@ -118,3 +118,15 @@ GitHub Actionsのcronには実行遅延があり、毎レースの締切10分前
 
 実装: scripts/autonomous_daily.py, app/forecast-reanalysis.js, app/app.js。
 テスト: tests/test_autonomous_daily.py, app/tests/forecast-reanalysis.test.js, app/tests/live.test.js。
+
+
+## v1.7 「結果照合」画面の更新ボタン（2026-10-22）
+
+- 「結果照合」に、iPhoneでタップしやすい **↻ 結果を更新** ボタンを追加。
+- 押すと GitHub Pages で公開済みの最新データ（app/data/live/latest.json）をキャッシュ無効のリクエストで再取得。
+- 発走前に固定した予想は変更せず、BOATRACE公式で確認済みの結果から的中率・仮想収支・回収率を再計算。
+- 更新中はボタン無効＋進捗を表示。結果が増えた場合、変化なし、古いデータ、通信エラー、手動インポートの各ケースを分けて案内。
+- 画面には公開データの最終更新時刻と、公式払戻ページの前回確認時刻をJSTで表示。
+- **GitHub Pagesは静的配信のため、更新ボタンは公式サイトへの即時取得処理を実行しない。** 新たな公式結果の収集はGitHub Actionsの定期実行側で行われるため、ページに反映されるまで時間差がある。手動インポート中は元の予想に戻してから再確認。
+- 通信が切れても、すでに表示していた公式確認済み結果は保持する。公開データの日付が古い場合は上書きしない。
+- テスト: app/tests/results-refresh.test.js。

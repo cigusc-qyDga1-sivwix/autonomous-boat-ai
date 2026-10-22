@@ -1,0 +1,67 @@
+name: BOAT LAB nationwide auto forecasts
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/autonomous_daily.py'
+      - '.github/workflows/boat-lab-auto.yml'
+  schedule:
+    # UTC: 06:00-23:59 JST, every 10 minutes. Cron may be delayed.
+    - cron: '*/10 21-23 * * *'
+    - cron: '*/10 0-14 * * *'
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: boat-lab-nationwide
+  cancel-in-progress: false
+
+jobs:
+  collect-forecast-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Collect all available venues and freeze only pre-cutoff forecasts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/autonomous_daily.py | tee boat-lab-daily-status.json
+          python -m json.tool app/data/live/latest.json > /dev/null
+      - name: Persist predictions and immutable version history
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.name 'github-actions[bot]'
+          git add app/data/live/
+          if ! git diff --cached --quiet; then
+            git commit -m 'data: automatic nationwide forecast snapshots and results'
+            git push origin HEAD:main
+          fi
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload BOAT LAB web app
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './app'
+      - name: Deploy site
+        id: deploy
+        uses: actions/deploy-pages@v4
+      - name: Keep run diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boat-lab-auto-status
+          path: boat-lab-daily-status.json
+          if-no-files-found: ignore
+          retention-days: 3

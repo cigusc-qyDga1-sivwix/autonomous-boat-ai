@@ -13,7 +13,7 @@ assert.equal(refs.linkFor('鳴門','2026-10-22',12),
 assert.equal(refs.linkFor('架空場','2026-10-22',1),'https://boaters-boatrace.com/race');
 assert.equal(refs.linkFor('徳山','invalid',1),'https://boaters-boatrace.com/race');
 assert.equal(refs.linkFor('徳山','2026-10-22',13),'https://boaters-boatrace.com/race');
-const data=JSON.parse(fs.readFileSync('app/data/2026-10-22.json','utf8'));
+const data=JSON.parse(fs.readFileSync('app/data/live/latest.json','utf8'));
 const original=JSON.stringify(data.forecast_races[0]);
 const localHTML=refs.analysisHTML(data.forecast_races[0]);
 assert.match(localHTML,/BOAT LAB保存記録のみ/);

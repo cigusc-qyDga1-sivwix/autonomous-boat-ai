@@ -21,6 +21,11 @@ function courseAverage(x,c){
  return validST(v)?Number(v):null;
 }
 function validST(v){const x=n(v);return x!==null&&x>=.01&&x<=.40;}
+function courseSTCount(x,c){
+ const tab=x.course_st_samples_by_course||x.course_start_count_by_course||x.course_st_count_by_course;
+ const raw=tab&&(tab[c]??tab[String(c)]);const v=n(raw);
+ return v!==null&&Number.isInteger(v)&&v>=0&&v<=10000?v:null;
+}
 function defaults(r){
  const racers=list(r);
  const courses=racers.map((x,i)=>Number(x.course??x.entry_course??i+1));
@@ -32,7 +37,7 @@ function defaults(r){
    const c=permutation?courses[i]:i+1;
    return {lane:i+1,course:c,group:c<=3?'slow':'dash',
     kind:c===1?'escape':c===2?'sashi':c>=5?'makuri':'makuri-zashi',
-    st:courseAverage(x,c)};
+    st:courseAverage(x,c),stSamples:courseSTCount(x,c)};
   }),
   wind:n(wind.wind_speed),wave:n(wind.wave_height),relativeWind:'unknown',
   startWidthM:venue?.startWidthM??null,turn1WidthM:venue?.turn1WidthM??null,
@@ -47,7 +52,8 @@ function normalise(cfg){
  return {boats:cfg.boats.map((b,i)=>({lane:i+1,course:Number(b.course),
   group:b.group==='dash'?'dash':'slow',
   kind:kinds.some(k=>k[0]===b.kind)?b.kind:'follow',
-  st:validST(b.st)?Number(b.st):null})),
+  st:validST(b.st)?Number(b.st):null,
+  stSamples:Number.isInteger(b.stSamples)&&b.stSamples>=0&&b.stSamples<=10000?b.stSamples:null})),
   wind:n(cfg.wind),wave:n(cfg.wave),
   startWidthM:validWidth(cfg.startWidthM)?Number(cfg.startWidthM):null,
   turn1WidthM:validWidth(cfg.turn1WidthM)?Number(cfg.turn1WidthM):null,
@@ -60,7 +66,9 @@ function analyze(r,config){
   const src=racers[b.lane-1]||{};
   const ref=validST(src.average_start_timing)?Number(src.average_start_timing):null;
   const st=validST(b.st)?b.st:(ref??.17);
-  const origin=b.st!=null?'進入コース別（手入力／取得値）':ref!=null?'全国平均STを参考':'ST未取得・中立値';
+  const sample=b.stSamples;
+  const origin=b.st!=null?'進入コース別'+(sample!=null?' '+sample+'走'+(sample<10?'・小標本':''):'（任意入力または標本不明）'):
+    ref!=null?'全国平均STを参考':'ST未取得・中立値';
   const exhib=n(src.exhibition_st);
   // Exhibition F is not fast ST; do not treat exhibition as a course average.
   const front=cfg.boats.filter(q=>q.course<b.course).map(q=>{
@@ -115,7 +123,7 @@ function drawControls(r,plan){
   html+='<div class="plan-row"><div class="plan-player"><b class="plan-lane plan-lane-'+b.lane+'">'+b.lane+'</b><span>'+esc(x.name||'選手未取得')+'<small>全国平均ST '+ref+'</small></span></div>'+
    '<label>進入<select data-plan-course="'+b.lane+'">'+[1,2,3,4,5,6].map(v=>'<option value="'+v+'"'+(v===b.course?' selected':'')+'>'+v+'コース</option>').join('')+'</select></label>'+
    '<label>隊形<select data-plan-group="'+b.lane+'"><option value="slow"'+(b.group==='slow'?' selected':'')+'>スロー</option><option value="dash"'+(b.group==='dash'?' selected':'')+'>ダッシュ</option></select></label>'+
-   '<label>進入別ST<input data-plan-st="'+b.lane+'" inputmode="decimal" type="number" min=".01" max=".40" step=".01" value="'+(b.st===null?'':b.st.toFixed(2))+'" placeholder="未取得"></label>'+
+   '<label>進入別ST'+(b.stSamples!=null?'（'+b.stSamples+'走）':'（標本不明）')+'<input data-plan-st="'+b.lane+'" inputmode="decimal" type="number" min=".01" max=".40" step=".01" value="'+(b.st===null?'':b.st.toFixed(2))+'" placeholder="未取得"></label>'+
    '<label>攻め方<select data-plan-kind="'+b.lane+'">'+kinds.map(k=>'<option value="'+k[0]+'"'+(k[0]===b.kind?' selected':'')+'>'+k[1]+'</option>').join('')+'</select></label></div>';
  }
  html+='</div><div class="plan-venue-header">🌊 '+esc(r.venue||'会場未取得')+'の1マーク水面幅：'+esc(plan.geometry.available?'自動参考配置':'未取得')+
@@ -240,11 +248,13 @@ function mount(root,r){
     b.course=dest;
     // A manually-entered course ST does not silently travel to the new course.
     b.st=courseAverage(list(r)[b.lane-1]||{},dest);
+    b.stSamples=courseSTCount(list(r)[b.lane-1]||{},dest);
    }else if(node.dataset.planGroup)b.group=node.value==='dash'?'dash':'slow';
    else if(node.dataset.planKind){if(kinds.some(k=>k[0]===node.value))b.kind=node.value;}
    else if(node.dataset.planSt){
     if(node.value!==''&&!validST(node.value))return;
     b.st=node.value===''?null:Number(node.value);
+    b.stSamples=null;
    }
   }
   persist();pause();state.position=0;repaint();

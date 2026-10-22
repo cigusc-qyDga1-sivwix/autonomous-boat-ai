@@ -17,13 +17,13 @@ const kinds=[['escape','逃げ・先マイ'],['sashi','差し'],['makuri','ま�
 function list(r){return [...(r&&Array.isArray(r.racers)?r.racers:[])].sort((a,b)=>Number(a.lane)-Number(b.lane));}
 function courseAverage(x,c){
  const table=x.course_average_st_by_course||x.course_st_by_course||x.course_avg_st_by_course;
- const v=table&&(table[c]??table[String(c)]);
+ const v=Array.isArray(table)?table[c-1]:(table&&(table[c]??table[String(c)]));
  return validST(v)?Number(v):null;
 }
 function validST(v){const x=n(v);return x!==null&&x>=.01&&x<=.40;}
 function courseSTCount(x,c){
  const tab=x.course_st_samples_by_course||x.course_start_count_by_course||x.course_st_count_by_course;
- const raw=tab&&(tab[c]??tab[String(c)]);const v=n(raw);
+ const raw=Array.isArray(tab)?tab[c-1]:(tab&&(tab[c]??tab[String(c)]));const v=n(raw);
  return v!==null&&Number.isInteger(v)&&v>=0&&v<=10000?v:null;
 }
 function defaults(r){
@@ -167,7 +167,7 @@ function animationHTML(r){
  '<div class="boat-sim-controls"><div class="boat-sim-buttons"><button data-plan-control="play">▶ 再生</button><button data-plan-control="pause">Ⅱ 停止</button><button data-plan-control="reset-play">↺ 最初から</button></div></div>'+
  '<div class="boat-sim-outcome"><strong data-plan-result>'+esc(p.summary)+'</strong></div>'+
  '<p data-plan-story class="boat-sim-story">スタート前の隊形を表示しています。</p>'+
- '<p class="boat-sim-disclaimer">※コース別STが未取得の場合は全国平均ST、どちらも無ければ中立値0.17を使用。展示STのFは加点しません。風と波の影響は未校正の仮説で、予測的中率の保証はありません。変更はこの端末内だけで正式な固定記録・結果照合・収支を変更しません。</p></section>';
+ '<p class="boat-sim-disclaimer">※コース別STは利用可能な独立データ/任意入力のみ。10走未満は小標本扱い。未取得の場合は全国平均ST、どちらも無ければ中立値0.17を使用。展示STのFは加点しません。風と波の影響は未校正の仮説で、予測的中率の保証はありません。変更はこの端末内だけで正式な固定記録・結果照合・収支を変更しません。</p></section>';
 }
 function dispose(){
  if(mounted&&mounted.raf!=null&&typeof cancelAnimationFrame==='function')cancelAnimationFrame(mounted.raf);

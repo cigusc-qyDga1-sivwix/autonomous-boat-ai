@@ -329,18 +329,74 @@
     if(incoming.mode!=='auto-live')throw Error('Not a live forecast');
     return incoming;
   }
-  async function reloadLiveIfNew(){
-    if(readJSON(STORE_DATA,null))return;
+  function acceptLiveData(incoming) {
+    if(data&&incoming.event_date<data.event_date)return false;
+    if(data&&incoming.event_date===data.event_date&&lastLiveUpdate&&incoming.updated_at_utc &&
+       incoming.updated_at_utc<lastLiveUpdate)return false;
+    const previous=(data?.event_date||'')+'|'+(lastLiveUpdate||'')+'|'+Object.keys(autoResults).length;
+    data=incoming;
+    autoResults=incoming.official_results||{};
+    lastLiveUpdate=incoming.updated_at_utc||'';
+    state.origin='非公式API＋GitHub Actions・発走前スナップショット';
+    if(state.raceDetail)state.raceDetail=findRace(state.raceDetail.venue,state.raceDetail.race);
+    const venues=getVenues();
+    if(state.venue!=='全場'&&!venues.includes(state.venue))state.venue='全場';
+    if(!venues.includes(state.resultVenue))state.resultVenue=venues[0];
+    if(state.resultVenue&&!findRace(state.resultVenue,state.resultRace)){
+      state.resultRace=allRaces().find(r=>r.venue===state.resultVenue)?.race||1;
+    }
+    return previous!==(data.event_date+'|'+lastLiveUpdate+'|'+Object.keys(autoResults).length);
+  }
+  async function refreshOfficialResults(){
+    if(resultsRefreshBusy)return;
+    if(readJSON(STORE_DATA,null)){
+      resultsRefreshIsError=true;
+      resultsRefreshNotice='手動インポート中です。データ管理から「元の予想に戻す」を選ぶと公式の自動照合を確認できます。';
+      render();
+      return;
+    }
+    resultsRefreshBusy=true;resultsRefreshIsError=false;resultsRefreshNotice='';render();
+    const oldDate=data?.event_date;
+    const oldVerified=new Set(Object.keys(autoResults).filter(key=>
+      autoResults[key]?.verified===true&&autoResults[key]?.source==='boatrace_official_pay' &&
+      !data?.settlement_alerts?.[key]));
     try{
       const incoming=await fetchLive();
-      if(data&&incoming.event_date<data.event_date)return;
-      if(incoming.updated_at_utc===lastLiveUpdate)return;
-      data=incoming;autoResults=incoming.official_results||{};lastLiveUpdate=incoming.updated_at_utc||'';
-      state.origin='非公式API＋GitHub Actions・発走前スナップショット';
-      if(state.raceDetail)state.raceDetail=findRace(state.raceDetail.venue,state.raceDetail.race);
-      if(state.venue!=='全場'&&!getVenues().includes(state.venue))state.venue='全場';
-      state.resultVenue=getVenues().includes(state.resultVenue)?state.resultVenue:getVenues()[0];
+      if(data&&incoming.event_date<data.event_date){
+        resultsRefreshIsError=true;
+        resultsRefreshNotice='公開先のデータは表示中の記録より古いため、上書きしませんでした。';
+      }else{
+        const applied=acceptLiveData(incoming);
+        const newKeys=Object.keys(autoResults).filter(key=>
+          autoResults[key]?.verified===true&&autoResults[key]?.source==='boatrace_official_pay' &&
+          !data?.settlement_alerts?.[key]);
+        const added=newKeys.filter(key=>!oldVerified.has(key)).length;
+        if(oldDate!==data.event_date){
+          resultsRefreshNotice='対象日が'+data.event_date+'に更新されました。公式照合 '+newKeys.length+'Rを表示しています。';
+        }else if(added>0){
+          resultsRefreshNotice='新たに'+added+'Rの公式結果を確認しました。合計'+newKeys.length+'Rを照合済みです。';
+        }else if(applied){
+          resultsRefreshNotice='公開データを更新しました。公式照合の追加はまだありません。';
+        }else{
+          resultsRefreshNotice='公開済みの最新データを確認しました。新しい公式照合結果はまだありません。';
+        }
+        resultsRefreshIsError=false;
+      }
+    }catch(error){
+      resultsRefreshIsError=true;
+      resultsRefreshNotice='データを取得できませんでした。通信状態を確認して、もう一度押してね。';
+      console.warn('Official-result data refresh failed:',error.message);
+    }finally{
+      resultsRefreshBusy=false;
       render();
+    }
+  }
+  async function reloadLiveIfNew(){
+    if(readJSON(STORE_DATA,null)||resultsRefreshBusy)return;
+    try{
+      const incoming=await fetchLive();
+      if(incoming.event_date===data?.event_date&&incoming.updated_at_utc===lastLiveUpdate)return;
+      if(acceptLiveData(incoming))render();
     }catch(error){console.warn('Live data refresh failed:',error.message);}
   }
   async function init(){
@@ -359,6 +415,6 @@
       document.addEventListener('visibilitychange',()=>{if(!document.hidden)reloadLiveIfNew();});
     }catch(error){el('main').innerHTML=`<section class="card card-pad"><h1>データを読み込めませんでした</h1><p class="muted">${escape(error.message)}</p><p>アプリはHTTPSまたはローカルHTTPサーバー上で開いてください。ダウンロードしたHTMLを直接開くと、ブラウザの制限で予想データを取得できない場合があります。</p></section>`;}
   }
-  window.BoatLab={validate:normalizeData,stats,officialStats,officialFor,compute,getData:()=>data};
+  window.BoatLab={validate:normalizeData,stats,officialStats,officialFor,compute,getData:()=>data,refreshOfficialResults};
   init();
 })();

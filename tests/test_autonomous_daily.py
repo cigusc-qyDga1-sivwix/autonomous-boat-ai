@@ -5,7 +5,8 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from scripts.autonomous_daily import (build, prediction, preview_complete, valid_entrants,
-                                     point_count, combinations, allocate_stakes)
+                                     point_count, combinations, allocate_stakes,
+                                     features, valid_average_st, usable_exhibition_st)
 
 JST = ZoneInfo("Asia/Tokyo")
 
@@ -153,3 +154,45 @@ def test_existing_8_point_snapshot_is_never_rewritten():
     assert view["forecast_races"][0]["bets"] == legacy["bets"]
     assert len(view["forecast_races"][0]["bets"]) == 8
     assert status["new_baseline"] == 0
+
+
+
+def test_zero_average_start_is_unknown_not_perfect_persistent_start():
+    assert valid_average_st(0) is None
+    assert valid_average_st(-.02) is None
+    assert valid_average_st(.16) == .16
+    first = race()
+    first["racers"]["1"]["average_start_timing"] = 0
+    neutral = race()
+    neutral["racers"]["1"]["average_start_timing"] = .17
+    weights_zero, detail_zero = features(first, "baseline")
+    weights_neutral, _ = features(neutral, "baseline")
+    assert weights_zero == weights_neutral
+    assert detail_zero[0]["average_start_timing"] is None
+    assert detail_zero[0]["average_start_timing_source_value"] == 0
+    assert detail_zero[0]["average_start_timing_imputed"] is True
+
+
+def test_exhibition_f_is_recorded_without_earning_quick_st_bonus():
+    assert usable_exhibition_st(-.09) is None
+    assert usable_exhibition_st(0) == 0
+    clean = race(show_preview=True)
+    clean["preview"]["racers"]["1"]["start_timing"] = .16
+    flying = race(show_preview=True)
+    flying["preview"]["racers"]["1"]["start_timing"] = -.15
+    assert preview_complete(flying)
+    clean_weights, _ = features(clean, "exhibition")
+    flying_weights, flying_detail = features(flying, "exhibition")
+    assert flying_weights[0] == clean_weights[0]
+    assert flying_detail[0]["exhibition_st"] == -.15
+    now = datetime(2026,10,22,9,10,tzinfo=JST)
+    snap = prediction(flying, "徳山", 1, "exhibition", now, "fixture")
+    assert snap["data_quality"]["exhibition_f_count"] == 1
+
+
+def test_bad_exhibition_time_zero_not_used_as_fastest_boat():
+    invalid = race(show_preview=True)
+    invalid["preview"]["racers"]["1"]["exhibition_time"] = 0
+    assert not preview_complete(invalid)
+    _, detail = features(invalid, "baseline")
+    assert detail[0]["exhibition_time"] is None

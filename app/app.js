@@ -14,7 +14,7 @@
   const raceKey = r => `${data.event_date}|${r.venue}|${r.race}`;
   const el = id => document.getElementById(id);
   const titles = {overview:'ダッシュボード',races:'レース・買い目',results:'結果照合',analysis:'成績分析',settings:'データ管理'};
-  const state = {view:'overview',venue:'全場',classification:'ALL',boardFilter:'all',boardSort:'official',raceDetail:null,showExternalAnalysis:false,resultVenue:'鳴門',resultRace:1,origin:'GitHubで発走前固定した予想のローカル写し'};
+  const state = {view:'overview',venue:'全場',classification:'ALL',boardFilter:'all',boardSort:'official',raceDetail:null,showExternalAnalysis:false,reanalysisResult:null,reanalysisExtras:{},resultVenue:'鳴門',resultRace:1,origin:'GitHubで発走前固定した予想のローカル写し'};
   let data = null;
   let results = {};
   let autoResults = {};
@@ -139,16 +139,25 @@
     const external=window.BoatExternalReference;
     const externalUrl=external?external.linkFor(r.venue,data.event_date,r.race):'https://boaters-boatrace.com/race';
     const predictionUrl=external?external.predictionLinkFor(r.venue,data.event_date,r.race):'https://boaters-boatrace.com/race';
-    const referencePanel=`<section class="external-reference-card" aria-label="外部サイトの参考情報">
-      <div class="external-header"><div><span class="external-eyebrow">EXTERNAL REFERENCE</span><h2>🔎 外部情報・比較ツール</h2></div><span class="external-status">手動確認</span></div>
-      <p>選択中の${escape(r.venue)} ${r.race}RをBOATERSで開けます。利用規約により、サイトの自動読み取り・転送は行いません。</p>
+    const recalc=window.BoatReanalysis;
+    const exhibitionUrl=external?.exhibitionLinkFor(r.venue,data.event_date,r.race)||externalUrl;
+    const modelKey=data.event_date+'|'+r.venue+'|'+r.race+'|'+(r.sha256||'sample');
+    const stored=state.reanalysisResult?.key===modelKey?state.reanalysisResult:null;
+    const referencePanel=`<section class="external-reference-card" aria-label="予想情報の確認と展開再評価">
+      <div class="external-header"><div><span class="external-eyebrow">EXHIBITION · RACE INTELLIGENCE</span><h2>🚤 展示情報を見て予想を強化</h2></div><span class="external-status">試験モデル</span></div>
+      <p>出走表・モーター・ST・展示タイムを使って<strong>1着の勝ち筋 → 2着の浮上 → 3着残存</strong>の順番で3連単を組み直します。外部サイトを無断で読み取ることはしません。</p>
       <div class="external-action-row">
-        <a class="external-btn external-btn-primary" href="${escape(externalUrl)}" target="_blank" rel="noopener noreferrer">↗ BOATERS レース情報</a>
-        <a class="external-btn external-btn-white" href="${escape(predictionUrl)}" target="_blank" rel="noopener noreferrer">↗ BOATERS AI予想</a>
-        <button type="button" class="external-btn external-btn-white" data-action="analyze-saved-race" aria-expanded="${state.showExternalAnalysis?'true':'false'}">${state.showExternalAnalysis?'✕ 比較を閉じる':'📊 取得済みデータを分析'}</button>
+        <a class="external-btn external-btn-primary" href="${escape(exhibitionUrl)}" target="_blank" rel="noopener noreferrer">↗ BOATERSの展示項目を見る</a>
+        <a class="external-btn external-btn-white" href="${escape(externalUrl)}" target="_blank" rel="noopener noreferrer">↗ 出走表・モーターを確認</a>
+        <button type="button" class="external-btn external-btn-white" data-action="analyze-saved-race" aria-expanded="${state.showExternalAnalysis?'true':'false'}">${state.showExternalAnalysis?'✕ 再評価画面を閉じる':'🧠 展開を再評価する'}</button>
       </div>
-      ${state.showExternalAnalysis && external?external.analysisHTML(r):''}
-      <p class="external-footnote">※ 比較ボタンはBOAT LABに保存済みのデータのみを使います。BOATERSのデータを取得したり、予想・固定買い目を書き換えたりしません。</p>
+      ${state.showExternalAnalysis ? `<div class="recalc-workbench">
+        <div class="recalc-data-status"><span>勝率・モーター・平均ST：${r.racers?.length===6?'取得済み':'未取得'}</span><span>展示タイム：${r.phase==='exhibition'?'取得済み':'未取得'}</span><span>1周・回り足・直線：追加できる場合のみ</span></div>
+        ${recalc?recalc.inputForm(r,state.reanalysisExtras):'<p>再評価モジュールを読み込めませんでした。</p>'}
+        <button type="button" class="external-btn external-btn-primary recalc-run" data-action="run-reanalysis">🧠 取得済みデータで再予想（8点）</button>
+        ${stored && recalc?recalc.resultHTML(stored.result,stored.afterCutoff):''}
+      </div>` : ''}
+      <p class="external-footnote">BOATERSが掲載する独自展示指標は、元の競艇場公式でも公開されることがあります。データ利用条件を確認し、許可された提供元から取り込む方針です。<strong>この機能はBOATERSから自動取得したものではありません。</strong>固定済み買い目は変更しません。</p>
     </section>`;
     return `<button class="back-btn" data-action="back-races">← レース一覧へ戻る</button><div class="detail-header"><div><div class="page-eyebrow">FORECAST DETAILS / ${escape(data.event_date)}</div><h1 class="detail-title">${escape(r.venue)} ${r.race}R <span style="font-size:17px;vertical-align:middle">${pill(r.classification)}</span></h1><div class="detail-sub">締切予定 ${escape(r.cutoff_jst)} JST　 ·　 ${r.phase==='exhibition'?'展示数値反映':r.phase==='baseline'?'展示前':'保存済み'}・結果未使用</div></div><button class="btn btn-primary" data-action="copy-bets" data-race="${escape(r.venue)}|${r.race}">⎘ 買い目をコピー</button></div>
     ${r.phase?`<div class="notice">${escape(r.evidence||'')} ・ 発走前保存 ${escape(r.frozen_at_utc||'未記録')} ・ SHA256 ${escape((r.sha256||'').slice(0,18))}…${r.weather_observed?`<br>場内風速 ${escape(r.weather_observed.wind_speed)}m/s ／ 波高 ${escape(r.weather_observed.wave_height)}cm（非公式・取得時点）`:''}<br>予想モデル：未学習・確率未校正。展示動画とオッズは未反映。</div>`:''}
@@ -209,7 +218,7 @@
     document.querySelectorAll('[data-view]').forEach(b=>{b.classList.toggle('active',b.dataset.view===state.view);if(b.dataset.view===state.view)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
     main.innerHTML=({overview,races,results:resultsPage,analysis,settings})[state.view]();
   }
-  function go(view) {state.view=view;state.raceDetail=null;state.showExternalAnalysis=false;render();window.scrollTo({top:0,behavior:'instant'});}
+  function go(view) {state.view=view;state.raceDetail=null;state.showExternalAnalysis=false;state.reanalysisResult=null;state.reanalysisExtras={};render();window.scrollTo({top:0,behavior:'instant'});}
   function toast(message){const node=el('toast');node.textContent=message;node.classList.add('show');if(toastTimer)clearTimeout(toastTimer);toastTimer=setTimeout(()=>node.classList.remove('show'),3200);}
   function download(name,content,type='text/plain;charset=utf-8') {const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
   function exportResultsCSV(){const header=['date','venue','race','classification','cutoff_jst','finish','payout_per_100','is_hit','stake_yen','virtual_payout_yen','virtual_profit_yen','recorded_at','source'];const body=allRaces().map(r=>{let c=compute(r);return [data.event_date,r.venue,r.race,r.classification,r.cutoff_jst,c.record?.finish||'',c.record?.payout_per_100??'',c.record?Number(c.hit):'',c.record?c.stake:'',c.payout??'',c.profit??'',c.record?.recorded_at||'',c.record?'manual':''];});const csv=[header,...body].map(a=>a.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');download(`boatlab-results-${data.event_date}.csv`,'\uFEFF'+csv,'text/csv;charset=utf-8');toast('結果CSVを書き出したよ');}
@@ -219,10 +228,31 @@
     const venueOpen=e.target.closest('[data-open-venue]');if(venueOpen){if(venueOpen.disabled)return;state.venue=venueOpen.dataset.openVenue;state.raceDetail=null;state.view='races';render();window.scrollTo(0,0);return;}
     const fav=e.target.closest('[data-favorite-venue]');if(fav){const name=fav.dataset.favoriteVenue;favorites=favorites.includes(name)?favorites.filter(x=>x!==name):favorites.concat([name]);try{localStorage.setItem(STORE_FAVORITES,JSON.stringify(favorites));}catch{}render();return;}
     const boardFilter=e.target.closest('[data-venue-filter]');if(boardFilter){state.boardFilter=boardFilter.dataset.venueFilter;render();return;}
-    const row=e.target.closest('[data-race]');if(row){const [v,n]=row.dataset.race.split('|');let r=findRace(v,n);if(!r)return;if(row.dataset.action==='settle-this'){state.resultVenue=v;state.resultRace=Number(n);go('results');return;}if(row.dataset.action==='copy-bets'){copyBets(r);return;}state.raceDetail=r;state.showExternalAnalysis=false;state.view='races';render();window.scrollTo(0,0);return;}
+    const row=e.target.closest('[data-race]');if(row){const [v,n]=row.dataset.race.split('|');let r=findRace(v,n);if(!r)return;if(row.dataset.action==='settle-this'){state.resultVenue=v;state.resultRace=Number(n);go('results');return;}if(row.dataset.action==='copy-bets'){copyBets(r);return;}state.raceDetail=r;state.showExternalAnalysis=false;state.reanalysisResult=null;state.reanalysisExtras={};state.view='races';render();window.scrollTo(0,0);return;}
     const btn=e.target.closest('[data-action]');if(!btn)return;
     switch(btn.dataset.action){
       case 'analyze-saved-race':state.showExternalAnalysis=!state.showExternalAnalysis;render();break;
+      case 'run-reanalysis':{
+        const r=state.raceDetail,engine=window.BoatReanalysis;
+        if(!r||!engine){toast('再評価データがありません');break;}
+        try{
+          const extras={};
+          for(const input of document.querySelectorAll('[data-recalc-lane][data-recalc-metric]')){
+            const lane=Number(input.dataset.recalcLane),metric=input.dataset.recalcMetric;
+            if(!Number.isInteger(lane)||lane<1||lane>6||!['lap_time','turn_time','straight_time'].includes(metric))continue;
+            if(!extras[lane])extras[lane]={};
+            if(input.value!==''&&input.value!=null)extras[lane][metric]=input.value;
+          }
+          const clean=engine.normalizeExtra(extras),estimate=engine.model(r,clean);
+          const formatter=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
+          const afterCutoff=formatter.format(new Date()).replace(' ','T')>=data.event_date+'T'+r.cutoff_jst;
+          state.reanalysisExtras=clean;
+          state.reanalysisResult={key:data.event_date+'|'+r.venue+'|'+r.race+'|'+(r.sha256||'sample'),result:estimate,afterCutoff};
+          state.showExternalAnalysis=true;render();
+          toast(afterCutoff?'締切後の参考試算を生成したよ':'展開を再評価したよ（試験用）');
+        }catch(err){toast(err.message||'再評価に失敗しました');}
+        break;
+      }
       case 'go-races':go('races');break;
       case 'back-races':state.raceDetail=null;render();break;
       case 'back-overview':state.venue='全場';go('overview');break;

@@ -4,7 +4,8 @@
  */
 (function(){
 'use strict';
-const STAKES=[12000,10000,8000,6000,5000,4000,3000,2000], COURSE=[1.78,1.27,1.06,.91,.79,.71];
+const COURSE=[1.78,1.27,1.06,.91,.79,.71];
+const BUDGET_UNITS=50,MIN_POINTS=4,MAX_POINTS=12;
 const METRICS=['lap_time','turn_time','straight_time'];
 const LABEL={lap_time:'1周',turn_time:'回り足',straight_time:'直線'};
 const LIMITS={lap_time:[30,50],turn_time:[4,15],straight_time:[5,12]};
@@ -24,6 +25,38 @@ function normalizeExtra(extra){
   }
  }
  return out;
+}
+function pointCount(weights){
+ if(!Array.isArray(weights)||weights.length!==6||weights.some(x=>!Number.isFinite(x)||x<=0))
+  throw Error('6艇の相対評価が取得できません');
+ const sorted=[...weights].sort((a,b)=>b-a),total=sorted.reduce((a,b)=>a+b,0);
+ const share=sorted[0]/total,margin=(sorted[0]-sorted[1])/total;
+ const thresholds=[[.40,.14,4],[.36,.10,5],[.33,.07,6],[.30,.05,7],
+  [.28,.04,8],[.26,.025,9],[.245,.015,10],[.23,.010,11]];
+ const found=thresholds.find(([min,lead])=>share>=min&&margin>=lead);
+ const count=found?found[2]:MAX_POINTS;
+ const label=count<=6?'主導権が比較的明確・買い目を集中':
+  count<=9?'対抗ラインと2・3着の分岐を重視':'先頭争いが接近・展開分岐を広めに検証';
+ return {count,share,margin,
+  reason:label+'（頭評価の相対重み '+(share*100).toFixed(1)+'%・次点差 '+(margin*100).toFixed(1)+'%、未校正）'};
+}
+function allocateBets(selected){
+ const count=selected.length;
+ if(count<MIN_POINTS||count>MAX_POINTS)throw Error('買い目は4〜12点で作成');
+ if(new Set(selected.map(x=>x.combination)).size!==count)throw Error('3連単が重複しています');
+ const remaining=BUDGET_UNITS-count;
+ const relative=selected.map(x=>Math.pow(Math.max(0,x.weight),.8));
+ const total=relative.reduce((a,b)=>a+b,0);
+ if(total<=0)throw Error('組合せの相対重みが不正です');
+ const quotas=relative.map(x=>remaining*x/total);
+ const amounts=quotas.map(x=>Math.floor(x));
+ let leftover=remaining-amounts.reduce((a,b)=>a+b,0);
+ const order=[...amounts.keys()].sort((a,b)=>
+  ((quotas[b]-amounts[b])-(quotas[a]-amounts[a]))||(a-b));
+ for(const i of order.slice(0,leftover))amounts[i]++;
+ const bets=selected.map((x,i)=>({combination:x.combination,virtual_yen:1000*(1+amounts[i])}));
+ if(bets.reduce((a,b)=>a+b.virtual_yen,0)!==50000)throw Error('仮想配分が50,000円になりません');
+ return bets;
 }
 function model(r,rawExtra){
  if(!Array.isArray(r?.racers)||r.racers.length!==6)throw Error('6艇分の選手情報が揃っていないため再評価できません');
@@ -78,18 +111,20 @@ function model(r,rawExtra){
   all.push({combination:(a+1)+'-'+(b+1)+'-'+(c+1),head:a+1,weight:(weights[a]/sum)*(x2[b]/x2.reduce((s,v)=>s+v,0))*(x3[c]/x3.reduce((s,v)=>s+v,0))});
  }
  all.sort((a,b)=>b.weight-a.weight||a.combination.localeCompare(b.combination));
- const selected=all.slice(0,8),heads=new Set(selected.map(x=>x.head));
+ const sizing=pointCount(weights);
+ const selected=all.slice(0,sizing.count),heads=new Set(selected.map(x=>x.head));
  if(heads.size===1){
   const alternative=[...weights].map((w,i)=>({head:i+1,w})).sort((a,b)=>b.w-a.w).find(x=>!heads.has(x.head));
   const best=alternative&&all.find(x=>x.head===alternative.head);
-  if(best)selected[7]=best;
+  if(best && alternative.w >= .62*Math.max(...weights))selected[selected.length-1]=best;
  }
  selected.sort((a,b)=>b.weight-a.weight||a.combination.localeCompare(b.combination));
- const bets=selected.map((x,i)=>({combination:x.combination,virtual_yen:STAKES[i]}));
+ const bets=allocateBets(selected);
  const lead=bets[0].combination.split('-').map(Number);
  const hc=Number(racers[lead[0]-1].course)||lead[0];
  const scenario=hc===1?'①を中心とする先マイ・押し切り仮説':hc===2?'②の差し・早仕掛け仮説':hc<=4?'センター勢のまくり・まくり差し仮説':'外枠からの仕掛け・展開突入仮説';
- return {model_version:'conditional-heuristic-experimental-0.1',bets,
+ return {model_version:'conditional-heuristic-experimental-0.2-flex4to12',bets,
+  point_count:sizing.count,point_reason:sizing.reason,
   scenario,pair:lead[0]+'→'+lead[1]+'→'+lead[2]+' を中心に3着残存を評価',
   used,skipped,extras,method:'未訓練・未校正の条件付き重みモデル。展示動画・オッズ・結果情報は不使用。'};
 }
@@ -112,15 +147,16 @@ function inputForm(r,extra){
  return out;
 }
 function resultHTML(result,afterCutoff){
- let out='<div class="recalc-result"><div class="recalc-result-heading"><b>🧠 展開を再評価した3連単8点</b><span>'+(afterCutoff?'締切後の参考試算':'発走前の参考試算')+'</span></div>';
+ let out='<div class="recalc-result"><div class="recalc-result-heading"><b>🧠 展開を再評価した3連単'+result.bets.length+'点</b><span>'+(afterCutoff?'締切後の参考試算':'発走前の参考試算')+'</span></div>';
  out+='<p class="recalc-scenario">'+esc(result.scenario)+'</p><p class="recalc-pair">'+esc(result.pair)+'</p>';
+ out+='<p class="recalc-used"><b>点数選定：</b>'+esc(result.point_reason||'未記録')+'</p>';
  out+='<p class="recalc-used"><b>使用した追加情報：</b>'+esc(result.used.join('・')||'なし（出走表のみ）')+'</p>';
  if(result.skipped.length)out+='<p class="recalc-alert">'+result.skipped.map(esc).join(' ／ ')+'</p>';
  out+='<table class="recalc-bets"><thead><tr><th>仮説</th><th>3連単</th><th>仮想金額</th></tr></thead><tbody>';
  for(let i=0;i<result.bets.length;i++){const b=result.bets[i];out+='<tr><td>'+(i<3?'本線':i<6?'対抗':'展開穴')+'</td><td>'+esc(b.combination)+'</td><td>'+b.virtual_yen.toLocaleString('ja-JP')+'円</td></tr>';}
- out+='</tbody></table><div class="recalc-total">仮想合計 <strong>50,000円</strong>（8点・試験値）</div>';
+ out+='</tbody></table><div class="recalc-total">仮想合計 <strong>50,000円</strong>（'+result.bets.length+'点・試験値）</div>';
  out+='<div class="notice warn">'+(afterCutoff?'締切後の事後シミュレーションで、発走前の正式予想・成績に加えません。':'端末内の参考試算であり、発走前の正式予想には加えません。')+' '+esc(result.method)+'</div></div>';
  return out;
 }
-window.BoatReanalysis={model,normalizeExtra,inputForm,resultHTML};
+window.BoatReanalysis={model,pointCount,allocateBets,normalizeExtra,inputForm,resultHTML};
 })();

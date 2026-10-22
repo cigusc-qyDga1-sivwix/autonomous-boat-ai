@@ -35,15 +35,20 @@
    const summary=(!forecast?'発走前予想なし':alert?'返還・中止・異常の要確認':
      mismatch?'現在の公式結果と不一致':
      official?.verified?'公式照合済み':'照合候補');
-   const blocked=!forecast||!!alert||!!mismatch||!!input.review||
-     !validFinish(input.finish)||!validPayout(input.payout_per_100)||
-     !forecast.sha256&&kind==='url' || kind==='url'&&(!forecast.frozen_at_utc || !forecast.cutoff_jst);
+   // OCR column guesses and ambiguous text are editable drafts, not silently
+   // accepted. Refund/cancellation/official conflict remain hard blockers.
+   const reviewText=String(input.review||'');
+   const hardReview=/返還|中止|同着|不成立|取り消し|公式訂正|異常払戻/.test(reviewText);
+   const blocked=!forecast||!!alert||!!mismatch||hardReview||
+     (kind==='url'&&(!forecast.sha256||!forecast.frozen_at_utc||!forecast.cutoff_jst))||
+     (kind==='url'&&(!validFinish(input.finish)||!validPayout(input.payout_per_100)));
    return {
      venue:input.venue,race:input.race,finish:input.finish||'',payout_per_100:input.payout_per_100??'',
      date:ctx.date,kind,reason:input.review||reason||'',matched:!!forecast,blocked,
      summary,officialDone:!!(official?.verified&&!mismatch&&!alert),
      source:kind==='url'?'boatrace_official_pay':'image_ocr_unverified',
-     snapshot_sha256:forecast?.sha256||null,checked:!blocked&&!official?.verified,
+     snapshot_sha256:forecast?.sha256||null,
+     checked:!blocked&&!official?.verified&&!reviewText&&!(!validFinish(input.finish)||!validPayout(input.payout_per_100)),
    };
  }
  function looksRefund(value){return /返還|中止|同着|不成立|返金|取り消し|欠場|払戻なし/.test(value);}
@@ -274,6 +279,7 @@
    if(!row.matched)return '発走前予想なし';
    if(row.blocked)return row.summary;
    if(row.officialDone)return '公式照合済み';
+   if(row.reason)return '要手動確認（暫定）';
    return row.kind==='url'?'公式データ確認・反映可能':'画像OCR（未検証）';
  }
  function render(ctx){

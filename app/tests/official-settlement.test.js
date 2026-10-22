@@ -43,5 +43,15 @@ setTimeout(()=>{
   assert.match(elements.get('main').innerHTML,/BOATRACE/);
   assert.match(elements.get('main').innerHTML,/払戻金一覧/);
   assert.match(elements.get('main').innerHTML,/返還/);
+  for(const click of listeners.click||[]){
+    click({target:{closest:s=>s==='[data-view]'?{dataset:{view:'analysis'}}:null}});
+  }
+  const diagnosis=elements.get('main').innerHTML;
+  assert.match(diagnosis,/予想AIの弱点診断/);
+  assert.match(diagnosis,/2着の組合せ抜け/);
+  assert.match(diagnosis,/1・2着一致→3着抜け/);
+  assert.match(diagnosis,/買い目筆頭が①頭/);
+  assert.match(diagnosis,/公式照合済み/);
+
   console.log('BOAT LAB official settlement UI tests: PASS');
 },150);

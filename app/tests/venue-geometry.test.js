@@ -34,4 +34,14 @@ assert.match(api.animationHTML(original),/data-plan-env="startWidthM"/);
 assert.match(api.animationHTML(original),/data-plan-mark="1"/);
 assert.match(api.animationHTML(original),/戸田/);
 assert.equal(JSON.stringify(original),before);
-console.log('24 venue layout profiles and mark-position tactical rendering: PASS');
+
+// Accept authorized independent course data in either 1-based objects or 0-based arrays.
+const racer3=racer(3);racer3.course_average_st_by_course=[.10,.12,.14,.16,.18,.20];
+racer3.course_st_samples_by_course=[31,25,8,21,19,11];
+const withSamples={...original,racers:original.racers.map((x,i)=>i===2?racer3:x)};
+const saved=api.tactics.defaults(withSamples);
+assert.equal(saved.boats[2].st,.14);
+assert.equal(saved.boats[2].stSamples,8);
+assert.match(api.animationHTML(withSamples),/小標本|8走/);
+
+console.log('24 venue layout profiles, mark positions and ST sample metadata: PASS');

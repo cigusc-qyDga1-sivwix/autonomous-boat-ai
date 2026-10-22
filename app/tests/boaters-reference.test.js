@@ -47,6 +47,7 @@ const ctx=vm.createContext({
   navigator:{},location:{protocol:'file:'},setTimeout,clearTimeout,console,Blob,URL,Intl,Date,
 });
 vm.runInContext(fs.readFileSync('app/boaters-reference.js','utf8'),ctx);
+vm.runInContext(fs.readFileSync('app/forecast-reanalysis.js','utf8'),ctx);
 vm.runInContext(fs.readFileSync('app/venue-board.js','utf8'),ctx);
 vm.runInContext(fs.readFileSync('app/app.js','utf8'),ctx);
 function click(selector,value){
@@ -57,17 +58,21 @@ setTimeout(()=>{
   const r=data.forecast_races[0];
   click('[data-race]',{race:r.venue+'|'+r.race});
   const detail=elements.get('main').innerHTML;
-  assert.match(detail,/BOATERS レース情報/);
-  assert.match(detail,/BOATERS AI予想/);
+  assert.match(detail,/BOATERSの展示項目を見る/);
+  assert.match(detail,/出走表・モーターを確認/);
   assert.match(detail,/利用規約/);
-  assert.match(detail,/取得済みデータを分析/);
+  assert.match(detail,/展開を再評価する/);
   const expected=refs.linkFor(r.venue,data.event_date,r.race);
   assert.ok(detail.includes(expected));
-  assert.ok(!detail.includes('BOAT LAB保存記録のみ'));
+  assert.ok(!detail.includes('展開を再評価した3連単8点'));
   click('[data-action]',{action:'analyze-saved-race'});
   const expanded=elements.get('main').innerHTML;
-  assert.match(expanded,/BOAT LAB保存記録のみ/);
-  assert.match(expanded,/全国勝率 上位/);
+  assert.match(expanded,/追加展示データ/);
+  assert.match(expanded,/取得済みデータで再予想/);
+  click('[data-action]',{action:'run-reanalysis'});
+  const predicted=elements.get('main').innerHTML;
+  assert.match(predicted,/展開を再評価した3連単8点/);
+  assert.match(predicted,/50,000円/);
   assert.equal(fetchCount,2,'no network requests for analysis (only app data)');
   console.log('BOAT LAB BOATERS-reference tests: PASS');
 },120);

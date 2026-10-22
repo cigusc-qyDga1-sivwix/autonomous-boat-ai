@@ -220,6 +220,7 @@
   document.addEventListener('submit',e=>{
     if(e.target.id!=='result-form')return;e.preventDefault();
     const r=findRace(state.resultVenue,state.resultRace);if(!r)return;
+    if(officialFor(r)||resultIssue(r)){toast('公式照合済み・要確認レースの手入力はできません');return;}
     const pos=[0,1,2].map(i=>el(`finish-${i}`)?.value||'');const finish=pos.join('-');const payout=Number(el('payout').value);
     if(!isCombo(finish)){toast('1〜3着は重複しない艇番を選択してね');return;}
     if(!Number.isSafeInteger(payout)||payout<100||payout>10000000||payout%10!==0){toast('3連単払戻は100〜10,000,000円の10円単位で入力してね');return;}
@@ -264,6 +265,6 @@
       document.addEventListener('visibilitychange',()=>{if(!document.hidden)reloadLiveIfNew();});
     }catch(error){el('main').innerHTML=`<section class="card card-pad"><h1>データを読み込めませんでした</h1><p class="muted">${escape(error.message)}</p><p>アプリはHTTPSまたはローカルHTTPサーバー上で開いてください。ダウンロードしたHTMLを直接開くと、ブラウザの制限で予想データを取得できない場合があります。</p></section>`;}
   }
-  window.BoatLab={validate:normalizeData,stats,compute,getData:()=>data};
+  window.BoatLab={validate:normalizeData,stats,officialStats,officialFor,compute,getData:()=>data};
   init();
 })();

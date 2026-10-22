@@ -18,7 +18,9 @@ const buttons=Array.from({length:3},(_,i)=>({
 }));
 let clickHandler=null,inputHandler=null;
 const slider={value:'0',addEventListener:(event,handler)=>{if(event==='input')inputHandler=handler}};
-const stage={textContent:''},caption={textContent:''},result={textContent:''};
+const stage={textContent:''},caption={textContent:''},result={textContent:''},tactic={textContent:''},forecast={textContent:''};
+const stages=['start','turn','back'].map(simJump=>({dataset:{simJump},classList:{toggle(){}},setAttribute(k,v){if(k==='aria-pressed')this.pressed=v}}));
+const speedBtns=[.5,1,1.5].map(simSpeed=>({dataset:{simSpeed:String(simSpeed)},classList:{toggle(){}},setAttribute(k,v){if(k==='aria-pressed')this.pressed=v}}));
 const svg={querySelector(query){
  const m=query.match(/\[data-sim-(?:path|boat)="(\d)"\]/);
  if(!m)return null;
@@ -31,9 +33,11 @@ const card={
   if(selector==='[data-sim-stage]')return stage;
   if(selector==='[data-sim-story]')return caption;
   if(selector==='[data-sim-order]')return result;
+  if(selector==='[data-sim-tactic]')return tactic;
+  if(selector==='[data-sim-forecast]')return forecast;
   return null;
  },
- querySelectorAll:(selector)=>selector==='[data-sim-pick]'?buttons:[],
+ querySelectorAll:(selector)=>selector==='[data-sim-pick]'?buttons:selector==='[data-sim-jump]'?stages:selector==='[data-sim-speed]'?speedBtns:[],
  addEventListener:(ev,fn)=>{if(ev==='click')clickHandler=fn}
 };
 const root={querySelector:q=>q==='[data-boat-sim]'?card:null};
@@ -49,9 +53,10 @@ visual.mount(root,race);
 assert.equal(stage.textContent,'START / スタートの攻防');
 assert.equal(slider.value,'0');
 assert.match(boats[0].transform,/translate/);
+function actionNode(node){clickHandler({target:{closest:()=>node}})}
 function action(control,pick){
  const node=pick?{dataset:{simPick:pick}}:{dataset:{simControl:control}};
- clickHandler({target:{closest:()=>node}});
+ actionNode(node);
 }
 action('play');
 assert.equal(typeof callback,'function');
@@ -69,10 +74,30 @@ assert.equal(typeof callback,'function');
 const other=race.bets[1].combination;
 action('pause');
 action('',other);
-assert.equal(paths[0].d,visual.path(1,visual.ranks(other)[1]));
+assert.equal(paths[0].d,visual.path(1,visual.ranks(other)[1],visual.tacticFor(other).id,Number(other[0])));
 assert.match(caption.textContent,/仮説/);
 assert.equal(buttons[1].pressed,'true');
 assert.equal(result.textContent,'予想：'+other);
+assert.equal(tactic.textContent,visual.tacticFor(other).label);
+assert.equal(forecast.textContent,'予想着順 '+other);
+actionNode({dataset:{simJump:'turn'}});
+assert.match(stage.textContent,/1M/);
+assert.equal(stages[1].pressed,'true');
+actionNode({dataset:{simJump:'back'}});
+assert.match(stage.textContent,/BACK/);
+assert.equal(stages[2].pressed,'true');
+actionNode({dataset:{simSpeed:'1.5'}});
+assert.equal(speedBtns[2].pressed,'true');
+actionNode({dataset:{simJump:'start'}});
+assert.match(stage.textContent,/START/);
+assert.equal(slider.value,'0');
+action('play');
+const accelerated=callback;
+accelerated(9000);
+const next=callback;
+next(10500);
+assert.ok(Number(slider.value)>200,'speed 1.5 should advance faster than normal');
+action('pause');
 visual.dispose();
 assert.equal(typeof callback,'object');
 console.log('BOAT LAB animated replay controls: PASS');

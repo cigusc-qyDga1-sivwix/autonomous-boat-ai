@@ -144,7 +144,21 @@
     <section class="card card-pad"><div class="section-head"><h2 class="section-title">${isLive?'展示時の場内気象':'時間帯別・気象見通し'}</h2>${pill(isLive?'実測由来・非公式':'予報値','pending')}</div>${isLive?all.filter(r=>r.weather_observed).slice(-6).map(r=>`<div class="weather-box"><div class="weather-symbol">≋</div><div class="weather-body"><strong>${escape(r.venue)} ${r.race}R・風 ${escape(r.weather_observed.wind_speed)}m/s・波高 ${escape(r.weather_observed.wave_height)}cm</strong><p>展示データ取得時点の観測情報（非公式）</p></div></div>`).join('')||'<p class="muted text-sm">展示時の気象はまだ取得できていません。</p>':`<div class="mini-caption">鳴門</div>${weatherHTML('鳴門')}<div class="mini-caption" style="margin-top:18px;margin-bottom:8px">徳山</div>${weatherHTML('徳山')}`}<div class="notice warn">${isLive?'展示前は場内気象未取得。時間別の気象予報と潮位予測は未接続。':'周辺気象の参考値。展示ST・波高・場内風速の実測は未反映。'}</div></section></div>
     <p class="footer-disclaimer">${escape(data.disclaimer||'仮想予想・研究用。自動購入や的中の保証はありません。')} SKIPを含む買い目は比較用の記録で、購入推奨ではありません。</p>`;
   }
+  function entryGateWarning(r) {
+    const g=r?.entry_exhibition_gate;
+    if(!g && data?.mode!=='auto-live')return '';
+    if(g?.final_eligible)
+      return '<div class="notice">✅ 展示進入6艇の発走前確認済み：'+
+        escape((g.exhibition_course_order||[]).join('-'))+
+        '（艇番順）。ただし本番の確定進入とは異なる場合があります。オッズ未確認のためBUYはしません。</div>';
+    const risk=g?.entry_watch?'⚠ 前付け警戒レース':'⚠ 展示未確認';
+    const explanation=g?.reason||'6艇の実進入・展示ST・展示タイムを検証できていません';
+    return '<div class="notice warn"><strong>'+risk+'：最終予想保留・BUY禁止</strong>'+
+      '<p>'+escape(explanation)+'。表示される固定買い目は展示前の研究記録です。'+
+      '発走前の展示確認なしに最終買い目として扱わないでください。</p></div>';
+  }
   function tacticalSummary(r){
+    if(r?.entry_exhibition_gate?.entry_watch && !r.entry_exhibition_gate.final_eligible)return null;
     try{
       const x=window.BoatTacticalModel?.forecast(r);
       return x?{top:x.top,points:x.bets.length,different:x.differs_from_frozen}:null;
@@ -158,6 +172,10 @@
       '<div class="tile-bets">🔒 固定：'+escape(r.bets.slice(0,2).map(b=>b.combination).join(' / '))+'</div>'+
       (trial?'<div class="tile-tactical">🧠 戦法研究版：<strong>'+escape(trial.top)+'</strong> ／ '+trial.points+'点'+
        (trial.different?' <span>新しい分岐・配分</span>':' <span>配分は旧版と同じ</span>')+'</div>':'')+
+      (r.entry_exhibition_gate?.entry_watch&&!r.entry_exhibition_gate.final_eligible?
+       '<div class="notice warn">⚠ 前付け警戒・展示進入未確認／最終予想保留</div>':
+       r.entry_exhibition_gate&&!r.entry_exhibition_gate.final_eligible?
+       '<div class="notice warn">展示確認待ち・最終判断保留</div>':'')+
       '<div class="tile-scenario">'+escape(r.scenario)+'</div>'+
       '<div class="tile-foot"><span>'+finishPill(r)+'</span><strong>比較を見る ↗</strong></div></button>';
   }
@@ -223,6 +241,8 @@
       '戦法別の数値モデル、潮流補正、整備による性能変化は今後の検証課題です。</p></section>';
   }
   function tacticalTrialPanel(r){
+    if(r?.entry_exhibition_gate?.entry_watch && !r.entry_exhibition_gate.final_eligible)
+      return '<div class="notice warn">⚠ 前付け警戒：6艇の展示進入が確認できるまで、戦法再計算の買い目は最終候補として表示しません。</div>';
     let trial=null;
     try{trial=window.BoatTacticalModel?.forecast(r)}catch(err){
       return '<div class="notice warn">展開試験版を計算できません：'+escape(err.message)+'</div>';
@@ -309,6 +329,7 @@
     </section>`;
     return `<button class="back-btn" data-action="back-races">← レース一覧へ戻る</button><div class="detail-header"><div><div class="page-eyebrow">FORECAST DETAILS / ${escape(data.event_date)}</div><h1 class="detail-title">${escape(r.venue)} ${r.race}R <span style="font-size:17px;vertical-align:middle">${pill(r.classification)}</span></h1><div class="detail-sub">締切予定 ${escape(r.cutoff_jst)} JST　 ·　 ${r.phase==='exhibition'?'展示数値反映':r.phase==='baseline'?'展示前':'保存済み'}・結果未使用</div></div><button class="btn btn-primary" data-action="copy-bets" data-race="${escape(r.venue)}|${r.race}">⎘ 買い目をコピー</button></div>
     ${r.phase?`<div class="notice">${escape(r.evidence||'')} ・ 発走前保存 ${escape(r.frozen_at_utc||'未記録')} ・ SHA256 ${escape((r.sha256||'').slice(0,18))}…${r.weather_observed?`<br>場内風速 ${escape(r.weather_observed.wind_speed)}m/s ／ 波高 ${escape(r.weather_observed.wave_height)}cm（非公式・取得時点）`:''}<br>予想モデル：未学習・確率未校正。展示動画とオッズは未反映。</div>`:''}
+    ${entryGateWarning(r)}
     ${venuePanel(r)}
     ${window.BoatExhibitionAudit?.panel(r)||''}
     ${exhibitionDetail}

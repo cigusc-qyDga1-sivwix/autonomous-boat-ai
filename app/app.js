@@ -310,6 +310,7 @@
     return `<button class="back-btn" data-action="back-races">← レース一覧へ戻る</button><div class="detail-header"><div><div class="page-eyebrow">FORECAST DETAILS / ${escape(data.event_date)}</div><h1 class="detail-title">${escape(r.venue)} ${r.race}R <span style="font-size:17px;vertical-align:middle">${pill(r.classification)}</span></h1><div class="detail-sub">締切予定 ${escape(r.cutoff_jst)} JST　 ·　 ${r.phase==='exhibition'?'展示数値反映':r.phase==='baseline'?'展示前':'保存済み'}・結果未使用</div></div><button class="btn btn-primary" data-action="copy-bets" data-race="${escape(r.venue)}|${r.race}">⎘ 買い目をコピー</button></div>
     ${r.phase?`<div class="notice">${escape(r.evidence||'')} ・ 発走前保存 ${escape(r.frozen_at_utc||'未記録')} ・ SHA256 ${escape((r.sha256||'').slice(0,18))}…${r.weather_observed?`<br>場内風速 ${escape(r.weather_observed.wind_speed)}m/s ／ 波高 ${escape(r.weather_observed.wave_height)}cm（非公式・取得時点）`:''}<br>予想モデル：未学習・確率未校正。展示動画とオッズは未反映。</div>`:''}
     ${venuePanel(r)}
+    ${window.BoatExhibitionAudit?.panel(r)||''}
     ${exhibitionDetail}
     ${window.BoatRaceVisual?window.BoatRaceVisual.entryHTML(r):''}
     ${tacticalTrialPanel(r)}
@@ -467,7 +468,8 @@
     const main=el('main');
     el('breadcrumb-label').textContent=titles[state.view];
     document.querySelectorAll('[data-view]').forEach(b=>{b.classList.toggle('active',b.dataset.view===state.view);if(b.dataset.view===state.view)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
-    main.innerHTML=({overview,races,results:resultsPage,analysis,settings})[state.view]();
+    main.innerHTML=(window.BoatExhibitionAudit?.banner(data)||'')+
+      ({overview,races,results:resultsPage,analysis,settings})[state.view]();
     if(state.view==='races'&&state.raceDetail)window.BoatRaceVisual?.mount(main,state.raceDetail);
     else window.BoatRaceVisual?.dispose();
   }
@@ -712,6 +714,7 @@
       const incoming=await fetchLive();
       if(incoming.event_date===data?.event_date&&incoming.updated_at_utc===lastLiveUpdate)return;
       if(acceptLiveData(incoming))render();
+      window.BoatExhibitionAudit?.load(incoming.event_date).then(()=>render()).catch(()=>{});
     }catch(error){console.warn('Live data refresh failed:',error.message);}
   }
   async function init(){
@@ -727,6 +730,7 @@
       if(!data){if(window.BOAT_LAB_BOOTSTRAP){data=normalizeData(window.BOAT_LAB_BOOTSTRAP);}else{try{data=await fetchLive();state.origin='非公式API＋GitHub Actions・発走前スナップショット';}catch{const response=await fetch('./data/2026-10-22.json',{cache:'no-cache'});if(!response.ok)throw Error(`HTTP ${response.status}`);data=normalizeData(await response.json());state.origin='過去データの表示（最新の自動予想を取得できません）';}}}
       autoResults=data.official_results||{};lastLiveUpdate=data.updated_at_utc||'';
       state.resultVenue=getVenues()[0];render();
+      window.BoatExhibitionAudit?.load(data.event_date).then(()=>{if(data?.event_date)render()}).catch(()=>{});
       if('serviceWorker' in navigator&&['https:','http:'].includes(location.protocol))navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
       if(typeof setInterval==='function')setInterval(reloadLiveIfNew,300000);
       document.addEventListener('visibilitychange',()=>{if(!document.hidden)reloadLiveIfNew();});

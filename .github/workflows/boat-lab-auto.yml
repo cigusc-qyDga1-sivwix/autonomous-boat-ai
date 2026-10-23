@@ -9,11 +9,13 @@ on:
       - 'scripts/export_venue_profiles.py'
       - 'scripts/ingest_boatracecsv_exhibition.py'
       - 'scripts/exhibition_bridge.py'
+      - 'app/exhibition-audit.js'
       - '.github/workflows/boat-lab-auto.yml'
   schedule:
-    # JST 06:00-23:59, 5-min cadence. GitHub cron can still be delayed.
-    - cron: '3-59/5 21-23 * * *'
-    - cron: '3-59/5 0-14 * * *'
+    # JST 06:00-23:59 every 5 minutes, best effort.
+    # GitHub-hosted cron may be delayed or skipped; the UI shows freshness.
+    - cron: '*/5 21-23 * * *'
+    - cron: '*/5 0-14 * * *'
 
 permissions:
   contents: write
@@ -40,6 +42,7 @@ jobs:
         continue-on-error: true
         run: |
           python scripts/ingest_boatracecsv_exhibition.py
+          python -m json.tool app/data/exhibition/status-latest.json > /dev/null
           # No results here can revise an immutable forecast or official settlement.
       - name: Collect all available venues and freeze only pre-cutoff forecasts
         shell: bash

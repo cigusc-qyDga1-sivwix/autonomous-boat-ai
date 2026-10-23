@@ -21,6 +21,7 @@ const assign=(r,course)=>{
 };
 const nameTactic=['','先マイ・逃げ','差し','まくり差し','カドまくり','外からのまくり差し','外の展開連動'];
 function forecast(input){
+ const outsideTrial=input?.experimental_variant==='outside-makuri-v0.2';
  const runners=input?.racers;
  if(!Array.isArray(runners)||runners.length!==6)throw Error('6艇の保存済み出走情報が必要');
  const sorted=[...runners].sort((a,b)=>a.lane-b.lane);
@@ -61,6 +62,22 @@ function forecast(input){
   return {go:clamp(go,.38,2.8),turn:clamp(turn,.35,2.8),
           straight:clamp(straight,.35,2.8),overall:clamp(skill*motor,.3,2.8)};
  });
+ // V0.2 research only. Start pressure is relative to the neighboring actual
+ // *course*, not the boat number. No result, odds or future data is consulted.
+ const outsideAttacks=[4,5,6].map(course=>{
+  const own=move[byCourse[course-1]];
+  const inner=move[byCourse[course-2]];
+  const one=move[byCourse[0]];
+  const launch=own.go/Math.max(.38,.72*inner.go+.28*one.go);
+  const steering=own.turn/Math.max(.38,inner.turn);
+  // A fast 4th-course attack can open a lane for 5 and 6; it does not
+  // automatically mean either following boat will win the race.
+  const preceding=course===4?0:Math.max(0,move[byCourse[course-2]].go/
+     move[byCourse[course-3]].go-1);
+  const multiplier=clamp(1+.85*Math.max(0,launch-1)+.35*Math.max(0,steering-1)+
+     .28*preceding-.65*Math.max(0,.95-launch),.72,1.65);
+  return {course,launch,steering,preceding,multiplier};
+ });
  const rate=finite(input.venue_profile?.course1_reference_rate,RATE_BY_VENUE[input.venue]??.55);
  const head1=clamp(rate,.38,.67);
  // Retain conservative venue dependence, but no hardcoded course-1 winner.
@@ -83,6 +100,12 @@ function forecast(input){
   const shift=clamp((i3.go/i1.go-1.22)*.30,0,.12);
   strength[0]*=1-shift;strength[2]*=1+shift*1.8;
  }
+ if(outsideTrial){
+  for(const signal of outsideAttacks)strength[signal.course-1]*=signal.multiplier;
+  // A plausible kadomakuri slightly lowers the odds of an unchallenged
+  // inside turn; never erase the inner survivor scenario.
+  strength[0]*=clamp(1-.13*Math.max(0,outsideAttacks[0].multiplier-1),.92,1);
+ }
  const denom=strength.reduce((a,b)=>a+b,0),shares=strength.map(v=>v/denom);
  // Condition second and third on WHICH first-turn maneuver succeeded. If c=3
  // attacks, nearby c2 and inside c1 can survive; if c1 escapes, c2/c3 can chase.
@@ -94,6 +117,16 @@ function forecast(input){
   else relation=secondCourse===headCourse-1?1.48:secondCourse===1?1.33:
        secondCourse===2?1.22:secondCourse===headCourse+1?1.18:.76;
   const z=move[byCourse[secondCourse-1]];
+  if(outsideTrial){
+   // When an outer boat attacks, its next outer neighbor may follow through.
+   if(headCourse>=4&&secondCourse===headCourse+1)relation*=1.32;
+   if(headCourse>=4&&secondCourse>=4&&secondCourse!==headCourse+1)relation*=1.12;
+   if(headCourse>=4&&secondCourse===1)
+      relation*=clamp(.9+.18*(move[byCourse[0]].turn-1),.78,1.08);
+   // Even if the inside survives, a strong outer turn can take second.
+   if(headCourse===1&&secondCourse>=4)
+      relation*=clamp(.95+.4*(z.turn-1)+.2*(z.go-1),.78,1.3);
+  }
   return Math.max(.01,relation*Math.pow(z.turn,.85)*Math.pow(z.go,.3));
  }
  function thirdWeight(h,s,c){
@@ -104,6 +137,12 @@ function forecast(input){
   if(h===1&&s===2&&c===3)consistency*=1.2;
   if(h===2&&s===1&&c===3)consistency*=1.22;
   if(h>=4&&c===1)consistency*=1.22;
+  if(outsideTrial){
+   // Preserve the outside-following and inner-survival branches separately.
+   if(h>=4&&c>=4&&c!==h)consistency*=1.24;
+   if(h===1&&s>=4&&c===s+1)consistency*=1.26;
+   if(h>=4&&s>=4&&c===1)consistency*=1.1;
+  }
   return Math.max(.01,consistency*Math.pow(x.turn,.65)*Math.pow(x.overall,.3));
  }
  const candidates=[];
@@ -137,6 +176,18 @@ function forecast(input){
   const replace=picks.findLastIndex(x=>x.headCourse===1);
   if(replace!==-1)picks[replace]=alternative;
  }
+ if(outsideTrial){
+  // Include an explainable outside-head branch only where attack strength is
+  // supported by pre-race signals. No blanket 4/5/6 ticket quota.
+  const strongOutside=outsideAttacks.filter(a=>a.multiplier>=1.14&&
+     shares[a.course-1]>=.045).sort((a,b)=>shares[b.course-1]-shares[a.course-1]);
+  for(const a of strongOutside.slice(0,2)){
+   if(picks.some(p=>p.headCourse===a.course))continue;
+   const candidate=candidates.find(p=>p.headCourse===a.course);
+   const replace=picks.findLastIndex(p=>p.headCourse===1);
+   if(candidate&&replace>=0)picks[replace]=candidate;
+  }
+ }
  picks.sort((a,b)=>b.pseudo-a.pseudo||a.combination.localeCompare(b.combination));
  const remaining=50-picks.length;
  const powered=picks.map(x=>Math.pow(x.pseudo,.8));
@@ -150,16 +201,21 @@ function forecast(input){
   head_course:c.headCourse,scenario:c.scenario,conditional_reason:c.scenario+'が成立 → '+c.secondCourse+'コースが追走 → '+c.thirdCourse+'コース残存',relative_score:+c.pseudo.toFixed(6)}));
  if(new Set(bets.map(x=>x.combination)).size!==bets.length||bets.reduce((sum,b)=>sum+b.virtual_yen,0)!==50000)throw Error('Invalid experimental virtual allocation');
  return {
-   model:'tactical-1m-conditional-v0.1-untrained',
+   model:outsideTrial?'tactical-outside-makuri-v0.2-untrained':'tactical-1m-conditional-v0.1-untrained',
    basis:'保存済み発走前選手情報と場別参考値のみ。結果・払戻・オッズ不使用。',
    venue:input.venue,head_course_shares:shares.map((s,i)=>({course:i+1,lane:v[byCourse[i]].lane,relative_share:+s.toFixed(4),tactic:nameTactic[i+1]})),
    metadata:{venue_reference_rate:rate,wind_speed:wind,validMetrics,exhibition_used:validMetrics.length>0,
-     source_at_utc:input.frozen_at_utc||null},
+     source_at_utc:input.frozen_at_utc||null,
+     ...(outsideTrial?{research_only:true,outside_attack_signals:outsideAttacks.map(a=>({
+       course:a.course,launch:+a.launch.toFixed(4),steering:+a.steering.toFixed(4),
+       preceding:+a.preceding.toFixed(4),multiplier:+a.multiplier.toFixed(4)}))}:{})},
    bets,top:bets[0]?.combination,
    differs_from_frozen:JSON.stringify(bets.map(x=>[x.combination,x.virtual_yen]))!==
      JSON.stringify((input.bets||[]).map(x=>[x.combination,x.virtual_yen])),
    is_frozen:false
  };
 }
-global.BoatTacticalModel={forecast,RATE_BY_VENUE,nameTactic,version:'trial-v0.1-20261023'};
+global.BoatTacticalModel={forecast,
+ forecastOutside:input=>forecast({...input,experimental_variant:'outside-makuri-v0.2'}),
+ RATE_BY_VENUE,nameTactic,version:'trial-v0.1-20261023'};
 })(typeof window!=='undefined'?window:globalThis);

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BOAT LAB｜10/23外枠・まくり試験A/B実戦検証</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#eff6f8;color:#183b4c;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",sans-serif}
+main{max-width:1230px;margin:0 auto;padding:18px 12px 48px}
+h1{font-size:clamp(23px,4vw,31px);margin:20px 0 10px}
+a{color:#087977}
+.sub{font-size:13px;color:#5d7788;line-height:1.75}
+.note{padding:12px 14px;border:1px solid #d2a970;border-radius:12px;background:#fff5e2;font-size:12px;line-height:1.75}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:15px 0}
+.stats>div{padding:12px 7px;border:1px solid #d9e9ee;background:white;border-radius:11px;text-align:center;font-size:10px}
+.stats b{display:block;font-size:23px;color:#138380}
+.controls{display:flex;flex-wrap:wrap;gap:7px;margin:18px 0}
+.controls select{background:#fff;border:1px solid #c8dbe2;border-radius:8px;padding:11px;font:inherit;min-width:150px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.race{padding:14px;border:1px solid #dce6e9;background:#fff;border-radius:13px}
+.race h3{margin:0;font-size:16px}
+.flag{font-size:10px;color:#708b93}
+.header{display:flex;justify-content:space-between;gap:10px}
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:13px 0}
+.compare>div{border-radius:11px;padding:10px;background:#f2f7f9;border:1px solid #d9e8ed}
+.compare>div.new{background:#eaf8f3;border:1px solid #c8e8dc}
+.compare small{font-size:10px;color:#6c8690;display:block}
+.compare strong{font-size:22px;color:#106e75;display:block;margin-top:4px}
+details>summary{cursor:pointer;color:#087b78;font-weight:800;font-size:12px;margin:8px 0}
+table{width:100%;border-collapse:collapse;font-size:11px}
+td{border-bottom:1px solid #e2eff0;padding:5px}
+td:last-child{text-align:right}
+button{cursor:pointer}
+.meta{font-size:10px;color:#718592;line-height:1.6}
+@media(max-width:700px){.grid{grid-template-columns:1fr}.stats b{font-size:18px}}
+</style></head><body><main>
+<a href="./index.html">← BOAT LABに戻る</a>
+<h1>🌊 10/23 1M v0.1 vs 外枠強化 v0.2</h1>
+<p class="sub">4・5・6コースのカドまくり・まくり差し・外の連動を試す新モデルv0.2と旧1M研究モデルv0.1を、同じ発走前資料から独立SHAで固定して比較します。</p>
+<div class="note">🔒 <b>厳格な前向き試験：</b>締切3分以内・予想元が45分以上更新されていない場合は、新規固定しません。固定時刻・入力時刻・SHA256を保存し、後から買い目を上書きしません。<b>古い展示情報やレース後の成績は混ぜない。</b>金額は仮想5万円、実投票なし。研究版の確率は未校正です。</div>
+<p class="sub"><strong>これは検証用の試験画面です。</strong> メイン画面の正式買い目は意図的に変更していません。両モデルの係数は未校正で、外枠を必ず買う方式でもありません。</p>
+<div class="stats" id="stats"><div><b>—</b>固定済みR</div><div><b>—</b>展示反映版</div><div><b>—</b>新旧で頭違い</div><div><b>—</b>最新更新</div></div>
+<p class="sub" id="health">保存済みのA/B実験データを読み込み中…</p>
+<div class="controls"><select id="venue" aria-label="開催場"><option value="">全会場</option></select><select id="phase" aria-label="展示反映の有無"><option value="">すべての固定版</option><option value="baseline">展示前</option><option value="exhibition">展示反映</option></select></div>
+<div class="grid" id="races"></div>
+<p class="sub">研究用の固定ログは <a href="https://github.com/cigusc-qyDga1-sivwix/autonomous-boat-ai/tree/main/app/data/experiments">GitHub</a> でも監査できるよ。</p>
+</main>
+<script>
+(()=>{'use strict';
+const q=x=>document.querySelector(x);
+const e=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const yen=x=>Number(x||0).toLocaleString('ja-JP')+'円';let entries=[];
+function render(){
+ const v=q('#venue').value,p=q('#phase').value;
+ const filtered=entries.filter(x=>(!v||x.venue===v)&&(!p||x.phase===p));
+ q('#races').innerHTML=filtered.map(x=>{
+  const top=x.outside_model.bets[0]?.combination||'—',old=x.previous_model.bets[0]?.combination||'—';
+  return '<section class="race"><div class="header"><h3>'+e(x.venue)+' '+e(x.race)+'R</h3><span class="flag">'+e(x.cutoff_jst)+'締切　'+(x.phase==='exhibition'?'展示反映':'展示前')+'</span></div>'+
+  '<div class="compare"><div><small>🔒 旧1M v0.1</small><strong>'+e(old)+'</strong><small>'+x.previous_model.bets.length+'点</small></div>'+
+  '<div class="new"><small>🧠 外枠強化 v0.2</small><strong>'+e(top)+'</strong><small>'+x.outside_model.bets.length+'点</small></div></div>'+
+  '<details><summary>全買い目・仮想5万円配分を見る</summary><div class="compare"><div><table>'+x.previous_model.bets.map(b=>'<tr><td>'+e(b.combination)+'</td><td>'+yen(b.virtual_yen)+'</td></tr>').join('')+'</table></div><div class="new"><table>'+
+  x.outside_model.bets.map(b=>'<tr><td>'+e(b.combination)+'</td><td>'+yen(b.virtual_yen)+'</td></tr>').join('')+'</table></div></div></details>'+
+  '<p class="meta">4・5・6コースの攻撃倍率：'+(x.outside_model.attack_signals||[]).map(a=>e(a.course)+'C ×'+e(a.multiplier)).join(' / ')+'</p>'+
+  '<p class="meta">固定 '+e(x.created_at_utc)+' UTC ／ 締切まで'+e(x.minutes_before_cutoff)+'分 ／ 入力鮮度'+e(x.input_quality?.source_age_minutes)+'分<br>記録SHA '+e(x.record_sha256.slice(0,20))+'…</p></section>';
+ }).join('')||'<p class="sub">該当レースはまだ発走前固定されていません。</p>';
+}
+q('#venue').addEventListener('change',render);q('#phase').addEventListener('change',render);
+fetch('./data/experiments/outside-status-latest.json?v='+Date.now(),{cache:'no-store'})
+.then(r=>{if(!r.ok)throw Error('実行状況 HTTP '+r.status);return r.json()})
+.then(status=>Promise.all([status,fetch('./data/experiments/outside-'+status.event_date+'.json?v='+Date.now(),{cache:'no-store'}).then(r=>r.json())]))
+.then(([s,d])=>{
+ entries=d.records||[];
+ const heads=entries.filter(x=>x.previous_model.bets[0]?.combination[0]!==x.outside_model.bets[0]?.combination[0]).length;
+ q('#stats').innerHTML=[
+  [entries.length,'固定済みの比較版'],
+  [entries.filter(x=>x.phase==='exhibition').length,'展示反映版'],
+  [heads,'最上位の頭が変化'],
+  [s.errors,'保存時エラー']
+ ].map(a=>'<div><b>'+e(a[0])+'</b>'+e(a[1])+'</div>').join('');
+ q('#health').textContent='最終チェック '+new Date(s.checked_at_utc).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'})+' JST ／ 今回新規固定 '+s.new_forward_freezes+
+  '版 ／ 締切超過で除外 '+s.excluded_late+'件 ／ データ古く除外 '+s.excluded_stale+'件'+(s.source_stale?' ／ ⚠ 元データが古い':'');
+ const venues=[...new Set(entries.map(x=>x.venue))].sort();
+ q('#venue').innerHTML='<option value="">全会場</option>'+venues.map(x=>'<option>'+e(x)+'</option>').join('');
+ render();
+}).catch(err=>{q('#health').textContent='A/B固定データはまだ公開されていません：'+err.message+'。実行時刻に締切を過ぎたレースは除外されます。'});
+})();
+</script></body></html>

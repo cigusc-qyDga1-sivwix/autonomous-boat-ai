@@ -15,7 +15,7 @@ def fixture():
         card.update({root+"登録番号":str(4000+lane),
             root+"選手名":f"選手{lane}",root+"級別":"A1",
             root+"全国勝率":str(6.0+lane/10),
-            root+"全国平均ST":"0.14",root+"F本数":str(lane==6),
+            root+"全国平均ST":"0.14",root+"F本数":str(int(lane==6)),
             root+"当地勝率":"6.55",root+"モーター番号":str(20+lane),
             root+"モーター2連対率":"42.0"})
         card[root+"節D1走1_R番号"]="1"

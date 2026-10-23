@@ -356,7 +356,7 @@
    card.addEventListener('click',event=>{
      const button=event.target.closest('[data-sim-control],[data-sim-pick],[data-sim-jump],[data-sim-speed],[data-sim-wake-toggle]');
      if(!button)return;
-     if(button.hasAttribute('data-sim-wake-toggle')){
+     if(button.dataset?.simWakeToggle!==undefined){
        state.wakeAssumed=!state.wakeAssumed;
        button.setAttribute('aria-pressed',String(state.wakeAssumed));
        update();return;

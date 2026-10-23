@@ -5,6 +5,8 @@ on:
   push:
     paths:
       - 'scripts/autonomous_daily.py'
+      - 'scripts/venue_profiles.py'
+      - 'scripts/export_venue_profiles.py'
       - 'scripts/ingest_boatracecsv_exhibition.py'
       - 'scripts/exhibition_bridge.py'
       - '.github/workflows/boat-lab-auto.yml'
@@ -43,6 +45,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python scripts/export_venue_profiles.py
           python scripts/autonomous_daily.py | tee boat-lab-daily-status.json
           python -m json.tool app/data/live/latest.json > /dev/null
           # Read-only forecast diagnostics; does not modify frozen predictions.
@@ -54,7 +57,7 @@ jobs:
           set -euo pipefail
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git config user.name 'github-actions[bot]'
-          git add app/data/live/ app/data/exhibition/
+          git add app/data/live/ app/data/exhibition/ app/data/venue-profiles.json
           if ! git diff --cached --quiet; then
             git commit -m 'data: automatic nationwide forecast snapshots and results'
             # Human edits or a new workflow commit may have landed since checkout.

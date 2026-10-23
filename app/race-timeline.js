@@ -29,30 +29,33 @@
   const upcoming=fresh?all.filter(r=>minutes(r.cutoff_jst)>nowMinutes).slice(0,7):[];
   const past=fresh?all.filter(r=>minutes(r.cutoff_jst)<=nowMinutes).reverse().slice(0,5):[];
   const old=!fresh;
+  const updated=data.updated_at_utc?new Date(data.updated_at_utc):null;
+  const updatedLabel=updated&&!Number.isNaN(updated.getTime())?updated.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'取得時刻不明';
   const line=(r,up,first)=>{
    const verified=official(data,r);
    const gate=r.entry_exhibition_gate;
    const hasForecast=Array.isArray(r.bets)&&r.bets.length>0;
    const delta=minutes(r.cutoff_jst)-nowMinutes;
    const phase=verified?'公式結果確認済':up?(gate?.final_eligible?'展示確認済':gate?.entry_watch?'前付け・展示待ち':r.phase==='exhibition'?'展示反映':'展示未確認'):'締切経過・結果待ち';
-   const label=up&&first?'次の締切':phase;
+   const urgent=up&&delta<=10;
+   const label=up&&first?'次の締切 · '+phase:phase;
    const detail=up?(first?'あと'+delta+'分':'締切まで'+delta+'分'):verified?'公式結果照合可':'公式結果は未確認';
    const main=hasForecast?
      '<button type="button" data-race="'+esc(r.venue)+'|'+r.race+'" class="timeline-action">AI予想</button>':
      '<span class="timeline-disabled">予想未固定</span>';
-   const result=verified?'<button type="button" data-result-next="'+esc(r.venue)+'|'+r.race+'" class="timeline-action">結果照合</button>':
-     '<span class="timeline-disabled">結果未確認</span>';
-   return '<article class="timeline-race'+(up&&first?' timeline-next':'')+'"><div class="timeline-clock"><strong>'+esc(r.cutoff_jst)+'</strong><small>'+esc(detail)+'</small></div>'+
+   const result=hasForecast&&!up?'<button type="button" data-result-next="'+esc(r.venue)+'|'+r.race+'" class="timeline-action">'+(verified?'結果照合':'結果を確認')+'</button>':
+     '<span class="timeline-disabled">'+(up?'結果待ち':hasForecast?'結果未確認':'結果・予想未取得')+'</span>';
+   return '<article class="timeline-race'+(up&&first?' timeline-next':'')+(urgent?' timeline-urgent':'')+'"><div class="timeline-clock"><strong>'+esc(r.cutoff_jst)+'</strong><small>'+esc(detail)+'</small></div>'+
     '<div class="timeline-race-main"><strong>'+esc(r.venue)+' <span>'+r.race+'R</span></strong><span class="timeline-status">'+esc(label)+'</span>'+
-    '<small>'+(gate?.entry_watch?'⚠ 前付け警戒 · ':'')+(gate?.final_eligible?'展示進入確認済':hasForecast?'展示前固定・最終判断保留':'展示・予想未確認')+'</small></div>'+
+    '<small>'+(gate?.entry_watch?'⚠ 前付け警戒 · ':'')+(gate?.final_eligible?'展示進入確認済':hasForecast?r.phase==='exhibition'?'展示反映・進入確定未確認':'展示前固定・最終判断保留':'展示・予想未確認')+'</small></div>'+
     '<div class="timeline-actions">'+main+result+'</div></article>';
   };
   return '<section class="race-timeline" aria-label="全国24場 締切時刻順のレース">'+
-   '<div class="timeline-heading"><div><h2>🕒 直近のレース</h2><p>全国の取得済みレースを締切予定順に表示</p></div><button type="button" data-view="races" class="timeline-all">全レース →</button></div>'+
+   '<div class="timeline-heading"><div><h2>🕒 直近のレース</h2><p>全国の取得済みレースを締切予定順に表示 · 現在 '+esc(nowJst(now))+' JST</p></div><button type="button" data-view="races" class="timeline-all">全レース →</button></div>'+
    (old?'<div class="notice warn">表示データは'+esc(data.event_date)+'の記録です。今日の直近レースとしては表示しません。</div>':
     '<div class="timeline-group">'+(upcoming.length?upcoming.map((r,i)=>line(r,true,i===0)).join(''):'<p class="timeline-empty">今後の締切予定を確認できるレースはありません。</p>')+'</div>'+
     '<h3>最近締切を迎えたレース</h3><div class="timeline-group">'+(past.length?past.map(r=>line(r,false,false)).join(''):'<p class="timeline-empty">該当レースはありません。</p>')+'</div>')+
-   '<p class="timeline-note">時刻は締切予定（発走時刻ではありません）。公開データには取得遅延・欠損があります。締切経過は結果確定を意味しません。実投票・通知は行いません。</p></section>';
+   '<p class="timeline-note">最終データ更新 '+esc(updatedLabel)+' JST。時刻は締切予定（発走時刻ではありません）。残り時間は端末時刻による目安です。表示時刻は毎分更新しますが、最新展示・結果の取得を保証しません。締切経過は結果確定を意味しません。実投票・通知は行いません。</p></section>';
  }
  root.BoatRaceTimeline={rows,official,render};
 })(typeof window==='undefined'?globalThis:window);

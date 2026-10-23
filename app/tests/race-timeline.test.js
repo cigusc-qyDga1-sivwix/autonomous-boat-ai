@@ -20,7 +20,7 @@ html=t.render(data,now);
 assert.match(html,/公式結果確認済/);
 assert.match(html,/data-result-next="大村\|7"/);
 const stale=t.render({...data,event_date:'2026-10-22'},now);
-assert.match(stale,/過去日のデータ/);
+assert.match(stale,/今日の直近レースとしては表示しません/);
 assert.doesNotMatch(stale,/次の締切/);
 assert.ok(!t.rows({...data,forecast_races:[race('X',1,'99:99',true)]}).some(r=>r.venue==='X'));
 console.log('Chronological race timeline: PASS');

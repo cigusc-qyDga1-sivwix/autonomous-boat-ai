@@ -80,7 +80,7 @@ function render(){
   '<button type="button" class="btn btn-white" data-action="reload-cumulative-results" '+(state.loading?'disabled':'')+'>'+ (state.loading?'読み込み中…':'↻ 再集計')+'</button></div>'+
   (found.length?
    '<div class="cum-total"><span>'+(completed?'2日間の累積仮想収支':'取得済み日だけの暫定累積')+'</span><strong class="'+(running>=0?'cum-plus':'cum-minus')+'">'+money(running)+'</strong>'+
-   '<small>公式照合 '+combined.checked+'R／対象固定 '+combined.eligible+'R · 的中 '+combined.hits+'R · 回収率 '+(combined.invested?(combined.paid/combined.invested*100).toFixed(1)+'%':'—')+'</small></div>':
+   '<small>仮想投資累計 '+yen(combined.invested)+' ／ 仮想払戻累計 '+yen(combined.paid)+'</small><small>公式照合 '+combined.checked+'R／対象固定 '+combined.eligible+'R · 的中 '+combined.hits+'R · 回収率 '+(combined.invested?(combined.paid/combined.invested*100).toFixed(1)+'%':'—')+'</small></div>':
    '<p class="notice">まだ集計できる日付別の公式照合記録がありません。</p>')+
   '<div class="cum-table-wrap"><table class="cum-table"><thead><tr><th>日付</th><th>公式照合</th><th>的中</th><th>仮想投資</th><th>仮想払戻</th><th>日別収支</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
   (state.loading?'<p class="help">22日・23日の固定記録を読み込んでいます…</p>':'')+

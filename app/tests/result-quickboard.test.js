@@ -55,6 +55,6 @@ assert.match(hits,/鳴門 1R/);
 assert.doesNotMatch(hits,/鳴門 2R/);
 const issues=Q.render(raw,ctx,{nowMs:at,filter:'issue'});
 assert.match(issues,/唐津 4R/);
-assert.doesNotMatch(issues,/data-result-quick="唐津\\|5"/);
+assert.ok(!issues.includes('data-result-quick="唐津|5"'));
 assert.equal(JSON.stringify(raw),original,'rendering must not change immutable forecast records');
 console.log('BOAT LAB quick official result status, filter and payout rendering: PASS');

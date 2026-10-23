@@ -18,12 +18,12 @@ function summary(doc,day){
  if(list.length>288)throw Error('レース記録数が上限を超えています');
  const out=EMPTY();
  for(const [id,record] of list){
-  if(!/^\\d{1,2}-([1-9]|1[0-2])$/.test(id)||!record||!Array.isArray(record.versions)||!record.versions.length)continue;
+  if(!/^\d{1,2}-([1-9]|1[0-2])$/.test(id)||!record||!Array.isArray(record.versions)||!record.versions.length)continue;
   const r=record.versions[record.versions.length-1];
   const cutoff=Date.parse(r?.cutoff_iso_jst),frozen=Date.parse(r?.frozen_at_utc);
   if(!r||typeof r.sha256!=='string'||! /^[a-f0-9]{64}$/i.test(r.sha256)||
      typeof r.cutoff_iso_jst!=='string'||!r.cutoff_iso_jst.startsWith(day+'T')||
-     !/(\\+09:00)$/.test(r.cutoff_iso_jst)||
+     !/(\+09:00)$/.test(r.cutoff_iso_jst)||
      !Number.isFinite(cutoff)||!Number.isFinite(frozen)||frozen>=cutoff||
      !validBets(r.bets)||r.venue!==record.venue||r.race!==record.race){out.excluded++;continue;}
   out.eligible++;

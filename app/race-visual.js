@@ -120,8 +120,17 @@
      {combo:center+'-'+sashi+'-'+inside,label:'まくり差し成立'},
    ].filter(x=>valid(x.combo));
  }
+ function tacticalOptions(r){
+   let outcome;
+   try{outcome=window.BoatTacticalModel?.forecast(r)}catch{return []}
+   if(!outcome)return [];
+   return (outcome.bets||[]).slice(0,4).filter(b=>valid(b.combination)).map(b=>({
+     combo:b.combination,kind:'tactical',label:b.scenario
+   }));
+ }
  function choices(r){
-   return [...options(r).map(combo=>({combo,kind:'forecast'})),
+   return [...tacticalOptions(r),
+     ...options(r).map(combo=>({combo,kind:'forecast'})),
      ...studyOptions(r).filter(x=>!options(r).includes(x.combo)).map(x=>({...x,kind:'study'}))];
  }
  function explanation(combo,r){
@@ -152,17 +161,24 @@
  function animationHTML(r){
    const picks=options(r);
    if(!picks.length)return '<section class="card card-pad">アニメ再生に使える買い目がありません。</section>';
-   const combo=picks[0],order=ranks(combo),tactic=tacticFor(combo),roles=rolesFor(combo,r);
+   const tacticCases=tacticalOptions(r);
+   const combo=tacticCases[0]?.combo||picks[0],order=ranks(combo),tactic=tacticFor(combo),roles=rolesFor(combo,r);
    let html='<section class="card card-pad boat-sim boat-sim-v3 boat-sim-v4" data-boat-sim aria-label="予想展開アニメーション">'+
-     '<div class="section-head"><div><h2 class="section-title">🎬 展開予想アニメ</h2><p class="boat-sim-mini">スタート → 第1ターンマーク → バックストレッチ</p></div><span class="boat-sim-tag">戦法別 v4</span></div>'+
-     '<div class="boat-sim-narrative"><span>想定する攻め方 <b data-sim-tactic>'+tactic.label+'</b></span><strong data-sim-forecast>予想着順 '+combo+'</strong></div>'+
+     '<div class="section-head"><div><h2 class="section-title">🎬 展開予想アニメ</h2><p class="boat-sim-mini">スタート → 第1ターンマーク → バックストレッチ</p></div><span class="boat-sim-tag">戦法別 v5 / 自動再生</span></div>'+
+     '<div class="boat-sim-narrative"><span>想定する攻め方 <b data-sim-tactic>'+tactic.label+'</b></span><strong data-sim-forecast>'+(tacticCases.length?'戦法研究（未固定） ':'元の予想 ')+combo+'</strong></div>'+
      '<p class="boat-sim-disclaimer">本線・対抗の買い目に加え、非購入の比較用展開も切り替えられるよ。各艇が独立して先マイ／差し／まくり／まくり差しを狙う仮説を描く。実際の進入や艇間の航跡・速度を再現したものではありません。艇の戦法と、1Mの外を回る位置関係を比較する模式図です。</p>'+
      '<div class="boat-sim-roles" data-sim-roles aria-label="各艇の攻め方の仮説">'+roles.map(x=>'<span>'+x.lane+'号艇('+x.course+'コース)：'+esc(x.label)+'</span>').join('')+'</div>'+
      '<div class="boat-sim-picks" role="group" aria-label="再現する買い目">';
    picks.forEach((pick,i)=>{
-     html+='<button type="button" data-sim-pick="'+pick+'" data-sim-kind="forecast" aria-pressed="'+(i===0)+'" class="'+(i===0?'active':'')+'">'+(i===0?'本線':'展開'+(i+1))+' <strong>'+pick+'</strong></button>';
+     const sel=pick===combo&&!tacticCases.length;
+     html+='<button type="button" data-sim-pick="'+pick+'" data-sim-kind="forecast" aria-pressed="'+sel+'" class="'+(sel?'active':'')+'">'+(i===0?'元の本線':'元の展開'+(i+1))+' <strong>'+pick+'</strong></button>';
    });
-   const extras=studyOptions(r).filter(x=>!picks.includes(x.combo));
+   html+='</div><div class="boat-sim-tactical"><span>🧠 戦法モデルの候補（研究・未固定、買い目確定ではない）</span><div role="group" aria-label="1M戦法の研究候補">';
+   tacticCases.forEach((x,i)=>{
+     html+='<button type="button" data-sim-pick="'+x.combo+'" data-sim-kind="tactical" class="'+(x.combo===combo?'active':'')+'" aria-pressed="'+(x.combo===combo)+'">'+(i===0?'新本線 ':'新展開 ')+esc(x.label)+' <strong>'+x.combo+'</strong></button>';
+   });
+   html+='</div></div><div class="boat-sim-picks">';
+   const extras=studyOptions(r).filter(x=>!picks.includes(x.combo)&&!tacticCases.some(t=>t.combo===x.combo));
    html+='</div><div class="boat-sim-study"><span>展開比較（買い目には含まれません）</span><div role="group" aria-label="未購入の比較用シナリオ">';
    extras.forEach(x=>{html+='<button type="button" data-sim-pick="'+x.combo+'" data-sim-kind="study" aria-pressed="false">'+esc(x.label)+' <strong>'+x.combo+'</strong></button>';});
    html+='</div></div><div class="boat-sim-picks-exit">';
@@ -219,7 +235,8 @@
    const stage=card.querySelector('[data-sim-stage]'),caption=card.querySelector('[data-sim-story]');
    const orderLabel=card.querySelector('[data-sim-order]'),tacticLabel=card.querySelector('[data-sim-tactic]');
    const forecastLabel=card.querySelector('[data-sim-forecast]');
-   const state={combo:options(r)[0],position:0,running:false,raf:null,last:null,speed:1};
+   const selectedTrial=tacticalOptions(r);
+   const state={combo:selectedTrial[0]?.combo||options(r)[0],position:0,running:false,raf:null,last:null,speed:1};
    current=state;
    function phaseIndex(t){return t<.4?0:t<.73?1:2;}
    function update(){
@@ -241,7 +258,7 @@
      range.value=String(Math.round(t*1000));
      const phase=phaseIndex(t);
      stage.textContent=['START / スタートの攻防','1M / 第1ターンマーク','BACK / バック側の想定隊形'][phase];
-     orderLabel.textContent='予想：'+state.combo;
+     orderLabel.textContent=(selectedTrial.length?'表示中：':'予想：')+state.combo;
      caption.textContent=stageTexts(state.combo,r)[phase];
      const phaseButtons=card.querySelectorAll('[data-sim-jump]');
      if(phaseButtons)phaseButtons.forEach(button=>{
@@ -285,7 +302,8 @@
     if(roleLegend)roleLegend.innerHTML=roles.map(x=>'<span>'+x.lane+'号艇('+x.course+'コース)：'+esc(x.label)+'</span>').join('');
     if(tacticLabel)tacticLabel.textContent=tactic.label;
      if(forecastLabel)forecastLabel.textContent=
-       selectedChoice.kind==='study'?'比較用（未購入） '+combo:'予想着順 '+combo;
+       selectedChoice.kind==='tactical'?'🧠 1M戦法研究（未固定） '+combo:
+       selectedChoice.kind==='study'?'比較用（未購入） '+combo:'元の固定予想 '+combo;
      update();play();
    }
    function jump(phase){
@@ -315,6 +333,11 @@
    });
    range.addEventListener('input',()=>{pause();state.position=clamp(Number(range.value)/1000,0,1);update();});
    update();
+   // Previous app appeared unchanged because animation was motionless until
+   // users found Play. Begin once on visible pages; keep reduced-motion safe.
+   const reduced=typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+   const hidden=typeof document!=='undefined'&&document.hidden;
+   if(!reduced&&!hidden)play();
  }
- window.BoatRaceVisual={entryHTML,animationHTML,mount,dispose,ranks,path,options,studyOptions,choices,explanation,tacticFor,rolesFor,stageTexts,MARK,SCENE};
+ window.BoatRaceVisual={entryHTML,animationHTML,mount,dispose,ranks,path,options,studyOptions,tacticalOptions,choices,explanation,tacticFor,rolesFor,stageTexts,MARK,SCENE};
 })();

@@ -1,7 +1,11 @@
 """Export a read-only all-24-venue manifest consumed by BOAT LAB PWA."""
 import json
 from pathlib import Path
-from scripts.venue_profiles import VENUE_PROFILES
+try:
+    from scripts.venue_profiles import VENUE_PROFILES
+except ModuleNotFoundError:
+    # Running as "python scripts/export_venue_profiles.py" sets sys.path to scripts/.
+    from venue_profiles import VENUE_PROFILES
 
 def main():
     target=Path("app/data/venue-profiles.json")

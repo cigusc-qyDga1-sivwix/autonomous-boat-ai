@@ -21,11 +21,13 @@ if __package__:
     from .official_pay import fetch_official_pay
     from .venue_weather import fetch_weather, weather_at, VENUE_POINTS
     from .exhibition_bridge import available_rows, inject
+    from .entry_exhibition_gate import validated_preview, summarize_gate
     from .venue_profiles import get_profile, adjust_weights as adjust_venue_weights
 else:
     from official_pay import fetch_official_pay
     from venue_weather import fetch_weather, weather_at, VENUE_POINTS
     from exhibition_bridge import available_rows, inject
+    from entry_exhibition_gate import validated_preview, summarize_gate
     from venue_profiles import get_profile, adjust_weights as adjust_venue_weights
 
 JST = ZoneInfo("Asia/Tokyo")
@@ -79,24 +81,14 @@ def valid_entrants(race: dict) -> bool:
 
 
 def preview_complete(race: dict) -> bool:
+    """Require six unambiguous, *unique* exhibition positions and measurements.
+
+    A duplicate 2-course, fractional position or missing preview must NEVER
+    be marked exhibition-confirmed. Entry changes must not be silently
+    coerced into lane order. Exhibition F is valid but not rewarded for speed.
+    """
     preview = race.get("preview")
-    if not isinstance(preview, dict):
-        return False
-    racers = preview.get("racers") or {}
-    # Complete racer exhibition and venue weather arrive independently.
-    # Lack of on-water observation must not hide otherwise complete exhibition.
-    # A six-boat preview is usable only with physical exhibition times.
-    # Negative start timing (F) is valid source data, but must NOT earn a speed bonus.
-    return all(
-        isinstance(racers.get(str(i)), dict)
-        and number(racers[str(i)].get("course_number")) is not None
-        and 1 <= number(racers[str(i)].get("course_number")) <= 6
-        and number(racers[str(i)].get("exhibition_time")) is not None
-        and 5.0 <= number(racers[str(i)].get("exhibition_time")) <= 10.0
-        and number(racers[str(i)].get("start_timing")) is not None
-        and -.5 <= number(racers[str(i)].get("start_timing")) <= 1.0
-        for i in range(1, 7)
-    )
+    return validated_preview(preview) is not None
 
 
 def valid_average_st(value) -> float | None:
@@ -536,6 +528,9 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
             if extra in current:
                 r[extra] = current[extra]
         r["version_count"] = len(versions)
+        # This is a derived, non-hashed display gate. Do not alter any frozen
+        # baseline/exhibition snapshot or re-create SHA with post-race facts.
+        r["entry_exhibition_gate"] = summarize_gate(current, local_day)
         latest_races.append(r)
         p = record.get("official_pay")
         if p and p.get("verified") and not record.get("official_conflict") and not record.get("official_review"):
@@ -559,6 +554,12 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         "weather_adjusted_race_count": sum(bool((r.get("weather_adjustment") or {}).get("applied")) for r in latest_races),
         "exhibition_race_count": sum(r.get("phase")=="exhibition" for r in latest_races),
         "exhibition_changed_bet_count": sum(bool((r.get("exhibition_change") or {}).get("bets_changed")) for r in latest_races),
+        "final_exhibition_verified_races": sum(bool((r.get("entry_exhibition_gate") or {}).get("final_eligible")) for r in latest_races),
+        "entry_watch_races": sum(bool((r.get("entry_exhibition_gate") or {}).get("entry_watch")) for r in latest_races),
+        "entry_watch_held_races": sum(
+            bool((r.get("entry_exhibition_gate") or {}).get("entry_watch"))
+            and not (r.get("entry_exhibition_gate") or {}).get("final_eligible")
+            for r in latest_races),
         "venue_weather": {
             VENUES[code]: weather_at(weather, now.astimezone(JST))
             for code, weather in weather_by_venue.items()
@@ -574,6 +575,9 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
               "new_baseline": new_baseline, "new_exhibition": new_exhibition,
               "revised_exhibition": revised_exhibition,
               "changed_exhibition": changed_exhibition,
+              "entry_watch_races": out["entry_watch_races"],
+              "entry_watch_held_races": out["entry_watch_held_races"],
+              "final_exhibition_verified_races": out["final_exhibition_verified_races"],
               "official_results": len(official_results),
               "weather_venues": len(set(weather_by_venue)&venues_seen),
               "weather_coverage": f"{len(set(weather_by_venue)&venues_seen)}/{len(venues_seen)}"}

@@ -5,7 +5,7 @@ const nav=fs.readFileSync('app/index.html','utf8');
 assert.match(html,/全国データ研究室/);
 assert.match(html,/data\/intelligence\/status-latest\.json/);
 assert.match(html,/boatlabs\.intelligence_research\.v1/);
-assert.match(html,/research_only|締切前に/);
+assert.match(html,/保存時刻の独立確認|締切前/);
 assert.match(nav,/intelligence\.html/);
 assert.match(html,/レース別に調べる/);
 console.log('BOAT LAB research dashboard navigation and provenance: PASS');

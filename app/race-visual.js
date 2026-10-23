@@ -123,7 +123,7 @@
    let html='<section class="card card-pad boat-sim boat-sim-v3" data-boat-sim aria-label="予想展開アニメーション">'+
      '<div class="section-head"><div><h2 class="section-title">🎬 展開予想アニメ</h2><p class="boat-sim-mini">スタート → 第1ターンマーク → バックストレッチ</p></div><span class="boat-sim-tag">動きのある模式図</span></div>'+
      '<div class="boat-sim-narrative"><span>想定する攻め方 <b data-sim-tactic>'+tactic.label+'</b></span><strong data-sim-forecast>予想着順 '+combo+'</strong></div>'+
-     '<p class="boat-sim-disclaimer">本線・対抗の買い目で動きが切り替わるよ。各艇が独立して先マイ／差し／まくり／まくり差しを狙う仮説を描く。着順から実際の決まり手を断定しない。</p>'+
+     '<p class="boat-sim-disclaimer">本線・対抗の買い目で動きが切り替わるよ。各艇が独立して先マイ／差し／まくり／まくり差しを狙う仮説を描く。実際の進入や艇間の軌道を再現せず、着順から実際の決まり手を断定しない。</p>'+
      '<div class="boat-sim-roles" data-sim-roles aria-label="各艇の攻め方の仮説">'+roles.map(x=>'<span>'+x.lane+'号艇('+x.course+'コース)：'+esc(x.label)+'</span>').join('')+'</div>'+
      '<div class="boat-sim-picks" role="group" aria-label="再現する買い目">';
    picks.forEach((pick,i)=>{

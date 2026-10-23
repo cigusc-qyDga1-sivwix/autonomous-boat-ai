@@ -152,11 +152,11 @@
    return inside.lane+'号艇が先マイで逃げを狙い、'+a+'号艇の'+roles[a-1].label+
       'が成立する仮説 → '+b+'号艇が2着 → '+c+'号艇が3着に残る想定';
  }
- function stageTexts(combo,r){
+ function stageTexts(combo,r,assumeWakeContact=false){
    if(!valid(combo))return ['スタートの攻防','1Mのターン','バックでの予想隊形'];
    const [a,b,c]=combo.split('-').map(Number),roles=rolesFor(combo,r);
    const inside=roles.find(x=>x.course===1);
-   const wash=wakeAffected(combo,r);
+   const wash=assumeWakeContact?wakeAffected(combo,r):[];
    const wakeNote=wash.length?
      ' 内側'+wash.map(x=>x+'号艇').join('・')+
      'が引き波を踏んで減速し、着外まで下がる仮説。引き波位置は未観測。':'';
@@ -231,6 +231,10 @@
      '<button type="button" data-sim-speed="1" aria-pressed="true" class="active">1×</button>'+
      '<button type="button" data-sim-speed="1.5" aria-pressed="false">1.5×</button></div>'+
      '</div>'+
+     '<div class="boat-sim-controls"><div class="boat-sim-buttons" role="group" aria-label="引き波の影響を仮定する研究切り替え">'+
+     '<button type="button" data-sim-wake-toggle aria-pressed="false">🌀 引き波直撃を仮定（初期OFF）</button>'+
+     '</div></div>'+
+     '<p class="boat-sim-disclaimer">※ 引き波に入った事実は未観測。OFFでは一律の失速を仮定せず、ONは特定艇が引き波を踏んだ場合の反事実的な説明だけを表示します。実際の失速量・順位を意味しません。</p>'+
      '<div class="boat-sim-outcome"><span>バック想定</span><strong data-sim-order>'+combo+'</strong><span>1着 → 2着 → 3着</span></div>'+
      '<p class="boat-sim-story" aria-live="polite" data-sim-story>'+stageTexts(combo,r)[0]+'</p>'+
      '<p class="boat-sim-disclaimer">※ 予想済み3連単の「どういう形でそうなるか」を表す<strong>説明用アニメ</strong>。艇速や実際のターン軌道を予測する計算、展示動画解析は未実装です。4〜6番手の表示は便宜上の隊列です。元の固定買い目や結果照合は変更しません。</p></section>';
@@ -256,13 +260,13 @@
    const orderLabel=card.querySelector('[data-sim-order]'),tacticLabel=card.querySelector('[data-sim-tactic]');
    const forecastLabel=card.querySelector('[data-sim-forecast]');
    const selectedTrial=tacticalOptions(r);
-   const state={combo:selectedTrial[0]?.combo||options(r)[0],position:0,running:false,raf:null,last:null,speed:1};
+   const state={combo:selectedTrial[0]?.combo||options(r)[0],position:0,running:false,raf:null,last:null,speed:1,wakeAssumed:false};
    current=state;
    function phaseIndex(t){return t<.4?0:t<.73?1:2;}
    function update(){
      const t=clamp(state.position,0,1);
      const projected=ranks(state.combo);
-     const affected=wakeAffected(state.combo,r);
+     const affected=state.wakeAssumed?wakeAffected(state.combo,r):[];
      const wakeLayer=card.querySelector('[data-sim-wake]');
      if(wakeLayer)wakeLayer.style.display=affected.length && t>=.44?'':'none';
      paths.forEach((p,i)=>{
@@ -286,7 +290,7 @@
      const phase=phaseIndex(t);
      stage.textContent=['START / スタートの攻防','1M / 第1ターンマーク','BACK / バック側の想定隊形'][phase];
      orderLabel.textContent=(selectedTrial.length?'表示中：':'予想：')+state.combo;
-     caption.textContent=stageTexts(state.combo,r)[phase];
+     caption.textContent=stageTexts(state.combo,r,state.wakeAssumed)[phase];
      const phaseButtons=card.querySelectorAll('[data-sim-jump]');
      if(phaseButtons)phaseButtons.forEach(button=>{
        const selected=button.dataset.simJump===['start','turn','back'][phase];
@@ -314,7 +318,9 @@
    function select(combo,kind){
      const selectedChoice=choices(r).find(x=>x.combo===combo&&(!kind||x.kind===kind));
      if(!selectedChoice)return;
-     pause();state.position=0;state.combo=combo;
+     pause();state.position=0;state.combo=combo;state.wakeAssumed=false;
+     const wakeButton=card.querySelector('[data-sim-wake-toggle]');
+     if(wakeButton)wakeButton.setAttribute('aria-pressed','false');
      const ranking=ranks(combo),tactic=tacticFor(combo,r),roles=rolesFor(combo,r);
      paths.forEach((p,i)=>{
        const curve=path(i+1,ranking[i+1],tactic.id,Number(combo[0]),roles[i].role,roles[i].course);
@@ -348,8 +354,13 @@
      });
    }
    card.addEventListener('click',event=>{
-     const button=event.target.closest('[data-sim-control],[data-sim-pick],[data-sim-jump],[data-sim-speed]');
+     const button=event.target.closest('[data-sim-control],[data-sim-pick],[data-sim-jump],[data-sim-speed],[data-sim-wake-toggle]');
      if(!button)return;
+     if(button.hasAttribute('data-sim-wake-toggle')){
+       state.wakeAssumed=!state.wakeAssumed;
+       button.setAttribute('aria-pressed',String(state.wakeAssumed));
+       update();return;
+     }
      if(button.dataset.simPick){select(button.dataset.simPick,button.dataset.simKind);return;}
      if(button.dataset.simJump){jump(button.dataset.simJump);return;}
      if(button.dataset.simSpeed){speed(button.dataset.simSpeed);return;}

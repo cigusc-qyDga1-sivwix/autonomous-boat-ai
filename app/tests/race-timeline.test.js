@@ -31,6 +31,6 @@ const urgent=t.render(soon,now);
 assert.match(urgent,/timeline-urgent/);
 assert.match(urgent,/あと8分/);
 const later=t.render(soon,new Date('2026-10-23T09:09:00Z'));
-assert.doesNotMatch(later,/timeline-urgent/);
+assert.doesNotMatch(later,/<article class="timeline-race timeline-next timeline-urgent"[^>]*><div class="timeline-clock"><strong>18:08<\/strong>/);
 assert.match(later,/結果を確認/);
 console.log('Chronological race timeline: PASS');

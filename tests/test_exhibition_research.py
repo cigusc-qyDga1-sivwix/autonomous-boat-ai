@@ -40,3 +40,36 @@ def test_delayed_result_merges_without_erasing_preview():
 def test_different_date_not_imported_and_nonnumeric_rejected():
     assert build(date(2026, 10, 22), fixtures())["coverage"]["race_count"] == 0
     assert numeric("NaN") is None
+
+def test_collection_health_is_recorded_when_source_unavailable(tmp_path, monkeypatch):
+    import json
+    import sys
+    import scripts.ingest_boatracecsv_exhibition as exporter
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(exporter, "fetch", lambda _name, _date: [])
+    path = tmp_path / "app/data/exhibition/2026-10-23.json"
+    monkeypatch.setattr(sys, "argv", ["ingest", "--date", "2026-10-23", "--output", str(path)])
+    exporter.main()
+    status = json.loads((path.parent / "status-latest.json").read_text(encoding="utf-8"))
+    assert status["event_date"] == "2026-10-23"
+    assert status["complete_sources"] is False
+    assert status["research_races"] == 0
+    assert all(value == 0 for value in status["fetch_counts"].values())
+    assert not path.exists()  # no fabricated exhibition data
+
+def test_collection_health_and_archive_are_both_written(tmp_path, monkeypatch):
+    import json
+    import sys
+    import scripts.ingest_boatracecsv_exhibition as exporter
+    monkeypatch.chdir(tmp_path)
+    mock = fixtures()
+    monkeypatch.setattr(exporter, "fetch", lambda name, day: mock[name])
+    path = tmp_path / "app/data/exhibition/2026-10-23.json"
+    monkeypatch.setattr(sys, "argv", ["ingest", "--date", "2026-10-23", "--output", str(path)])
+    exporter.main()
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    status = json.loads((path.parent / "status-latest.json").read_text(encoding="utf-8"))
+    assert status["complete_sources"] is True
+    assert doc["coverage"]["race_count"] == status["research_races"] == 1
+    assert status["fetch_counts"]["stt"] == 1
+    assert status["forecast_eligibility"] == "not_certified_by_archived_sources"

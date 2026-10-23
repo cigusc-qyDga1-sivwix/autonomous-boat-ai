@@ -49,5 +49,5 @@ assert.equal(after.status.exhibition_versions,1);
 assert.equal(after.doc.records.filter(x=>x.race===3).length,2,'baseline+exhibition independent versions');
 assert.equal(after.doc.records.find(x=>x.phase==='baseline'&&x.race===3).record_sha256,
  first.doc.records.find(x=>x.phase==='baseline'&&x.race===3).record_sha256);
-assert.throws(()=>run({...make(),event_date:'2026-10-24'},null,now),/Untrusted source update time|Missing source/);
+assert.throws(()=>run({...make(),event_date:'not-a-day'},null,now),/Missing source event date/);
 console.log('Pre-cutoff tactical A/B seal, 3-minute safety, replay separation and no overwrite: PASS');

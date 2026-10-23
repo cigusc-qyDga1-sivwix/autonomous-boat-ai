@@ -133,7 +133,7 @@
     return {now:jp.format(current),today:extract('year')+'-'+extract('month')+'-'+extract('day'),favorites,filter:state.boardFilter,sort:state.boardSort};
   }
   function overview() {
-    if(window.BoatVenueBoard) return window.BoatVenueBoard.renderHome(data,boardOptions());
+    if(window.BoatVenueBoard) return (window.BoatRaceTimeline?.render(data)||'')+window.BoatVenueBoard.renderHome(data,boardOptions());
     const all=allRaces();const recorded=stats(all);const countWatch=all.filter(r=>r.classification==='WATCH').length;const countSkip=all.filter(r=>r.classification==='SKIP').length;const isLive=data.mode==='auto-live';const dayJst=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());const stale=isLive&&dayJst!==data.event_date;const updated=isLive&&data.updated_at_utc?new Date(data.updated_at_utc).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}):'未確認';
     const nowJst=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());const soon=all.filter(r=>r.classification==='WATCH' && (data.mode!=='auto-live'||r.cutoff_jst>nowJst)).sort((a,b)=>a.cutoff_jst.localeCompare(b.cutoff_jst)).slice(0,6);
     return `${head('AI予想ダッシュボード',`${dateDisplay(data.event_date)} ・ ${getVenues().length}場 / ${data.mode==='auto-live'?'全国開催・自動取得（非公式）':'展示前の固定予想'}` ,`<button class="btn btn-white" data-action="export-results">↧ 結果CSV</button>`)}

@@ -468,8 +468,8 @@
     const main=el('main');
     el('breadcrumb-label').textContent=titles[state.view];
     document.querySelectorAll('[data-view]').forEach(b=>{b.classList.toggle('active',b.dataset.view===state.view);if(b.dataset.view===state.view)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
-    main.innerHTML=({overview,races,results:resultsPage,analysis,settings})[state.view]();
-    main.insertAdjacentHTML('afterbegin',window.BoatExhibitionAudit?.banner(data)||'');
+    main.innerHTML=(window.BoatExhibitionAudit?.banner(data)||'')+
+      ({overview,races,results:resultsPage,analysis,settings})[state.view]();
     if(state.view==='races'&&state.raceDetail)window.BoatRaceVisual?.mount(main,state.raceDetail);
     else window.BoatRaceVisual?.dispose();
   }

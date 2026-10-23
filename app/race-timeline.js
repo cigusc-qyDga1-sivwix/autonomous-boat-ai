@@ -4,7 +4,7 @@
  const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const time=t=>/^([01]\d|2[0-3]):[0-5]\d$/.test(String(t||''))?t:null;
  const minutes=t=>Number(t.slice(0,2))*60+Number(t.slice(3));
- const dateJst=(d)=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
+ const dateJst=(d)=>{const parts=new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(d);const part=k=>parts.find(p=>p.type===k)?.value||'';return part('year')+'-'+part('month')+'-'+part('day')};
  const nowJst=(d)=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit',hour12:false}).format(d);
  function rows(data){
   const map=new Map();
@@ -40,7 +40,7 @@
    const main=hasForecast?
      '<button type="button" data-race="'+esc(r.venue)+'|'+r.race+'" class="timeline-action">AI予想</button>':
      '<span class="timeline-disabled">予想未固定</span>';
-   const result=verified?'<button type="button" data-view="results" class="timeline-action">結果照合</button>':
+   const result=verified?'<button type="button" data-result-next="'+esc(r.venue)+'|'+r.race+'" class="timeline-action">結果照合</button>':
      '<span class="timeline-disabled">結果未確認</span>';
    return '<article class="timeline-race'+(up&&first?' timeline-next':'')+'"><div class="timeline-clock"><strong>'+esc(r.cutoff_jst)+'</strong><small>'+esc(detail)+'</small></div>'+
     '<div class="timeline-race-main"><strong>'+esc(r.venue)+' <span>'+r.race+'R</span></strong><span class="timeline-status">'+esc(label)+'</span>'+

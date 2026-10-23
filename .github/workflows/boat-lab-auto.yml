@@ -9,6 +9,7 @@ on:
       - 'scripts/export_venue_profiles.py'
       - 'scripts/ingest_boatracecsv_exhibition.py'
       - 'scripts/exhibition_bridge.py'
+      - 'scripts/freeze_tactical_trials.js'
       - 'app/exhibition-audit.js'
       - '.github/workflows/boat-lab-auto.yml'
   schedule:
@@ -54,13 +55,19 @@ jobs:
           # Read-only forecast diagnostics; does not modify frozen predictions.
           python scripts/forecast_audit.py --input app/data/live/latest.json --out app/data/live/audit-latest.json
           python -m json.tool app/data/live/audit-latest.json > /dev/null
+      - name: Forward-freeze original vs tactical A/B forecast while cutoff is ahead
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/freeze_tactical_trials.js
+          python -m json.tool app/data/experiments/status-latest.json > /dev/null
       - name: Persist predictions and immutable version history
         shell: bash
         run: |
           set -euo pipefail
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git config user.name 'github-actions[bot]'
-          git add app/data/live/ app/data/exhibition/ app/data/venue-profiles.json
+          git add app/data/live/ app/data/exhibition/ app/data/experiments/ app/data/venue-profiles.json
           if ! git diff --cached --quiet; then
             git commit -m 'data: automatic nationwide forecast snapshots and results'
             # Human edits or a new workflow commit may have landed since checkout.

@@ -4,13 +4,20 @@
 'use strict';
 const names=['桐生','戸田','江戸川','平和島','多摩川','浜名湖','蒲郡','常滑','津','三国','びわこ','住之江','尼崎','鳴門','丸亀','児島','宮島','徳山','下関','若松','芦屋','福岡','唐津','大村'];
 const esc=x=>String(x??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-const state={day:'',map:new Map(),collected:'',error:'',loading:false};
+const state={day:'',map:new Map(),collected:'',checked:'',sourceOkay:null,error:'',loading:false};
 function key(r){const idx=names.indexOf(r.venue);return state.day.replaceAll('-','')+String(idx+1).padStart(2,'0')+String(r.race).padStart(2,'0');}
 async function load(day){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return;
  state.day=day;state.loading=true;
  try{
- const res=await fetch('./data/exhibition/'+day+'.json?v='+Date.now(),{cache:'no-store'});
+ const [res,health]=await Promise.all([
+   fetch('./data/exhibition/'+day+'.json?v='+Date.now(),{cache:'no-store'}),
+   fetch('./data/exhibition/status-latest.json?v='+Date.now(),{cache:'no-store'}).catch(()=>null)
+ ]);
+ if(health&&health.ok){
+   const info=await health.json();
+   if(info.event_date===day){state.checked=info.collected_at_utc||'';state.sourceOkay=info.complete_sources;}
+ }
  if(!res.ok)throw Error('展示記録 HTTP '+res.status);
  const j=await res.json();
  if(j.event_date!==day||j.schema!=='boatlabs.exhibition_research.v1')throw Error('展示記録の日付が不一致');
@@ -30,10 +37,12 @@ function age(value){const t=new Date(value).getTime();return Number.isFinite(t)?
 function banner(data){
  if(data?.mode!=='auto-live')return '';
  const fore=(data.forecast_races||[]),used=fore.filter(x=>x.phase==='exhibition').length;
- const a=age(data.updated_at_utc),b=age(state.collected),stale=a===null||a>20||b===null||b>20;
+ const a=age(data.updated_at_utc),b=age(state.collected),
+       checked=age(state.checked),stale=a===null||a>20||checked===null||checked>20||state.sourceOkay===false;
  return '<div class="exhibit-health '+(stale?'stale':'ready')+'" role="status"><strong>📡 展示の取得状況</strong>　'+
   '発走前反映 '+used+'/'+fore.length+'R ／ 展示研究記録 '+state.map.size+'R ／ '+ 
-  '予想更新 '+(a===null?'不明':a+'分前')+' ／ 展示更新 '+(b===null?'不明':b+'分前')+
+  '予想更新 '+(a===null?'不明':a+'分前')+' ／ 展示収集チェック '+(checked===null?'未確認':checked+'分前')+
+  ' ／ 展示研究データ更新 '+(b===null?'不明':b+'分前')+
   (stale?' ／ ⚠ 更新遅延あり':'')+(state.error?' ／ '+esc(state.error):'')+
   '<p>研究記録と発走前に反映済みの展示は別です。'+
   '<a href="./exhibition.html">展示の研究記録を見る ↗</a></p></div>';
@@ -51,5 +60,5 @@ function panel(r){
   '<th>展示タイム</th><th>一周・回り足・直線</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
   '<p class="muted text-sm">記録の観測時刻は、サーバーへの保存が締切前だった証拠ではありません。結果・払戻は予想に利用しません。</p></section>';
 }
-global.BoatExhibitionAudit={load,banner,panel,status:()=>({count:state.map.size,collected:state.collected,error:state.error})};
+global.BoatExhibitionAudit={load,banner,panel,status:()=>({count:state.map.size,collected:state.collected,checked:state.checked,sourceOkay:state.sourceOkay,error:state.error})};
 })(typeof window!=='undefined'?window:globalThis);

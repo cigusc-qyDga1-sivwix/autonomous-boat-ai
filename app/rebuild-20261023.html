@@ -1,0 +1,63 @@
+<!doctype html><html lang="ja"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="theme-color" content="#0a3851"/>
+<title>BOAT LAB｜10月23日 全168レース 再評価</title>
+<link rel="stylesheet" href="./styles.css"/>
+<style>
+body{margin:0;background:#f2f6fa;color:#16364a}
+.audit-wrap{max-width:1400px;margin:0 auto;padding:18px 14px 64px}
+.audit-header{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+.audit-header a,.audit-wrap a{color:#087987}
+.audit-title{font-size:clamp(22px,5vw,32px);margin:14px 0 6px}
+.audit-lead{font-size:13px;color:#507285;line-height:1.75;max-width:950px}
+.audit-note{margin:14px 0;background:#fff7e8;border:1px solid #ead3a7;border-radius:11px;padding:12px;color:#73511c;font-size:12px;line-height:1.7}
+.audit-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:16px 0}
+.audit-stats>div{background:white;border-radius:12px;padding:11px 8px;border:1px solid #d8e6ea;text-align:center;font-size:11px}
+.audit-stats strong{display:block;font-size:21px;color:#146f7c}
+.audit-tools{display:flex;gap:7px;flex-wrap:wrap;margin:13px 0}
+.audit-tools select,.audit-tools input{border:1px solid #c8dbe4;background:white;color:#16364a;border-radius:9px;padding:9px 12px;font:inherit;font-size:13px;min-height:39px}
+.audit-tools input{flex:1;min-width:145px}
+.audit-venue{margin:22px 0 12px;border-bottom:1px solid #cadae4;padding:0 0 7px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.audit-venue h2{margin:0;font-size:19px}
+.audit-venue span{font-size:12px;color:#597686}
+.audit-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.audit-race{background:#fff;border-radius:13px;border:1px solid #d6e4eb;padding:12px;min-width:0}
+.audit-race>summary{cursor:pointer;list-style:none}
+.audit-race>summary::-webkit-details-marker{display:none}
+.audit-race .top{display:flex;justify-content:space-between;gap:7px;align-items:center}
+.audit-race h3{margin:0;font-size:15px}
+.audit-race small{color:#69808d;font-size:10px}
+.audit-race .cutoff{font-variant-numeric:tabular-nums;font-size:13px;font-weight:800;color:#24687a}
+.audit-race .primary{margin:12px 0 7px;display:flex;justify-content:space-between;align-items:baseline}
+.audit-race .primary strong{font-size:22px;letter-spacing:1px;color:#147d78}
+.audit-race .primary span{font-size:11px;color:#718693}
+.audit-race .detail{border-top:1px solid #e4eef2;padding-top:10px;margin-top:8px}
+.audit-race p{margin:6px 0;font-size:11px;line-height:1.6}
+.audit-race .status{font-size:10px;background:#eaf3f7;color:#2c6076;padding:4px 6px;border-radius:7px}
+.audit-race .status.expired{background:#eff0f3;color:#66727d}
+.audit-race table{border-collapse:collapse;width:100%;font-size:12px;margin:9px 0}
+.audit-race td{padding:7px 4px;border-bottom:1px solid #ecf1f5}
+.audit-race td:last-child{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.audit-race .callout{background:#edf8f7;border-radius:8px;padding:7px 9px;color:#32636a;font-size:11px;line-height:1.55}
+.audit-race .muted{color:#748997;font-size:10px}
+.audit-race .change{color:#9b681b;font-weight:800}
+.audit-race .player-link{display:inline-block;margin:6px 0;font-size:12px;font-weight:800}
+#audit-empty{color:#718693}
+@media(max-width:950px){.audit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.audit-grid{grid-template-columns:1fr}.audit-wrap{padding:12px 10px 44px}.audit-stats strong{font-size:18px}}
+</style><script src="./rebuild-20261023.js" defer></script>
+</head><body><main class="audit-wrap">
+<div class="audit-header"><a href="./index.html">← BOAT LAB 本体</a><a href="./venue-profiles.html">全国24場の水面特徴 ↗</a></div>
+<h1 class="audit-title">🚤 2026/10/23 全レース再評価</h1>
+<p class="audit-lead">本日の14開催・168レースを、保存済みの発走前選手情報から全国24場の試験補正を使って再計算。過去の予想を上書きせず、後から結果や払戻を使わない「別研究版」です。</p>
+<div class="audit-note"><b>重要：</b>この再評価は未学習・確率未校正のv0.7研究モデル。すべての最上位買い目が1号艇頭で、戦法×艇間連動を評価する予想モデルとしてはまだ不十分です。1Mアニメと買い目推定は別機能。<b>締切後のものは事後再計算であって、事前的中予想ではありません。</b>展示の情報は保存時点の取得済み部分だけ使用します。金額は仮想5万円、実購入なし。</div>
+<div class="audit-stats" id="audit-stats" aria-live="polite"><div><strong>168</strong>再評価R</div><div><strong>14</strong>開催場</div><div><strong>—</strong>比較変更</div><div><strong>—</strong>作成時締切前</div></div>
+<div class="audit-tools">
+ <select id="audit-venue-filter" aria-label="開催場"><option value="">すべての開催場</option></select>
+ <select id="audit-status-filter" aria-label="区分"><option value="">全区分</option><option value="pre_cutoff_research">作成時に締切前</option><option value="after_cutoff_research_only">締切後の事後再評価</option><option value="changed">旧版と変更あり</option></select>
+ <input id="audit-search" type="search" placeholder="選手名・場名・R・買い目で検索" aria-label="レースを検索"/>
+</div>
+<p class="audit-lead" id="audit-meta">データを読み込み中…</p>
+<div id="audit-results"></div><p id="audit-empty" hidden>条件に合うレースがありません。</p>
+<p class="audit-lead">データの出典と検証状況：<a href="https://github.com/cigusc-qyDga1-sivwix/autonomous-boat-ai/blob/main/app/data/research/2026-10-23-venue-rebuilt.json" target="_blank" rel="noopener noreferrer">研究用JSON</a> ／ <a href="https://github.com/cigusc-qyDga1-sivwix/autonomous-boat-ai/blob/main/docs/ALL_VENUE_MODELS_V0_1.md" target="_blank" rel="noopener noreferrer">24場のモデル仕様</a>。オッズ・実際の購入は未連携。</p>
+</main></body></html>

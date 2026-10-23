@@ -209,10 +209,11 @@
    const card=root.querySelector('[data-boat-sim]');if(!card)return;
    const svg=card.querySelector('svg'),range=card.querySelector('[data-sim-slider]');
    if(!svg||!range)return;
-   const paths=[],boats=[];
+   const paths=[],boats=[],trails=[];
    for(let i=1;i<=6;i++){
      paths.push(svg.querySelector('[data-sim-path="'+i+'"]'));
      boats.push(svg.querySelector('[data-sim-boat="'+i+'"]'));
+     trails.push(svg.querySelector('[data-sim-trail="'+i+'"]'));
    }
    if(paths.some(p=>!p||typeof p.getTotalLength!=='function')||boats.some(b=>!b))return;
    const stage=card.querySelector('[data-sim-stage]'),caption=card.querySelector('[data-sim-story]');
@@ -223,10 +224,17 @@
    function phaseIndex(t){return t<.4?0:t<.73?1:2;}
    function update(){
      const t=clamp(state.position,0,1);
+     const projected=ranks(state.combo);
      paths.forEach((p,i)=>{
        const len=p.getTotalLength();
-       const pos=p.getPointAtLength(t*len);
-       const prev=p.getPointAtLength(clamp(t*len-1,0,len)),next=p.getPointAtLength(clamp(t*len+1,0,len));
+       // Highlight a possible overtake only *after* 1M: no fictitious
+       // instant jump at the start; no inference from actual race results.
+       const edge=t>.56?(t-.56)/.44:0;
+       const leadOffset=edge*(7-projected[i+1])*.010;
+       const progress=clamp(t+leadOffset,0,1);
+       const pos=p.getPointAtLength(progress*len);
+       const prev=p.getPointAtLength(clamp(progress*len-2,0,len)),
+             next=p.getPointAtLength(clamp(progress*len+2,0,len));
        const deg=Math.atan2(next.y-prev.y,next.x-prev.x)*180/Math.PI;
        boats[i].setAttribute('transform','translate('+pos.x.toFixed(2)+' '+pos.y.toFixed(2)+') rotate('+deg.toFixed(1)+')');
      });
@@ -260,10 +268,15 @@
    }
    function restart(){pause();state.position=0;update();play();}
    function select(combo){
-     if(!options(r).includes(combo))return;
+     const selectedChoice=choices(r).find(x=>x.combo===combo);
+     if(!selectedChoice)return;
      pause();state.position=0;state.combo=combo;
      const ranking=ranks(combo),tactic=tacticFor(combo),roles=rolesFor(combo,r);
-     paths.forEach((p,i)=>p.setAttribute('d',path(i+1,ranking[i+1],tactic.id,Number(combo[0]),roles[i].role,roles[i].course)));
+     paths.forEach((p,i)=>{
+       const curve=path(i+1,ranking[i+1],tactic.id,Number(combo[0]),roles[i].role,roles[i].course);
+       p.setAttribute('d',curve);
+       if(trails[i])trails[i].setAttribute('d',curve);
+     });
      card.querySelectorAll('[data-sim-pick]').forEach(button=>{
        const selected=button.dataset.simPick===combo;
        button.classList.toggle('active',selected);button.setAttribute('aria-pressed',String(selected));
@@ -271,7 +284,8 @@
      const roleLegend=card.querySelector('[data-sim-roles]');
     if(roleLegend)roleLegend.innerHTML=roles.map(x=>'<span>'+x.lane+'号艇('+x.course+'コース)：'+esc(x.label)+'</span>').join('');
     if(tacticLabel)tacticLabel.textContent=tactic.label;
-     if(forecastLabel)forecastLabel.textContent='予想着順 '+combo;
+     if(forecastLabel)forecastLabel.textContent=
+       selectedChoice.kind==='study'?'比較用（未購入） '+combo:'予想着順 '+combo;
      update();play();
    }
    function jump(phase){

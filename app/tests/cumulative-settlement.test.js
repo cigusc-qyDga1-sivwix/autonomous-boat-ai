@@ -12,7 +12,7 @@ function rec(day,n,finish,payout){
  return {venue:'鳴門',race:n,versions:[{
   venue:'鳴門',race:n,sha256:'a'.repeat(64),bets,
   cutoff_iso_jst:day+'T08:35:00+09:00',
-  frozen_at_utc:day+'T00:00:00Z',
+  frozen_at_utc:new Date(Date.parse(day+'T00:00:00Z')-3600000).toISOString(),
   classification:'WATCH'
  }],official_pay:finish?{source:'boatrace_official_pay',verified:true,
    finish,payout_per_100:payout}:null};

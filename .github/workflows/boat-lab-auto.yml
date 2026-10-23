@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - 'scripts/autonomous_daily.py'
+      - 'scripts/ingest_boatracecsv_exhibition.py'
       - '.github/workflows/boat-lab-auto.yml'
   schedule:
     # UTC: 06:00-23:59 JST, every 10 minutes. Cron may be delayed.
@@ -40,13 +41,18 @@ jobs:
           # Read-only forecast diagnostics; does not modify frozen predictions.
           python scripts/forecast_audit.py --input app/data/live/latest.json --out app/data/live/audit-latest.json
           python -m json.tool app/data/live/audit-latest.json > /dev/null
+      - name: Collect exhibition measurements for research only
+        continue-on-error: true
+        run: |
+          python scripts/ingest_boatracecsv_exhibition.py
+          # No results here can revise an immutable forecast or official settlement.
       - name: Persist predictions and immutable version history
         shell: bash
         run: |
           set -euo pipefail
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git config user.name 'github-actions[bot]'
-          git add app/data/live/
+          git add app/data/live/ app/data/exhibition/
           if ! git diff --cached --quiet; then
             git commit -m 'data: automatic nationwide forecast snapshots and results'
             # Human edits or a new workflow commit may have landed since checkout.

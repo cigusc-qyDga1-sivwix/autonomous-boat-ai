@@ -20,6 +20,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: python3 scripts/test_entry_exhibition_gate.py
       - run: node --check app/app.js
       - run: node --check app/exhibition-research.js
       - run: node --check app/exhibition-audit.js
@@ -27,6 +28,7 @@ jobs:
       - run: node --check app/venue-board.js
       - run: node app/tests/smoke.test.js
       - run: node app/tests/live.test.js
+      - run: node app/tests/entry-exhibition-ui.test.js
       - run: node app/tests/venue-board.test.js
       - run: node app/tests/venue-navigation.test.js
       - run: node app/tests/weather-ui.test.js

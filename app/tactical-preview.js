@@ -60,6 +60,40 @@ function normalise(cfg){
   relativeWind:['unknown','head','tail','cross'].includes(cfg.relativeWind)?cfg.relativeWind:'unknown',
   source:String(cfg.source||'手動設定').slice(0,60)};
 }
+// Small, explicitly UNCALIBRATED scenario nudges derived from official qualitative
+// headwind/turn and tailwind/sashi explanations. No real win probabilities.
+function directionalHypothesis(cfg,b){
+ const wind=clamp(n(cfg.wind)??0,0,30);
+ if(wind<3||cfg.relativeWind==='unknown'||cfg.relativeWind==='cross')
+   return {delta:0,reason:'風向補正なし'};
+ const factor=clamp((wind-2)/4,0,1);
+ let delta=0,reason='中立';
+ if(cfg.relativeWind==='head'){
+   if(b.group==='slow'){delta-=.020*factor;reason='スロー勢の立ち上がりリスク';}
+   if(b.course>=2&&b.course<=5&&b.kind==='makuri'){
+     delta+=.055*factor;reason='向かい風でのまくり仮説';
+   }else if(b.course>=2&&b.course<=5&&b.kind==='makuri-zashi'){
+     delta+=.035*factor;reason='向かい風でのまくり差し仮説';
+   }
+ }else if(cfg.relativeWind==='tail'){
+   if(b.course>=2&&b.course<=4&&b.kind==='sashi'){
+     delta+=.055*factor;reason='追い風による差し余地仮説';
+   }else if(b.kind==='makuri'){
+     delta-=.025*factor;reason='追い風時の握った旋回の流れリスク';
+   }else if(b.course===1&&b.kind==='escape'&&wind<=5){
+     delta+=.015*factor;reason='比較的弱い追い風での逃げ残存仮説';
+   }
+ }
+ return {delta,reason};
+}
+function windExplanation(cfg){
+ const v=n(cfg.wind),w=cfg.relativeWind;
+ if(v==null||w==='unknown')return '水面に対する風向が未判定。勝ち筋への方向補正なし。';
+ if(v<3)return '風速3m/s未満は方向による順位補正なし（試験基準）。';
+ if(w==='head')return '向かい風 '+v+'m/s：スロー勢の立ち上がりとセンター勢のまくり・まくり差しを検討。';
+ if(w==='tail')return '追い風 '+v+'m/s：1マークの外への流れと2・3コース差しを検討。強い追い風では逃げ確定とみなさない。';
+ return '横風 '+v+'m/s：水面に対する左右方向が未判定のため、有利艇を自動決定しない。';
+}
 function analyze(r,config){
  const racers=list(r);const cfg=normalise(config)||defaults(r);
  const boats=cfg.boats.map(b=>{
@@ -78,9 +112,10 @@ function analyze(r,config){
   const attack=(b.kind==='makuri'||b.kind==='makuri-zashi')?
        clamp(slowInside*3.8,-.20,.36):b.kind==='sashi'?.12:b.kind==='escape'?.18:0;
   const extra=exhib!==null&&exhib>=0&&exhib<=.40?clamp((.17-exhib)*.38,-.04,.04):0;
-  const power=1.42-(b.course-1)*.14+(.17-st)*6.2+attack+extra+
+  const baseScore=1.42-(b.course-1)*.14+(.17-st)*6.2+attack+extra+
     (b.group==='dash'?.02:0);
-  return {...b,st,origin,exhibition_st:exhib,score:power,attack};
+  const windBias=directionalHypothesis(cfg,b);
+  return {...b,st,origin,exhibition_st:exhib,score:baseScore+windBias.delta,baseScore,windBias,attack};
  });
  const sorted=[...boats].sort((a,b)=>b.score-a.score||a.course-b.course);
  const rank={};sorted.forEach((b,i)=>{rank[b.lane]=i+1;});
@@ -92,7 +127,7 @@ function analyze(r,config){
    uncertainty,wind,wave,
    summary:'試算バック隊形 '+sorted.slice(0,3).map(b=>b.lane).join('-')+
       ' ／ スタート先行想定 '+[...boats].sort((a,b)=>a.st-b.st)[0].lane+'号艇',
-   note:'風・波は旋回の膨らみと不確実性の表現に反映。会場別1マーク配置は模式的で、勝率への補正は未校正です。'
+   note:windExplanation(cfg)+' 風による評価の変化は最大でも小さな試験値で、実測確率ではない。会場別の旋回モデルも未校正。'
  };
 }
 function trajectory(b,rank,plan){
@@ -276,5 +311,5 @@ function mount(root,r){
  slider.addEventListener('input',()=>{pause();state.position=clamp(Number(slider.value)/1000,0,1);paint();});
  repaint();
 }
-Object.assign(api,{animationHTML,mount,dispose,tactics:{defaults,normalise,analyze,trajectory,drawControls}});
+Object.assign(api,{animationHTML,mount,dispose,tactics:{defaults,normalise,analyze,trajectory,drawControls,directionalHypothesis,windExplanation}});
 })();

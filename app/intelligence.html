@@ -1,0 +1,96 @@
+<!doctype html><html lang="ja"><head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>BOAT LAB | 全国データ研究室</title><meta name="theme-color" content="#09384b"/>
+<style>
+*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",sans-serif;background:#f2f7f9;color:#16384a;margin:0}
+main{max-width:1200px;margin:0 auto;padding:20px 14px 64px}
+a{color:#087978}.top{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+h1{font-size:clamp(24px,4vw,32px);margin:18px 0 8px}.intro{font-size:13px;line-height:1.75;color:#577584}
+.alert{background:#fff5e8;border:1px solid #eccb98;padding:13px;border-radius:11px;font-size:12px;line-height:1.8;margin:16px 0}
+.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:15px 0}
+.summary>div{background:#fff;border:1px solid #d7e5eb;border-radius:12px;padding:14px;text-align:center;font-size:10px}
+.summary strong{font-size:23px;color:#09777e;display:block}
+.h2{margin:24px 0 11px;font-size:20px}
+.sources{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.source{background:white;border:1px solid #dce9ef;border-radius:12px;padding:14px}
+.source h3{font-size:14px;margin:0 0 8px}.source p{font-size:11px;color:#6b8190;line-height:1.6;margin:5px 0}
+.source .available{color:#167958;font-weight:800}.source .empty{color:#a66924;font-weight:800}
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin:15px 0}
+.controls select,.controls input{background:#fff;border:1px solid #c7dbe4;padding:12px;border-radius:10px;color:#153b52;font:inherit;font-size:14px;min-width:150px;flex:1}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.entry{background:#fff;border:1px solid #d5e5e9;border-radius:12px;padding:14px}
+.entry h3{font-size:16px;margin:4px 0 12px}
+.entry .subtitle{font-size:11px;color:#638394}
+.racers{display:grid;gap:7px}
+.racer{background:#f5fafb;border:1px solid #e4edf0;border-radius:9px;padding:9px 10px;line-height:1.55}
+.racer b{font-size:12px}.racer span{font-size:11px;color:#6c8390}
+.racer small{color:#557c84;font-size:10px}
+.more{border:0;background:#e5f2f3;color:#136b76;border-radius:8px;padding:8px 12px;font-weight:750;cursor:pointer}
+.foot{font-size:11px;color:#68808b;line-height:1.75;margin-top:24px}
+@media(max-width:800px){.sources{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}}
+@media(max-width:550px){.sources{grid-template-columns:1fr}.summary strong{font-size:18px}.summary>div{padding:10px 4px}main{padding:12px 10px 42px}}
+</style></head><body><main>
+<div class="top"><a href="./index.html">← BOAT LAB</a><a href="./venue-profiles.html">全国24場の水面特性 →</a></div>
+<h1>🧠 全国データ研究室</h1>
+<p class="intro">全国24場を対象に、選手の直近10走・前5節・モーターの期成績・使用者履歴・出走表を同じレースコードで照合。取得済み情報だけを表示します。</p>
+<div class="alert"><b>重要：</b>これは独立した研究データベース。公開CSVはレース後に更新される場合があるため、<b>保存時刻の独立確認なしに昔の予想へ投入しません。</b> 予想的中率の保証、競技映像の解析、モーター整備による改善の証明ではありません。</div>
+<div class="summary" id="summary"><div><strong>—</strong>収録R</div><div><strong>—</strong>収録艇</div><div><strong>—</strong>会場</div><div><strong>—</strong>完全な出走表R</div></div>
+<p class="intro" id="stamp" role="status">データ読み込み中…</p>
+<h2 class="h2">取得元の稼働状況</h2>
+<div class="sources" id="sources"></div>
+<h2 class="h2">レース別に調べる</h2>
+<div class="controls"><select id="venue" aria-label="会場"><option value="">すべての会場</option></select><input id="filter" type="search" placeholder="選手名・会場・レース番号・モーター番号で検索" aria-label="検索"/></div>
+<div class="grid" id="races"></div><p id="empty" class="intro" hidden>該当するデータがありません。</p>
+<p class="foot">主な情報源：<a href="https://boatracecsv.github.io/docs/data/" target="_blank" rel="noopener noreferrer">BoatraceCSV 公式仕様一覧</a>・<a href="https://www.boatrace.jp/owpc/pc/extra/data/download.html" target="_blank" rel="noopener noreferrer">BOAT RACE公式の競走・選手情報</a>。予想に採用する前には、締切時刻、データ取得時刻、情報の出典と欠損率を別途監査します。モーター履歴の基準日は節終了日で、使用期間が当該レース以前のデータだけを表示します。</p>
+</main>
+<script>
+(()=>{
+'use strict';
+const q=x=>document.querySelector(x),e=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const venues=['桐生','戸田','江戸川','平和島','多摩川','浜名湖','蒲郡','常滑','津','三国','びわこ','住之江','尼崎','鳴門','丸亀','児島','宮島','徳山','下関','若松','芦屋','福岡','唐津','大村'];
+let data=null;
+const percent=x=>x==null?'—':Number(x).toFixed(1)+'%';
+const text=x=>x==null?'—':x;
+function render(){
+ if(!data)return;
+ const venue=q('#venue').value,term=q('#filter').value.trim().toLowerCase();
+ const matches=data.races.filter(r=>(!venue||r.venue_code===venue)&&
+   (!term||[venues[Number(r.venue_code)-1],r.race+'R',r.race_code,...r.racers.map(x=>x.name||''),
+          ...r.racers.map(x=>String(x.motor_no||''))].join(' ').toLowerCase().includes(term)));
+ const limit=40;
+ q('#races').innerHTML=matches.slice(0,limit).map(r=>'<article class="entry"><div class="subtitle">'+e(r.race_code)+' ／ '+e(r.grade||'未分類')+' ／ '+e(r.meeting_day||'')+'</div><h3>'+
+    e(venues[Number(r.venue_code)-1]||r.venue_code)+' '+r.race+'R　'+e(r.race_title||'')+'</h3><div class="racers">'+
+    r.racers.map(x=>'<div class="racer"><b>'+x.lane+'号艇 '+e(x.name||'未取得')+'</b><span>　全国 '+e(text(x.national_win))+' / 当地 '+e(text(x.local_win))+
+    ' / 枠別 '+e(text(x.frame_history?.frame_win))+'</span><div><small>モーター '+e(text(x.motor_no))+'番｜2連対率 '+e(percent(x.motor_top2))+
+    '｜期内 '+e(percent(x.motor_stats?.wins_pct))+
+    '｜過去10走 '+(x.past10?.length||0)+'件｜全国近況 '+(x.recent_national?.length||0)+'節'+
+    '｜以前の使用者 '+(x.motor_previous_users?.length||0)+'件</small></div></div>').join('')+
+ '</div></article>').join('');
+ q('#empty').hidden=matches.length>0;
+ q('#stamp').textContent='表示 '+Math.min(matches.length,limit)+' / 該当 '+matches.length+
+    'レース｜保存 '+new Date(data.created_at_utc).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'})+' JST。'+
+    (matches.length>limit?' 一度に表示するのは40Rまで。会場や検索で絞り込んでね。':'');
+}
+function show(doc){
+ if(doc.schema!=='boatlabs.intelligence_research.v1'||!doc.coverage)throw Error('研究データの形式が不正');
+ data=doc;const c=doc.coverage;
+ q('#summary').innerHTML=[['収録R',c.races],['収録艇',c.racer_rows],['会場',c.venue_count],['完全な出走表R',c.has_complete_racers]]
+   .map(x=>'<div><strong>'+e(x[1])+'</strong>'+e(x[0])+'</div>').join('');
+ q('#sources').innerHTML=Object.entries(doc.sources).map(([name,s])=>
+    '<div class="source"><h3>'+e(name)+'</h3><p class="'+(s.state==='available'?'available':'empty')+'">'+
+    e(s.state==='available'?'取得済み':'未取得・空欄')+'　'+e(s.rows||0)+'行</p>'+
+    '<p>取得元：<a target="_blank" rel="noopener noreferrer" href="'+e(s.url)+'">CSV ↗</a></p>'+
+    (s.error?'<p>エラー：'+e(s.error)+'</p>':'')+'</div>').join('');
+ const active=[...new Set(doc.races.map(r=>r.venue_code))].sort();
+ q('#venue').innerHTML='<option value="">すべての会場</option>'+
+   active.map(code=>'<option value="'+e(code)+'">'+e(venues[Number(code)-1])+'</option>').join('');
+ render();
+}
+q('#venue').addEventListener('change',render);q('#filter').addEventListener('input',render);
+fetch('./data/intelligence/status-latest.json?v='+Date.now(),{cache:'no-store'})
+.then(r=>{if(!r.ok)throw Error('HTTP '+r.status);return r.json()})
+.then(s=>fetch('./data/intelligence/'+encodeURIComponent(s.event_date)+'.json?v='+Date.now(),{cache:'no-store'}))
+.then(r=>{if(!r.ok)throw Error('HTTP '+r.status);return r.json()})
+.then(show).catch(err=>{q('#stamp').textContent='研究データを読み込めません：'+err.message+'。GitHubでの収集実行を確認してください。'});
+})();
+</script></body></html>

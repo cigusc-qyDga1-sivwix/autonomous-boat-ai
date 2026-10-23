@@ -144,7 +144,23 @@
     <section class="card card-pad"><div class="section-head"><h2 class="section-title">${isLive?'展示時の場内気象':'時間帯別・気象見通し'}</h2>${pill(isLive?'実測由来・非公式':'予報値','pending')}</div>${isLive?all.filter(r=>r.weather_observed).slice(-6).map(r=>`<div class="weather-box"><div class="weather-symbol">≋</div><div class="weather-body"><strong>${escape(r.venue)} ${r.race}R・風 ${escape(r.weather_observed.wind_speed)}m/s・波高 ${escape(r.weather_observed.wave_height)}cm</strong><p>展示データ取得時点の観測情報（非公式）</p></div></div>`).join('')||'<p class="muted text-sm">展示時の気象はまだ取得できていません。</p>':`<div class="mini-caption">鳴門</div>${weatherHTML('鳴門')}<div class="mini-caption" style="margin-top:18px;margin-bottom:8px">徳山</div>${weatherHTML('徳山')}`}<div class="notice warn">${isLive?'展示前は場内気象未取得。時間別の気象予報と潮位予測は未接続。':'周辺気象の参考値。展示ST・波高・場内風速の実測は未反映。'}</div></section></div>
     <p class="footer-disclaimer">${escape(data.disclaimer||'仮想予想・研究用。自動購入や的中の保証はありません。')} SKIPを含む買い目は比較用の記録で、購入推奨ではありません。</p>`;
   }
-  function tile(r) {return `<button type="button" class="race-tile" data-race="${escape(r.venue)}|${r.race}"><div class="tile-top"><span class="tile-r">${escape(r.venue)} ${r.race}R</span>${pill(r.classification)}</div><div class="tile-time">締切予定 ${escape(r.cutoff_jst)} · ${r.bets.length}点 · ${r.phase==='exhibition'?'展示反映':r.phase==='baseline'?'展示前':'保存済み'}</div><div class="tile-bets">${escape(r.bets.slice(0,2).map(b=>b.combination).join(' / '))}</div><div class="tile-scenario">${escape(r.scenario)}</div><div class="tile-foot"><span>${finishPill(r)}</span><strong>詳細を見る ↗</strong></div></button>`;}
+  function tacticalSummary(r){
+    try{
+      const x=window.BoatTacticalModel?.forecast(r);
+      return x?{top:x.top,points:x.bets.length,different:x.differs_from_frozen}:null;
+    }catch{return null}
+  }
+  function tile(r) {
+    const trial=tacticalSummary(r);
+    return '<button type="button" class="race-tile" data-race="'+escape(r.venue)+'|'+r.race+'">'+
+      '<div class="tile-top"><span class="tile-r">'+escape(r.venue)+' '+r.race+'R</span>'+pill(r.classification)+'</div>'+
+      '<div class="tile-time">締切予定 '+escape(r.cutoff_jst)+' · 固定 '+r.bets.length+'点 · '+(r.phase==='exhibition'?'展示反映':'展示前')+'</div>'+
+      '<div class="tile-bets">🔒 固定：'+escape(r.bets.slice(0,2).map(b=>b.combination).join(' / '))+'</div>'+
+      (trial?'<div class="tile-tactical">🧠 戦法研究版：<strong>'+escape(trial.top)+'</strong> ／ '+trial.points+'点'+
+       (trial.different?' <span>新しい分岐・配分</span>':' <span>配分は旧版と同じ</span>')+'</div>':'')+
+      '<div class="tile-scenario">'+escape(r.scenario)+'</div>'+
+      '<div class="tile-foot"><span>'+finishPill(r)+'</span><strong>比較を見る ↗</strong></div></button>';
+  }
   function races() {
     if(state.raceDetail) return detail(state.raceDetail);
     if(state.venue!=='全場' && window.BoatVenueBoard) return window.BoatVenueBoard.renderVenue(data,state.venue,boardOptions());

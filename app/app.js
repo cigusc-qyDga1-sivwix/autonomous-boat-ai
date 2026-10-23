@@ -206,6 +206,41 @@
       '<p class="muted text-sm">過去率＝このレースの1号艇勝率ではありません。選手・モーター・展示と実測を優先。'+
       '戦法別の数値モデル、潮流補正、整備による性能変化は今後の検証課題です。</p></section>';
   }
+  function tacticalTrialPanel(r){
+    let trial=null;
+    try{trial=window.BoatTacticalModel?.forecast(r)}catch(err){
+      return '<div class="notice warn">展開試験版を計算できません：'+escape(err.message)+'</div>';
+    }
+    if(!trial)return '<div class="notice warn">展開試験版の読み込みがありません。アプリを更新してください。</div>';
+    const dated=(data?.event_date||'')+'T'+r.cutoff_jst+':00+09:00';
+    const closed=Date.now()>=new Date(dated).getTime()-120000;
+    const original=r.bets.map(b=>b.combination).join(', ');
+    const newTop=trial.top,oldTop=r.bets[0]?.combination;
+    const changed=trial.differs_from_frozen;
+    const heads=trial.head_course_shares
+      .filter(h=>h.relative_share>=.07)
+      .sort((a,b)=>b.relative_share-a.relative_share).slice(0,5);
+    return '<section class="card card-pad boat-tactical-trial" aria-label="戦法連動型の新しい試験買い目">'+
+      '<div class="section-head"><div><h2 class="section-title">🧠 NEW｜1マーク戦法連動型 v0.1</h2>'+
+      '<p class="boat-sim-mini">能力×モーター×展示×場別条件 → 逃げ/差し/まくり差し分岐 → 2・3着残存</p></div>'+
+      '<span class="boat-sim-tag">新しい別モデル</span></div>'+
+      '<div class="tactical-warning">'+
+      (closed?'<b>締切後の研究計算です。事前に固定した予想ではありません。</b>':
+              '<b>現時点の試験再計算です。正式な発走前固定予想とは別です。</b>')+
+      '<p>事前保存の選手・機体・展示データだけを使い、結果・払戻・オッズは不使用。実測的中確率ではありません。正式のBUY収支にも加えません。</p></div>'+
+      '<div class="tactical-compare"><div><small>従来の固定本線</small><strong>'+escape(oldTop)+'</strong></div>'+
+      '<span>→</span><div><small>新・戦法別研究本線</small><strong>'+escape(newTop)+'</strong></div>'+
+      '<span class="tactical-change">'+(changed?'買い目・配分に違いあり':'比較結果：同じ配分')+'</span></div>'+
+      '<div class="tactical-heads"><strong>1着戦法の相対評価（未校正）</strong>'+
+      heads.map(h=>'<span>'+escape(h.lane)+'号艇：'+escape(h.tactic)+' '+(h.relative_share*100).toFixed(1)+'%</span>').join('')+
+      '</div><div class="boat-entry-overflow"><table class="bets-table tactical-bets"><thead><tr><th>3連単</th><th>頭の勝ち筋</th><th>仮想配分</th></tr></thead><tbody>'+
+      trial.bets.map(b=>'<tr><td><strong>'+escape(b.combination)+'</strong></td>'+
+      '<td>'+escape(b.scenario)+'</td><td>'+money(b.virtual_yen)+'</td></tr>').join('')+
+      '</tbody></table></div><p class="tactical-foot">試験 '+trial.bets.length+'点／仮想5万円。'+
+      '元の固定 '+r.bets.length+'点／仮想5万円は下部に残して比較可能。'+
+      'アニメでは「1M研究候補」を選ぶと展開を表示できる。'+
+      '選手×モーターの相性や調整後の改善度は取得不足のため、独立補正としては未反映。</p></section>';
+  }
   function detail(r) {
     const w=weatherFor(r.venue,r.cutoff_jst),c=compute(r);
     const external=window.BoatExternalReference;
@@ -261,6 +296,7 @@
     ${venuePanel(r)}
     ${exhibitionDetail}
     ${window.BoatRaceVisual?window.BoatRaceVisual.entryHTML(r):''}
+    ${tacticalTrialPanel(r)}
     ${window.BoatRaceVisual?window.BoatRaceVisual.animationHTML(r):''}
     ${referencePanel}
     ${r.point_reason?`<div class="notice"><strong>点数を選んだ理由：</strong>${escape(r.point_reason)} ／ ${r.bets.length}点。これは未校正の相対指標で、実測的中確率ではありません。</div>`:''}

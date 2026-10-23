@@ -295,10 +295,13 @@ def main():
     prev=json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
     # Keep the newest nonempty historical snapshot when upstream is temporarily
     # unreachable. NEVER overwrite a usable archive with zero-race payload.
-    if prev and prev.get("event_date")==day and prev.get("coverage",{}).get("races",0)>doc["coverage"]["races"]:
+    core_good=all(states[k]["state"]=="available" for k in REQUIRED)
+    if prev and prev.get("event_date")==day and (
+        prev.get("coverage",{}).get("races",0)>doc["coverage"]["races"]
+        or not core_good):
         doc["races"]=prev["races"]
         doc["coverage"]=prev["coverage"]
-        doc["warning"] += " Previous fuller archive retained after sparse fetch."
+        doc["warning"] += " Previous archive retained because key sources were missing or sparse."
     path.parent.mkdir(parents=True,exist_ok=True)
     path.write_text(json.dumps(doc,ensure_ascii=False,separators=(",",":"))+"\n",encoding="utf-8")
     status={

@@ -196,6 +196,31 @@
     const exhibitionUrl=external?.exhibitionLinkFor(r.venue,data.event_date,r.race)||externalUrl;
     const modelKey=data.event_date+'|'+r.venue+'|'+r.race+'|'+(r.sha256||'sample');
     const stored=state.reanalysisResult?.key===modelKey?state.reanalysisResult:null;
+
+    const compare=r.exhibition_change;
+    const provenance=r.exhibition_origin;
+    const exhibitionDetail = r.phase==='exhibition' ? (
+      '<section class="card card-pad bottom-margin" aria-label="展示による買い目再計算">'+
+      '<h3>🔄 展示情報を反映した再計算</h3>'+
+      '<p><strong>展示の取得元：</strong>'+escape(provenance?.source||'従来の非公式API')+
+      '　<strong>展示の公開記録：</strong>'+escape(provenance?.observed_at_jst||'時刻未取得')+'</p>'+
+      (compare ? '<div class="notice '+(compare.bets_changed?'':'warn')+'">'+
+       '<strong>'+(compare.bets_changed?'買い目・配分に変更あり':'再計算済み：買い目・配分は維持')+'</strong>'+
+       '<p>前回 '+escape(compare.previous_top)+' → 展示後 '+escape(compare.new_top)+
+       '　/　'+escape(compare.previous_point_count)+'点 → '+escape(compare.new_point_count)+'点</p>'+
+       '<p>追加：'+escape(compare.added.join('、')||'なし')+'　除外：'+escape(compare.removed.join('、')||'なし')+'</p>'+
+       '<p>配分変更：'+(compare.allocation_changed?'あり':'なし')+'。'+
+       (compare.bets_changed?'展示で変化した相対評価に基づく暫定変更です。':
+        '展示値を反映しても上位の組み合わせが維持されたため、無理に変更していません。')+'</p></div>' :
+       '<p>旧版の展示予想のため、買い目比較記録はありません。</p>')+
+      '<div class="tablewrap"><table class="bets-table"><thead><tr><th>艇</th><th>展示ST</th><th>展示タイム</th><th>進入</th><th>一周・回り足・直線</th><th>相対評価</th></tr></thead><tbody>'+
+      (r.racers||[]).map(x=>'<tr><td>'+escape(x.lane)+'</td><td>'+escape(x.exhibition_st??'—')+'</td>'+
+       '<td>'+escape(x.exhibition_time??'—')+'</td><td>'+escape(x.course??'—')+'</td>'+
+       '<td>'+escape(Object.entries(x.original_exhibition||{}).map(([key,val])=>key+': '+val).join(' / ')||'未取得')+'</td>'+
+       '<td>'+escape(x.relative_weight??'—')+'</td></tr>').join('')+
+      '</tbody></table></div><p class="muted text-sm">数値は未学習・未校正の試験評価。結果・払戻は予想計算に不使用。</p></section>'
+    ) : '<div class="notice warn">展示前の固定予想です。展示情報が締切前に揃えば、別バージョンとして再計算・保存します。取得が遅れた場合、締切後に買い目を書き換えません。</div>';
+
     const referencePanel=`<section class="external-reference-card" aria-label="予想情報の確認と展開再評価">
       <div class="external-header"><div><span class="external-eyebrow">EXHIBITION · RACE INTELLIGENCE</span><h2>🚤 展示情報を見て予想を強化</h2></div><span class="external-status">試験モデル</span></div>
       <p>出走表・モーター・ST・展示タイムを使って<strong>1着の勝ち筋 → 2着の浮上 → 3着残存</strong>の順番で3連単を組み直します。外部サイトを無断で読み取ることはしません。</p>
@@ -210,10 +235,11 @@
         <button type="button" class="external-btn external-btn-primary recalc-run" data-action="run-reanalysis">🧠 取得済みデータで再予想（4〜12点）</button>
         ${stored && recalc?recalc.resultHTML(stored.result,stored.afterCutoff):''}
       </div>` : ''}
-      <p class="external-footnote">BOATERSが掲載する独自展示指標は、元の競艇場公式でも公開されることがあります。データ利用条件を確認し、許可された提供元から取り込む方針です。<strong>この機能はBOATERSから自動取得したものではありません。</strong>固定済み買い目は変更しません。</p>
+      <p class="external-footnote">BOATERSが掲載する独自展示指標は、元の競艇場公式でも公開されることがあります。データ利用条件を確認し、許可された提供元から取り込む方針です。<strong>この機能はBOATERSから自動取得したものではありません。</strong>この端末内の手動再評価では、固定済み買い目を変更しません。</p>
     </section>`;
     return `<button class="back-btn" data-action="back-races">← レース一覧へ戻る</button><div class="detail-header"><div><div class="page-eyebrow">FORECAST DETAILS / ${escape(data.event_date)}</div><h1 class="detail-title">${escape(r.venue)} ${r.race}R <span style="font-size:17px;vertical-align:middle">${pill(r.classification)}</span></h1><div class="detail-sub">締切予定 ${escape(r.cutoff_jst)} JST　 ·　 ${r.phase==='exhibition'?'展示数値反映':r.phase==='baseline'?'展示前':'保存済み'}・結果未使用</div></div><button class="btn btn-primary" data-action="copy-bets" data-race="${escape(r.venue)}|${r.race}">⎘ 買い目をコピー</button></div>
     ${r.phase?`<div class="notice">${escape(r.evidence||'')} ・ 発走前保存 ${escape(r.frozen_at_utc||'未記録')} ・ SHA256 ${escape((r.sha256||'').slice(0,18))}…${r.weather_observed?`<br>場内風速 ${escape(r.weather_observed.wind_speed)}m/s ／ 波高 ${escape(r.weather_observed.wave_height)}cm（非公式・取得時点）`:''}<br>予想モデル：未学習・確率未校正。展示動画とオッズは未反映。</div>`:''}
+    ${exhibitionDetail}
     ${window.BoatRaceVisual?window.BoatRaceVisual.entryHTML(r):''}
     ${window.BoatRaceVisual?window.BoatRaceVisual.animationHTML(r):''}
     ${referencePanel}

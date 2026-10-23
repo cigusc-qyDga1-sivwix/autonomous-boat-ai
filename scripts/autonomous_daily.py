@@ -20,9 +20,11 @@ from zoneinfo import ZoneInfo
 if __package__:
     from .official_pay import fetch_official_pay
     from .venue_weather import fetch_weather, weather_at, VENUE_POINTS
+    from .exhibition_bridge import available_rows, inject
 else:
     from official_pay import fetch_official_pay
     from venue_weather import fetch_weather, weather_at, VENUE_POINTS
+    from exhibition_bridge import available_rows, inject
 
 JST = ZoneInfo("Asia/Tokyo")
 UTC = timezone.utc
@@ -90,7 +92,7 @@ def preview_complete(race: dict) -> bool:
         and number(racers[str(i)].get("exhibition_time")) is not None
         and 5.0 <= number(racers[str(i)].get("exhibition_time")) <= 10.0
         and number(racers[str(i)].get("start_timing")) is not None
-        and -.5 <= number(racers[str(i)].get("start_timing")) <= .5
+        and -.5 <= number(racers[str(i)].get("start_timing")) <= 1.0
         for i in range(1, 7)
     )
 
@@ -121,7 +123,17 @@ def features(race: dict, phase: str) -> tuple[list[float], list[dict]]:
         expo_times = [None] * 6
     reference = min(t for t in expo_times if t is not None) if all(
         t is not None for t in expo_times) else None
-    weights, detail = [], []
+    # A complete six-boat original-exhibition field is used only in test mode.
+    # Individual missing boats must not create artificial rankings.
+    original = race.get("_exhibition_original") or {} if phase == "exhibition" else {}
+    valid_ranges = {"lap_time": (30, 50, .09), "turn_time": (4, 15, .15),
+                    "straight_time": (5, 12, .12)}
+    normalised = {}
+    for key,(lower,upper,rate) in valid_ranges.items():
+        values = [number((original.get(key) or {}).get(str(i))) for i in range(1,7)]
+        if all(v is not None and lower <= v <= upper for v in values):
+            normalised[key] = (values, sum(values)/6, rate)
+    weights, detail = [] , []
     for i in range(1, 7):
         racer = runners[str(i)]
         pr = prev_racers.get(str(i)) or {}
@@ -143,6 +155,9 @@ def features(race: dict, phase: str) -> tuple[list[float], list[dict]]:
             score *= max(.75, min(1.23, 1 + .7 * (reference - expo)))
             if est is not None:
                 score *= max(.90, min(1.10, 1 + .18 * (.16 - est)))
+            for values, mean, rate in normalised.values():
+                # Lower time = better within the same venue/race, conservative bounded gain.
+                score *= max(.83, min(1.17, 1 + rate * (mean - values[i-1])))
         weights.append(max(.12, score))
         detail.append({
             "lane": i,
@@ -156,6 +171,10 @@ def features(race: dict, phase: str) -> tuple[list[float], list[dict]]:
             "exhibition_st": number(pr.get("start_timing")) if phase == "exhibition" else None,
             "exhibition_time": number(pr.get("exhibition_time")) if phase == "exhibition" else None,
             "tilt": number(pr.get("tilt_adjustment")) if phase == "exhibition" else None,
+            "relative_weight": round(max(.12, score), 5),
+            "original_exhibition": {
+                key: vals[i-1] for key, (vals, _, _) in normalised.items()
+            } if phase == "exhibition" else {},
         })
     return weights, detail
 
@@ -344,7 +363,10 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     follower = racers[int(ranked[0][0][2]) - 1]
     weather = observed
     body = {
-        "model_version": "heuristic-0.5-st-quality-weather-test-untrained",
+        "model_version": ("heuristic-0.6-csv-exhibition-test-untrained"
+                          if phase == "exhibition" and race.get("_exhibition_origin")
+                          else "heuristic-0.5-st-quality-weather-test-untrained"),
+        "exhibition_origin": race.get("_exhibition_origin") if phase == "exhibition" else None,
         "data_quality": {
             "average_start_timing_imputed_count": sum(
                 bool(r.get("average_start_timing_imputed")) for r in racers
@@ -353,6 +375,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
                 isinstance(r.get("exhibition_st"), (int, float)) and
                 r["exhibition_st"] < 0 for r in racers
             ),
+            "original_exhibition_metrics": list((race.get("_exhibition_original") or {}).keys())
+                  if phase == "exhibition" else [],
             "motor_zero_percent_count": sum(
                 r.get("motor_top_2_percent") == 0 for r in racers
             ),
@@ -395,7 +419,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
 
 
 def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
-          weather_by_venue: dict | None = None) -> tuple[dict, dict, dict]:
+          weather_by_venue: dict | None = None, exhibition_rows: dict | None = None) -> tuple[dict, dict, dict]:
     if now.tzinfo is None:
         raise ValueError("Timezone-aware now is mandatory")
     local_day = now.astimezone(JST).date().isoformat()
@@ -406,7 +430,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
     records = ledger["race_records"]
     venues_seen = set()
     weather_by_venue = weather_by_venue or {}
-    new_baseline, new_exhibition = 0, 0
+    new_baseline, new_exhibition, revised_exhibition, changed_exhibition = 0, 0, 0, 0
+    exhibition_rows = exhibition_rows or {}
     race_source = (payload.get("programs") or {}).get("stadiums") or {}
     for venue_code, stadium in race_source.items():
         if venue_code not in VENUES or not isinstance(stadium, dict):
@@ -437,10 +462,43 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                     record["versions"].append(prediction(race, VENUES[venue_code], n,
                                                          "baseline", now, source_url, nearby))
                     new_baseline += 1
-                if "exhibition" not in phases and preview_complete(race):
-                    record["versions"].append(prediction(race, VENUES[venue_code], n,
-                                                         "exhibition", now, source_url, nearby))
+                code = f"{local_day.replace('-', '')}{int(venue_code):02d}{n:02d}"
+                csv_race, csv_origin = inject(race, exhibition_rows.get(code), now, venue_code, n)
+                candidate = csv_race if csv_origin else race
+                preview_ready = preview_complete(candidate)
+                existing_exhibition = [v for v in record["versions"] if v["phase"] == "exhibition"]
+                previous_csv_time = (existing_exhibition[-1].get("exhibition_origin") or {}).get("observed_at_jst") if existing_exhibition else None
+                revision = bool(
+                    csv_origin and existing_exhibition
+                    and len(existing_exhibition) < 3
+                    and (not previous_csv_time or previous_csv_time < csv_origin["observed_at_jst"])
+                )
+                if preview_ready and ("exhibition" not in phases or revision):
+                    origin_url = csv_origin and "https://boatracecsv.github.io/docs/data/previews.html" or source_url
+                    new = prediction(candidate, VENUES[venue_code], n,
+                                     "exhibition", now, origin_url, nearby)
+                    before = record["versions"][-1] if record["versions"] else None
+                    if before:
+                        prev_bets = {b["combination"]: b["virtual_yen"] for b in before["bets"]}
+                        curr_bets = {b["combination"]: b["virtual_yen"] for b in new["bets"]}
+                        changed = prev_bets != curr_bets
+                        new["exhibition_change"] = {
+                            "comparison_phase": before["phase"],
+                            "bets_changed": changed,
+                            "added": sorted(set(curr_bets) - set(prev_bets)),
+                            "removed": sorted(set(prev_bets) - set(curr_bets)),
+                            "allocation_changed": any(prev_bets.get(k) != v for k,v in curr_bets.items()),
+                            "head_changed": before["bets"][0]["combination"][0] != new["bets"][0]["combination"][0],
+                            "previous_top": before["bets"][0]["combination"],
+                            "new_top": new["bets"][0]["combination"],
+                            "previous_point_count": len(before["bets"]),
+                            "new_point_count": len(new["bets"]),
+                        }
+                        new["sha256"] = stable_hash({k:v for k,v in new.items() if k != "sha256"})
+                        changed_exhibition += int(changed)
+                    record["versions"].append(new)
                     new_exhibition += 1
+                    revised_exhibition += int(revision)
             # Results are NEVER taken from the unofficial preview API.
             # Official pay-page evidence is attached only after forecasts are generated.
     # Preserve previous records even if a subsequent source request is incomplete.
@@ -463,7 +521,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
             "racers", "weather_observed", "evidence", "source_url"
         )}
         for extra in ("point_count", "point_reason", "head_weight_concentration", "head_weight_gap",
-                      "weather_used", "weather_adjustment", "weather_ab", "data_quality"):
+                      "weather_used", "weather_adjustment", "weather_ab", "data_quality",
+                      "exhibition_origin", "exhibition_change"):
             if extra in current:
                 r[extra] = current[extra]
         r["version_count"] = len(versions)
@@ -488,6 +547,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         "weather_venue_count": len(set(weather_by_venue)&venues_seen),
         "weather_fixed_race_count": sum(bool(r.get("weather_used")) for r in latest_races),
         "weather_adjusted_race_count": sum(bool((r.get("weather_adjustment") or {}).get("applied")) for r in latest_races),
+        "exhibition_race_count": sum(r.get("phase")=="exhibition" for r in latest_races),
+        "exhibition_changed_bet_count": sum(bool((r.get("exhibition_change") or {}).get("bets_changed")) for r in latest_races),
         "venue_weather": {
             VENUES[code]: weather_at(weather, now.astimezone(JST))
             for code, weather in weather_by_venue.items()
@@ -501,6 +562,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
               "forecast_races": len(latest_races),
               "missed_or_unavailable": len(unavailable),
               "new_baseline": new_baseline, "new_exhibition": new_exhibition,
+              "revised_exhibition": revised_exhibition,
+              "changed_exhibition": changed_exhibition,
               "official_results": len(official_results),
               "weather_venues": len(set(weather_by_venue)&venues_seen),
               "weather_coverage": f"{len(set(weather_by_venue)&venues_seen)}/{len(venues_seen)}"}
@@ -706,7 +769,12 @@ def main():
             nearby_forecasts = fetch_weather(active, now)
         except Exception as exc:
             weather_error = str(exc)
-    ledger, webapp, summary = build(previous, source, now, source_url, nearby_forecasts)
+    # BoatraceCSV data must have been downloaded by this run BEFORE forecasting.
+    # Tests with --input-json receive no historical research file by default.
+    research = (available_rows(Path("app/data/exhibition") / f"{day}.json", day)
+                if not args.input_json else {})
+    ledger, webapp, summary = build(previous, source, now, source_url, nearby_forecasts,
+                                     exhibition_rows=research)
     if weather_error:
         summary["weather_error"] = weather_error
         webapp["weather_fetch_status"] = "UNAVAILABLE"

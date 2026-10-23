@@ -5,6 +5,20 @@
 const names=['桐生','戸田','江戸川','平和島','多摩川','浜名湖','蒲郡','常滑','津','三国','びわこ','住之江','尼崎','鳴門','丸亀','児島','宮島','徳山','下関','若松','芦屋','福岡','唐津','大村'];
 const esc=x=>String(x??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const state={day:'',map:new Map(),collected:'',checked:'',sourceOkay:null,error:'',loading:false};
+const ORIGINAL_LABELS={'一周':'lap_time','1周':'lap_time','まわり足':'turn_time','回り足':'turn_time','直線':'straight_time'};
+const ORIGINAL_LIMITS={lap_time:[30,50],turn_time:[4,15],straight_time:[5,12]};
+function approvedMetrics(rows){
+ const output={};
+ if(!Array.isArray(rows))return output;
+ for(const item of rows){
+  const key=ORIGINAL_LABELS[item?.metric];
+  const n=Number(item?.value),limits=ORIGINAL_LIMITS[key];
+  if(key&&item?.value!==''&&item?.value!=null&&Number.isFinite(n)&&n>=limits[0]&&n<=limits[1])
+   output[key]=n;
+ }
+ return output;
+}
+
 function key(r){const idx=names.indexOf(r.venue);return state.day.replaceAll('-','')+String(idx+1).padStart(2,'0')+String(r.race).padStart(2,'0');}
 async function load(day){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return;
@@ -26,7 +40,8 @@ async function load(day){
   if(r.race_code&&Array.isArray(r.boats)&&r.boats.length===6)
    map.set(r.race_code,{observed:r.source_observed_jst,boats:r.boats.map(b=>({
     lane:b.lane,course:b.course,st:b.exhibition_st,time:b.exhibition_time,
-    metrics:(b.original_exhibition||[]).map(v=>v.metric+': '+v.value).join(' / ')
+    metrics:(b.original_exhibition||[]).map(v=>v.metric+': '+v.value).join(' / '),
+    original:approvedMetrics(b.original_exhibition)
    }))});
  }
  if(state.day===day){state.map=map;state.collected=j.created_at_utc;state.error='';}
@@ -60,5 +75,21 @@ function panel(r){
   '<th>展示タイム</th><th>一周・回り足・直線</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
   '<p class="muted text-sm">記録の観測時刻は、サーバーへの保存が締切前だった証拠ではありません。結果・払戻は予想に利用しません。</p></section>';
 }
-global.BoatExhibitionAudit={load,banner,panel,status:()=>({count:state.map.size,collected:state.collected,checked:state.checked,sourceOkay:state.sourceOkay,error:state.error})};
+// Research-only projection. Never returns results, payouts or odds.
+function metricsFor(r){
+ if(!r||!state.day||!Number.isInteger(Number(r.race)))return null;
+ const k=key(r),row=state.map.get(k);
+ if(!row||!Array.isArray(row.boats)||row.boats.length!==6)return null;
+ const lanes=new Set(),values={};
+ for(const boat of row.boats){
+  const lane=Number(boat.lane);
+  if(!Number.isInteger(lane)||lane<1||lane>6||lanes.has(lane))return null;
+  lanes.add(lane);
+  values[lane]={...boat.original};
+ }
+ return {date:state.day,values,source:'BoatraceCSV original_exhibition',
+   source_observed_jst:row.observed||'',collected_at_utc:state.collected||'',
+   certification:'research_snapshot_not_certified_before_cutoff'};
+}
+global.BoatExhibitionAudit={load,banner,panel,metricsFor,status:()=>({count:state.map.size,collected:state.collected,checked:state.checked,sourceOkay:state.sourceOkay,error:state.error})};
 })(typeof window!=='undefined'?window:globalThis);

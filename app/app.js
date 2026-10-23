@@ -283,6 +283,8 @@
     const externalUrl=external?external.linkFor(r.venue,data.event_date,r.race):'https://boaters-boatrace.com/race';
     const predictionUrl=external?external.predictionLinkFor(r.venue,data.event_date,r.race):'https://boaters-boatrace.com/race';
     const recalc=window.BoatReanalysis;
+    const autoMetrics=recalc?.autoExtra?.(r,window.BoatExhibitionAudit?.metricsFor?.(r));
+    const filledMetrics=recalc?.mergeInput?.(autoMetrics?.values,state.reanalysisExtras)||state.reanalysisExtras;
     const exhibitionUrl=external?.exhibitionLinkFor(r.venue,data.event_date,r.race)||externalUrl;
     const modelKey=data.event_date+'|'+r.venue+'|'+r.race+'|'+(r.sha256||'sample');
     const stored=state.reanalysisResult?.key===modelKey?state.reanalysisResult:null;
@@ -320,8 +322,8 @@
         <button type="button" class="external-btn external-btn-white" data-action="analyze-saved-race" aria-expanded="${state.showExternalAnalysis?'true':'false'}">${state.showExternalAnalysis?'✕ 再評価画面を閉じる':'🧠 展開を再評価する'}</button>
       </div>
       ${state.showExternalAnalysis ? `<div class="recalc-workbench">
-        <div class="recalc-data-status"><span>勝率・モーター・平均ST：${r.racers?.length===6?'取得済み':'未取得'}</span><span>展示タイム：${r.phase==='exhibition'?'取得済み':'未取得'}</span><span>1周・回り足・直線：追加できる場合のみ</span></div>
-        ${recalc?recalc.inputForm(r,state.reanalysisExtras):'<p>再評価モジュールを読み込めませんでした。</p>'}
+        <div class="recalc-data-status"><span>勝率・モーター・平均ST：${r.racers?.length===6?'取得済み':'未取得'}</span><span>展示タイム：${r.phase==='exhibition'?'取得済み':'未取得'}</span><span>1周・回り足・直線：自動入力 ${Object.values(autoMetrics?.complete||{}).filter(Boolean).length}/3項目（6艇揃い）</span></div>
+        ${recalc?recalc.inputForm(r,filledMetrics,autoMetrics):'<p>再評価モジュールを読み込めませんでした。</p>'}
         <button type="button" class="external-btn external-btn-primary recalc-run" data-action="run-reanalysis">🧠 取得済みデータで再予想（4〜12点）</button>
         ${stored && recalc?recalc.resultHTML(stored.result,stored.afterCutoff):''}
       </div>` : ''}
@@ -677,6 +679,16 @@
       case 'clear-results':if(confirm('入力した結果をすべて削除します。この操作は元に戻せません。')){results={};persistResults();render();toast('結果データを削除しました');}break;
       case 'delete-result':{const r=findRace(state.resultVenue,state.resultRace);if(r&&confirm(`${r.venue} ${r.race}R の結果を取り消しますか？`)){delete results[raceKey(r)];persistResults();render();toast('入力を取り消しました');}break;}
     }
+  });
+  // Preserve user overrides (including deliberate clearing) while auto values refresh.
+  document.addEventListener('input',e=>{
+    const field=e.target?.closest?.('[data-recalc-lane][data-recalc-metric]');
+    if(!field||!state.raceDetail||state.view!=='races')return;
+    const lane=Number(field.dataset.recalcLane),metric=field.dataset.recalcMetric;
+    if(!Number.isInteger(lane)||lane<1||lane>6||
+       !['lap_time','turn_time','straight_time'].includes(metric))return;
+    if(!state.reanalysisExtras[lane])state.reanalysisExtras[lane]={};
+    state.reanalysisExtras[lane][metric]=field.value;
   });
   document.addEventListener('change',async e=>{
     if(e.target.matches('#batch-image')){

@@ -26,6 +26,42 @@ function normalizeExtra(extra){
  }
  return out;
 }
+// Automatic entry fills only approved original-exhibition categories.
+// Frozen pre-cutoff features take precedence over later research archives.
+function autoExtra(r,research){
+ const values={},sources={frozen:0,research:0},complete={};
+ const racers=Array.isArray(r?.racers)?r.racers:[];
+ if(racers.length!==6||new Set(racers.map(x=>Number(x.lane))).size!==6)
+  return {values,sources,complete,missing:true,source_observed_jst:null};
+ for(const racer of racers){
+  const lane=Number(racer.lane);
+  if(!Number.isInteger(lane)||lane<1||lane>6)continue;
+  values[lane]={};
+  for(const metric of METRICS){
+   const frozen=num(racer.original_exhibition?.[metric]);
+   const archive=num(research?.values?.[lane]?.[metric]);
+   const fits=v=>v!==null&&v>=LIMITS[metric][0]&&v<=LIMITS[metric][1];
+   if(fits(frozen)){values[lane][metric]=frozen;sources.frozen++;}
+   else if(fits(archive)){values[lane][metric]=archive;sources.research++;}
+  }
+ }
+ for(const metric of METRICS)complete[metric]=Array.from({length:6},(_,i)=>values[i+1]?.[metric])
+    .every(v=>v!=null);
+ return {values,sources,complete,missing:sources.frozen+sources.research===0,
+   source_observed_jst:research?.source_observed_jst||null};
+}
+function mergeInput(auto,manual){
+ const out={};
+ for(let lane=1;lane<=6;lane++){
+  out[lane]={};
+  for(const metric of METRICS){
+   if(Object.prototype.hasOwnProperty.call(manual?.[lane]||{},metric))
+     out[lane][metric]=manual[lane][metric];
+   else if(auto?.[lane]?.[metric]!=null)out[lane][metric]=auto[lane][metric];
+  }
+ }
+ return out;
+}
 function pointCount(weights){
  if(!Array.isArray(weights)||weights.length!==6||weights.some(x=>!Number.isFinite(x)||x<=0))
   throw Error('6艇の相対評価が取得できません');
@@ -128,7 +164,7 @@ function model(r,rawExtra){
   scenario,pair:lead[0]+'→'+lead[1]+'→'+lead[2]+' を中心に3着残存を評価',
   used,skipped,extras,method:'未訓練・未校正の条件付き重みモデル。展示動画・オッズ・結果情報は不使用。'};
 }
-function inputForm(r,extra){
+function inputForm(r,extra,automatic){
  if(!Array.isArray(r?.racers)||r.racers.length!==6)return '<div class="notice warn">6艇分の選手情報が足りないため再評価できません。</div>';
  const fields=[['lap_time','1周'],['turn_time','回り足'],['straight_time','直線']];
  let out='<div class="recalc-form"><div class="recalc-form-head"><strong>追加展示データ（任意）</strong><span>6艇分そろった項目のみ使用</span></div>';
@@ -143,7 +179,15 @@ function inputForm(r,extra){
   }
   out+='</tr>';
  }
- out+='</tbody></table></div><p>追加値は利用条件を確認した競艇場公式等、<strong>使用許可のある独立したデータ元</strong>からのみ入力してください。BOATERSの自動取得・転記を行う機能ではありません。</p></div>';
+ const complete=METRICS.filter(k=>automatic?.complete?.[k]).map(k=>LABEL[k]).join('・');
+ const fixed=automatic?.sources?.frozen||0,archived=automatic?.sources?.research||0;
+ const note=fixed+archived?
+   '自動入力 '+(fixed+archived)+'/18項目（発走前保存 '+fixed+'件・BoatraceCSV研究記録 '+archived+'件）'+
+   (complete?' ／ 6艇分が揃った項目：'+complete:' ／ 6艇分が揃った項目なし'):
+   '自動取得できるオリジナル展示項目がまだありません。未取得は空欄のままです。';
+ out+='</tbody></table></div><p class="recalc-auto-note">'+esc(note)+'</p>'+
+ '<p>発走前に保存した展示値を優先して表示します。BoatraceCSV研究記録からの補完値は<strong>取得・保存が締切前だったとは保証されません</strong>。締切後の試算は正式な発走前予想や収支に加えません。'+
+ '会場によって項目が異なり、半周ラップを1周タイムとして扱いません。BOATERSのスクレイピングや自動転記は行いません。</p></div>';
  return out;
 }
 function resultHTML(result,afterCutoff){
@@ -158,5 +202,5 @@ function resultHTML(result,afterCutoff){
  out+='<div class="notice warn">'+(afterCutoff?'締切後の事後シミュレーションで、発走前の正式予想・成績に加えません。':'端末内の参考試算であり、発走前の正式予想には加えません。')+' '+esc(result.method)+'</div></div>';
  return out;
 }
-window.BoatReanalysis={model,pointCount,allocateBets,normalizeExtra,inputForm,resultHTML};
+window.BoatReanalysis={model,pointCount,allocateBets,normalizeExtra,autoExtra,mergeInput,inputForm,resultHTML};
 })();

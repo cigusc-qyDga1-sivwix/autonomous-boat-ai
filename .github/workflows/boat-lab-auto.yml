@@ -10,6 +10,8 @@ on:
       - 'scripts/ingest_boatracecsv_exhibition.py'
       - 'scripts/exhibition_bridge.py'
       - 'scripts/freeze_tactical_trials.js'
+      - 'scripts/freeze_outside_trials.js'
+      - 'app/tactical-1m.js'
       - 'app/exhibition-audit.js'
       - '.github/workflows/boat-lab-auto.yml'
   schedule:
@@ -61,6 +63,12 @@ jobs:
           set -euo pipefail
           node scripts/freeze_tactical_trials.js
           python -m json.tool app/data/experiments/status-latest.json > /dev/null
+      - name: Forward-freeze v0.1 vs outside-makuri v0.2 on separate ledgers
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/freeze_outside_trials.js
+          python -m json.tool app/data/experiments/outside-status-latest.json > /dev/null
       - name: Persist predictions and immutable version history
         shell: bash
         run: |

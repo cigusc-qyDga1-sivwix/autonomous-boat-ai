@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#081b33"><title>展示データ研究 | BOAT LAB</title>
+<style>
+:root{color-scheme:dark;font:16px/1.55 system-ui,-apple-system,sans-serif;background:#081b33;color:#e7f1ff}
+*{box-sizing:border-box}body{margin:0}a{color:#80e5d4}.wrap{max-width:1100px;margin:auto;padding:22px 16px}
+header{display:flex;align-items:center;gap:18px;flex-wrap:wrap}h1{font-size:1.55rem;margin:10px 0}p{color:#acc0d7}
+.warn{border:1px solid #54758b;border-radius:12px;padding:12px;margin:14px 0;background:#132b40}
+.controls{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:20px 0}
+label{display:grid;gap:4px;font-size:.85rem;color:#c5d7e8}
+input,select,button{background:#15314a;color:#eaf8ff;border:1px solid #5b8498;border-radius:8px;padding:10px;font:inherit}
+button{cursor:pointer}.summary{display:flex;gap:10px;flex-wrap:wrap}
+.stat{border:1px solid #2c526b;background:#11283e;padding:12px 18px;border-radius:10px;min-width:120px}
+.stat strong{font-size:1.4rem;display:block}
+.tablewrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:.89rem}
+th,td{padding:9px;border-bottom:1px solid #2c4b60;white-space:nowrap;text-align:left}
+th{color:#92d6d0}tr:hover{background:#13334b}
+details{border:1px solid #30516a;border-radius:10px;padding:7px 11px;margin:9px 0}
+summary{cursor:pointer;font-weight:650}.sub{color:#a9bfd2;font-size:.8rem}.negative{color:#ffcb9d}
+</style></head><body><div class="wrap">
+<header><a href="./index.html">← BOAT LAB に戻る</a><h1>展示情報・レース展開の研究データ</h1></header>
+<div class="warn"><strong>展示記録と事後検証を表示</strong>
+<p>後から入手した展示・結果は、発走前固定予想や公式照合収支に混ぜません。展示F（負値の展示ST）を速い合法スタートとして評価しません。</p></div>
+<div class="controls">
+<label>対象日<input id="date" type="date" min="2026-01-01"></label>
+<label>競艇場<select id="venue"><option value="">全場</option></select></label>
+<label>表示<select id="mode"><option value="all">全レース</option><option value="finished">結果ありのみ</option><option value="unsettled">未結果のみ</option></select></label>
+<button id="reload" type="button">↻ 公開データを再読込</button>
+</div><p id="status" role="status"></p>
+<div id="summary" class="summary"></div>
+<div class="tablewrap"><table><thead><tr><th>場 / R</th><th>締切</th><th>取得時刻</th><th>展示最速</th><th>気象</th><th>結果（参考）</th><th>6艇詳細</th></tr></thead><tbody id="races"></tbody></table></div>
+<div id="details"></div>
+<p class="sub">出典：<a href="https://boatracecsv.github.io/" target="_blank" rel="noopener noreferrer">BoatraceCSV</a>。更新遅延・欠損があり、公開データの更新は即時ではありません。通知や投票は行いません。</p>
+</div><script src="./exhibition-research.js" defer></script></body></html>

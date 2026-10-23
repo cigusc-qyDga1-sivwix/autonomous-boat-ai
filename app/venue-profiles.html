@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="theme-color" content="#081b33"/>
+<title>全国24場｜BOAT LAB</title>
+<link rel="stylesheet" href="./styles.css"/>
+<style>
+  body{background:#f3f7fb;color:#172a41;margin:0}
+  .venue-wrap{max-width:1250px;margin:0 auto;padding:20px 14px 50px}
+  .venue-top{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+  .venue-top h1{font-size:clamp(24px,4vw,34px);margin:12px 0}
+  .venue-top a{color:#087f87;font-weight:800;text-decoration:none}
+  .venue-intro{font-size:13px;line-height:1.8;color:#54677a}
+  .venue-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:18px 0}
+  .venue-summary>div{border:1px solid #d7e6ef;background:#fff;border-radius:14px;padding:12px;text-align:center;font-size:11px}
+  .venue-summary strong{font-size:19px;display:block;color:#087978}
+  .venue-search{width:100%;max-width:420px;border:1px solid #c6d9e2;border-radius:10px;padding:13px;font:inherit;background:#fff}
+  .venue-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:15px}
+  .venue-card{border:1px solid #dae5eb;border-radius:15px;background:white;padding:16px;box-shadow:0 7px 18px #0f2c4410;min-width:0}
+  .venue-card h2{margin:5px 0 8px;font-size:18px}
+  .venue-code{font-size:12px;color:#27878b;font-weight:850}
+  .venue-meta{display:flex;gap:5px;flex-wrap:wrap;margin:9px 0}
+  .venue-meta span{border-radius:7px;background:#e7f2f4;color:#2d6472;padding:5px 8px;font-size:10px}
+  .venue-card p{margin:9px 0;font-size:12px;line-height:1.7}
+  .venue-card .headrate{font-weight:850;color:#1c6c72}
+  .venue-card small{font-size:10px;color:#789}
+  .venue-card a{color:#007f87;font-size:12px}
+  @media(max-width:950px){.venue-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media(max-width:600px){.venue-grid{grid-template-columns:minmax(0,1fr)}.venue-wrap{padding:12px 11px 40px}.venue-summary>div{padding:10px 5px}}
+</style>
+<script src="./venue-profiles.js" defer></script>
+</head>
+<body>
+<main class="venue-wrap">
+ <div class="venue-top"><h1>🚤 全国24場｜水面・展開ロジック</h1><a href="./index.html">← BOAT LABへ戻る</a></div>
+ <p class="venue-intro">1号艇を全国一律で評価せず、レース場ごとのコース傾向と水面環境を確認する研究用ページ。選手・モーター・出足・回り足・進入・風などの実測は、個別の予想で別途評価します。</p>
+ <div class="venue-summary"><div><strong>24</strong>全国の会場</div><div><strong>弱い事前補正</strong>過去率をそのまま使わない</div><div><strong>未校正</strong>正式な的中確率ではない</div></div>
+ <p class="venue-intro"><b>実装：</b>各会場の「実進入1コースの過去傾向」を弱く重みへ反映。風・波は当日取得値に基づく既存の不確実性補正を維持。潮流、追い風/向かい風、調整改善、選手とモーターの相性の<strong>数値補正はデータ未接続</strong>。場ごとの戦法は仮説として表示します。</p>
+ <input type="search" class="venue-search" id="venue-filter" aria-label="会場を絞り込む" placeholder="会場名・水質・戦法で検索（例：唐津）"/>
+ <p class="venue-intro" id="venue-count" role="status">読み込み中…</p>
+ <div class="venue-grid" id="venue-grid"></div>
+ <p class="venue-intro">参考集計：<a href="https://kouei-lab.com/venues.html" target="_blank" rel="noopener noreferrer">全国24場の過去傾向（独立集計）</a>。集計期間が一覧上で明示されていないため暫定値として扱い、随時検証します。唐津の水面説明は<a href="https://www.boatrace-karatsu.jp/modules/datafile/?page=index_suimen" target="_blank" rel="noopener noreferrer">唐津公式の水面特性</a>を参照。値は各開催日の予測勝率ではありません。</p>
+</main>
+</body>
+</html>

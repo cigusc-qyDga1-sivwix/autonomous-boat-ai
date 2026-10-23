@@ -187,6 +187,25 @@
       ${selected.source==='open-meteo'?'<a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Weather data by Open-Meteo.com (CC BY 4.0) ↗</a>':''}</p>
     </div>`;
   }
+  function venuePanel(r) {
+    const p=r?.venue_profile,adj=r?.venue_adjustment;
+    if(!p)return '';
+    const rate=p.course1_reference_rate!=null?
+      (Number(p.course1_reference_rate)*100).toFixed(1)+'%':'未取得';
+    return '<section class="card card-pad bottom-margin" aria-label="会場別展開ロジック">'+
+      '<div class="section-head"><h2 class="section-title">🏁 '+escape(r.venue)+'専用・水面補正</h2>'+
+      '<a href="./venue-profiles.html">全国24場を見る ↗</a></div>'+
+      '<p><b>水質：</b>'+escape(p.water_type)+'　<b>風の注意：</b>'+escape(p.wind_exposure)+
+      '　<b>潮・流れ：</b>'+(p.tide_sensitive?'実測不足なら数値補正なし':'対象外')+'</p>'+
+      '<p><b>水面・進入：</b>'+escape(p.layout_focus)+'</p>'+
+      '<p><b>攻防の着眼点：</b>'+escape(p.tactical_focus)+'</p>'+
+      '<p><b>1コース相対重みの試験補正：</b>×'+
+          escape(adj?.course1_relative_multiplier??'1.0000')+
+      '（参考過去1着率 '+escape(rate)+'を弱く反映）</p>'+
+      (adj?.wind_risk?'<p>⚠ '+escape(adj.wind_risk)+'</p>':'')+
+      '<p class="muted text-sm">過去率＝このレースの1号艇勝率ではありません。選手・モーター・展示と実測を優先。'+
+      '戦法別の数値モデル、潮流補正、整備による性能変化は今後の検証課題です。</p></section>';
+  }
   function detail(r) {
     const w=weatherFor(r.venue,r.cutoff_jst),c=compute(r);
     const external=window.BoatExternalReference;
@@ -239,6 +258,7 @@
     </section>`;
     return `<button class="back-btn" data-action="back-races">← レース一覧へ戻る</button><div class="detail-header"><div><div class="page-eyebrow">FORECAST DETAILS / ${escape(data.event_date)}</div><h1 class="detail-title">${escape(r.venue)} ${r.race}R <span style="font-size:17px;vertical-align:middle">${pill(r.classification)}</span></h1><div class="detail-sub">締切予定 ${escape(r.cutoff_jst)} JST　 ·　 ${r.phase==='exhibition'?'展示数値反映':r.phase==='baseline'?'展示前':'保存済み'}・結果未使用</div></div><button class="btn btn-primary" data-action="copy-bets" data-race="${escape(r.venue)}|${r.race}">⎘ 買い目をコピー</button></div>
     ${r.phase?`<div class="notice">${escape(r.evidence||'')} ・ 発走前保存 ${escape(r.frozen_at_utc||'未記録')} ・ SHA256 ${escape((r.sha256||'').slice(0,18))}…${r.weather_observed?`<br>場内風速 ${escape(r.weather_observed.wind_speed)}m/s ／ 波高 ${escape(r.weather_observed.wave_height)}cm（非公式・取得時点）`:''}<br>予想モデル：未学習・確率未校正。展示動画とオッズは未反映。</div>`:''}
+    ${venuePanel(r)}
     ${exhibitionDetail}
     ${window.BoatRaceVisual?window.BoatRaceVisual.entryHTML(r):''}
     ${window.BoatRaceVisual?window.BoatRaceVisual.animationHTML(r):''}

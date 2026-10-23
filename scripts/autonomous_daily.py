@@ -21,10 +21,12 @@ if __package__:
     from .official_pay import fetch_official_pay
     from .venue_weather import fetch_weather, weather_at, VENUE_POINTS
     from .exhibition_bridge import available_rows, inject
+    from .venue_profiles import get_profile, adjust_weights as adjust_venue_weights
 else:
     from official_pay import fetch_official_pay
     from venue_weather import fetch_weather, weather_at, VENUE_POINTS
     from exhibition_bridge import available_rows, inject
+    from venue_profiles import get_profile, adjust_weights as adjust_venue_weights
 
 JST = ZoneInfo("Asia/Tokyo")
 UTC = timezone.utc
@@ -350,10 +352,15 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     if phase == "exhibition" and not preview_complete(race):
         raise ValueError("Incomplete exhibition readings")
     weights, racers = features(race, phase)
-    # Freeze a fair-weather control *before* seeing the official result.
-    control_bets = allocate_stakes(combinations(weights))
     observed, selected_weather = weather_for_prediction(race, nearby_weather)
-    weathered, weather_adjustment = condition_weights(weights, selected_weather)
+    # Historical venue rates are weak trial priors, not fixed win probabilities.
+    venue_code = next((code for code, name in VENUES.items() if name == venue), None)
+    venue_weights, venue_adjustment = (
+        adjust_venue_weights(weights, racers, venue_code, selected_weather)
+        if venue_code else (weights, {"applied": False, "reason": "場コード不明・補正なし"}))
+    # Weather counterfactual retains the SAME venue profile for fair A/B.
+    control_bets = allocate_stakes(combinations(venue_weights))
+    weathered, weather_adjustment = condition_weights(venue_weights, selected_weather)
     ranked = combinations(weathered)
     bets = allocate_stakes(ranked)
     count, reason, concentration, gap = point_count(weathered)
@@ -365,7 +372,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     body = {
         "model_version": ("heuristic-0.6-csv-exhibition-test-untrained"
                           if phase == "exhibition" and race.get("_exhibition_origin")
-                          else "heuristic-0.5-st-quality-weather-test-untrained"),
+                          else "heuristic-0.7-venue-priors-test-untrained"),
         "exhibition_origin": race.get("_exhibition_origin") if phase == "exhibition" else None,
         "data_quality": {
             "average_start_timing_imputed_count": sum(
@@ -399,6 +406,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         "bets": bets,
         "racers": racers,
         "weather_observed": weather,
+        "venue_profile": get_profile(venue_code) if venue_code else None,
+        "venue_adjustment": venue_adjustment,
         "weather_used": selected_weather,
         "weather_adjustment": weather_adjustment,
         "weather_ab": ({
@@ -522,7 +531,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         )}
         for extra in ("point_count", "point_reason", "head_weight_concentration", "head_weight_gap",
                       "weather_used", "weather_adjustment", "weather_ab", "data_quality",
-                      "exhibition_origin", "exhibition_change"):
+                      "exhibition_origin", "exhibition_change",
+                      "venue_profile", "venue_adjustment"):
             if extra in current:
                 r[extra] = current[extra]
         r["version_count"] = len(versions)

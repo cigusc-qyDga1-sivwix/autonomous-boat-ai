@@ -129,9 +129,9 @@
    picks.forEach((pick,i)=>{
      html+='<button type="button" data-sim-pick="'+pick+'" aria-pressed="'+(i===0)+'" class="'+(i===0?'active':'')+'">'+(i===0?'本線':'展開'+(i+1))+' <strong>'+pick+'</strong></button>';
    });
-   html+='</div><div class="boat-sim-water"><svg viewBox="0 0 680 315" preserveAspectRatio="xMidYMid meet" role="img" aria-label="六艇がスタートし第一ターンマークを回ってバックストレッチに進む模式図">'+
+   html+='</div><div class="boat-sim-water"><svg viewBox="0 0 680 383" preserveAspectRatio="xMidYMid meet" role="img" aria-label="六艇がスタートし第一ターンマークを回ってバックストレッチに進む模式図">'+
      '<defs><pattern id="sim-waves" patternUnits="userSpaceOnUse" width="42" height="28"><path d="M0 19 Q 11 13 21 19 T42 19" stroke="#5cb4c8" opacity=".16" fill="none"/></pattern></defs>'+
-     '<rect width="680" height="315" fill="#08384e" rx="13"/><rect width="680" height="315" rx="13" fill="url(#sim-waves)"/>'+
+     '<rect width="680" height="383" fill="#08384e" rx="13"/><rect width="680" height="383" rx="13" fill="url(#sim-waves)"/>'+
      '<path d="M96 159 V281" stroke="#d1f3f8" stroke-width="2.5" stroke-dasharray="8 6"/>'+
      '<text x="54" y="292" fill="#b7e0e8" font-weight="700" font-size="13">START</text>'+
      '<path d="M137 281 L477 281" stroke="#a7e6f0" stroke-width="1.5" stroke-dasharray="5 8" opacity=".6"/>'+

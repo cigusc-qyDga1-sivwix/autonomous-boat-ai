@@ -3,7 +3,8 @@ const fs=require('node:fs'),vm=require('node:vm');
 const win={};const ctx=vm.createContext({window:win,Number,Intl});
 vm.runInContext(fs.readFileSync('app/tactical-1m.js','utf8'),ctx);
 vm.runInContext(fs.readFileSync('app/race-visual.js','utf8'),ctx);
-const r=JSON.parse(fs.readFileSync('app/data/live/latest.json','utf8')).forecast_races.find(x=>x.venue==='唐津');
+const races=JSON.parse(fs.readFileSync('app/data/live/latest.json','utf8')).forecast_races;
+const r=races.find(x=>x.venue==='唐津'&&x.racers?.length===6)||races.find(x=>x.racers?.length===6); // today's venues may not include 唐津
 assert.ok(r);
 const original=JSON.stringify(r);
 const model=win.BoatTacticalModel.forecast(r),view=win.BoatRaceVisual;

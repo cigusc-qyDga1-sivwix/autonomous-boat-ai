@@ -14,7 +14,7 @@ const home=fs.readFileSync('app/index.html','utf8');
 assert.match(home,/venue-profiles.html/);
 const sim=fs.readFileSync('app/race-visual.js','utf8');
 const css=fs.readFileSync('app/styles.css','utf8');
-assert.match(sim,/viewBox="0 0 680 383"/);
+assert.match(sim,/viewBox="0 0 1080 608"/);
 assert.match(css,/aspect-ratio:16 \/ 9/);
 assert.match(fs.readFileSync('app/app.js','utf8'),/function venuePanel\(r\)/);
 console.log('BOAT LAB venue directory and wide 16:9 animation player: PASS');

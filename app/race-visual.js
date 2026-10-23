@@ -35,15 +35,16 @@
    const order=top.concat([1,2,3,4,5,6].filter(x=>!top.includes(x)));
    const rank={};order.forEach((x,i)=>rank[x]=i+1);return rank;
  }
- function tacticFor(combo){
+ function tacticFor(combo,r){
    if(!valid(combo))return {id:'escape',label:'逃げ・先マイ'};
    const [head,second]=combo.split('-').map(Number);
-   if(head===1)return {id:'escape',label:'逃げ・先マイ'};
-   if(head===2)return {id:'sashi',label:'差し'};
+   const headCourse=r?.racers?courseOf(r,head):head;
+   if(headCourse===1)return {id:'escape',label:'逃げ・先マイ'};
+   if(headCourse===2)return {id:'sashi',label:'差し'};
    // A head from a centre/outside lane is NOT a proven race tactic.
    // These are selectable strategy hypotheses, not actual confirmed wins.
-   if(head===3||head>=5)return {id:'makuri-zashi',label:'まくり差し'};
-   if(head===4)return {id:'makuri',label:'まくり'};
+   if(headCourse===3||headCourse>=5)return {id:'makuri-zashi',label:'まくり差し'};
+   if(headCourse===4)return {id:'makuri',label:'まくり'};
    return {id:second<=2?'makuri-zashi':'makuri',label:second<=2?'まくり差し':'まくり'};
  }
  const ROLES={'escape':'先マイ・逃げ狙い','sashi':'差し','makuri':'まくり',
@@ -61,7 +62,7 @@
      const lane=i+1,course=courseOf(r,lane);
      let role=defaults[course];
      if(lane===winner && course!==1){
-       role=tacticFor(combo).id;
+       role=tacticFor(combo,r).id;
        if(role==='escape')role='sashi';
      }
      return {lane,course,role,label:ROLES[role]};
@@ -140,7 +141,7 @@
    if(!valid(combo))return [];
    const nums=combo.split('-').map(Number);
    const head=nums[0];
-   if(courseOf(r,head)!==4||tacticFor(combo).id!=='makuri')return [];
+   if(courseOf(r,head)!==4||tacticFor(combo,r).id!=='makuri')return [];
    return Array.from({length:6},(_,i)=>i+1).filter(lane=>
      courseOf(r,lane)<4&&!nums.includes(lane));
  }
@@ -177,7 +178,7 @@
    const picks=options(r);
    if(!picks.length)return '<section class="card card-pad">アニメ再生に使える買い目がありません。</section>';
    const tacticCases=tacticalOptions(r);
-   const combo=tacticCases[0]?.combo||picks[0],order=ranks(combo),tactic=tacticFor(combo),roles=rolesFor(combo,r);
+   const combo=tacticCases[0]?.combo||picks[0],order=ranks(combo),tactic=tacticFor(combo,r),roles=rolesFor(combo,r);
    let html='<section class="card card-pad boat-sim boat-sim-v3 boat-sim-v4" data-boat-sim aria-label="予想展開アニメーション">'+
      '<div class="section-head"><div><h2 class="section-title">🎬 展開予想アニメ</h2><p class="boat-sim-mini">スタート → 第1ターンマーク → バックストレッチ</p></div><span class="boat-sim-tag">戦法別 v5 / 自動再生</span></div>'+
      '<div class="boat-sim-narrative"><span>想定する攻め方 <b data-sim-tactic>'+tactic.label+'</b></span><strong data-sim-forecast>'+(tacticCases.length?'戦法研究（未固定） ':'元の予想 ')+combo+'</strong></div>'+
@@ -314,7 +315,7 @@
      const selectedChoice=choices(r).find(x=>x.combo===combo&&(!kind||x.kind===kind));
      if(!selectedChoice)return;
      pause();state.position=0;state.combo=combo;
-     const ranking=ranks(combo),tactic=tacticFor(combo),roles=rolesFor(combo,r);
+     const ranking=ranks(combo),tactic=tacticFor(combo,r),roles=rolesFor(combo,r);
      paths.forEach((p,i)=>{
        const curve=path(i+1,ranking[i+1],tactic.id,Number(combo[0]),roles[i].role,roles[i].course);
        p.setAttribute('d',curve);

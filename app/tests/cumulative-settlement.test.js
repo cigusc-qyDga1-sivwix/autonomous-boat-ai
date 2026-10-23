@@ -48,7 +48,7 @@ mismatch.race_records['14-1'].official_pay.snapshot_sha256='b'.repeat(64);
 assert.equal(api.summary(mismatch,day22).checked,1,'snapshot mismatch never contributes');
 (async()=>{
  const docs={[day22]:l22,[day23]:l23};
- await api.load(false,async url=>({ok:true,json:async()=>docs[url.match(/\\d{4}-\\d\\d-\\d\\d/)[0]]}));
+ await api.load(false,async url=>({ok:true,json:async()=>docs[url.match(/\d{4}-\d\d-\d\d/)[0]]}));
  const html=api.render();
  assert.match(html,/10\/22・10\/23 累積収支/);
  assert.match(html,/−50,000円/);

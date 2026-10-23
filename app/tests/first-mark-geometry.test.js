@@ -24,10 +24,10 @@ for(const comb of combinations) {
    const d=V.path(i,rank[i],V.tacticFor(comb).id,Number(comb[0]),roles[i-1].role,i);
    assert.match(d,/^M\d+/);
    const values=[...d.matchAll(/-?\d+(?:\.\d+)?/g)].map(m=>Number(m[0]));
-   assert.equal(values.length,20,'1 move + 3 cubic segments');
+   assert.equal(values.length,26,'1 move + 4 cubic segments');
    const pts=[[values[0],values[1]]];
    function bezier(a,b,c,d,t){const q=1-t;return q*q*q*a+3*q*q*t*b+3*q*t*t*c+t*t*t*d}
-   for(let seg=0;seg<3;seg++){
+   for(let seg=0;seg<4;seg++){
      const ix=2+seg*6;
      const p0=pts.at(-1),p1=values.slice(ix,ix+2),
            p2=values.slice(ix+2,ix+4),p3=values.slice(ix+4,ix+6);

@@ -37,6 +37,8 @@ MAX_CSV_BYTES = 18_000_000  # refuse unexpectedly huge responses
 MAX_RECORDS = 24 * 12  # one code per venue/race, incomplete days allowed
 
 def source_url(name: str, day: date) -> str:
+    if name == "monthly_schedule":
+        return f"{ROOT}programs/monthly_schedule/{day:%Y/%m}.csv"
     if name == "motor_history":
         path = "programs/motor_history"
     else:
@@ -56,7 +58,7 @@ def fetch_csv(name: str, day: date) -> tuple[list[dict[str, str]], dict]:
             raise ValueError("source size exceeds safety limit")
         content = payload.decode("utf-8-sig")
         table = list(csv.DictReader(io.StringIO(content)))
-        if table and "レースコード" not in table[0] and name not in ("motor_stats", "motor_history"):
+        if table and "レースコード" not in table[0] and name not in ("motor_stats", "motor_history", "monthly_schedule"):
             raise ValueError("missing race join key; upstream schema may have changed")
         note.update(rows=len(table), state="available" if table else "empty",
                     sha256=hashlib.sha256(payload).hexdigest())
@@ -158,6 +160,20 @@ def motor_registry(rows):
           ("maintenance_6","整備種別6回数","int"),
         ])
     return by_motor
+
+def previous_meeting_end_dates(day: date, schedules: list[dict], active_codes: set[int],
+                               max_keys: int = 12) -> list[date]:
+    """Look up each active venue's most recent completed meeting, not yesterday."""
+    most_recent={}
+    for row in schedules:
+        venue=integer(row.get("場コード"))
+        if venue not in active_codes: continue
+        try: end=date.fromisoformat(row.get("節終了日") or "")
+        except ValueError: continue
+        if end>=day: continue
+        if venue not in most_recent or most_recent[venue]<end:
+            most_recent[venue]=end
+    return sorted(set(most_recent.values()),reverse=True)[:max_keys]
 
 def historical_motors(rows, current_day: date):
     """Only previous-meet history; never present race day or future usage."""
@@ -284,9 +300,22 @@ def main():
     rows,states={},{}
     for name in DAY_SOURCE_PATHS:
         rows[name],states[name]=fetch_csv(name,day)
+    # The motor-history URL date refers to the previous meeting END date,
+    # not the research day. Use the monthly schedule to find it by venue.
+    first=day.replace(day=1)
+    last_month=first-timedelta(days=1)
+    schedule_today,health_today=fetch_csv("monthly_schedule",day)
+    schedule_before,health_before=fetch_csv("monthly_schedule",last_month)
+    states["monthly_schedule_"+day.strftime("%Y-%m")]=health_today
+    states["monthly_schedule_"+last_month.strftime("%Y-%m")]=health_before
+    active_codes={int(code[8:10]) for code in by_race(rows.get("race_cards",[]),day)}
+    lookup_dates=previous_meeting_end_dates(
+        day,schedule_today+schedule_before,active_codes)
+    # If schedule is unavailable, attempt a few recent dates only as a fallback.
+    if not lookup_dates:
+        lookup_dates=[day-timedelta(days=n) for n in range(1,args.history_days+1)]
     history=[]
-    for n in range(1,args.history_days+1):
-        oldday=day-timedelta(days=n)
+    for oldday in lookup_dates:
         record,health=fetch_csv("motor_history",oldday)
         states["motor_history_"+oldday.isoformat()]=health
         history.extend(record)

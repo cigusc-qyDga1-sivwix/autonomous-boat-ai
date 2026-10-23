@@ -134,3 +134,16 @@ def test_source_date_and_csv_identity():
     assert collect.source_url("waku10",DAY).endswith("/2026/10/23.csv")
     assert collect.source_url("motor_history",date(2026,10,22)).endswith("/2026/10/22.csv")
     assert collect.MAX_RECORDS==288
+
+def test_previous_meeting_end_dates_not_last_three_calendar_days():
+    rows=[
+      {"場コード":"23","節開始日":"2026-10-07","節終了日":"2026-10-12"},
+      {"場コード":"23","節開始日":"2026-10-16","節終了日":"2026-10-27"},
+      {"場コード":"18","節開始日":"2026-10-13","節終了日":"2026-10-19"},
+      {"場コード":"11","節開始日":"2026-10-15","節終了日":"2026-10-20"},
+      {"場コード":"02","節開始日":"2026-10-13","節終了日":"2026-10-22"},
+    ]
+    found=collect.previous_meeting_end_dates(DAY,rows,{23,18,11})
+    assert found==[date(2026,10,20),date(2026,10,19),date(2026,10,12)]
+    assert collect.source_url("monthly_schedule",DAY).endswith("/2026/10.csv")
+    assert collect.previous_meeting_end_dates(DAY,rows,{2})==[date(2026,10,22)]

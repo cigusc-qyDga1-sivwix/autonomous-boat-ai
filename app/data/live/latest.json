@@ -3,9 +3,9 @@
   "entry_watch_held_races": 1,
   "entry_watch_races": 5,
   "event_date": "2026-10-23",
-  "exhibition_changed_bet_count": 15,
-  "exhibition_race_count": 25,
-  "final_exhibition_verified_races": 25,
+  "exhibition_changed_bet_count": 16,
+  "exhibition_race_count": 26,
+  "final_exhibition_verified_races": 26,
   "forecast_races": [
     {
       "bets": [
@@ -34864,7 +34864,7 @@
       "bets": [
         {
           "combination": "1-2-3",
-          "virtual_yen": 5000
+          "virtual_yen": 6000
         },
         {
           "combination": "2-1-3",
@@ -34875,7 +34875,15 @@
           "virtual_yen": 5000
         },
         {
+          "combination": "3-1-2",
+          "virtual_yen": 5000
+        },
+        {
           "combination": "1-2-4",
+          "virtual_yen": 5000
+        },
+        {
+          "combination": "2-3-1",
           "virtual_yen": 5000
         },
         {
@@ -34883,27 +34891,15 @@
           "virtual_yen": 5000
         },
         {
-          "combination": "3-1-2",
+          "combination": "3-2-1",
           "virtual_yen": 5000
         },
         {
-          "combination": "2-3-1",
-          "virtual_yen": 4000
-        },
-        {
           "combination": "1-4-2",
-          "virtual_yen": 4000
+          "virtual_yen": 5000
         },
         {
-          "combination": "3-2-1",
-          "virtual_yen": 4000
-        },
-        {
-          "combination": "2-4-1",
-          "virtual_yen": 4000
-        },
-        {
-          "combination": "4-1-2",
+          "combination": "1-2-6",
           "virtual_yen": 4000
         }
       ],
@@ -34911,31 +34907,71 @@
       "cutoff_jst": "19:03",
       "data_quality": {
         "average_start_timing_imputed_count": 0,
-        "exhibition_f_count": 0,
+        "exhibition_f_count": 2,
         "motor_zero_percent_count": 0,
-        "notes": "平均STの0.00は中立補完、展示Fは速いSTとして加点しない"
+        "notes": "平均STの0.00は中立補完、展示Fは速いSTとして加点しない",
+        "original_exhibition_metrics": [
+          "lap_time",
+          "turn_time",
+          "straight_time"
+        ]
       },
       "entry_exhibition_gate": {
         "buy_allowed": false,
         "entry_changed": false,
         "entry_watch": false,
         "entry_watch_racers": [],
-        "exhibition_course_order": null,
-        "exhibition_source": null,
-        "exhibition_verified_before_cutoff": false,
-        "final_eligible": false,
+        "exhibition_course_order": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "exhibition_source": "BoatraceCSV",
+        "exhibition_verified_before_cutoff": true,
+        "final_eligible": true,
         "limitation": "前付け候補の選手リストは網羅的ではない。展示未取得は全レース最終予想保留。",
-        "reason": "展示6艇の進入・ST・タイムの発走前固定が未確認",
-        "status": "hold"
+        "reason": "展示6艇の進入を発走前に検証済み",
+        "status": "verified"
       },
-      "evidence": "近隣予報（現地実測ではない）・展示前",
-      "frozen_at_utc": "2026-10-22T18:49:26.952242+00:00",
-      "head_weight_concentration": 0.2394,
-      "head_weight_gap": 0.0366,
-      "model_version": "heuristic-0.5-st-quality-weather-test-untrained",
-      "phase": "baseline",
-      "point_count": 11,
-      "point_reason": "先頭争いが接近・展開分岐を広めに検証（頭評価の相対重み 23.9%・次点差 3.7%、未校正） ／ 気象補正試験：風速5.89m/s・突風12.9m/s：頭候補の確信度を抑えて展開分岐を試験評価",
+      "evidence": "展示・場内気象あり・展示あり",
+      "exhibition_change": {
+        "added": [
+          "1-2-6"
+        ],
+        "allocation_changed": true,
+        "bets_changed": true,
+        "comparison_phase": "baseline",
+        "head_changed": false,
+        "new_point_count": 10,
+        "new_top": "1-2-3",
+        "previous_point_count": 11,
+        "previous_top": "1-2-3",
+        "removed": [
+          "2-4-1",
+          "4-1-2"
+        ]
+      },
+      "exhibition_origin": {
+        "captured_before_cutoff": true,
+        "forecast_run_utc": "2026-10-23T09:59:02.425139+00:00",
+        "metrics": [
+          "lap_time",
+          "turn_time",
+          "straight_time"
+        ],
+        "observed_at_jst": "2026-10-23T18:55:22.463392+09:00",
+        "source": "BoatraceCSV"
+      },
+      "frozen_at_utc": "2026-10-23T09:59:02.425139+00:00",
+      "head_weight_concentration": 0.254,
+      "head_weight_gap": 0.0478,
+      "model_version": "heuristic-0.6-csv-exhibition-test-untrained",
+      "phase": "exhibition",
+      "point_count": 10,
+      "point_reason": "先頭争いが接近・展開分岐を広めに検証（頭評価の相対重み 25.4%・次点差 4.8%、未校正） ／ 気象補正試験：風速5m/s・波高5cm：頭候補の確信度を抑えて展開分岐を試験評価",
       "race": 3,
       "racers": [
         {
@@ -34943,85 +34979,157 @@
           "average_start_timing_imputed": false,
           "average_start_timing_source_value": 0.21,
           "course": 1,
-          "exhibition_st": null,
-          "exhibition_time": null,
+          "exhibition_st": 0.02,
+          "exhibition_time": 6.89,
           "lane": 1,
           "motor_top_2_percent": 30.84,
           "name": "畔柳 俊吾",
           "national_win_rate": 4.62,
-          "tilt": null
+          "original_exhibition": {
+            "lap_time": 37.33,
+            "straight_time": 6.17,
+            "turn_time": 5.79
+          },
+          "relative_weight": 1.78911,
+          "tilt": -0.5
         },
         {
           "average_start_timing": 0.16,
           "average_start_timing_imputed": false,
           "average_start_timing_source_value": 0.16,
           "course": 2,
-          "exhibition_st": null,
-          "exhibition_time": null,
+          "exhibition_st": 0.04,
+          "exhibition_time": 6.94,
           "lane": 2,
           "motor_top_2_percent": 28.25,
           "name": "齊藤 仁",
           "national_win_rate": 6.15,
-          "tilt": null
+          "original_exhibition": {
+            "lap_time": 37.42,
+            "straight_time": 6.17,
+            "turn_time": 5.65
+          },
+          "relative_weight": 1.44303,
+          "tilt": -0.5
         },
         {
           "average_start_timing": 0.16,
           "average_start_timing_imputed": false,
           "average_start_timing_source_value": 0.16,
           "course": 3,
-          "exhibition_st": null,
-          "exhibition_time": null,
+          "exhibition_st": 0.18,
+          "exhibition_time": 6.95,
           "lane": 3,
           "motor_top_2_percent": 35.48,
           "name": "渡部 悟",
           "national_win_rate": 5.03,
-          "tilt": null
+          "original_exhibition": {
+            "lap_time": 37.17,
+            "straight_time": 6.16,
+            "turn_time": 5.57
+          },
+          "relative_weight": 1.14646,
+          "tilt": -0.5
         },
         {
           "average_start_timing": 0.18,
           "average_start_timing_imputed": false,
           "average_start_timing_source_value": 0.18,
           "course": 4,
-          "exhibition_st": null,
-          "exhibition_time": null,
+          "exhibition_st": 0.05,
+          "exhibition_time": 6.96,
           "lane": 4,
           "motor_top_2_percent": 31.73,
           "name": "烏野 賢太",
           "national_win_rate": 5.76,
-          "tilt": null
+          "original_exhibition": {
+            "lap_time": 37.82,
+            "straight_time": 6.24,
+            "turn_time": 5.85
+          },
+          "relative_weight": 0.93866,
+          "tilt": 0.0
         },
         {
           "average_start_timing": 0.19,
           "average_start_timing_imputed": false,
           "average_start_timing_source_value": 0.19,
           "course": 5,
-          "exhibition_st": null,
-          "exhibition_time": null,
+          "exhibition_st": -0.04,
+          "exhibition_time": 6.94,
           "lane": 5,
           "motor_top_2_percent": 30.65,
           "name": "高橋 直哉",
           "national_win_rate": 4.62,
-          "tilt": null
+          "original_exhibition": {
+            "lap_time": 37.78,
+            "straight_time": 6.17,
+            "turn_time": 6.11
+          },
+          "relative_weight": 0.70249,
+          "tilt": -0.5
         },
         {
           "average_start_timing": 0.16,
           "average_start_timing_imputed": false,
           "average_start_timing_source_value": 0.16,
           "course": 6,
-          "exhibition_st": null,
-          "exhibition_time": null,
+          "exhibition_st": -0.02,
+          "exhibition_time": 6.87,
           "lane": 6,
           "motor_top_2_percent": 34.88,
           "name": "鈴木 勝博",
           "national_win_rate": 6.36,
-          "tilt": null
+          "original_exhibition": {
+            "lap_time": 37.46,
+            "straight_time": 6.13,
+            "turn_time": 5.91
+          },
+          "relative_weight": 0.80986,
+          "tilt": 0.0
         }
       ],
-      "scenario": "1号艇畔柳 俊吾中心・2号艇齊藤 仁の残存を検証（展示前仮説）",
-      "sha256": "7db3d36fd891bc078700f371b621dc62f2baf92e8032d309e7e3978631e1315f",
-      "source_url": "https://boatraceopenapi.github.io/api/v1/2026/20261023.json",
+      "scenario": "1号艇畔柳 俊吾中心・2号艇齊藤 仁の残存を検証（展示数値を参照）",
+      "sha256": "ad093f32b8089338328236b939c170fdd427b23ac3a99b41a4d4696927e10723",
+      "source_url": "https://boatracecsv.github.io/docs/data/previews.html",
       "venue": "若松",
-      "version_count": 1,
+      "venue_adjustment": {
+        "applied": true,
+        "course1_lane": 1,
+        "course1_reference_rate": 0.581,
+        "course1_relative_multiplier": 1.0188,
+        "profile": {
+          "code": "20",
+          "course1_reference_rate": 0.581,
+          "course_prior_provisional": true,
+          "layout_focus": "湾奥・潮と風",
+          "name": "若松",
+          "reference_url": "https://kouei-lab.com/venues.html",
+          "source_period": "historical, unspecified on summary: independent verification needed",
+          "tactical_focus": "潮流が強い日のセンター攻め",
+          "tide_sensitive": true,
+          "water_type": "海水",
+          "wind_exposure": "高"
+        },
+        "reason": "潮流が強い日のセンター攻め",
+        "reference_type": "uncalibrated_weak_prior_third_party",
+        "tide_data_status": "未取得。潮向・潮位の数値補正なし",
+        "wind_risk": "強風による分岐増を注視（勝ちコースを断定しない）"
+      },
+      "venue_profile": {
+        "code": "20",
+        "course1_reference_rate": 0.581,
+        "course_prior_provisional": true,
+        "layout_focus": "湾奥・潮と風",
+        "name": "若松",
+        "reference_url": "https://kouei-lab.com/venues.html",
+        "source_period": "historical, unspecified on summary: independent verification needed",
+        "tactical_focus": "潮流が強い日のセンター攻め",
+        "tide_sensitive": true,
+        "water_type": "海水",
+        "wind_exposure": "高"
+      },
+      "version_count": 2,
       "weather_ab": {
         "control_bets": [
           {
@@ -35030,14 +35138,22 @@
           },
           {
             "combination": "2-1-3",
-            "virtual_yen": 5000
+            "virtual_yen": 6000
           },
           {
             "combination": "1-3-2",
-            "virtual_yen": 5000
+            "virtual_yen": 6000
           },
           {
             "combination": "1-2-4",
+            "virtual_yen": 6000
+          },
+          {
+            "combination": "3-1-2",
+            "virtual_yen": 6000
+          },
+          {
+            "combination": "2-3-1",
             "virtual_yen": 5000
           },
           {
@@ -35045,56 +35161,46 @@
             "virtual_yen": 5000
           },
           {
-            "combination": "3-1-2",
-            "virtual_yen": 5000
-          },
-          {
-            "combination": "2-3-1",
+            "combination": "3-2-1",
             "virtual_yen": 5000
           },
           {
             "combination": "1-4-2",
             "virtual_yen": 5000
-          },
-          {
-            "combination": "3-2-1",
-            "virtual_yen": 5000
-          },
-          {
-            "combination": "2-4-1",
-            "virtual_yen": 4000
           }
         ],
         "control_model": "same_features_without_weather",
-        "control_point_count": 10,
+        "control_point_count": 9,
         "different_combinations": 1,
         "generated_pre_cutoff": true,
-        "weather_point_count": 11
+        "weather_point_count": 10
       },
       "weather_adjustment": {
         "applied": true,
         "limitation": "風向からコース有利不利を機械的に推定しない。効果は未検証",
         "method": "weather-uncertainty-shrinkage-experimental-untrained-v0",
-        "uncertainty_exponent": 0.883,
-        "why": "風速5.89m/s・突風12.9m/s：頭候補の確信度を抑えて展開分岐を試験評価"
+        "uncertainty_exponent": 0.893,
+        "why": "風速5m/s・波高5cm：頭候補の確信度を抑えて展開分岐を試験評価"
       },
-      "weather_observed": null,
+      "weather_observed": {
+        "air_temperature": 20.0,
+        "water_temperature": 22.0,
+        "wave_height": 5.0,
+        "weather_number": 3.0,
+        "wind_direction_number": 3.0,
+        "wind_speed": 5.0
+      },
       "weather_used": {
-        "air_temperature": 18.4,
-        "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
-        "forecast_hour_jst": "2026-10-23T19:00+09:00",
-        "grid_reference": "会場近隣の概算座標・気象予報格子",
-        "issued_at_utc": "2026-10-22T18:49:26.952242+00:00",
-        "precipitation_mm": 1.4,
-        "site_observed": false,
-        "source": "open-meteo",
-        "source_label": "近隣気象予報",
-        "wave_height": null,
-        "wave_source": "unavailable",
-        "weather_code": 61,
-        "wind_direction_degrees": 111.0,
-        "wind_gust": 12.9,
-        "wind_speed": 5.89
+        "air_temperature": 20.0,
+        "site_observed": true,
+        "source": "boatrace_preview",
+        "source_label": "展示時の場内観測（非公式API経由）",
+        "source_note": "発走時の実測ではなく、取得時点の展示観測",
+        "water_temperature": 22.0,
+        "wave_height": 5.0,
+        "weather_number": 3.0,
+        "wind_direction_number": 3.0,
+        "wind_speed": 5.0
       }
     },
     {
@@ -38619,13 +38725,13 @@
   "method": "全国24場対応・未訓練Plackett–Luceヒューリスティック／4〜12点・展示前後の発走前固定",
   "mode": "auto-live",
   "official_pay_info": {
-    "confirmed_forecast_results": 145,
+    "confirmed_forecast_results": 146,
     "needs_review": 4,
     "newly_confirmed": 1,
-    "pending_on_page": 19,
-    "retrieved_at_utc": "2026-10-23T09:47:15.678979+00:00",
+    "pending_on_page": 18,
+    "retrieved_at_utc": "2026-10-23T09:59:04.154814+00:00",
     "source_url": "https://www.boatrace.jp/owpc/pc/race/pay?hd=20261023",
-    "verified_on_page": 145
+    "verified_on_page": 146
   },
   "official_results": {
     "2026-10-23|びわこ|1": {
@@ -40075,6 +40181,35 @@
         "weather_minus_control_yen": 0,
         "weather_payout": 0,
         "weather_point_count": 8,
+        "weather_profit": -50000
+      }
+    },
+    "2026-10-23|大村|8": {
+      "finish": "4-5-1",
+      "first_second": false,
+      "head_captured": false,
+      "hit": false,
+      "payout_per_100": 14910,
+      "recorded_at": "2026-10-23T09:59:04.154814+00:00",
+      "snapshot_phase": "exhibition",
+      "snapshot_sha256": "9965a7614b536e85ad7e6c3b0f6a4313efcdd0aa1515db4b643c1ca20a7df152",
+      "source": "boatrace_official_pay",
+      "source_url": "https://www.boatrace.jp/owpc/pc/race/pay?hd=20261023",
+      "third_miss": false,
+      "verified": true,
+      "virtual_payout": 0,
+      "virtual_profit": -50000,
+      "virtual_stake": 50000,
+      "weather_comparison": {
+        "control_hit": false,
+        "control_payout": 0,
+        "control_point_count": 7,
+        "control_profit": -50000,
+        "source": "pre_cutoff_shadow_frozen",
+        "weather_hit": false,
+        "weather_minus_control_yen": 0,
+        "weather_payout": 0,
+        "weather_point_count": 7,
         "weather_profit": -50000
       }
     },
@@ -42858,14 +42993,14 @@
   },
   "timezone": "Asia/Tokyo",
   "unforecast_races": [],
-  "updated_at_utc": "2026-10-23T09:47:14.021071+00:00",
+  "updated_at_utc": "2026-10-23T09:59:02.425139+00:00",
   "venue_weather": {
     "びわこ": {
       "air_temperature": 19.6,
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-10-23T19:00+09:00",
       "grid_reference": "会場近隣の概算座標・気象予報格子",
-      "issued_at_utc": "2026-10-23T09:47:14.021071+00:00",
+      "issued_at_utc": "2026-10-23T09:59:02.425139+00:00",
       "precipitation_mm": 0.0,
       "site_observed": false,
       "source": "open-meteo",
@@ -42880,7 +43015,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-10-23T19:00+09:00",
       "grid_reference": "会場近隣の概算座標・気象予報格子",
-      "issued_at_utc": "2026-10-23T09:47:14.021071+00:00",
+      "issued_at_utc": "2026-10-23T09:59:02.425139+00:00",
       "precipitation_mm": 0.7,
       "site_observed": false,
       "source": "open-meteo",
@@ -42895,7 +43030,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-10-23T19:00+09:00",
       "grid_reference": "会場近隣の概算座標・気象予報格子",
-      "issued_at_utc": "2026-10-23T09:47:14.021071+00:00",
+      "issued_at_utc": "2026-10-23T09:59:02.425139+00:00",
       "precipitation_mm": 4.0,
       "site_observed": false,
       "source": "open-meteo",
@@ -42910,7 +43045,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-10-23T19:00+09:00",
       "grid_reference": "会場近隣の概算座標・気象予報格子",
-      "issued_at_utc": "2026-10-23T09:47:14.021071+00:00",
+      "issued_at_utc": "2026-10-23T09:59:02.425139+00:00",
       "precipitation_mm": 0.0,
       "site_observed": false,
       "source": "open-meteo",
@@ -42925,7 +43060,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-10-23T19:00+09:00",
       "grid_reference": "会場近隣の概算座標・気象予報格子",
-      "issued_at_utc": "2026-10-23T09:47:14.021071+00:00",
+      "issued_at_utc": "2026-10-23T09:59:02.425139+00:00",
       "precipitation_mm": 5.9,
       "site_observed": false,
       "source": "open-meteo",
@@ -42940,7 +43075,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-10-23T19:00+09:00",
       "grid_reference": "会場近隣の概算座標・気象予報格子",
-      "issued_at_utc": "2026-10-23T09:47:14.021071+00:00",
+      "issued_at_utc": "2026-10-23T09:59:02.425139+00:00",
       "precipitation_mm": 6.3,
       "site_observed": false,
       "source": "open-meteo",
@@ -42955,7 +43090,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-10-23T19:00+09:00",
       "grid_reference": "会場近隣の概算座標・気象予報格子",
-      "issued_at_utc": "2026-10-23T09:47:14.021071+00:00",
+      "issued_at_utc": "2026-10-23T09:59:02.425139+00:00",
       "precipitation_mm": 0.3,
       "site_observed": false,
       "source": "open-meteo",
@@ -42970,7 +43105,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-10-23T19:00+09:00",
       "grid_reference": "会場近隣の概算座標・気象予報格子",
-      "issued_at_utc": "2026-10-23T09:47:14.021071+00:00",
+      "issued_at_utc": "2026-10-23T09:59:02.425139+00:00",
       "precipitation_mm": 0.0,
       "site_observed": false,
       "source": "open-meteo",
@@ -42985,7 +43120,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-10-23T19:00+09:00",
       "grid_reference": "会場近隣の概算座標・気象予報格子",
-      "issued_at_utc": "2026-10-23T09:47:14.021071+00:00",
+      "issued_at_utc": "2026-10-23T09:59:02.425139+00:00",
       "precipitation_mm": 1.4,
       "site_observed": false,
       "source": "open-meteo",
@@ -43000,7 +43135,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-10-23T19:00+09:00",
       "grid_reference": "会場近隣の概算座標・気象予報格子",
-      "issued_at_utc": "2026-10-23T09:47:14.021071+00:00",
+      "issued_at_utc": "2026-10-23T09:59:02.425139+00:00",
       "precipitation_mm": 0.0,
       "site_observed": false,
       "source": "open-meteo",
@@ -43015,7 +43150,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-10-23T19:00+09:00",
       "grid_reference": "会場近隣の概算座標・気象予報格子",
-      "issued_at_utc": "2026-10-23T09:47:14.021071+00:00",
+      "issued_at_utc": "2026-10-23T09:59:02.425139+00:00",
       "precipitation_mm": 2.7,
       "site_observed": false,
       "source": "open-meteo",
@@ -43030,7 +43165,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-10-23T19:00+09:00",
       "grid_reference": "会場近隣の概算座標・気象予報格子",
-      "issued_at_utc": "2026-10-23T09:47:14.021071+00:00",
+      "issued_at_utc": "2026-10-23T09:59:02.425139+00:00",
       "precipitation_mm": 0.2,
       "site_observed": false,
       "source": "open-meteo",
@@ -43045,7 +43180,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-10-23T19:00+09:00",
       "grid_reference": "会場近隣の概算座標・気象予報格子",
-      "issued_at_utc": "2026-10-23T09:47:14.021071+00:00",
+      "issued_at_utc": "2026-10-23T09:59:02.425139+00:00",
       "precipitation_mm": 0.1,
       "site_observed": false,
       "source": "open-meteo",
@@ -43060,7 +43195,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-10-23T19:00+09:00",
       "grid_reference": "会場近隣の概算座標・気象予報格子",
-      "issued_at_utc": "2026-10-23T09:47:14.021071+00:00",
+      "issued_at_utc": "2026-10-23T09:59:02.425139+00:00",
       "precipitation_mm": 0.6,
       "site_observed": false,
       "source": "open-meteo",
@@ -43077,8 +43212,8 @@
     "control_hits": 69,
     "control_payout": 10885900,
     "model_note": "発走前固定の気象補正あり・なしの試験比較。配当・結果はBOATRACE公式確定後に照合",
-    "races": 145,
-    "virtual_stake_per_model": 7250000,
+    "races": 146,
+    "virtual_stake_per_model": 7300000,
     "weather_hits": 69,
     "weather_minus_control_yen": -138700,
     "weather_payout": 10747200

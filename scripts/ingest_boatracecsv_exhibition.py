@@ -126,18 +126,36 @@ def main():
     path=args.output or Path(f"app/data/exhibition/{day.isoformat()}.json")
     prior=json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
     sources={k:fetch(k,day) for k in SOURCES}
-    if not all(sources[k] for k in ("stt","tkz","sui")):
+    has_essential=all(sources[k] for k in ("stt","tkz","sui"))
+    new=build(day,sources,prior) if has_essential else None
+    if new and (not prior or new["records"]!=prior.get("records")):
+        path.parent.mkdir(parents=True,exist_ok=True)
+        tmp=path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(new,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+        tmp.replace(path)
+        print(f"[research] Saved {path}: {new['coverage']}")
+    elif has_essential:
+        print(f"[research] Unchanged: {len((prior or {}).get('records',[]))}R")
+    else:
         print("[research] Missing preview source, preserving previous file.")
-        return
-    new=build(day,sources,prior)
-    if prior and new["records"]==prior.get("records"):
-        print(f"[research] Unchanged: {len(new['records'])}R")
-        return
-    path.parent.mkdir(parents=True,exist_ok=True)
-    tmp=path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(new,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
-    tmp.replace(path)
-    print(f"[research] Saved {path}: {new['coverage']}")
+    # Always write a dated fetch heartbeat, even if no new rows are published.
+    # Do not advertise historical source timestamps as proof of cutoff-time capture.
+    current=new if new is not None else prior or {}
+    records=current.get("records",[])
+    status={
+        "event_date":day.isoformat(),
+        "collected_at_utc":datetime.now(timezone.utc).isoformat(),
+        "complete_sources":has_essential,
+        "fetch_counts":{k:len(rows) for k,rows in sources.items()},
+        "research_races":len(records),
+        "latest_source_observed_jst":max((r.get("source_observed_jst") or "" for r in records),default=""),
+        "forecast_eligibility":"not_certified_by_archived_sources",
+        "warning":"Historical source timestamps do not prove ingestion before cutoff. Review immutable forecast ledger separately.",
+    }
+    status_path=path.parent/"status-latest.json"
+    status_path.parent.mkdir(parents=True,exist_ok=True)
+    status_path.write_text(json.dumps(status,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
+    print("[research] Source health: "+json.dumps(status,ensure_ascii=False))
 
 if __name__ == "__main__":
     main()

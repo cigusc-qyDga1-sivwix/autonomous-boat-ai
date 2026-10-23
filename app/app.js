@@ -505,6 +505,13 @@
     if(state.view==='races'&&state.raceDetail)window.BoatRaceVisual?.mount(main,state.raceDetail);
     else window.BoatRaceVisual?.dispose();
   }
+  function refreshTimelineClock(){
+    if(state.view!=='overview'||!data||document.hidden||!window.BoatRaceTimeline)return;
+    const node=document.querySelector('.race-timeline');
+    if(!node||node.contains(document.activeElement))return;
+    // Refresh only the timeline. Never refetch, mutate a frozen prediction, or reset scroll.
+    node.outerHTML=window.BoatRaceTimeline.render(data);
+  }
   function go(view) {state.view=view;state.raceDetail=null;state.showExternalAnalysis=false;state.reanalysisResult=null;state.reanalysisExtras={};render();window.scrollTo({top:0,behavior:'instant'});}
   function toast(message){const node=el('toast');node.textContent=message;node.classList.add('show');if(toastTimer)clearTimeout(toastTimer);toastTimer=setTimeout(()=>node.classList.remove('show'),3200);}
   function download(name,content,type='text/plain;charset=utf-8') {const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
@@ -791,6 +798,7 @@
       if('serviceWorker' in navigator&&['https:','http:'].includes(location.protocol))navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
       if(typeof setInterval==='function'){
         setInterval(reloadLiveIfNew,300000);
+        setInterval(refreshTimelineClock,60000);
         // While the result screen is visible, check published snapshots more
         // frequently without notifications or source-site scraping.
         setInterval(()=>{if(state.view==='results'&&!document.hidden)void reloadLiveIfNew();},90000);

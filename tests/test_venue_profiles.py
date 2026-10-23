@@ -76,7 +76,7 @@ def test_frozen_pre_cutoff_forecast_includes_correct_venue_metadata():
         assert item["venue_adjustment"]["reference_type"]=="uncalibrated_weak_prior_third_party"
         assert 4<=len(item["bets"])<=12
         assert sum(b["virtual_yen"] for b in item["bets"])==50000
-        assert item["frozen_at_utc"]<item["cutoff_iso_jst"]
+        assert datetime.fromisoformat(item["frozen_at_utc"]).astimezone(JST).strftime("%H:%M") < item["cutoff_jst"]
     # Same-day reruns must preserve previous freeze even if weather changes.
     original={k:list(v["versions"]) for k,v in ledger["race_records"].items()}
     ledger2,_,status2=build(ledger,src,datetime(2026,10,23,11,0,tzinfo=JST),"fixture")

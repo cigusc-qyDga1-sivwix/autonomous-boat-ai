@@ -1,0 +1,26 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const ctx={};ctx.globalThis=ctx;
+vm.runInNewContext(fs.readFileSync('app/race-timeline.js','utf8'),ctx);
+const t=ctx.BoatRaceTimeline;
+const race=(venue,race,cutoff_jst,bets)=>({venue,race,cutoff_jst,...(bets?{bets:[{combination:'1-2-3'}]}:{})});
+const now=new Date('2026-10-23T09:00:00Z'); // 18:00 JST
+const data={event_date:'2026-10-23',forecast_races:[race('大村',8,'18:45',true),race('住之江',7,'18:20',true),race('大村',7,'17:59',true)],unforecast_races:[race('若松',3,'18:10'),race('住之江',7,'18:20')],official_results:{}};
+assert.deepEqual(Array.from(t.rows(data),r=>r.venue+'|'+r.race),['大村|7','若松|3','住之江|7','大村|8']);
+let html=t.render(data,now);
+assert.ok(html.indexOf('若松')<html.indexOf('住之江  <span>7R')||html.indexOf('若松')<html.indexOf('住之江 <span>7R'));
+assert.match(html,/次の締切/);
+assert.match(html,/展示未確認/);
+assert.match(html,/予想未固定/);
+assert.match(html,/結果未確認/);
+assert.doesNotMatch(html,/公式結果確認済/);
+const key='2026-10-23|大村|7';
+data.official_results[key]={source:'boatrace_official_pay',verified:true};
+html=t.render(data,now);
+assert.match(html,/公式結果確認済/);
+assert.match(html,/data-result-next="大村\|7"/);
+const stale=t.render({...data,event_date:'2026-10-22'},now);
+assert.match(stale,/過去日のデータ/);
+assert.doesNotMatch(stale,/次の締切/);
+assert.ok(!t.rows({...data,forecast_races:[race('X',1,'99:99',true)]}).some(r=>r.venue==='X'));
+console.log('Chronological race timeline: PASS');

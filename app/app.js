@@ -144,7 +144,23 @@
     <section class="card card-pad"><div class="section-head"><h2 class="section-title">${isLive?'展示時の場内気象':'時間帯別・気象見通し'}</h2>${pill(isLive?'実測由来・非公式':'予報値','pending')}</div>${isLive?all.filter(r=>r.weather_observed).slice(-6).map(r=>`<div class="weather-box"><div class="weather-symbol">≋</div><div class="weather-body"><strong>${escape(r.venue)} ${r.race}R・風 ${escape(r.weather_observed.wind_speed)}m/s・波高 ${escape(r.weather_observed.wave_height)}cm</strong><p>展示データ取得時点の観測情報（非公式）</p></div></div>`).join('')||'<p class="muted text-sm">展示時の気象はまだ取得できていません。</p>':`<div class="mini-caption">鳴門</div>${weatherHTML('鳴門')}<div class="mini-caption" style="margin-top:18px;margin-bottom:8px">徳山</div>${weatherHTML('徳山')}`}<div class="notice warn">${isLive?'展示前は場内気象未取得。時間別の気象予報と潮位予測は未接続。':'周辺気象の参考値。展示ST・波高・場内風速の実測は未反映。'}</div></section></div>
     <p class="footer-disclaimer">${escape(data.disclaimer||'仮想予想・研究用。自動購入や的中の保証はありません。')} SKIPを含む買い目は比較用の記録で、購入推奨ではありません。</p>`;
   }
-  function tile(r) {return `<button type="button" class="race-tile" data-race="${escape(r.venue)}|${r.race}"><div class="tile-top"><span class="tile-r">${escape(r.venue)} ${r.race}R</span>${pill(r.classification)}</div><div class="tile-time">締切予定 ${escape(r.cutoff_jst)} · ${r.bets.length}点 · ${r.phase==='exhibition'?'展示反映':r.phase==='baseline'?'展示前':'保存済み'}</div><div class="tile-bets">${escape(r.bets.slice(0,2).map(b=>b.combination).join(' / '))}</div><div class="tile-scenario">${escape(r.scenario)}</div><div class="tile-foot"><span>${finishPill(r)}</span><strong>詳細を見る ↗</strong></div></button>`;}
+  function tacticalSummary(r){
+    try{
+      const x=window.BoatTacticalModel?.forecast(r);
+      return x?{top:x.top,points:x.bets.length,different:x.differs_from_frozen}:null;
+    }catch{return null}
+  }
+  function tile(r) {
+    const trial=tacticalSummary(r);
+    return '<button type="button" class="race-tile" data-race="'+escape(r.venue)+'|'+r.race+'">'+
+      '<div class="tile-top"><span class="tile-r">'+escape(r.venue)+' '+r.race+'R</span>'+pill(r.classification)+'</div>'+
+      '<div class="tile-time">締切予定 '+escape(r.cutoff_jst)+' · 固定 '+r.bets.length+'点 · '+(r.phase==='exhibition'?'展示反映':'展示前')+'</div>'+
+      '<div class="tile-bets">🔒 固定：'+escape(r.bets.slice(0,2).map(b=>b.combination).join(' / '))+'</div>'+
+      (trial?'<div class="tile-tactical">🧠 戦法研究版：<strong>'+escape(trial.top)+'</strong> ／ '+trial.points+'点'+
+       (trial.different?' <span>新しい分岐・配分</span>':' <span>配分は旧版と同じ</span>')+'</div>':'')+
+      '<div class="tile-scenario">'+escape(r.scenario)+'</div>'+
+      '<div class="tile-foot"><span>'+finishPill(r)+'</span><strong>比較を見る ↗</strong></div></button>';
+  }
   function races() {
     if(state.raceDetail) return detail(state.raceDetail);
     if(state.venue!=='全場' && window.BoatVenueBoard) return window.BoatVenueBoard.renderVenue(data,state.venue,boardOptions());
@@ -206,6 +222,41 @@
       '<p class="muted text-sm">過去率＝このレースの1号艇勝率ではありません。選手・モーター・展示と実測を優先。'+
       '戦法別の数値モデル、潮流補正、整備による性能変化は今後の検証課題です。</p></section>';
   }
+  function tacticalTrialPanel(r){
+    let trial=null;
+    try{trial=window.BoatTacticalModel?.forecast(r)}catch(err){
+      return '<div class="notice warn">展開試験版を計算できません：'+escape(err.message)+'</div>';
+    }
+    if(!trial)return '<div class="notice warn">展開試験版の読み込みがありません。アプリを更新してください。</div>';
+    const dated=(data?.event_date||'')+'T'+r.cutoff_jst+':00+09:00';
+    const closed=Date.now()>=new Date(dated).getTime()-120000;
+    const original=r.bets.map(b=>b.combination).join(', ');
+    const newTop=trial.top,oldTop=r.bets[0]?.combination;
+    const changed=trial.differs_from_frozen;
+    const heads=trial.head_course_shares
+      .filter(h=>h.relative_share>=.07)
+      .sort((a,b)=>b.relative_share-a.relative_share).slice(0,5);
+    return '<section class="card card-pad boat-tactical-trial" aria-label="戦法連動型の新しい試験買い目">'+
+      '<div class="section-head"><div><h2 class="section-title">🧠 NEW｜1マーク戦法連動型 v0.1</h2>'+
+      '<p class="boat-sim-mini">能力×モーター×展示×場別条件 → 逃げ/差し/まくり差し分岐 → 2・3着残存</p></div>'+
+      '<span class="boat-sim-tag">新しい別モデル</span></div>'+
+      '<div class="tactical-warning">'+
+      (closed?'<b>締切後の研究計算です。事前に固定した予想ではありません。</b>':
+              '<b>現時点の試験再計算です。正式な発走前固定予想とは別です。</b>')+
+      '<p>事前保存の選手・機体・展示データだけを使い、結果・払戻・オッズは不使用。実測的中確率ではありません。正式のBUY収支にも加えません。</p></div>'+
+      '<div class="tactical-compare"><div><small>従来の固定本線</small><strong>'+escape(oldTop)+'</strong></div>'+
+      '<span>→</span><div><small>新・戦法別研究本線</small><strong>'+escape(newTop)+'</strong></div>'+
+      '<span class="tactical-change">'+(changed?'買い目・配分に違いあり':'比較結果：同じ配分')+'</span></div>'+
+      '<div class="tactical-heads"><strong>1着戦法の相対評価（未校正）</strong>'+
+      heads.map(h=>'<span>'+escape(h.lane)+'号艇：'+escape(h.tactic)+' '+(h.relative_share*100).toFixed(1)+'%</span>').join('')+
+      '</div><div class="boat-entry-overflow"><table class="bets-table tactical-bets"><thead><tr><th>3連単</th><th>頭の勝ち筋</th><th>仮想配分</th></tr></thead><tbody>'+
+      trial.bets.map(b=>'<tr><td><strong>'+escape(b.combination)+'</strong></td>'+
+      '<td>'+escape(b.scenario)+'</td><td>'+money(b.virtual_yen)+'</td></tr>').join('')+
+      '</tbody></table></div><p class="tactical-foot">試験 '+trial.bets.length+'点／仮想5万円。'+
+      '元の固定 '+r.bets.length+'点／仮想5万円は下部に残して比較可能。'+
+      'アニメでは「1M研究候補」を選ぶと展開を表示できる。'+
+      '選手×モーターの相性や調整後の改善度は取得不足のため、独立補正としては未反映。</p></section>';
+  }
   function detail(r) {
     const w=weatherFor(r.venue,r.cutoff_jst),c=compute(r);
     const external=window.BoatExternalReference;
@@ -261,6 +312,7 @@
     ${venuePanel(r)}
     ${exhibitionDetail}
     ${window.BoatRaceVisual?window.BoatRaceVisual.entryHTML(r):''}
+    ${tacticalTrialPanel(r)}
     ${window.BoatRaceVisual?window.BoatRaceVisual.animationHTML(r):''}
     ${referencePanel}
     ${r.point_reason?`<div class="notice"><strong>点数を選んだ理由：</strong>${escape(r.point_reason)} ／ ${r.bets.length}点。これは未校正の相対指標で、実測的中確率ではありません。</div>`:''}

@@ -1,0 +1,30 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const j=JSON.parse(fs.readFileSync('app/data/research/2026-10-23-venue-rebuilt.json','utf8'));
+assert.equal(j.schema,'boatlabs.today_full_research_rebuild.v1');
+assert.equal(j.date,'2026-10-23');
+assert.equal(j.races.length,168);
+assert.equal(new Set(j.races.map(x=>x.venue)).size,14);
+assert.equal(j.summary.races,168);
+assert.equal(j.summary.changed_vs_original,j.races.filter(x=>x.new_vs_original.changed).length);
+assert.equal(j.summary.after_cutoff_research+j.summary.before_cutoff_research,168);
+for(const r of j.races){
+ assert.equal(r.bets.length,r.forecast_point_count);
+ assert.ok(r.bets.length>=4&&r.bets.length<=12);
+ assert.equal(new Set(r.bets.map(b=>b.combination)).size,r.bets.length);
+ assert.equal(r.bets.reduce((a,b)=>a+b.virtual_yen,0),50000);
+ assert.match(r.original_fixed_sha256,/^[0-9a-f]{64}$/);
+ assert.ok(r.venue_relative_course1_multiplier>=0.90&&r.venue_relative_course1_multiplier<=1.11);
+ assert.ok(r.bets.every(x=>/^[1-6]-[1-6]-[1-6]$/.test(x.combination)));
+ assert.ok(['after_cutoff_research_only','pre_cutoff_research'].includes(r.status_at_rebuild));
+ const originalFrozen=new Date(r.evidence_from_frozen_at_utc).getTime();
+ const cutoff=new Date(j.date+'T'+r.cutoff_jst+':00+09:00').getTime();
+ assert.ok(originalFrozen<cutoff-120000,'source snapshots must be locked pre-cutoff');
+}
+const html=fs.readFileSync('app/rebuild-20261023.html','utf8');
+const js=fs.readFileSync('app/rebuild-20261023.js','utf8');
+assert.match(html,/事後再計算/);
+assert.match(html,/再評価/);
+assert.match(js,/data\/research\/2026-10-23-venue-rebuilt.json/);
+assert.match(fs.readFileSync('app/index.html','utf8'),/rebuild-20261023.html/);
+console.log('Full-day 168-race research/replay separation and UI: PASS');

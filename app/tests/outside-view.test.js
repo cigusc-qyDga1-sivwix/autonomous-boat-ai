@@ -1,0 +1,16 @@
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const html=fs.readFileSync('app/outside-20261023.html','utf8');
+const home=fs.readFileSync('app/index.html','utf8');
+assert.match(home,/href="\.\/outside-20261023\.html"/);
+assert.match(html,/outside-status-latest\.json/);
+assert.match(html,/outside-\x27\+status\.event_date/);
+assert.match(html,/x\.previous_model\.bets/);
+assert.match(html,/x\.outside_model\.bets/);
+assert.match(html,/attack_signals/);
+assert.match(html,/攻撃倍率/);
+assert.match(html,/正式買い目は意図的に変更していません/);
+assert.doesNotMatch(html,/x\.baseline\.bets|x\.tactical\.bets/);
+assert.doesNotMatch(home,/automated voting|実投票あり/);
+console.log('Outer makuri A/B UI feeds and research/official separation: PASS');

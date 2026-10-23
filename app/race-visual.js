@@ -284,8 +284,8 @@
      state.running=true;state.last=null;state.raf=requestAnimationFrame(tick);
    }
    function restart(){pause();state.position=0;update();play();}
-   function select(combo){
-     const selectedChoice=choices(r).find(x=>x.combo===combo);
+   function select(combo,kind){
+     const selectedChoice=choices(r).find(x=>x.combo===combo&&(!kind||x.kind===kind));
      if(!selectedChoice)return;
      pause();state.position=0;state.combo=combo;
      const ranking=ranks(combo),tactic=tacticFor(combo),roles=rolesFor(combo,r);
@@ -295,7 +295,7 @@
        if(trails[i])trails[i].setAttribute('d',curve);
      });
      card.querySelectorAll('[data-sim-pick]').forEach(button=>{
-       const selected=button.dataset.simPick===combo;
+       const selected=button.dataset.simPick===combo&&(!kind||button.dataset.simKind===kind);
        button.classList.toggle('active',selected);button.setAttribute('aria-pressed',String(selected));
      });
      const roleLegend=card.querySelector('[data-sim-roles]');
@@ -323,7 +323,7 @@
    card.addEventListener('click',event=>{
      const button=event.target.closest('[data-sim-control],[data-sim-pick],[data-sim-jump],[data-sim-speed]');
      if(!button)return;
-     if(button.dataset.simPick){select(button.dataset.simPick);return;}
+     if(button.dataset.simPick){select(button.dataset.simPick,button.dataset.simKind);return;}
      if(button.dataset.simJump){jump(button.dataset.simJump);return;}
      if(button.dataset.simSpeed){speed(button.dataset.simSpeed);return;}
      const action=button.dataset.simControl;

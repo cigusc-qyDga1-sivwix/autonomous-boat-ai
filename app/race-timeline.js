@@ -6,6 +6,12 @@
  const minutes=t=>Number(t.slice(0,2))*60+Number(t.slice(3));
  const dateJst=(d)=>{const parts=new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(d);const part=k=>parts.find(p=>p.type===k)?.value||'';return part('year')+'-'+part('month')+'-'+part('day')};
  const nowJst=(d)=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit',hour12:false}).format(d);
+ let filter='all';
+ const validFilters=['all','exhibition','entry'];
+ function setFilter(next){filter=validFilters.includes(next)?next:'all';return filter;}
+ function getFilter(){return filter;}
+ function needsExhibition(r){return r.entry_exhibition_gate?.final_eligible!==true;}
+ function entryWatch(r){return r.entry_exhibition_gate?.entry_watch===true;}
  function rows(data){
   const map=new Map();
   for(const r of (data.unforecast_races||[]).concat(data.forecast_races||[])){
@@ -26,9 +32,13 @@
  function render(data,now=new Date()){
   if(!data)return '';
   const all=rows(data),today=dateJst(now),fresh=data.event_date===today,nowMinutes=minutes(nowJst(now));
-  const upcoming=fresh?all.filter(r=>minutes(r.cutoff_jst)>nowMinutes).slice(0,7):[];
+  const future=fresh?all.filter(r=>minutes(r.cutoff_jst)>nowMinutes):[];
+  const shown=filter==='entry'?future.filter(entryWatch):filter==='exhibition'?future.filter(needsExhibition):future;
+  const upcoming=shown.slice(0,7);
   const past=fresh?all.filter(r=>minutes(r.cutoff_jst)<=nowMinutes).reverse().slice(0,5):[];
   const old=!fresh;
+  const filterButtons=[['all','すべて',future.length],['exhibition','展示要確認',future.filter(needsExhibition).length],['entry','前付け警戒',future.filter(entryWatch).length]];
+  const filterHTML='<div class="timeline-filters" role="group" aria-label="直近レースの絞り込み">'+filterButtons.map(([key,label,count])=>'<button type="button" data-timeline-filter="'+key+'" aria-pressed="'+(filter===key)+'">'+esc(label)+' <span>'+count+'</span></button>').join('')+'</div>';
   const updated=data.updated_at_utc?new Date(data.updated_at_utc):null;
   const updatedLabel=updated&&!Number.isNaN(updated.getTime())?updated.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'取得時刻不明';
   const line=(r,up,first)=>{
@@ -53,9 +63,9 @@
   return '<section class="race-timeline" aria-label="全国24場 締切時刻順のレース">'+
    '<div class="timeline-heading"><div><h2>🕒 直近のレース</h2><p>全国の取得済みレースを締切予定順に表示 · 現在 '+esc(nowJst(now))+' JST</p></div><button type="button" data-view="races" class="timeline-all">全レース →</button></div>'+
    (old?'<div class="notice warn">表示データは'+esc(data.event_date)+'の記録です。今日の直近レースとしては表示しません。</div>':
-    '<div class="timeline-group">'+(upcoming.length?upcoming.map((r,i)=>line(r,true,i===0)).join(''):'<p class="timeline-empty">今後の締切予定を確認できるレースはありません。</p>')+'</div>'+
+    filterHTML+'<div class="timeline-group">'+(upcoming.length?upcoming.map((r,i)=>line(r,true,i===0)).join(''):'<p class="timeline-empty">'+(filter==='entry'?'前付け警戒のレースはありません。':filter==='exhibition'?'展示要確認のレースはありません。':'今後の締切予定を確認できるレースはありません。')+'</p>')+'</div>'+
     '<h3>最近締切を迎えたレース</h3><div class="timeline-group">'+(past.length?past.map(r=>line(r,false,false)).join(''):'<p class="timeline-empty">該当レースはありません。</p>')+'</div>')+
    '<p class="timeline-note">最終データ更新 '+esc(updatedLabel)+' JST。時刻は締切予定（発走時刻ではありません）。残り時間は端末時刻による目安です。表示時刻は毎分更新しますが、最新展示・結果の取得を保証しません。締切経過は結果確定を意味しません。実投票・通知は行いません。</p></section>';
  }
- root.BoatRaceTimeline={rows,official,render};
+ root.BoatRaceTimeline={rows,official,render,setFilter,getFilter,needsExhibition,entryWatch};
 })(typeof window==='undefined'?globalThis:window);

@@ -1,0 +1,56 @@
+name: BOAT LAB nationwide intelligence research
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/ingest_global_intelligence.py'
+      - '.github/workflows/boat-lab-intelligence.yml'
+  schedule:
+    # Twice daily while Japanese events are running: JST 06:20 / 14:20.
+    # Hosted scheduler can be delayed; source freshness is recorded in JSON.
+    - cron: '20 21,5 * * *'
+permissions:
+  contents: write
+concurrency:
+  group: boat-lab-intelligence
+  cancel-in-progress: false
+jobs:
+  research:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download documented pre-race research tables
+        run: |
+          set -euo pipefail
+          python scripts/ingest_global_intelligence.py --history-days 3
+          python -m json.tool app/data/intelligence/status-latest.json >/dev/null
+      - name: Validate research safeguards
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          status=json.loads(pathlib.Path("app/data/intelligence/status-latest.json").read_text())
+          doc=json.loads(pathlib.Path("app/data/intelligence",status["event_date"]+".json").read_text())
+          assert doc["schema"]=="boatlabs.intelligence_research.v1"
+          assert doc["forecast_eligibility"].startswith("research_only")
+          assert doc["coverage"]["racer_rows"]==6*doc["coverage"]["races"]
+          assert len(doc["races"])<=288
+          assert "official_results" not in doc and "payouts" not in doc
+          print("Intelligence corpus status:", status["research_races"],"races")
+          PY
+      - name: Persist only research data
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/data/intelligence/
+          if ! git diff --cached --quiet; then
+            git commit -m 'data: update BOAT LAB independent race intelligence research'
+            git fetch origin main
+            git rebase origin/main
+            git push origin HEAD:main
+          fi

@@ -33,4 +33,18 @@ assert.match(urgent,/あと8分/);
 const later=t.render(soon,new Date('2026-10-23T09:09:00Z'));
 assert.doesNotMatch(later,/<article class="timeline-race timeline-next timeline-urgent"[^>]*><div class="timeline-clock"><strong>18:08<\/strong>/);
 assert.match(later,/結果を確認/);
+
+const focusData={...data,forecast_races:[
+ {...race('大村',8,'18:45',true),entry_exhibition_gate:{entry_watch:true,final_eligible:false}},
+ {...race('住之江',7,'18:20',true),entry_exhibition_gate:{entry_watch:false,final_eligible:true}}
+],unforecast_races:[]};
+assert.equal(t.setFilter('entry'),'entry');
+const entryHtml=t.render(focusData,now);
+assert.match(entryHtml,/大村 <span>8R/);
+assert.doesNotMatch(entryHtml,/住之江 <span>7R/);
+assert.match(entryHtml,/data-timeline-filter="entry" aria-pressed="true"/);
+assert.equal(t.setFilter('exhibition'),'exhibition');
+assert.doesNotMatch(t.render(focusData,now),/住之江 <span>7R/);
+assert.equal(t.setFilter('unknown'),'all');
+assert.match(t.render(focusData,now),/住之江 <span>7R/);
 console.log('Chronological race timeline: PASS');

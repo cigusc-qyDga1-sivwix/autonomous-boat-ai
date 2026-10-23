@@ -35,15 +35,16 @@
    const order=top.concat([1,2,3,4,5,6].filter(x=>!top.includes(x)));
    const rank={};order.forEach((x,i)=>rank[x]=i+1);return rank;
  }
- function tacticFor(combo){
+ function tacticFor(combo,r){
    if(!valid(combo))return {id:'escape',label:'逃げ・先マイ'};
    const [head,second]=combo.split('-').map(Number);
-   if(head===1)return {id:'escape',label:'逃げ・先マイ'};
-   if(head===2)return {id:'sashi',label:'差し'};
+   const headCourse=r?.racers?courseOf(r,head):head;
+   if(headCourse===1)return {id:'escape',label:'逃げ・先マイ'};
+   if(headCourse===2)return {id:'sashi',label:'差し'};
    // A head from a centre/outside lane is NOT a proven race tactic.
    // These are selectable strategy hypotheses, not actual confirmed wins.
-   if(head===3||head>=5)return {id:'makuri-zashi',label:'まくり差し'};
-   if(head===4)return {id:'makuri',label:'まくり'};
+   if(headCourse===3||headCourse>=5)return {id:'makuri-zashi',label:'まくり差し'};
+   if(headCourse===4)return {id:'makuri',label:'まくり'};
    return {id:second<=2?'makuri-zashi':'makuri',label:second<=2?'まくり差し':'まくり'};
  }
  const ROLES={'escape':'先マイ・逃げ狙い','sashi':'差し','makuri':'まくり',
@@ -61,7 +62,7 @@
      const lane=i+1,course=courseOf(r,lane);
      let role=defaults[course];
      if(lane===winner && course!==1){
-       role=tacticFor(combo).id;
+       role=tacticFor(combo,r).id;
        if(role==='escape')role='sashi';
      }
      return {lane,course,role,label:ROLES[role]};
@@ -133,6 +134,17 @@
      ...options(r).map(combo=>({combo,kind:'forecast'})),
      ...studyOptions(r).filter(x=>!options(r).includes(x.combo)).map(x=>({...x,kind:'study'}))];
  }
+ // Illustrative only: when a 4th-course makuri succeeds, inner racers
+ // not in the forecast top three may be knocked off pace by crossing wash.
+ // This is a scenario, NOT measured wake geometry or actual finish order.
+ function wakeAffected(combo,r){
+   if(!valid(combo))return [];
+   const nums=combo.split('-').map(Number);
+   const head=nums[0];
+   if(courseOf(r,head)!==4||tacticFor(combo,r).id!=='makuri')return [];
+   return Array.from({length:6},(_,i)=>i+1).filter(lane=>
+     courseOf(r,lane)<4&&!nums.includes(lane));
+ }
  function explanation(combo,r){
    if(!valid(combo))return '展開情報が不足しています';
    const [a,b,c]=combo.split('-').map(Number),roles=rolesFor(combo,r);
@@ -144,10 +156,14 @@
    if(!valid(combo))return ['スタートの攻防','1Mのターン','バックでの予想隊形'];
    const [a,b,c]=combo.split('-').map(Number),roles=rolesFor(combo,r);
    const inside=roles.find(x=>x.course===1);
+   const wash=wakeAffected(combo,r);
+   const wakeNote=wash.length?
+     ' 内側'+wash.map(x=>x+'号艇').join('・')+
+     'が引き波を踏んで減速し、着外まで下がる仮説。引き波位置は未観測。':'';
    return [
      inside.lane+'号艇が1Mの先マイを狙う。2〜6コースは差し・まくり・まくり差し等を選ぶ仮説。展示STを本番STとみなさない。',
      '1M：'+inside.lane+'号艇の先マイに対し、'+a+'号艇が'+roles[a-1].label+
-       'で攻める仮説。差し場・艇間は映像で未検証。',
+       'で攻める仮説。差し場・艇間は映像で未検証。'+wakeNote,
      'バック：'+a+'–'+b+'–'+c+'を仮配置。実際の動きや4〜6番手を確定するアニメではない。'
    ];
  }
@@ -162,7 +178,7 @@
    const picks=options(r);
    if(!picks.length)return '<section class="card card-pad">アニメ再生に使える買い目がありません。</section>';
    const tacticCases=tacticalOptions(r);
-   const combo=tacticCases[0]?.combo||picks[0],order=ranks(combo),tactic=tacticFor(combo),roles=rolesFor(combo,r);
+   const combo=tacticCases[0]?.combo||picks[0],order=ranks(combo),tactic=tacticFor(combo,r),roles=rolesFor(combo,r);
    let html='<section class="card card-pad boat-sim boat-sim-v3 boat-sim-v4" data-boat-sim aria-label="予想展開アニメーション">'+
      '<div class="section-head"><div><h2 class="section-title">🎬 展開予想アニメ</h2><p class="boat-sim-mini">スタート → 第1ターンマーク → バックストレッチ</p></div><span class="boat-sim-tag">戦法別 v5 / 自動再生</span></div>'+
      '<div class="boat-sim-narrative"><span>想定する攻め方 <b data-sim-tactic>'+tactic.label+'</b></span><strong data-sim-forecast>'+(tacticCases.length?'戦法研究（未固定） ':'元の予想 ')+combo+'</strong></div>'+
@@ -192,6 +208,10 @@
      '<circle cx="786" cy="278" r="46" stroke="#f4a541" stroke-width="2.0" stroke-dasharray="7 8" fill="none" opacity=".65"/>'+
      '<circle cx="786" cy="278" r="13" fill="#ffa936" stroke="#fff2ba" stroke-width="3"/>'+
      '<text x="774" y="214" fill="#ffd49b" font-size="22" font-weight="800">1M</text>'+
+     '<g data-sim-wake style="display:none" aria-label="引き波による失速の仮説">'+
+     '<path d="M908 404 Q867 431 827 401 T752 365" stroke="#fff" stroke-width="17" opacity=".30" fill="none" stroke-dasharray="10 14"/>'+
+     '<path d="M918 418 Q871 447 822 419 T752 379" stroke="#b8f4ff" stroke-width="5" opacity=".70" fill="none" stroke-dasharray="6 11"/>'+
+     '<text x="817" y="480" text-anchor="middle" fill="#fff" font-size="17" font-weight="800">引き波・失速の仮説</text></g>'+
      '<text x="26" y="37" fill="#bfe4e9" font-size="15" letter-spacing="1.4">BOAT LAB / TACTICAL REPLAY v4</text>';
    // Each registered boat follows its own scenario-specific Bezier path.
    for(let lane=1;lane<=6;lane++)html+='<path data-sim-path="'+lane+'" d="'+path(lane,order[lane],tactic.id,Number(combo[0]),roles[lane-1].role,roles[lane-1].course)+'" stroke="transparent" fill="none"/>'+
@@ -242,13 +262,20 @@
    function update(){
      const t=clamp(state.position,0,1);
      const projected=ranks(state.combo);
+     const affected=wakeAffected(state.combo,r);
+     const wakeLayer=card.querySelector('[data-sim-wake]');
+     if(wakeLayer)wakeLayer.style.display=affected.length && t>=.44?'':'none';
      paths.forEach((p,i)=>{
        const len=p.getTotalLength();
        // Highlight a possible overtake only *after* 1M: no fictitious
        // instant jump at the start; no inference from actual race results.
        const edge=t>.56?(t-.56)/.44:0;
        const leadOffset=edge*(7-projected[i+1])*.010;
-       const progress=clamp(t+leadOffset,0,1);
+       // Scenario-only slowdown: losing inner craft cross the attacking
+       // 4th-course wake around 1M. No image tracking or fluid simulation.
+       const washLoss=affected.includes(i+1)&&t>.44?
+         .14*clamp((t-.44)/.20,0,1):0;
+       const progress=clamp(t+leadOffset-washLoss,0,1);
        const pos=p.getPointAtLength(progress*len);
        const prev=p.getPointAtLength(clamp(progress*len-2,0,len)),
              next=p.getPointAtLength(clamp(progress*len+2,0,len));
@@ -288,7 +315,7 @@
      const selectedChoice=choices(r).find(x=>x.combo===combo&&(!kind||x.kind===kind));
      if(!selectedChoice)return;
      pause();state.position=0;state.combo=combo;
-     const ranking=ranks(combo),tactic=tacticFor(combo),roles=rolesFor(combo,r);
+     const ranking=ranks(combo),tactic=tacticFor(combo,r),roles=rolesFor(combo,r);
      paths.forEach((p,i)=>{
        const curve=path(i+1,ranking[i+1],tactic.id,Number(combo[0]),roles[i].role,roles[i].course);
        p.setAttribute('d',curve);
@@ -339,5 +366,5 @@
    const hidden=typeof document!=='undefined'&&document.hidden;
    if(!reduced&&!hidden)play();
  }
- window.BoatRaceVisual={entryHTML,animationHTML,mount,dispose,ranks,path,options,studyOptions,tacticalOptions,choices,explanation,tacticFor,rolesFor,stageTexts,MARK,SCENE};
+ window.BoatRaceVisual={entryHTML,animationHTML,mount,dispose,ranks,path,options,studyOptions,tacticalOptions,choices,explanation,tacticFor,rolesFor,stageTexts,wakeAffected,MARK,SCENE};
 })();

@@ -21,13 +21,17 @@ const assign=(r,course)=>{
 };
 const nameTactic=['','先マイ・逃げ','差し','まくり差し','カドまくり','外からのまくり差し','外の展開連動'];
 function forecast(input){
- const outsideTrial=input?.experimental_variant==='outside-makuri-v0.2';
+ const wakeTrial=input?.experimental_variant==='wake-attrition-v0.3';
+ const outsideTrial=input?.experimental_variant==='outside-makuri-v0.2'||wakeTrial;
  const runners=input?.racers;
  if(!Array.isArray(runners)||runners.length!==6)throw Error('6艇の保存済み出走情報が必要');
  const sorted=[...runners].sort((a,b)=>a.lane-b.lane);
  if(sorted.some((r,i)=>Number(r.lane)!==i+1))throw Error('艇番号1〜6が必要');
  const rawCourses=sorted.map(r=>finite(r.course,r.lane));
- const courses=[...new Set(rawCourses)].length===6&&rawCourses.every(x=>x>=1&&x<=6&&Number.isInteger(x))?
+ const uniqueCourses=[...new Set(rawCourses)].length===6&&
+   rawCourses.every(x=>x>=1&&x<=6&&Number.isInteger(x));
+ if(wakeTrial&&!uniqueCourses)throw Error('引き波試験：6艇の実進入が未確認');
+ const courses=uniqueCourses?
    rawCourses:sorted.map(r=>r.lane);
  const byCourse=Array.from({length:6},(_,i)=>courses.indexOf(i+1));
  const byLane=sorted;
@@ -106,6 +110,23 @@ function forecast(input){
   // inside turn; never erase the inner survivor scenario.
   strength[0]*=clamp(1-.13*Math.max(0,outsideAttacks[0].multiplier-1),.92,1);
  }
+ // Incomplete hydrodynamic proxy: a makuri or sweeping outer turn may put
+ // an inner boat across its wake. This score is not an observed trajectory,
+ // probability, or a guarantee of losing the top 3.
+ function estimatedWakeRisk(headCourse,otherCourse){
+  if(!wakeTrial||headCourse<3||otherCourse>=headCourse)return 0;
+  const attacker=move[byCourse[headCourse-1]];
+  const inner=move[byCourse[otherCourse-1]];
+  if(!attacker||!inner)return 0;
+  const speedRatio=attacker.go/Math.max(.38,inner.go);
+  const turnRatio=attacker.turn/Math.max(.35,inner.turn);
+  // 4-course makuri is the clearest case; for 3/5/6-course labels the
+  // actual turn type is unknown, so the hypothetical wave impact is lighter.
+  const tacticScale=headCourse===4?1:headCourse===3?.42:.48;
+  const crossing=clamp((speedRatio-.98)*.70+(turnRatio-.96)*.24,0,.88);
+  const distance=clamp(1-.07*Math.max(0,headCourse-otherCourse-1),.68,1);
+  return clamp(crossing*tacticScale*distance,0,.75);
+ }
  const denom=strength.reduce((a,b)=>a+b,0),shares=strength.map(v=>v/denom);
  // Condition second and third on WHICH first-turn maneuver succeeded. If c=3
  // attacks, nearby c2 and inside c1 can survive; if c1 escapes, c2/c3 can chase.
@@ -127,6 +148,7 @@ function forecast(input){
    if(headCourse===1&&secondCourse>=4)
       relation*=clamp(.95+.4*(z.turn-1)+.2*(z.go-1),.78,1.3);
   }
+  if(wakeTrial)relation*=clamp(1-.82*estimatedWakeRisk(headCourse,secondCourse),.39,1);
   return Math.max(.01,relation*Math.pow(z.turn,.85)*Math.pow(z.go,.3));
  }
  function thirdWeight(h,s,c){
@@ -143,6 +165,7 @@ function forecast(input){
    if(h===1&&s>=4&&c===s+1)consistency*=1.26;
    if(h>=4&&s>=4&&c===1)consistency*=1.1;
   }
+  if(wakeTrial)consistency*=clamp(1-.75*estimatedWakeRisk(h,c),.43,1);
   return Math.max(.01,consistency*Math.pow(x.turn,.65)*Math.pow(x.overall,.3));
  }
  const candidates=[];
@@ -201,11 +224,19 @@ function forecast(input){
   head_course:c.headCourse,scenario:c.scenario,conditional_reason:c.scenario+'が成立 → '+c.secondCourse+'コースが追走 → '+c.thirdCourse+'コース残存',relative_score:+c.pseudo.toFixed(6)}));
  if(new Set(bets.map(x=>x.combination)).size!==bets.length||bets.reduce((sum,b)=>sum+b.virtual_yen,0)!==50000)throw Error('Invalid experimental virtual allocation');
  return {
-   model:outsideTrial?'tactical-outside-makuri-v0.2-untrained':'tactical-1m-conditional-v0.1-untrained',
+   model:wakeTrial?'tactical-wake-attrition-v0.3-untrained':
+     outsideTrial?'tactical-outside-makuri-v0.2-untrained':'tactical-1m-conditional-v0.1-untrained',
    basis:'保存済み発走前選手情報と場別参考値のみ。結果・払戻・オッズ不使用。',
    venue:input.venue,head_course_shares:shares.map((s,i)=>({course:i+1,lane:v[byCourse[i]].lane,relative_share:+s.toFixed(4),tactic:nameTactic[i+1]})),
    metadata:{venue_reference_rate:rate,wind_speed:wind,validMetrics,exhibition_used:validMetrics.length>0,
      source_at_utc:input.frozen_at_utc||null,
+     ...(wakeTrial?{wake_research_only:true,wake_hypothesis:'inner boat may lose acceleration when crossed by outer makuri wash; not measured',
+         wake_risk_by_attacker: [3,4,5,6].map(h=>({
+            head_course:h,inner_courses:Array.from({length:h-1},(_,i)=>({
+              course:i+1,estimated_exposure:+estimatedWakeRisk(h,i+1).toFixed(4)
+            }))
+         }))
+       }:{ }),
      ...(outsideTrial?{research_only:true,outside_attack_signals:outsideAttacks.map(a=>({
        course:a.course,launch:+a.launch.toFixed(4),steering:+a.steering.toFixed(4),
        preceding:+a.preceding.toFixed(4),multiplier:+a.multiplier.toFixed(4)}))}:{})},
@@ -217,5 +248,6 @@ function forecast(input){
 }
 global.BoatTacticalModel={forecast,
  forecastOutside:input=>forecast({...input,experimental_variant:'outside-makuri-v0.2'}),
+ forecastWake:input=>forecast({...input,experimental_variant:'wake-attrition-v0.3'}),
  RATE_BY_VENUE,nameTactic,version:'trial-v0.1-20261023'};
 })(typeof window!=='undefined'?window:globalThis);

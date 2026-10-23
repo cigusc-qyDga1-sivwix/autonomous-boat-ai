@@ -5,7 +5,7 @@
 (function(global){
 'use strict';
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({
-  '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;':'&quot;',"'":'&#39;'
+  '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
 }[c]));
 const yen=value=>Number(value||0).toLocaleString('ja-JP')+'円';
 const number=value=>Number(value||0).toLocaleString('ja-JP');

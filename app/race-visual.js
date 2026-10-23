@@ -40,8 +40,11 @@
    const [head,second]=combo.split('-').map(Number);
    if(head===1)return {id:'escape',label:'逃げ・先マイ'};
    if(head===2)return {id:'sashi',label:'差し'};
-   if(second<=2)return {id:'makuri-zashi',label:'まくり差し'};
-   return {id:'makuri',label:'まくり'};
+   // A head from a centre/outside lane is NOT a proven race tactic.
+   // These are selectable strategy hypotheses, not actual confirmed wins.
+   if(head===3||head>=5)return {id:'makuri-zashi',label:'まくり差し'};
+   if(head===4)return {id:'makuri',label:'まくり'};
+   return {id:second<=2?'makuri-zashi':'makuri',label:second<=2?'まくり差し':'まくり'};
  }
  const ROLES={'escape':'先マイ・逃げ狙い','sashi':'差し','makuri':'まくり',
                 'makuri-zashi':'まくり差し','follow':'展開待ち'};
@@ -64,32 +67,62 @@
      return {lane,course,role,label:ROLES[role]};
    });
  }
+
+ // Wide 16:9 schematic. 1M buoy sits at (786,278). All courses turn on
+ // the right/outside of the buoy, NOT straight through it. The first course
+ // always attempts an inside first turn even if its projected finish is 3rd.
+ const MARK={x:786,y:278};
+ const SCENE={width:1080,height:608};
  function path(lane,rank,tactic='escape',leader=1,role=null,course=lane){
-   // Conceptual independent maneuvers. Never infer a real race from rank alone.
-   // The occupant of the innermost course always tries first turn at 1M.
    const chosen=role||(lane===leader?tactic:
      ({1:'escape',2:'sashi',3:'makuri-zashi',4:'makuri',5:'makuri-zashi',6:'follow'}[course]||'follow'));
-   const start=158+course*18,back=48+rank*19;
-   let entry,tipX,tipY,cutX,cutY;
+   const start=320+course*29;
+   const approach=310+course*24;
+   const offset=Math.max(0,course-3);
+   let outsideX,outsideY,exitX,exitY;
    if(chosen==='escape'){
-     entry=180;tipX=537;tipY=190;cutX=494;cutY=146;
+     // Tight first turn: near the buoy, but always outside its safety circle.
+     outsideX=833;outsideY=314;exitX=744;exitY=192;
    }else if(chosen==='sashi'){
-     entry=195+course*5;tipX=533;tipY=203;cutX=474;cutY=153;
+     // Arrive behind 1, turn outward then cross into the opening after 1M.
+     outsideX=853+Math.max(0,course-2)*3;outsideY=333;
+     exitX=729;exitY=186;
    }else if(chosen==='makuri-zashi'){
-     entry=211+course*5;tipX=558+Math.max(0,course-3)*3;
-     tipY=220;cutX=471;cutY=147;
+     outsideX=888+offset*8;outsideY=360+offset*6;
+     exitX=748+offset*3;exitY=171;
    }else if(chosen==='makuri'){
-     entry=209+course*6;tipX=578+Math.max(0,course-3)*5;
-     tipY=238;cutX=518;cutY=188;
+     // The whole arc is outside 1M; do not send a makuri boat through buoy.
+     outsideX=941+offset*7;outsideY=399+offset*7;
+     exitX=776+offset*4;exitY=145;
    }else{
-     entry=219+course*6;tipX=583+Math.max(0,course-4)*4;
-     tipY=248;cutX=527;cutY=198;
+     outsideX=960+offset*8;outsideY=418+offset*9;
+     exitX=805+offset*6;exitY=130;
    }
-   return 'M108 '+start+
-     ' C206 '+(start-4)+' 360 '+(entry-4)+' 465 '+entry+
-     ' C514 '+entry+' '+(tipX+12)+' '+(tipY+26)+' '+tipX+' '+tipY+
-     ' C'+(tipX-11)+' '+(tipY-38)+' '+cutX+' '+cutY+' 440 '+back+
-     ' C363 '+back+' 296 '+back+' '+(237+rank*10)+' '+back;
+   const backY=70+rank*20;
+   const farther=chosen==='makuri'||chosen==='follow';
+   const startX=104,entryX=705+Math.min(0,course-1)*5;
+   const bend=farther?32:21;
+   return 'M'+startX+' '+start+
+     ' C268 '+(start+2)+' 548 '+(approach+8)+' '+entryX+' '+approach+
+     ' C766 '+approach+' '+(outsideX+27)+' '+(outsideY+31)+' '+outsideX+' '+outsideY+
+     ' C'+(outsideX+bend)+' '+(outsideY-65)+' '+(exitX+48)+' '+(exitY+18)+' '+exitX+' '+exitY+
+     ' C625 '+backY+' 377 '+backY+' '+(165+rank*14)+' '+backY;
+ }
+ function studyOptions(r){
+   // Static counterfactuals for understanding alternative wins; NEVER added
+   // to tickets and NEVER interpreted as evidence of an observed outcome.
+   const byCourse={};
+   for(let lane=1;lane<=6;lane++)byCourse[courseOf(r,lane)]=lane;
+   const inside=byCourse[1],sashi=byCourse[2],center=byCourse[3];
+   return [
+     {combo:inside+'-'+sashi+'-'+center,label:'逃げ成立'},
+     {combo:sashi+'-'+inside+'-'+center,label:'差し成立'},
+     {combo:center+'-'+sashi+'-'+inside,label:'まくり差し成立'},
+   ].filter(x=>valid(x.combo));
+ }
+ function choices(r){
+   return [...options(r).map(combo=>({combo,kind:'forecast'})),
+     ...studyOptions(r).filter(x=>!options(r).includes(x.combo)).map(x=>({...x,kind:'study'}))];
  }
  function explanation(combo,r){
    if(!valid(combo))return '展開情報が不足しています';
@@ -112,38 +145,41 @@
  function glyph(lane){
    const color=colors[lane-1],txt=texts[lane-1];
    return '<g data-sim-boat="'+lane+'" transform="translate(108 '+(164+lane*17)+')">'+
-     '<path d="M-21 -6 L-33 0 L-21 6" fill="none" stroke="'+color+'" opacity=".45" stroke-width="2.3"/>'+
-     '<path d="M -14 -9 Q -2 -12 14 0 Q -2 12 -14 9 Z" fill="'+color+'" stroke="#082538" stroke-width="1.2"/>'+
-     '<text x="-3" y="4" text-anchor="middle" font-size="11" font-weight="900" fill="'+txt+'">'+lane+'</text></g>';
+     '<path d="M-25 -7 L-54 -10 M-25 7 L-54 10" fill="none" stroke="'+color+'" opacity=".45" stroke-width="2.3"/>'+
+     '<path d="M -25 -12 Q -1 -17 24 0 Q -1 17 -25 12 Z" fill="'+color+'" stroke="#082538" stroke-width="1.2"/>'+
+     '<text x="0" y="5" text-anchor="middle" font-size="16" font-weight="900" fill="'+txt+'">'+lane+'</text></g>';
  }
  function animationHTML(r){
    const picks=options(r);
    if(!picks.length)return '<section class="card card-pad">アニメ再生に使える買い目がありません。</section>';
    const combo=picks[0],order=ranks(combo),tactic=tacticFor(combo),roles=rolesFor(combo,r);
-   let html='<section class="card card-pad boat-sim boat-sim-v3" data-boat-sim aria-label="予想展開アニメーション">'+
-     '<div class="section-head"><div><h2 class="section-title">🎬 展開予想アニメ</h2><p class="boat-sim-mini">スタート → 第1ターンマーク → バックストレッチ</p></div><span class="boat-sim-tag">動きのある模式図</span></div>'+
+   let html='<section class="card card-pad boat-sim boat-sim-v3 boat-sim-v4" data-boat-sim aria-label="予想展開アニメーション">'+
+     '<div class="section-head"><div><h2 class="section-title">🎬 展開予想アニメ</h2><p class="boat-sim-mini">スタート → 第1ターンマーク → バックストレッチ</p></div><span class="boat-sim-tag">戦法別 v4</span></div>'+
      '<div class="boat-sim-narrative"><span>想定する攻め方 <b data-sim-tactic>'+tactic.label+'</b></span><strong data-sim-forecast>予想着順 '+combo+'</strong></div>'+
-     '<p class="boat-sim-disclaimer">本線・対抗の買い目で動きが切り替わるよ。各艇が独立して先マイ／差し／まくり／まくり差しを狙う仮説を描く。実際の進入や艇間の軌道を再現せず、着順から実際の決まり手を断定しない。</p>'+
+     '<p class="boat-sim-disclaimer">本線・対抗の買い目に加え、非購入の比較用展開も切り替えられるよ。各艇が独立して先マイ／差し／まくり／まくり差しを狙う仮説を描く。実際の進入や艇間の航跡・速度を再現したものではありません。艇の戦法と、1Mの外を回る位置関係を比較する模式図です。</p>'+
      '<div class="boat-sim-roles" data-sim-roles aria-label="各艇の攻め方の仮説">'+roles.map(x=>'<span>'+x.lane+'号艇('+x.course+'コース)：'+esc(x.label)+'</span>').join('')+'</div>'+
      '<div class="boat-sim-picks" role="group" aria-label="再現する買い目">';
    picks.forEach((pick,i)=>{
-     html+='<button type="button" data-sim-pick="'+pick+'" aria-pressed="'+(i===0)+'" class="'+(i===0?'active':'')+'">'+(i===0?'本線':'展開'+(i+1))+' <strong>'+pick+'</strong></button>';
+     html+='<button type="button" data-sim-pick="'+pick+'" data-sim-kind="forecast" aria-pressed="'+(i===0)+'" class="'+(i===0?'active':'')+'">'+(i===0?'本線':'展開'+(i+1))+' <strong>'+pick+'</strong></button>';
    });
-   html+='</div><div class="boat-sim-water"><svg viewBox="0 0 680 383" preserveAspectRatio="xMidYMid meet" role="img" aria-label="六艇がスタートし第一ターンマークを回ってバックストレッチに進む模式図">'+
-     '<defs><pattern id="sim-waves" patternUnits="userSpaceOnUse" width="42" height="28"><path d="M0 19 Q 11 13 21 19 T42 19" stroke="#5cb4c8" opacity=".16" fill="none"/></pattern></defs>'+
-     '<rect width="680" height="383" fill="#08384e" rx="13"/><rect width="680" height="383" rx="13" fill="url(#sim-waves)"/>'+
-     '<path d="M96 159 V281" stroke="#d1f3f8" stroke-width="2.5" stroke-dasharray="8 6"/>'+
-     '<text x="54" y="292" fill="#b7e0e8" font-weight="700" font-size="13">START</text>'+
-     '<path d="M137 281 L477 281" stroke="#a7e6f0" stroke-width="1.5" stroke-dasharray="5 8" opacity=".6"/>'+
-     '<text x="336" y="301" fill="#b7e0e8" text-anchor="middle" font-size="13">START → 1M</text>'+
-     '<path d="M164 31 H459" stroke="#a3d7e3" stroke-width="1.8" stroke-dasharray="9 6"/>'+
-     '<text x="312" y="19" text-anchor="middle" fill="#b7e0e8" font-size="13">← BACK STRETCH</text>'+
-     '<circle cx="558" cy="175" r="31" stroke="#f4a541" stroke-width="1.3" stroke-dasharray="4 5" fill="none" opacity=".5"/>'+
-     '<circle cx="558" cy="175" r="9" fill="#ffa936" stroke="#fff2ba" stroke-width="2"/>'+
-     '<text x="592" y="176" fill="#ffd49b" font-size="14" font-weight="800">1M</text>'+
-     '<text x="17" y="30" fill="#bfe4e9" font-size="10" letter-spacing="1.4">BOAT LAB / TACTICAL VIEW</text>';
+   const extras=studyOptions(r).filter(x=>!picks.includes(x.combo));
+   html+='</div><div class="boat-sim-study"><span>展開比較（買い目には含まれません）</span><div role="group" aria-label="未購入の比較用シナリオ">';
+   extras.forEach(x=>{html+='<button type="button" data-sim-pick="'+x.combo+'" data-sim-kind="study" aria-pressed="false">'+esc(x.label)+' <strong>'+x.combo+'</strong></button>';});
+   html+='</div></div><div class="boat-sim-picks-exit">';
+   html+='</div><div class="boat-sim-water"><svg viewBox="0 0 1080 608" preserveAspectRatio="xMidYMid meet" role="img" aria-label="6艇が1マークの外を回る戦法別アニメーション">'+
+     '<defs><linearGradient id="sim-water-shade" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#09546c"/><stop offset="1" stop-color="#052c43"/></linearGradient><pattern id="sim-waves" patternUnits="userSpaceOnUse" width="54" height="30"><path d="M0 17 Q13 9 27 17 T54 17" stroke="#67b8c9" opacity=".15" fill="none"/></pattern></defs>'+
+     '<rect width="1080" height="608" fill="url(#sim-water-shade)" rx="13"/><rect width="1080" height="608" fill="url(#sim-waves)" rx="13"/>'+
+     '<path d="M108 315 V552" stroke="#d1f3f8" stroke-width="3" stroke-dasharray="10 8"/>'+
+     '<text x="115" y="579" fill="#b7e0e8" font-weight="700" font-size="21">START →</text>'+
+     '<path d="M102 108 H708" stroke="#a3d7e3" stroke-width="2.5" stroke-dasharray="13 10"/>'+
+     '<text x="375" y="83" text-anchor="middle" fill="#b7e0e8" font-size="21">← BACK STRETCH</text>'+
+     '<circle cx="786" cy="278" r="46" stroke="#f4a541" stroke-width="2.0" stroke-dasharray="7 8" fill="none" opacity=".65"/>'+
+     '<circle cx="786" cy="278" r="13" fill="#ffa936" stroke="#fff2ba" stroke-width="3"/>'+
+     '<text x="774" y="214" fill="#ffd49b" font-size="22" font-weight="800">1M</text>'+
+     '<text x="26" y="37" fill="#bfe4e9" font-size="15" letter-spacing="1.4">BOAT LAB / TACTICAL REPLAY v4</text>';
    // Each registered boat follows its own scenario-specific Bezier path.
-   for(let lane=1;lane<=6;lane++)html+='<path data-sim-path="'+lane+'" d="'+path(lane,order[lane],tactic.id,Number(combo[0]),roles[lane-1].role,roles[lane-1].course)+'" stroke="transparent" fill="none"/>';
+   for(let lane=1;lane<=6;lane++)html+='<path data-sim-path="'+lane+'" d="'+path(lane,order[lane],tactic.id,Number(combo[0]),roles[lane-1].role,roles[lane-1].course)+'" stroke="transparent" fill="none"/>'+
+   '<path data-sim-trail="'+lane+'" d="'+path(lane,order[lane],tactic.id,Number(combo[0]),roles[lane-1].role,roles[lane-1].course)+'" stroke="'+colors[lane-1]+'" opacity="'+(lane<=3?'.40':'.23')+'" stroke-width="2.6" stroke-dasharray="8 12" fill="none"/>';
    for(let lane=1;lane<=6;lane++)html+=glyph(lane);
    return html+'</svg><div class="boat-sim-stage" data-sim-stage>START / スタート想定</div></div>'+
      '<div class="boat-sim-phase" role="group" aria-label="アニメの場面に移動">'+
@@ -266,5 +302,5 @@
    range.addEventListener('input',()=>{pause();state.position=clamp(Number(range.value)/1000,0,1);update();});
    update();
  }
- window.BoatRaceVisual={entryHTML,animationHTML,mount,dispose,ranks,path,options,explanation,tacticFor,rolesFor,stageTexts};
+ window.BoatRaceVisual={entryHTML,animationHTML,mount,dispose,ranks,path,options,studyOptions,choices,explanation,tacticFor,rolesFor,stageTexts,MARK,SCENE};
 })();

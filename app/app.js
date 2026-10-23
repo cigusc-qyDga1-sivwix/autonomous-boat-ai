@@ -15,7 +15,7 @@
   const raceKey = r => `${data.event_date}|${r.venue}|${r.race}`;
   const el = id => document.getElementById(id);
   const titles = {overview:'ダッシュボード',races:'レース・買い目',results:'結果照合',analysis:'成績分析',settings:'データ管理'};
-  const state = {view:'overview',venue:'全場',classification:'ALL',boardFilter:'all',boardSort:'official',raceDetail:null,showExternalAnalysis:false,reanalysisResult:null,reanalysisExtras:{},resultVenue:'鳴門',resultRace:1,origin:'GitHubで発走前固定した予想のローカル写し'};
+  const state = {view:'overview',venue:'全場',classification:'ALL',boardFilter:'all',boardSort:'official',raceDetail:null,resultQuickFilter:'recent',resultQuickExpanded:false,showExternalAnalysis:false,reanalysisResult:null,reanalysisExtras:{},resultVenue:'鳴門',resultRace:1,origin:'GitHubで発走前固定した予想のローカル写し'};
   let data = null;
   let results = {};
   let autoResults = {};
@@ -365,6 +365,17 @@
     const r=findRace(state.resultVenue,state.resultRace)||allRaces()[0];
     return r?{date:data.event_date,venue:r.venue,race:r.race,sha256:r.sha256}:null;
   }
+  function quickResultBoard(races){
+    return window.BoatResultQuickboard?.render(races,{
+      date:data.event_date,officialFor,resultIssue,compute,
+      officialUpdatedAt:data.official_pay_info?.retrieved_at_utc||data.updated_at_utc
+    },{
+      filter:state.resultQuickFilter,
+      expanded:state.resultQuickExpanded,
+      venue:state.resultVenue,
+      race:state.resultRace
+    })||'';
+  }
   function resultsPage() {
     const races=allRaces();
     if(!races.length)return head('結果照合','公式払戻の一括確認ができます')+resultsRefreshControl()+
@@ -388,7 +399,7 @@
     }).join('')}</div>`:'<div class="no-data">未照合です。公式払戻が掲載されると自動反映されます。</div>';
     const selected=state.resultVenue, raceSelect=state.resultRace;
     const form=`<form id="result-form" class="result-form"><div class="form-row"><div class="field"><label for="result-venue">競艇場</label><select id="result-venue" class="select input">${getVenues().map(v=>`<option value="${escape(v)}" ${selected===v?'selected':''}>${escape(v)}</option>`).join('')}</select></div><div class="field"><label for="result-race">レース</label><select id="result-race" class="select input">${races.filter(x=>x.venue===selected).map(x=>`<option value="${x.race}" ${raceSelect===x.race?'selected':''}>${x.race}R</option>`).join('')}</select></div></div><div class="feature-card"><span class="feature-label">保存済み予想 / ${escape(r.classification)}</span><strong>${escape(r.bets.slice(0,3).map(b=>b.combination).join(' / '))}</strong><p>${escape(r.scenario)}</p></div><div class="field"><label for="finish">3連単（確定着順）</label><div class="form-row" style="gap:8px">${[0,1,2].map(i=>`<select id="finish-${i}" class="select input" style="width:calc(33.3% - 6px);min-width:0" aria-label="${i+1}着"><option value="">${i+1}着</option>${[1,2,3,4,5,6].map(n=>`<option value="${n}" ${c.record?.finish?.split('-')[i]===String(n)?'selected':''}>${n}号艇</option>`).join('')}</select>`).join('')}</div></div><div class="field"><label for="payout">3連単払戻（100円あたり）</label><input id="payout" class="input" inputmode="numeric" type="number" min="100" max="10000000" step="10" required placeholder="例：2430" value="${c.record?c.record.payout_per_100:''}"></div><p class="help">${hasOfficial?'公式結果を取得済み。手入力で変更はできません。':issue?'返還・中止・不一致があるため、手入力で収支を確定できません。':'公式結果未取得の場合だけ暫定的に手入力できます。公式照合済み成績には含みません。'}</p><button type="submit" class="btn btn-primary" ${hasOfficial||issue?'disabled':''}>${live?'暫定結果を保存':'結果を照合・保存'}</button>${results[raceKey(r)]&&!hasOfficial?'<button type="button" data-action="delete-result" class="btn btn-danger">手入力を取り消す</button>':''}</form>`;
-    return `${head('結果照合',live?'BOATRACE公式払戻から自動照合・発走前予想は変更しません':'手入力の仮想照合',pill(live?verified.count+'R 公式確認':settled.length+'R 入力済み','local'))}${resultsRefreshControl()}${header}${batchPanel}<details class="individual-legacy"><summary>1Rずつの入力・読み取り（必要なときだけ）</summary>${readPanel}</details><div class="results-layout"><section class="card card-pad"><div class="section-head"><h2 class="section-title">${live?'レース結果の確認':'結果を入力'}</h2>${pill(hasOfficial?'公式確認済み':issue?'要確認':'未確認','local')}</div>${issue?`<div class="notice warn">このレースは${escape(issue.reason||'追加確認')}。自動の仮想収支には含めません。</div>`:''}${form}</section><section class="card card-pad"><div class="section-head"><h2 class="section-title">照合履歴</h2><span class="text-xs muted">${settled.length}R</span></div>${recent}</section></div>`;
+    return `${head('結果照合',live?'BOATRACE公式払戻から自動照合・発走前予想は変更しません':'手入力の仮想照合',pill(live?verified.count+'R 公式確認':settled.length+'R 入力済み','local'))}${resultsRefreshControl()}${header}${quickResultBoard(races)}${batchPanel}<details class="individual-legacy"><summary>1Rずつの入力・読み取り（必要なときだけ）</summary>${readPanel}</details><div class="results-layout"><section class="card card-pad"><div class="section-head"><h2 class="section-title">${live?'レース結果の確認':'結果を入力'}</h2>${pill(hasOfficial?'公式確認済み':issue?'要確認':'未確認','local')}</div>${issue?`<div class="notice warn">このレースは${escape(issue.reason||'追加確認')}。自動の仮想収支には含めません。</div>`:''}${form}</section><section class="card card-pad"><div class="section-head"><h2 class="section-title">照合履歴</h2><span class="text-xs muted">${settled.length}R</span></div>${recent}</section></div>`;
   }
   function weaknessDiagnosis() {
     if(data.mode!=='auto-live')return '';
@@ -483,6 +494,28 @@
     const venueOpen=e.target.closest('[data-open-venue]');if(venueOpen){if(venueOpen.disabled)return;state.venue=venueOpen.dataset.openVenue;state.raceDetail=null;state.view='races';render();window.scrollTo(0,0);return;}
     const fav=e.target.closest('[data-favorite-venue]');if(fav){const name=fav.dataset.favoriteVenue;favorites=favorites.includes(name)?favorites.filter(x=>x!==name):favorites.concat([name]);try{localStorage.setItem(STORE_FAVORITES,JSON.stringify(favorites));}catch{}render();return;}
     const boardFilter=e.target.closest('[data-venue-filter]');if(boardFilter){state.boardFilter=boardFilter.dataset.venueFilter;render();return;}
+    const quickFilter=e.target.closest('[data-result-filter]');
+    if(quickFilter){
+      state.resultQuickFilter=quickFilter.dataset.resultFilter||'recent';
+      state.resultQuickExpanded=false;render();return;
+    }
+    const quickMore=e.target.closest('[data-result-more]');
+    if(quickMore){
+      state.resultQuickExpanded=quickMore.dataset.resultMore==='true';render();return;
+    }
+    const quickSelect=e.target.closest('[data-result-quick]')||e.target.closest('[data-result-next]');
+    if(quickSelect){
+      const token=quickSelect.dataset.resultQuick||quickSelect.dataset.resultNext||'';
+      const last=token.lastIndexOf('|');
+      if(last>0){
+        const venue=token.slice(0,last),race=Number(token.slice(last+1));
+        if(findRace(venue,race)){
+          state.resultVenue=venue;state.resultRace=race;
+          state.view='results';render();
+        }
+      }
+      return;
+    }
     const row=e.target.closest('[data-race]');if(row){const [v,n]=row.dataset.race.split('|');let r=findRace(v,n);if(!r)return;if(row.dataset.action==='settle-this'){state.resultVenue=v;state.resultRace=Number(n);go('results');return;}if(row.dataset.action==='copy-bets'){copyBets(r);return;}state.raceDetail=r;state.showExternalAnalysis=false;state.reanalysisResult=null;state.reanalysisExtras={};state.view='races';render();window.scrollTo(0,0);return;}
     const btn=e.target.closest('[data-action]');if(!btn)return;
     switch(btn.dataset.action){
@@ -708,14 +741,17 @@
       render();
     }
   }
+  let liveUpdateInFlight=false;
   async function reloadLiveIfNew(){
-    if(readJSON(STORE_DATA,null)||resultsRefreshBusy)return;
+    if(readJSON(STORE_DATA,null)||resultsRefreshBusy||liveUpdateInFlight||document.hidden)return;
+    liveUpdateInFlight=true;
     try{
       const incoming=await fetchLive();
       if(incoming.event_date===data?.event_date&&incoming.updated_at_utc===lastLiveUpdate)return;
       if(acceptLiveData(incoming))render();
       window.BoatExhibitionAudit?.load(incoming.event_date).then(()=>render()).catch(()=>{});
     }catch(error){console.warn('Live data refresh failed:',error.message);}
+    finally{liveUpdateInFlight=false;}
   }
   async function init(){
     results=readJSON(STORE_RESULTS,{});
@@ -732,7 +768,12 @@
       state.resultVenue=getVenues()[0];render();
       window.BoatExhibitionAudit?.load(data.event_date).then(()=>{if(data?.event_date)render()}).catch(()=>{});
       if('serviceWorker' in navigator&&['https:','http:'].includes(location.protocol))navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
-      if(typeof setInterval==='function')setInterval(reloadLiveIfNew,300000);
+      if(typeof setInterval==='function'){
+        setInterval(reloadLiveIfNew,300000);
+        // While the result screen is visible, check published snapshots more
+        // frequently without notifications or source-site scraping.
+        setInterval(()=>{if(state.view==='results'&&!document.hidden)void reloadLiveIfNew();},90000);
+      }
       document.addEventListener('visibilitychange',()=>{if(!document.hidden)reloadLiveIfNew();});
     }catch(error){el('main').innerHTML=`<section class="card card-pad"><h1>データを読み込めませんでした</h1><p class="muted">${escape(error.message)}</p><p>アプリはHTTPSまたはローカルHTTPサーバー上で開いてください。ダウンロードしたHTMLを直接開くと、ブラウザの制限で予想データを取得できない場合があります。</p></section>`;}
   }

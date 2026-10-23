@@ -5,7 +5,11 @@ considered. An already finished race cannot be revised, no matter what the
 third-party 'source observed' timestamp says. Results/payouts are never read.
 """
 from copy import deepcopy
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+JST = ZoneInfo('Asia/Tokyo')
+SAFE_MARGIN_SECONDS = 120
 from pathlib import Path
 import json
 
@@ -47,12 +51,14 @@ def inject(race: dict, row: dict | None, now: datetime, venue_code: str,
     """
     if not row or now.tzinfo is None or not isinstance(race, dict):
         return race, None
-    if row.get("race_code") != f"{now.astimezone(now.tzinfo):%Y%m%d}{int(venue_code):02d}{race_number:02d}":
+    if row.get("race_code") != f"{now.astimezone(JST):%Y%m%d}{int(venue_code):02d}{race_number:02d}":
         return race, None
     if row.get("source_status") != "historical_research_only_not_frozen_forecast":
         return race, None
-    from .autonomous_daily import JST, SAFE_MARGIN_SECONDS, cutoff_of
-    cutoff = cutoff_of(race)
+    try:
+        cutoff = datetime.strptime(race['closed_at'], '%Y-%m-%d %H:%M:%S').replace(tzinfo=JST)
+    except (KeyError, TypeError, ValueError):
+        return race, None
     if cutoff is None or now.astimezone(JST) >= cutoff - timedelta(seconds=SAFE_MARGIN_SECONDS):
         return race, None
     try:
@@ -117,6 +123,6 @@ def inject(race: dict, row: dict | None, now: datetime, venue_code: str,
     copy["_exhibition_origin"] = {
         "source":SOURCE_NAME, "observed_at_jst":row["source_observed_jst"],
         "captured_before_cutoff":True,"metrics":list(extras),
-        "forecast_run_utc":now.astimezone(__import__("datetime").timezone.utc).isoformat(),
+        "forecast_run_utc":now.astimezone(timezone.utc).isoformat(),
     }
     return copy, copy["_exhibition_origin"]

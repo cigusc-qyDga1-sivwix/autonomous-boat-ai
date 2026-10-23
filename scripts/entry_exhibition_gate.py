@@ -67,7 +67,17 @@ def validated_preview(preview):
                     return None
             except (TypeError, ValueError):
                 return None
-        rows.append({"lane": lane, "course": boat.get("course_number")})
+        try:
+            raw = boat.get("course_number")
+            if isinstance(raw, bool):
+                return None
+            numeric = float(raw)
+            if not math.isfinite(numeric) or not numeric.is_integer():
+                return None
+            course = int(numeric)
+        except (TypeError, ValueError):
+            return None
+        rows.append({"lane": lane, "course": course})
     return validated_courses(rows)
 
 

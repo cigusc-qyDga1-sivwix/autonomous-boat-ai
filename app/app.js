@@ -518,6 +518,13 @@
   function exportResultsCSV(){const header=['date','venue','race','classification','cutoff_jst','finish','payout_per_100','is_hit','stake_yen','virtual_payout_yen','virtual_profit_yen','recorded_at','source'];const body=allRaces().map(r=>{let c=compute(r);return [data.event_date,r.venue,r.race,r.classification,r.cutoff_jst,c.record?.finish||'',c.record?.payout_per_100??'',c.record?Number(c.hit):'',c.record?c.stake:'',c.payout??'',c.profit??'',c.record?.recorded_at||'',c.record?(c.record.source||'manual'):''];});const csv=[header,...body].map(a=>a.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');download(`boatlab-results-${data.event_date}.csv`,'\uFEFF'+csv,'text/csv;charset=utf-8');toast('結果CSVを書き出したよ');}
   function copyBets(r){const s=`${data.event_date} ${r.venue} ${r.race}R ${r.cutoff_jst} [${r.classification}] ${r.phase==='exhibition'?'展示反映':'展示前'}予想（${r.bets.length}点）\n${r.scenario}\n${r.bets.map((b,i)=>`${i+1}. ${b.combination} ${money(b.virtual_yen)}`).join('\n')}\n合計 ${money(r.bets.reduce((s,b)=>s+b.virtual_yen,0))} / 研究用・仮想`;if(navigator.clipboard?.writeText)navigator.clipboard.writeText(s).then(()=>toast('買い目をコピーしたよ'),()=>toast('コピーできませんでした'));else {const t=document.createElement('textarea');t.value=s;document.body.append(t);t.select();document.execCommand('copy');t.remove();toast('買い目をコピーしたよ');}}
   document.addEventListener('click',e=>{
+    const timelineFilter=e.target.closest('[data-timeline-filter]');
+    if(timelineFilter&&window.BoatRaceTimeline){
+      window.BoatRaceTimeline.setFilter(timelineFilter.dataset.timelineFilter);
+      const node=document.querySelector('.race-timeline');
+      if(node)node.outerHTML=window.BoatRaceTimeline.render(data);
+      return;
+    }
     const nav=e.target.closest('[data-view]');if(nav){if(nav.dataset.view==='races')state.venue='全場';go(nav.dataset.view);return;}
     const venueOpen=e.target.closest('[data-open-venue]');if(venueOpen){if(venueOpen.disabled)return;state.venue=venueOpen.dataset.openVenue;state.raceDetail=null;state.view='races';render();window.scrollTo(0,0);return;}
     const fav=e.target.closest('[data-favorite-venue]');if(fav){const name=fav.dataset.favoriteVenue;favorites=favorites.includes(name)?favorites.filter(x=>x!==name):favorites.concat([name]);try{localStorage.setItem(STORE_FAVORITES,JSON.stringify(favorites));}catch{}render();return;}

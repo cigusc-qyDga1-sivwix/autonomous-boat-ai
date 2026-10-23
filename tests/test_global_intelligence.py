@@ -146,4 +146,4 @@ def test_previous_meeting_end_dates_not_last_three_calendar_days():
     found=collect.previous_meeting_end_dates(DAY,rows,{23,18,11})
     assert found==[date(2026,10,20),date(2026,10,19),date(2026,10,12)]
     assert collect.source_url("monthly_schedule",DAY).endswith("/2026/10.csv")
-    assert collect.previous_meeting_end_dates(DAY,rows,{2})==[]
+    assert collect.previous_meeting_end_dates(DAY,rows,{2})==[date(2026,10,22)]

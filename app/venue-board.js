@@ -166,6 +166,10 @@
     if(outcome&&outcome.review)return badge('要確認','missing');
     if(outcome)return badge(outcome.hit?'公式 的中':'公式 不的中',outcome.hit?'ready':'idle');
     if(!r)return slot&&slot.unforecast?badge('予想未固定','missing'):badge('情報未取得','idle');
+    if(r.entry_exhibition_gate&&r.entry_exhibition_gate.entry_watch&&
+       !r.entry_exhibition_gate.final_eligible)return badge('前付け警戒・展示待ち','missing');
+    if(r.entry_exhibition_gate&&!r.entry_exhibition_gate.final_eligible)
+      return badge('展示未確認・保留','watch');
     if(r.phase==='exhibition')return badge('展示反映','ready');
     if(r.classification==='SKIP')return badge('SKIP','missing');
     if(slot&&slot.cutoff&&slot.cutoff<=now)return badge('展示前固定','watch');
@@ -175,7 +179,7 @@
     var r=slot&&slot.forecast;
     var cutoff=slot&&slot.cutoff;
     var experiment=null;
-    if(r&&window.BoatTacticalModel){
+    if(r&&window.BoatTacticalModel&&!(r.entry_exhibition_gate?.entry_watch&&!r.entry_exhibition_gate?.final_eligible)){
       try{experiment=window.BoatTacticalModel.forecast(r)}catch(e){experiment=null;}
     }
     var outcome=officialForSlot(data,venue,number,r);

@@ -79,7 +79,7 @@ assert.match(caption.textContent,/仮説/);
 assert.equal(buttons[1].pressed,'true');
 assert.equal(result.textContent,'予想：'+other);
 assert.equal(tactic.textContent,visual.tacticFor(other).label);
-assert.equal(forecast.textContent,'予想着順 '+other);
+assert.equal(forecast.textContent,'元の固定予想 '+other);
 actionNode({dataset:{simJump:'turn'}});
 assert.match(stage.textContent,/1M/);
 assert.equal(stages[1].pressed,'true');

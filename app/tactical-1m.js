@@ -28,8 +28,9 @@ const assign=(r,course)=>{
 };
 const nameTactic=['','先マイ・逃げ','差し','まくり差し','カドまくり','外からのまくり差し','外の展開連動'];
 function forecast(input){
- const wakeTrial=input?.experimental_variant==='wake-attrition-v0.3';
- const outerStudyTrial=input?.experimental_variant==='outside-role-v0.5';
+ const coupledTrial=input?.experimental_variant==='six-boat-coupling-v0.6';
+ const wakeTrial=input?.experimental_variant==='wake-attrition-v0.3'||coupledTrial;
+ const outerStudyTrial=input?.experimental_variant==='outside-role-v0.5'||coupledTrial;
  const roleAwareTrial=input?.experimental_variant==='role-consistency-v0.4'||outerStudyTrial;
  const outsideTrial=input?.experimental_variant==='outside-makuri-v0.2'||wakeTrial||outerStudyTrial;
  const runners=input?.racers;
@@ -164,6 +165,36 @@ function forecast(input){
   const distance=clamp(1-.07*Math.max(0,headCourse-otherCourse-1),.68,1);
   return clamp(crossing*tacticScale*distance,0,.75);
  }
+ // V0.6: directed interactions between an ATTACKER and the other five boats.
+ // This is a bounded, untrained mechanistic hypothesis: NOT observed trajectories,
+ // NOT a calibrated probability and NOT inferred from the race result.
+ const coupling=coupledTrial?Array.from({length:6},(_,i)=>{
+   const h=i+1,attacker=move[byCourse[i]];
+   const nearest=h>=2?move[byCourse[h-2]]:null;
+   const innerFast=h>=3?Math.max(...Array.from({length:h-1},(_,j)=>move[byCourse[j]].go)):0;
+   const reference=nearest?Math.max(.35,.72*nearest.go+.28*innerFast):null;
+   const goRatio=reference?attacker.go/reference:1;
+   const turnRatio=nearest?attacker.turn/Math.max(.35,nearest.turn):1;
+   const pressure=h>=3?clamp(1.05*(goRatio-1)+.55*(turnRatio-1),0,.82):
+     h===2?clamp(.6*(goRatio-1)+.25*(turnRatio-1),0,.65):0;
+   const next=h<6?move[byCourse[h]]:null;
+   const follow=next?clamp(.55+.55*(next.go/attacker.go-.8)+
+     .36*(next.turn/attacker.turn-.8),0,1):0;
+   const inside=Array.from({length:h-1},(_,j)=>{
+     const m=move[byCourse[j]];
+     const vulnerability=clamp(.65+.4*(attacker.go/m.go-1)-
+       .32*(m.turn/Math.max(.35,attacker.turn)-1),.35,1.15);
+     return {course:j+1,lane:v[byCourse[j]].lane,
+       risk:+clamp(pressure*vulnerability,0,.9).toFixed(4)};
+   });
+   const tactic=h===1?'最短先マイを守る':h===2?(pressure>=.22?'差し・まくり両にらみ':'内の差し残り'):
+     goRatio>=1.08&&turnRatio>=.92?'外からのまくり':
+       turnRatio>=.98?'まくり差し・差し場探索':'外の残存・攻め待ち';
+   return {head_course:h,head_lane:v[byCourse[i]].lane,tactic,
+     pressure:+pressure.toFixed(4),follower_course:h<6?h+1:null,
+     follower_lane:h<6?v[byCourse[h]].lane:null,
+     follower_readiness:+follow.toFixed(4),inside};
+ }):[];
  const denom=strength.reduce((a,b)=>a+b,0),shares=strength.map(v=>v/denom);
  // Condition second and third on WHICH first-turn maneuver succeeded. If c=3
  // attacks, nearby c2 and inside c1 can survive; if c1 escapes, c2/c3 can chase.
@@ -197,6 +228,23 @@ function forecast(input){
       relation*=own?.attack&&candidate.turn>=.93?clamp(1+.3*own.confidence,1,1.2):1;
    }
    if(wakeTrial)relation*=clamp(1-.82*estimatedWakeRisk(headCourse,secondCourse),.39,1);
+   if(coupledTrial){
+     const attack=coupling[headCourse-1];
+     if(headCourse>=3){
+       // Consequence A: the boat directly outside a credible attacker can
+       // FOLLOW its path, but cannot automatically outrank the inside survivor.
+       if(secondCourse===attack.follower_course)
+         relation*=1+.95*attack.pressure*attack.follower_readiness;
+       // Consequence B: displaced inner boats might drop from 2nd to 3rd.
+       const victim=attack.inside.find(x=>x.course===secondCourse);
+       if(victim)relation*=clamp(1-.42*victim.risk,.62,1);
+     }else if(headCourse===1&&secondCourse>=3){
+       // Even when 1 survives, a strong outside attacker can chase to second.
+       const follow=coupling[secondCourse-1];
+       if(follow.pressure>.12)
+         relation*=1+.23*follow.pressure*clamp(z.turn,.6,1.5);
+     }
+   }
   return Math.max(.01,relation*Math.pow(z.turn,.85)*Math.pow(z.go,.3));
  }
  function thirdWeight(h,s,c){
@@ -219,6 +267,23 @@ function forecast(input){
       consistency*=clamp(1+.7*earlier.confidence,1,1.5);
    }
    if(wakeTrial)consistency*=clamp(1-.75*estimatedWakeRisk(h,c),.43,1);
+   if(coupledTrial){
+     const attack=coupling[h-1];
+     if(h>=3){
+       const survivor=attack.inside.find(z=>z.course===c);
+       // Conditional on the 2nd position: a displaced inner boat can
+       // survive in 3rd while another follows the attacking boat.
+       if(survivor&&s===attack.follower_course)
+         consistency*=1+.35*survivor.risk*clamp(x.turn,.55,1.5);
+       // If the inside boat kept 2nd, a strong following boat may get 3rd.
+       if(c===attack.follower_course&&s<h)
+         consistency*=1+.8*attack.pressure*attack.follower_readiness;
+       // Two inner survivors behind a credible sweeping attack compete for
+       // a crowded pocket; do not count both as independent clean turns.
+       if(c<h&&s<h&&attack.pressure>.15)
+         consistency*=clamp(1-.24*attack.pressure,.79,1);
+     }
+   }
   return Math.max(.01,consistency*Math.pow(x.turn,.65)*Math.pow(x.overall,.3));
  }
  const candidates=[];
@@ -356,16 +421,27 @@ function forecast(input){
  const remainders=target.map((x,i)=>({delta:x-floor[i],i})).sort((a,b)=>b.delta-a.delta||a.i-b.i);
  remainders.slice(0,unused).forEach(o=>floor[o.i]++);
  const bets=picks.map((c,i)=>({combination:c.combination,virtual_yen:(floor[i]+1)*1000,
-  head_course:c.headCourse,scenario:c.scenario,conditional_reason:c.scenario+'が成立 → '+c.secondCourse+'コースが追走 → '+c.thirdCourse+'コース残存',relative_score:+c.pseudo.toFixed(6)}));
+  head_course:c.headCourse,scenario:c.scenario,
+  conditional_reason:coupledTrial?
+   c.headCourse+'コース '+coupling[c.headCourse-1].tactic+'（仮説） → '+c.secondCourse+'コースが2着を確保 → '+c.thirdCourse+'コースが3着に残存':
+   c.scenario+'が成立 → '+c.secondCourse+'コースが追走 → '+c.thirdCourse+'コース残存',
+  relative_score:+c.pseudo.toFixed(6)}));
  if(new Set(bets.map(x=>x.combination)).size!==bets.length||bets.reduce((sum,b)=>sum+b.virtual_yen,0)!==50000)throw Error('Invalid experimental virtual allocation');
  return {
-   model:outerStudyTrial?'tactical-outside-role-v0.5-untrained':
+   model:coupledTrial?'tactical-six-boat-coupling-v0.6-untrained':
+     outerStudyTrial?'tactical-outside-role-v0.5-untrained':
      roleAwareTrial?'tactical-role-consistency-v0.4-untrained':
      wakeTrial?'tactical-wake-attrition-v0.3-untrained':
      outsideTrial?'tactical-outside-makuri-v0.2-untrained':'tactical-1m-conditional-v0.1-untrained',
    basis:'保存済み発走前選手情報と場別参考値のみ。結果・払戻・オッズ不使用。',
    venue:input.venue,head_course_shares:shares.map((s,i)=>({course:i+1,lane:v[byCourse[i]].lane,relative_share:+s.toFixed(4),tactic:nameTactic[i+1]})),
    metadata:{venue_reference_rate:rate,wind_speed:wind,validMetrics,exhibition_used:validMetrics.length>0,
+     ...(coupledTrial?{coupled_v06:{
+       interaction_graph:coupling,
+       branch_definition:'1M head attack -> inner displacement / outer follow -> conditional 2nd and 3rd',
+       analysis_only:true,calibrated:false,
+       disclaimer:'No actual hull coordinates or wake measurements; mechanism hypotheses only. Race results, payouts, odds not used.'
+     }}:{}),
      ...(outerStudyTrial?{outside_v05:{
        reference_period:'2026-07-01/2026-09-30',
        reference_source:officialReference?.source||null,
@@ -396,7 +472,8 @@ function forecast(input){
 global.BoatTacticalModel={forecast,
  forecastRoleAware:input=>forecast({...input,experimental_variant:'role-consistency-v0.4'}),
  forecastOutsideRole:input=>forecast({...input,experimental_variant:'outside-role-v0.5'}),
+ forecastCoupled:input=>forecast({...input,experimental_variant:'six-boat-coupling-v0.6'}),
  forecastOutside:input=>forecast({...input,experimental_variant:'outside-makuri-v0.2'}),
  forecastWake:input=>forecast({...input,experimental_variant:'wake-attrition-v0.3'}),
- RATE_BY_VENUE,OUTSIDE_VENUE_COURSES,nameTactic,version:'trial-v0.5-outside-20261024'};
+ RATE_BY_VENUE,OUTSIDE_VENUE_COURSES,nameTactic,version:'trial-v0.6-coupled-20261024'};
 })(typeof window!=='undefined'?window:globalThis);

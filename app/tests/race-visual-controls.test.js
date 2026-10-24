@@ -61,7 +61,7 @@ assert.match(wakeLabel.textContent,/🌀 ON/,'all races start with wake research
 assert.match(boats[0].transform,/translate/);
 function actionNode(node){clickHandler({target:{closest:()=>node}})}
 function action(control,pick){
- const node=pick?{dataset:{simPick:pick}}:{dataset:{simControl:control}};
+ const node=pick?{dataset:{simPick:pick,simKind:'forecast'}}:{dataset:{simControl:control}};
  actionNode(node);
 }
 action('play');

@@ -407,7 +407,7 @@
         <div class="recalc-data-status"><span>勝率・モーター・平均ST：${r.racers?.length===6?'取得済み':'未取得'}</span><span>展示タイム：${r.phase==='exhibition'?'取得済み':'未取得'}</span><span>1周・回り足・直線：自動入力 ${Object.values(autoMetrics?.complete||{}).filter(Boolean).length}/3項目（6艇揃い）</span></div>
         <div class="recalc-direct-status" role="status" aria-live="polite"><div><strong>📡 オリジナル展示：${escape(originalRefreshLabel)}</strong><p>${escape(directStatus.message||'画面を開くと対象レースの展示CSVを直接確認します。')}${directStatus.data?.source_observed_jst?' ／ データ元の記録 '+escape(directStatus.data.source_observed_jst):''}</p></div><button type="button" class="external-btn external-btn-white" data-action="refresh-original-exhibition" ${directStatus.state==='loading'?'disabled':''}>↻ 今すぐ取得</button></div>
         ${recalc?recalc.inputForm(r,filledMetrics,autoMetrics):'<p>再評価モジュールを読み込めませんでした。</p>'}
-        <button type="button" class="external-btn external-btn-primary recalc-run" data-action="run-reanalysis">🧠 再予想を実行（4〜12点）</button>
+        <button type="button" class="external-btn external-btn-primary recalc-run" data-action="run-reanalysis">🧠 取得済みデータで再予想を実行（4〜12点）</button>
         <p class="recalc-execute-notice" role="status" aria-live="polite">${escape(state.reanalysisNotice||'タップすると表示中の6艇データを使って、この端末で試算します。')}</p>
         ${stored && recalc?recalc.resultHTML(stored.result,stored.afterCutoff):''}
       </div>` : ''}

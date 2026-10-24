@@ -197,7 +197,7 @@
     return '<div class="venue-race'+(r?' venue-race-available':' venue-race-empty')+'">' +
       '<div class="venue-race-top"><b>'+number+'R</b>'+raceStatus(r,slot,now,data,venue,number)+'</div>' +
       '<div class="venue-race-cutoff"><span>締切予定</span><strong>'+esc(cutoff||'—')+'</strong></div>' +
-      (r?'<div class="venue-race-main">'+(r.model_role==='main'?'✅ メインv0.7 固定：':'🔒 旧モデル固定：')+esc(r.bets.slice(0,2).map(function (b){return b.combination;}).join(' / '))+'</div>' +
+      (r?'<div class="venue-race-main">'+(r.model_role==='main'?'✅ メイン'+(r.model_version?.includes('v0.9')?'v0.9':'v0.7')+' 固定：':'🔒 旧モデル固定：')+esc(r.bets.slice(0,2).map(function (b){return b.combination;}).join(' / '))+'</div>' +
           (experiment?'<div class="venue-tactical">🧠 '+(experiment.legacy?'旧モデル検証：':'1M戦法研究：')+
           '<b>'+esc(experiment.top)+'</b> ／ '+experiment.bets.length+'点'+
           (experiment.legacy?'（結果は正式収支に重複計上しない）':experiment.differs_from_frozen?'（変更あり）':'（配分同じ）')+'</div>':'') +

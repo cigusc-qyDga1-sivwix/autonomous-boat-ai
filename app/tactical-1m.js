@@ -139,7 +139,7 @@ function forecast(input){
    const follower=followerCourse?move[byCourse[followerCourse-1]]:null;
    const follows=!!(confidence>=.10&&follower&&
      follower.go>=m.go*.74&&follower.turn>=m.turn*.72);
-   outsideEvidence[course]={attack:entry,confidence:+confidence.toFixed(4),
+   outsideEvidence[course]={course,attack:entry,confidence:+confidence.toFixed(4),
      follower_course:followerCourse,following_supported:follows,
      launch:+signal.launch.toFixed(4),steering:+signal.steering.toFixed(4)};
    if(entry)strength[course-1]*=1+.7*confidence;

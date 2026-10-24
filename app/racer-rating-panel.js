@@ -18,7 +18,7 @@ function render(r){
  const leaders=topAbility!==null&&topExpected!==null?
   '総合能力トップ：'+names(scored.filter(x=>x.ability===topAbility))+
   ' ／ このレースの活躍期待トップ：'+names(expected.filter(x=>x.race_expectation===topExpected)):
-  '未取得・進入未確認の項目は評価保留';
+  (rating.status==='hold'?'展示進入確認待ちのため期待指数を保留':'未取得・進入未確認の項目は評価保留');
  const rows=rating.rows.map(x=>{
   const ability=shown(x.ability),expectation=shown(x.race_expectation);
   const bestAbility=topAbility!==null&&x.ability===topAbility;

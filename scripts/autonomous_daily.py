@@ -719,7 +719,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "weather_used", "weather_adjustment", "weather_ab", "data_quality",
                       "exhibition_origin", "exhibition_change",
                       "venue_profile", "venue_adjustment", "model_role", "legacy_control",
-                      "start_v07", "coupled_v06", "head_course_shares",
+                      "start_v07", "coupled_v06", "wake_v09", "model_upgrade", "primary_model_ab", "head_course_shares",
                       "role_coverage", "role_changes", "relative_scores_uncalibrated"):
             if extra in current:
                 r[extra] = current[extra]

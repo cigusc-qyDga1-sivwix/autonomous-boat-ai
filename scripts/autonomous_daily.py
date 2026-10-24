@@ -506,7 +506,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
 
 
 def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
-          weather_by_venue: dict | None = None, exhibition_rows: dict | None = None) -> tuple[dict, dict, dict]:
+          weather_by_venue: dict | None = None, exhibition_rows: dict | None = None,
+          enforce_wall_clock: bool = False) -> tuple[dict, dict, dict]:
     if now.tzinfo is None:
         raise ValueError("Timezone-aware now is mandatory")
     local_day = now.astimezone(JST).date().isoformat()
@@ -544,13 +545,18 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 raise ValueError("Recorded race identity mismatch")
             phases = {entry["phase"] for entry in record["versions"]}
             nearby = weather_at(weather_by_venue.get(venue_code), cutoff)
-            if now.astimezone(JST) < cutoff - timedelta(seconds=SAFE_MARGIN_SECONDS) and valid_entrants(race):
+            # Actual production per-race clock: a large nationwide Node batch
+            # must NEVER treat the timestamp from initial collection as current.
+            # Synthetic test fixtures explicitly leave this safeguard disabled.
+            runtime_now = datetime.now(UTC) if enforce_wall_clock else now
+            margin = max(SAFE_MARGIN_SECONDS, 180) if enforce_wall_clock else SAFE_MARGIN_SECONDS
+            if runtime_now.astimezone(JST) < cutoff - timedelta(seconds=margin) and valid_entrants(race):
                 if "baseline" not in phases:
                     record["versions"].append(prediction(race, VENUES[venue_code], n,
-                                                         "baseline", now, source_url, nearby))
+                                                         "baseline", runtime_now, source_url, nearby))
                     new_baseline += 1
                 code = f"{local_day.replace('-', '')}{int(venue_code):02d}{n:02d}"
-                csv_race, csv_origin = inject(race, exhibition_rows.get(code), now, venue_code, n)
+                csv_race, csv_origin = inject(race, exhibition_rows.get(code), runtime_now, venue_code, n)
                 candidate = csv_race if csv_origin else race
                 preview_ready = preview_complete(candidate)
                 existing_exhibition = [v for v in record["versions"] if v["phase"] == "exhibition"]
@@ -563,7 +569,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 if preview_ready and ("exhibition" not in phases or revision):
                     origin_url = csv_origin and "https://boatracecsv.github.io/docs/data/previews.html" or source_url
                     new = prediction(candidate, VENUES[venue_code], n,
-                                     "exhibition", now, origin_url, nearby)
+                                     "exhibition", (datetime.now(UTC) if enforce_wall_clock else now), origin_url, nearby)
                     before = record["versions"][-1] if record["versions"] else None
                     if before:
                         prev_bets = {b["combination"]: b["virtual_yen"] for b in before["bets"]}
@@ -913,7 +919,7 @@ def main():
     research = (available_rows(Path("app/data/exhibition") / f"{day}.json", day)
                 if not args.input_json else {})
     ledger, webapp, summary = build(previous, source, now, source_url, nearby_forecasts,
-                                     exhibition_rows=research)
+                                     exhibition_rows=research, enforce_wall_clock=not bool(args.input_json))
     if weather_error:
         summary["weather_error"] = weather_error
         webapp["weather_fetch_status"] = "UNAVAILABLE"

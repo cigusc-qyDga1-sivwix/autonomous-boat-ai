@@ -84,6 +84,11 @@ async function load(force=false,fetcher=root.fetch?.bind(root),now=new Date()){
  return inflight;
 }
 function status(){return state.loading?'loading':state.ready?'ready':'idle'}
+function needsRefresh(now=new Date()){
+ const current=daysThrough(now);
+ return !state.loading&&(!state.ready||state.range.join(',')!==current.join(',')||
+  Date.now()-state.lastFetchedAt>=90000);
+}
 function render(){
  const dates=state.range.length?state.range:daysThrough(new Date());
  const found=dates.filter(day=>state.days[day]);
@@ -123,5 +128,5 @@ function render(){
   '今日を含め公式照合済みレースだけが仮想投資と払戻の集計対象です。未照合・中止・返還・矛盾・不正データは集計せず、日付欠損を0円扱いしません。'+
   '旧モデルと新モデルの買い目を二重計上しません。全研究予想の仮想収支であり、実際の購入成績・正式BUY収支ではありません。</p></section>';
 }
-root.BoatCumulative={summary,load,render,status,daysThrough,jstDay,get dates(){return daysThrough(new Date())}};
+root.BoatCumulative={summary,load,render,status,needsRefresh,daysThrough,jstDay,get dates(){return daysThrough(new Date())}};
 })(typeof window==='undefined'?globalThis:window);

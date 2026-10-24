@@ -588,6 +588,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
     venues_seen = set()
     weather_by_venue = weather_by_venue or {}
     new_baseline, new_exhibition, revised_exhibition, changed_exhibition = 0, 0, 0, 0
+    new_model_upgrades = 0
     exhibition_rows = exhibition_rows or {}
     race_source = (payload.get("programs") or {}).get("stadiums") or {}
     for venue_code, stadium in race_source.items():
@@ -661,6 +662,42 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                     record["versions"].append(new)
                     new_exhibition += 1
                     revised_exhibition += int(revision)
+            # 2026-10-25 onward, a race whose earlier v0.7 pre-cutoff
+            # baseline was already fixed may receive ONE new v0.9 revision
+            # BEFORE cutoff. NEVER replace the older version or backdate it.
+            # If last snapshot was exhibition, only promote with complete
+            # currently observed exhibition data; do not downgrade it.
+            if (cutoff.date() >= WAKE_PROMOTION_DATE
+                    and record["versions"]
+                    and record["versions"][-1].get("model_version") != MAIN_WAKE_MODEL
+                    and datetime.now(UTC).astimezone(JST) < cutoff - timedelta(seconds=margin)
+                    if enforce_wall_clock else
+                    cutoff.date() >= WAKE_PROMOTION_DATE
+                    and record["versions"]
+                    and record["versions"][-1].get("model_version") != MAIN_WAKE_MODEL
+                    and runtime_now.astimezone(JST) < cutoff - timedelta(seconds=margin)):
+                latest_before = record["versions"][-1]
+                phase_to_promote = latest_before["phase"]
+                if phase_to_promote == "baseline" or preview_ready:
+                    candidate_now = candidate if phase_to_promote == "exhibition" else race
+                    latest_timestamp = datetime.now(UTC) if enforce_wall_clock else runtime_now
+                    upgrade = prediction(
+                        candidate_now, VENUES[venue_code], n,
+                        phase_to_promote, latest_timestamp, source_url, nearby
+                    )
+                    # Unique immutable record, not a rewrite of earlier SHA.
+                    upgrade["model_upgrade"] = {
+                        "previous_sha256": latest_before["sha256"],
+                        "previous_model": latest_before["model_version"],
+                        "revision_at_utc": latest_timestamp.isoformat(),
+                        "new_model": MAIN_WAKE_MODEL,
+                        "same_race_pre_cutoff_revision": True,
+                    }
+                    upgrade["sha256"] = stable_hash({
+                        k: v for k, v in upgrade.items() if k != "sha256"
+                    })
+                    record["versions"].append(upgrade)
+                    new_model_upgrades += 1
             # Results are NEVER taken from the unofficial preview API.
             # Official pay-page evidence is attached only after forecasts are generated.
     # Preserve previous records even if a subsequent source request is incomplete.
@@ -740,6 +777,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
               "forecast_races": len(latest_races),
               "missed_or_unavailable": len(unavailable),
               "new_baseline": new_baseline, "new_exhibition": new_exhibition,
+              "new_model_upgrades": new_model_upgrades,
               "revised_exhibition": revised_exhibition,
               "changed_exhibition": changed_exhibition,
               "entry_watch_races": out["entry_watch_races"],

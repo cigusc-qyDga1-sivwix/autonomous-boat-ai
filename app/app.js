@@ -285,6 +285,8 @@
     const recalc=window.BoatReanalysis;
     const autoMetrics=recalc?.autoExtra?.(r,window.BoatExhibitionAudit?.metricsFor?.(r));
     const filledMetrics=recalc?.mergeInput?.(autoMetrics?.values,state.reanalysisExtras)||state.reanalysisExtras;
+    const directStatus=window.BoatOriginalExhibitionDirect?.status(r,data.event_date)||{state:'idle'};
+    const originalRefreshLabel=directStatus.state==='ready'?'直接取得済み':directStatus.state==='loading'?'直前CSVを確認中':directStatus.state==='unpublished'?'直前CSV未公開':directStatus.state==='error'?'直接取得失敗':directStatus.state==='cutoff'?'締切後・新規取得停止':'直接取得未確認';
     const exhibitionUrl=external?.exhibitionLinkFor(r.venue,data.event_date,r.race)||externalUrl;
     const modelKey=data.event_date+'|'+r.venue+'|'+r.race+'|'+(r.sha256||'sample');
     const stored=state.reanalysisResult?.key===modelKey?state.reanalysisResult:null;
@@ -323,6 +325,7 @@
       </div>
       ${state.showExternalAnalysis ? `<div class="recalc-workbench">
         <div class="recalc-data-status"><span>勝率・モーター・平均ST：${r.racers?.length===6?'取得済み':'未取得'}</span><span>展示タイム：${r.phase==='exhibition'?'取得済み':'未取得'}</span><span>1周・回り足・直線：自動入力 ${Object.values(autoMetrics?.complete||{}).filter(Boolean).length}/3項目（6艇揃い）</span></div>
+        <div class="recalc-direct-status" role="status" aria-live="polite"><div><strong>📡 オリジナル展示：${escape(originalRefreshLabel)}</strong><p>${escape(directStatus.message||'画面を開くと対象レースの展示CSVを直接確認します。')}${directStatus.data?.source_observed_jst?' ／ データ元の記録 '+escape(directStatus.data.source_observed_jst):''}</p></div><button type="button" class="external-btn external-btn-white" data-action="refresh-original-exhibition" ${directStatus.state==='loading'?'disabled':''}>↻ 今すぐ取得</button></div>
         ${recalc?recalc.inputForm(r,filledMetrics,autoMetrics):'<p>再評価モジュールを読み込めませんでした。</p>'}
         <button type="button" class="external-btn external-btn-primary recalc-run" data-action="run-reanalysis">🧠 取得済みデータで再予想（4〜12点）</button>
         ${stored && recalc?recalc.resultHTML(stored.result,stored.afterCutoff):''}
@@ -647,7 +650,8 @@
         }
         break;
       }
-      case 'analyze-saved-race':state.showExternalAnalysis=!state.showExternalAnalysis;render();break;
+      case 'analyze-saved-race':state.showExternalAnalysis=!state.showExternalAnalysis;render();if(state.showExternalAnalysis)void refreshOriginalExhibition(false);break;
+      case 'refresh-original-exhibition':void refreshOriginalExhibition(true);break;
       case 'run-reanalysis':{
         const r=state.raceDetail,engine=window.BoatReanalysis;
         if(!r||!engine){toast('再評価データがありません');break;}
@@ -799,6 +803,25 @@
       render();
     }
   }
+  let originalRefreshBusy=false;
+  async function refreshOriginalExhibition(force=false){
+    const race=state.raceDetail,source=window.BoatOriginalExhibitionDirect;
+    if(!source||!race||!data||!state.showExternalAnalysis||originalRefreshBusy)return;
+    const date=data.event_date,key=date+'|'+race.venue+'|'+race.race;
+    originalRefreshBusy=true;
+    try{
+      // Direct public original-exhibition CSV (no results or payouts).
+      const result=await source.refresh(race,date,{force});
+      // A manual refresh also updates the archived snapshot fallback.
+      if(force)await window.BoatExhibitionAudit?.load(date);
+      if(result?.state==='error')console.warn('Original exhibition direct fetch:',result.message);
+    }catch(error){console.warn('Original exhibition update:',error?.message);}
+    finally{
+      originalRefreshBusy=false;
+      if(data?.event_date===date&&state.view==='races'&&state.showExternalAnalysis&&
+         state.raceDetail&&date+'|'+state.raceDetail.venue+'|'+state.raceDetail.race===key)render();
+    }
+  }
   let liveUpdateInFlight=false;
   async function reloadLiveIfNew(){
     if(readJSON(STORE_DATA,null)||resultsRefreshBusy||liveUpdateInFlight||document.hidden)return;
@@ -828,12 +851,15 @@
       if('serviceWorker' in navigator&&['https:','http:'].includes(location.protocol))navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
       if(typeof setInterval==='function'){
         setInterval(reloadLiveIfNew,300000);
+        // While reanalysis is open, query the public original-exhibition-only CSV directly.
+        // The external publisher is periodic; this is best-effort, not true realtime.
+        setInterval(()=>{if(state.view==='races'&&state.raceDetail&&state.showExternalAnalysis&&!document.hidden)void refreshOriginalExhibition(false);},20000);
         setInterval(refreshTimelineClock,60000);
         // While the result screen is visible, check published snapshots more
         // frequently without notifications or source-site scraping.
         setInterval(()=>{if(state.view==='results'&&!document.hidden)void reloadLiveIfNew();},90000);
       }
-      document.addEventListener('visibilitychange',()=>{if(!document.hidden)reloadLiveIfNew();});
+      document.addEventListener('visibilitychange',()=>{if(!document.hidden){reloadLiveIfNew();if(state.view==='races'&&state.showExternalAnalysis)void refreshOriginalExhibition(false);}});
     }catch(error){el('main').innerHTML=`<section class="card card-pad"><h1>データを読み込めませんでした</h1><p class="muted">${escape(error.message)}</p><p>アプリはHTTPSまたはローカルHTTPサーバー上で開いてください。ダウンロードしたHTMLを直接開くと、ブラウザの制限で予想データを取得できない場合があります。</p></section>`;}
   }
   window.BoatLab={validate:normalizeData,stats,officialStats,officialFor,compute,getData:()=>data,refreshOfficialResults};

@@ -78,18 +78,27 @@ function panel(r){
 // Research-only projection. Never returns results, payouts or odds.
 function metricsFor(r){
  if(!r||!state.day||!Number.isInteger(Number(r.race)))return null;
- const k=key(r),row=state.map.get(k);
- if(!row||!Array.isArray(row.boats)||row.boats.length!==6)return null;
- const lanes=new Set(),values={};
- for(const boat of row.boats){
-  const lane=Number(boat.lane);
-  if(!Number.isInteger(lane)||lane<1||lane>6||lanes.has(lane))return null;
-  lanes.add(lane);
-  values[lane]={...boat.original};
+ const archive=state.map.get(key(r));
+ const direct=global.BoatOriginalExhibitionDirect?.get(r,state.day)||null;
+ if(!archive&&!direct)return null;
+ const values={},lanes=new Set();
+ if(archive){
+  if(!Array.isArray(archive.boats)||archive.boats.length!==6)return null;
+  for(const boat of archive.boats){
+   const lane=Number(boat.lane);
+   if(!Number.isInteger(lane)||lane<1||lane>6||lanes.has(lane))return null;
+   lanes.add(lane);values[lane]={...boat.original};
+  }
  }
- return {date:state.day,values,source:'BoatraceCSV original_exhibition',
-   source_observed_jst:row.observed||'',collected_at_utc:state.collected||'',
-   certification:'research_snapshot_not_certified_before_cutoff'};
+ if(direct){
+  for(let lane=1;lane<=6;lane++){
+   values[lane]={...(values[lane]||{}),...(direct.values[lane]||{})};
+  }
+ }
+ return {date:state.day,values,source:direct?.source||'BoatraceCSV original_exhibition research',
+   source_observed_jst:direct?.source_observed_jst||archive?.observed||'',
+   collected_at_utc:state.collected||'',
+   certification:'research_or_direct_not_immutable_pre_cutoff'};
 }
 global.BoatExhibitionAudit={load,banner,panel,metricsFor,status:()=>({count:state.map.size,collected:state.collected,checked:state.checked,sourceOkay:state.sourceOkay,error:state.error})};
 })(typeof window!=='undefined'?window:globalThis);

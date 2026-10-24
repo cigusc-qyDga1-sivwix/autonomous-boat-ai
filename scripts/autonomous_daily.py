@@ -43,7 +43,10 @@ VENUES = {
     "21": "芦屋", "22": "福岡", "23": "唐津", "24": "大村",
 }
 MAIN_MODEL = "tactical-outside-start-gap-v0.7-untrained"
+MAIN_WAKE_MODEL = "tactical-outside-start-wake-v0.9-untrained"
+WAKE_PROMOTION_DATE = date(2026, 10, 25)
 MAIN_BRIDGE = Path(__file__).resolve().parent / "main_v07_bridge.js"
+WAKE_BRIDGE = Path(__file__).resolve().parent / "main_v09_bridge.js"
 VIRTUAL_BUDGET_YEN = 50_000
 MIN_POINTS, MAX_POINTS = 4, 12
 STAKE_UNIT_YEN = 1_000
@@ -383,6 +386,50 @@ def promoted_v07(venue: str, phase: str, racers: list[dict],
     return answer
 
 
+def promoted_v09(venue: str, phase: str, racers: list[dict],
+                 profile: dict | None, weather: dict | None,
+                 frozen_at_utc: str) -> dict:
+    """New main (only for Oct 25+). Fail closed, same pre-cutoff data."""
+    inputs = {
+        "venue": venue, "phase": phase,
+        "racers": [{key: r.get(key) for key in (
+            "lane", "course", "national_win_rate", "motor_top_2_percent",
+            "average_start_timing", "exhibition_st", "exhibition_time",
+            "original_exhibition"
+        )} for r in racers],
+        "venue_profile": profile, "weather_used": weather,
+        "frozen_at_utc": frozen_at_utc,
+    }
+    try:
+        job = subprocess.run(
+            ["node", str(WAKE_BRIDGE)], input=json.dumps(inputs, ensure_ascii=False),
+            text=True, capture_output=True, timeout=12, check=True
+        )
+        answer = json.loads(job.stdout)
+    except (OSError, ValueError, subprocess.CalledProcessError,
+            subprocess.TimeoutExpired) as exc:
+        raise RuntimeError("v0.9 bridge unavailable: fail closed, no fallback freeze") from exc
+    bets = answer.get("bets")
+    if answer.get("model_version") != MAIN_WAKE_MODEL or not isinstance(bets, list):
+        raise ValueError("Wrong new main bridge model identity")
+    if not MIN_POINTS <= len(bets) <= MAX_POINTS or len({
+        b.get("combination") for b in bets
+    }) != len(bets) or any(
+        not isinstance(b.get("virtual_yen"), int)
+        or b["virtual_yen"] < STAKE_UNIT_YEN
+        or b["virtual_yen"] % STAKE_UNIT_YEN
+        or not isinstance(b.get("combination"), str)
+        or len(b["combination"].split("-")) != 3
+        or len(set(b["combination"].split("-"))) != 3
+        or any(x not in "123456" for x in b["combination"].split("-"))
+        for b in bets
+    ) or sum(b["virtual_yen"] for b in bets) != VIRTUAL_BUDGET_YEN:
+        raise ValueError("Invalid v0.9 ticket allocation")
+    if not answer.get("wake_v09", {}).get("pre_cutoff_only"):
+        raise ValueError("Wake provenance missing")
+    return answer
+
+
 def prediction(race: dict, venue: str, race_number: int, phase: str,
                now: datetime, source_url: str, nearby_weather: dict | None = None) -> dict:
     if phase not in ("baseline", "exhibition"):
@@ -434,24 +481,46 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         }
     legacy_control["sha256"] = stable_hash(legacy_control)
     profile = get_profile(venue_code) if venue_code else None
-    promoted = promoted_v07(venue, phase, racers, profile, selected_weather, frozen_at)
+    new_primary = cutoff.date() >= WAKE_PROMOTION_DATE
+    if new_primary:
+        same_time_old = promoted_v07(venue, phase, racers, profile, selected_weather, frozen_at)
+        legacy_control = {
+            "model_version": same_time_old["model_version"],
+            "bets": same_time_old["bets"],
+            "point_count": len(same_time_old["bets"]),
+            "frozen_at_utc": frozen_at,
+            "model_role": "shadow_validation",
+            "source_note": "v0.7 old main frozen at same pre-cutoff instant; no result",
+        }
+        legacy_control["sha256"] = stable_hash(legacy_control)
+        promoted = promoted_v09(venue, phase, racers, profile, selected_weather, frozen_at)
+        chosen_model = MAIN_WAKE_MODEL
+    else:
+        promoted = promoted_v07(venue, phase, racers, profile, selected_weather, frozen_at)
+        chosen_model = MAIN_MODEL
     bets = promoted["bets"]
     count = len(bets)
     shares = promoted["head_course_shares"]
     concentration = max(x["relative_share"] for x in shares)
     top_two = sorted((x["relative_share"] for x in shares), reverse=True)
     gap = top_two[0] - top_two[1]
-    reason = ("6艇連動＋平均ST／展示STと内艇の先行差による着順分岐"
-              "（4〜12点・未訓練・確率未校正）")
+    reason = ("6艇連動＋平均ST／展示ST＋1M・2M引き波回避の着順分岐"
+              if new_primary else
+              "6艇連動＋平均ST／展示STと内艇の先行差による着順分岐")
+    reason += "（4〜12点・未訓練・確率未校正）"
     top_combo = bets[0]["combination"].split("-")
     leader = racers[int(top_combo[0]) - 1]
     follower = racers[int(top_combo[1]) - 1]
     weather = observed
     body = {
-        "model_version": MAIN_MODEL,
+        "model_version": chosen_model,
         "model_role": "main",
         "legacy_control": legacy_control,
         "start_v07": promoted["start_v07"],
+        **({"wake_v09": promoted["wake_v09"],
+            "primary_promotion_date_jst": WAKE_PROMOTION_DATE.isoformat(),
+            "primary_model_ab": "v0.9 primary vs same-time frozen v0.7 control"}
+           if new_primary else {}),
         "coupled_v06": promoted["coupled_v06"],
         "head_course_shares": promoted["head_course_shares"],
         "role_coverage": promoted["role_coverage"],

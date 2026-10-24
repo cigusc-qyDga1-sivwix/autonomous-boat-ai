@@ -424,6 +424,14 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         "model_role": "shadow_validation",
         "source_note": "Same pre-cutoff input, original Python heuristic; no hindsight",
     }
+    if selected_weather:
+        legacy_control["weather_ab"] = {
+            "control_model": "old_heuristic_without_weather",
+            "control_bets": control_bets,
+            "weather_bets": bets,
+            "generated_pre_cutoff": True,
+            "scope": "old_shadow_only_never_count_as_primary_weather_ab",
+        }
     legacy_control["sha256"] = stable_hash(legacy_control)
     profile = get_profile(venue_code) if venue_code else None
     promoted = promoted_v07(venue, phase, racers, profile, selected_weather, frozen_at)
@@ -621,8 +629,11 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         "mode": "auto-live",
         "updated_at_utc": ledger["last_updated_at_utc"],
         "timezone": "Asia/Tokyo",
-        "method": ("全国24場・v0.7スタート差＋6艇着順連動をメインで発走前固定"
-                   "／旧方式は別枠検証／4〜12点・仮想5万円"),
+        "method": ("全国24場・新規予想はv0.7スタート差＋6艇着順連動がメイン"
+                   "／旧モデル固定分は不変・同時点の旧方式を別枠検証"
+                   "／4〜12点・仮想5万円"
+                   if any(x.get("model_role") == "main" for x in latest_races)
+                   else "全国24場・既存の発走前固定予想（v0.7昇格前の旧モデル記録）"),
         "freeze_reference": "GitHub app/data/live/{date}.json のcommit履歴＋SHA256",
         "forecast_races": latest_races,
         "official_results": official_results,

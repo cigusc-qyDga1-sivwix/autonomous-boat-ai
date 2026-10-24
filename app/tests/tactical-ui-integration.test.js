@@ -15,8 +15,8 @@ assert.equal(view.tacticalOptions(r)[0].combo,
   'v0.7 main keeps old model only in shadow animation choices');
 assert.ok(view.choices(r).some(x=>x.kind==='tactical'));
 assert.match(html,/戦法別 v5/);
-assert.match(html,/戦法モデルの候補/);
-assert.match(html,/未固定/);
+assert.match(html,r.model_role==='main'?/旧モデルの検証用買い目/:/戦法モデルの候補/);
+assert.match(html,r.model_role==='main'?/旧モデル比較/:/未固定/);
 assert.match(html,/data-sim-kind="tactical"/);
 assert.match(html,/data-sim-kind="forecast"/);
 assert.match(html,/1Mの外/);

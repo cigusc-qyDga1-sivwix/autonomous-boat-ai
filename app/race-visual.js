@@ -152,6 +152,9 @@
    ].filter(x=>valid(x.combo));
  }
  function tacticalOptions(r){
+   if(r?.model_role==='main'&&Array.isArray(r.legacy_control?.bets))
+    return r.legacy_control.bets.slice(0,4).filter(b=>valid(b.combination))
+     .map(b=>({combo:b.combination,kind:'tactical',label:'旧モデル比較'}));
    let outcome;
    try{outcome=window.BoatTacticalModel?.forecast(r)}catch{return []}
    if(!outcome)return [];
@@ -208,20 +211,20 @@
    const picks=options(r);
    if(!picks.length)return '<section class="card card-pad">アニメ再生に使える買い目がありません。</section>';
    const tacticCases=tacticalOptions(r);
-   const combo=tacticCases[0]?.combo||picks[0],order=ranks(combo),tactic=tacticFor(combo,r),roles=rolesFor(combo,r);
+   const combo=r?.model_role==='main'?picks[0]:(tacticCases[0]?.combo||picks[0]),order=ranks(combo),tactic=tacticFor(combo,r),roles=rolesFor(combo,r);
    let html='<section class="card card-pad boat-sim boat-sim-v3 boat-sim-v4" data-boat-sim aria-label="予想展開アニメーション">'+
      '<div class="section-head"><div><h2 class="section-title">🎬 展開予想アニメ</h2><p class="boat-sim-mini">スタート → 第1ターンマーク → バックストレッチ</p></div><span class="boat-sim-tag">戦法別 v5 / 自動再生</span></div>'+
-     '<div class="boat-sim-narrative"><span>想定する攻め方 <b data-sim-tactic>'+tactic.label+'</b></span><strong data-sim-forecast>'+(tacticCases.length?'戦法研究（未固定） ':'元の予想 ')+combo+'</strong></div>'+
+     '<div class="boat-sim-narrative"><span>想定する攻め方 <b data-sim-tactic>'+tactic.label+'</b></span><strong data-sim-forecast>'+(r?.model_role==='main'?'メインv0.7 発走前固定 ':tacticCases.length?'戦法研究（未固定） ':'元の予想 ')+combo+'</strong></div>'+
      '<p class="boat-sim-disclaimer">本線・対抗の買い目に加え、非購入の比較用展開も切り替えられるよ。各艇が独立して先マイ／差し／まくり／まくり差しを狙う仮説を描く。実際の進入や艇間の航跡・速度を再現したものではありません。艇の戦法と、1Mの外を回る位置関係を比較する模式図です。</p>'+
      '<div class="boat-sim-roles" data-sim-roles aria-label="各艇の攻め方の仮説">'+roles.map(x=>'<span>'+x.lane+'号艇('+x.course+'コース)：'+esc(x.label)+'</span>').join('')+'</div>'+
      '<div class="boat-sim-picks" role="group" aria-label="再現する買い目">';
    picks.forEach((pick,i)=>{
-     const sel=pick===combo&&!tacticCases.length;
-     html+='<button type="button" data-sim-pick="'+pick+'" data-sim-kind="forecast" aria-pressed="'+sel+'" class="'+(sel?'active':'')+'">'+(i===0?'元の本線':'元の展開'+(i+1))+' <strong>'+pick+'</strong></button>';
+     const sel=pick===combo&&(r?.model_role==='main'||!tacticCases.length);
+     html+='<button type="button" data-sim-pick="'+pick+'" data-sim-kind="forecast" aria-pressed="'+sel+'" class="'+(sel?'active':'')+'">'+(r?.model_role==='main'?(i===0?'v0.7本線':'v0.7展開'+(i+1)):(i===0?'元の本線':'元の展開'+(i+1)))+' <strong>'+pick+'</strong></button>';
    });
-   html+='</div><div class="boat-sim-tactical"><span>🧠 戦法モデルの候補（研究・未固定、買い目確定ではない）</span><div role="group" aria-label="1M戦法の研究候補">';
+   html+='</div><div class="boat-sim-tactical"><span>🧠 '+(r?.model_role==='main'?'旧モデルの検証用買い目（同時点で固定）':'戦法モデルの候補（研究・未固定、買い目確定ではない）')+'</span><div role="group" aria-label="1M戦法の研究候補">';
    tacticCases.forEach((x,i)=>{
-     html+='<button type="button" data-sim-pick="'+x.combo+'" data-sim-kind="tactical" class="'+(x.combo===combo?'active':'')+'" aria-pressed="'+(x.combo===combo)+'">'+(i===0?'新本線 ':'新展開 ')+esc(x.label)+' <strong>'+x.combo+'</strong></button>';
+     html+='<button type="button" data-sim-pick="'+x.combo+'" data-sim-kind="tactical" class="'+(x.combo===combo?'active':'')+'" aria-pressed="'+(x.combo===combo)+'">'+(r?.model_role==='main'?'旧モデル ':i===0?'新本線 ':'新展開 ')+esc(x.label)+' <strong>'+x.combo+'</strong></button>';
    });
    html+='</div></div><div class="boat-sim-picks">';
    const extras=studyOptions(r).filter(x=>!picks.includes(x.combo)&&!tacticCases.some(t=>t.combo===x.combo));

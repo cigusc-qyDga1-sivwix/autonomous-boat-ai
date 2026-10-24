@@ -38,11 +38,14 @@ for(const lane of [4,5,6]){
   'start-based attacking gap raises head relative score for '+lane);
  const insideSecond=next.metadata.start_v07.second_given_inside_first;
  assert.equal(insideSecond.length,5);
- const beforeWeight=[2,3,4,5,6].map(course=>({
-   course,weight:0 // v0.6 does not publish a conditional head1 second diagnostic.
- }));
- assert.ok(insideSecond.find(x=>x.course===lane).conditional_relative_weight>0,
-  'start-based outer second finish is scored separately for '+lane);
+ const other={...src,racers:src.racers.map((r,i)=>(
+   i===lane-1||i===lane-2?
+    {...r,average_start_timing:.18,exhibition_st:.18}:r
+ ))};
+ const neutral=T.forecastOutsideStart(other).metadata.start_v07.second_given_inside_first;
+ assert.ok(insideSecond.find(x=>x.course===lane).conditional_relative_weight>
+   neutral.find(x=>x.course===lane).conditional_relative_weight,
+   'outer 2nd given 1st-course winner must improve when ST lead appears: '+lane);
  assert.ok(next.bets.some(b=>b.combination.split('-').slice(0,2).includes(String(lane))),
   'strong 4/5/6 must appear as head or second if a competitive 3-way combo exists: '+lane);
  assert.ok(next.bets.length>=4&&next.bets.length<=12);

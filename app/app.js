@@ -570,6 +570,7 @@
     ${window.BoatExhibitionAudit?.panel(r)||''}
     ${exhibitionDetail}
     ${window.BoatRaceVisual?window.BoatRaceVisual.entryHTML(r):''}
+     ${window.BoatRacerRatingPanel?.render(r)||''}
     ${r.model_role==='main'?legacyControlPanel(r):tacticalTrialPanel(r)}
     ${window.BoatRaceVisual?window.BoatRaceVisual.animationHTML(r):''}
     ${referencePanel}

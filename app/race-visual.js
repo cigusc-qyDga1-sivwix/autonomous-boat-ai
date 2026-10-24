@@ -18,7 +18,7 @@
    if(r?.entry_exhibition_gate?.entry_watch&&!r.entry_exhibition_gate.final_eligible)
      return {status:'hold',reason:'前付け警戒・展示進入未確認のため順位を保留'};
    try{
-     const forecast=window.BoatTacticalModel?.forecastRoleAware?.(r)||window.BoatTacticalModel?.forecast(r);
+     const forecast=window.BoatRacerRating?.forecastForRace?.(r)||window.BoatTacticalModel?.forecastRoleAware?.(r)||window.BoatTacticalModel?.forecast(r);
      const values=forecast?.head_course_shares;
      if(!Array.isArray(values)||values.length!==6)return {status:'unknown',reason:'評価に必要なデータがありません'};
      const candidates=values.map(v=>({lane:Number(v.lane),share:Number(v.relative_share)}));

@@ -34,6 +34,8 @@ win.BoatOriginalExhibitionDirect={
  status:()=>state,get:()=>state.state==='ready'?state.data:null,
  refresh:async(_r,_d,opts)=>{
   requests++;if(opts.force)forceRequests++;
+  state={state:'loading',message:'展示CSVを直接確認しています'};
+  await new Promise(resolve=>setTimeout(resolve,1));
   state={state:'ready',data:preview,count:18,message:'直前CSVから 18/18項目を取得'};
   return state;
  }
@@ -56,6 +58,7 @@ async function main(){
  const original=JSON.stringify(race);
  click('[data-race]',{race:race.venue+'|'+race.race});
  click('[data-action]',{action:'analyze-saved-race'});
+ assert.match(el('main').innerHTML,/直前CSVを確認中/,'loading status must render immediately');
  await tick();
  assert.ok(requests>=1,'opening reanalysis must check direct CSV');
  assert.match(el('main').innerHTML,/直接CSV 18件/);

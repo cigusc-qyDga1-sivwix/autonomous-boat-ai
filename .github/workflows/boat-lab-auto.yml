@@ -11,6 +11,8 @@ on:
       - 'scripts/export_venue_profiles.py'
       - 'scripts/ingest_boatracecsv_exhibition.py'
       - 'scripts/research_outside_roles.py'
+      - 'scripts/research_coupling_patterns.py'
+      - 'scripts/freeze_coupling_trials.js'
       - 'scripts/exhibition_bridge.py'
       - 'scripts/freeze_tactical_trials.js'
       - 'scripts/freeze_outside_trials.js'
@@ -51,6 +53,7 @@ jobs:
           python scripts/ingest_boatracecsv_exhibition.py
           python -m json.tool app/data/exhibition/status-latest.json > /dev/null
           python scripts/research_outside_roles.py
+          python -m scripts.research_coupling_patterns
           # No results here can revise an immutable forecast or official settlement.
       - name: Collect all available venues and freeze only pre-cutoff forecasts
         shell: bash
@@ -74,6 +77,12 @@ jobs:
           set -euo pipefail
           node scripts/freeze_outside_trials.js
           python -m json.tool app/data/experiments/outside-status-latest.json > /dev/null
+      - name: Independently freeze v0.5 versus six-boat coupling v0.6
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/freeze_coupling_trials.js
+          python -m json.tool app/data/experiments/coupling-status-latest.json > /dev/null
       - name: Persist predictions and immutable version history
         shell: bash
         run: |

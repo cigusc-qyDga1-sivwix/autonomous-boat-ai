@@ -28,7 +28,8 @@ const assign=(r,course)=>{
 };
 const nameTactic=['','先マイ・逃げ','差し','まくり差し','カドまくり','外からのまくり差し','外の展開連動'];
 function forecast(input){
- const coupledTrial=input?.experimental_variant==='six-boat-coupling-v0.6';
+ const startTrial=input?.experimental_variant==='outside-start-gap-v0.7';
+ const coupledTrial=input?.experimental_variant==='six-boat-coupling-v0.6'||startTrial;
  const wakeTrial=input?.experimental_variant==='wake-attrition-v0.3'||coupledTrial;
  const outerStudyTrial=input?.experimental_variant==='outside-role-v0.5'||coupledTrial;
  const roleAwareTrial=input?.experimental_variant==='role-consistency-v0.4'||outerStudyTrial;
@@ -49,12 +50,15 @@ function forecast(input){
    const win=clamp(finite(r.national_win_rate,4.5),1,10);
    const motor=clamp(finite(r.motor_top_2_percent,30),0,100);
    const st=finite(r.average_start_timing,.17);
-   const avg=st>=.01&&st<=.4?st:.17;
+   const avgValid=st>=.01&&st<=.4&&r.average_start_timing!==null&&r.average_start_timing!==undefined;
+   const avg=avgValid?st:.17;
    const exhibit=finite(r.exhibition_time,null),est=finite(r.exhibition_st,null);
+   const estValid=est!==null&&est>=0&&est<=.45; // Exhibition F is NOT a faster start.
+
    const lap=finite(r.original_exhibition?.lap_time,null);
    const turn=finite(r.original_exhibition?.turn_time,null);
    const straight=finite(r.original_exhibition?.straight_time,null);
-   return {lane:i+1,course:courses[i],win,motor,avg,exhibit,est,lap,turn,straight};
+   return {lane:i+1,course:courses[i],win,motor,avg,avgValid,exhibit,est,estValid,lap,turn,straight};
  });
  const mean=(key)=>v.reduce((s,x)=>s+x[key],0)/6;
  const meanWin=mean('win'),meanMotor=mean('motor'),meanST=mean('avg');
@@ -92,6 +96,46 @@ function forecast(input){
      .28*preceding-.65*Math.max(0,.95-launch),.72,1.65);
   return {course,launch,steering,preceding,multiplier};
  });
+ // v0.7 ST research: predict relative SLIT formation from pre-race estimates
+ // only; exhibition F is excluded, not interpreted as "exceptionally early".
+ // No real start times, results or after-cutoff data enter this function.
+ const startSignals=startTrial?Array.from({length:6},(_,i)=>{
+   const own=v[byCourse[i]];
+   const inner=i>0?v[byCourse[i-1]]:null;
+   const stEstimate=x=>x.avgValid?(x.estValid?
+     .72*x.avg+.28*x.est:x.avg):(x.estValid?x.est:null);
+   const ownST=stEstimate(own),innerST=inner?stEstimate(inner):null;
+   const allInner=Array.from({length:i},(_,j)=>v[byCourse[j]]);
+   const innerValid=allInner.map(stEstimate).filter(x=>x!==null);
+   const nearestGap=ownST!==null&&innerST!==null?innerST-ownST:null;
+   const innerGap=ownST!==null&&innerValid.length?
+     innerValid.reduce((sum,st)=>sum+st,0)/innerValid.length-ownST:null;
+   const wallHole=allInner.some(x=>{
+     const s=stEstimate(x);
+     return ownST!==null&&s!==null&&s-ownST>=.035;
+   });
+   const confidence=own.avgValid&&inner?.avgValid?(own.estValid&&inner.estValid?.88:.64):
+     ownST!==null&&innerST!==null?.42:0;
+   const go=move[byCourse[i]];
+   const neighbor=inner?move[byCourse[i-1]]:null;
+   const speedEdge=neighbor?go.go/Math.max(.38,neighbor.go):1;
+   const turnEdge=neighbor?go.turn/Math.max(.35,neighbor.turn):1;
+   const headEligible=i>=3&&confidence>=.60&&nearestGap!==null&&
+     nearestGap>=.022&&speedEdge>=.92&&turnEdge>=.78;
+   const secondEligible=i>=3&&confidence>=.42&&nearestGap!==null&&
+     nearestGap>=.012&&go.go>=.72&&go.turn>=.70;
+   const tactics=[];
+   if(headEligible&&speedEdge>=1.05&&nearestGap>=.04)tactics.push('まくり先行');
+   if(headEligible&&wallHole&&turnEdge>=.85)tactics.push('まくり差しの差し場');
+   if(secondEligible)tactics.push('攻め残り・追走2着');
+   return {course:i+1,lane:own.lane,estimated_st:ownST===null?null:+ownST.toFixed(3),
+     nearest_gap_sec:nearestGap===null?null:+nearestGap.toFixed(3),
+     inside_mean_gap_sec:innerGap===null?null:+innerGap.toFixed(3),
+     wall_hole:wallHole,confidence:+confidence.toFixed(2),
+     speed_ratio:+speedEdge.toFixed(3),turn_ratio:+turnEdge.toFixed(3),
+     head_evidence:!!headEligible,second_evidence:!!secondEligible,
+     tactic_candidates:tactics,exhibition_f_ignored:own.est!==null&&!own.estValid};
+ }):[];
  const rate=finite(input.venue_profile?.course1_reference_rate,RATE_BY_VENUE[input.venue]??.55);
  const head1=clamp(rate,.38,.67);
  // Retain conservative venue dependence, but no hardcoded course-1 winner.
@@ -147,6 +191,18 @@ function forecast(input){
   }
   if(outsideEvidence[4]?.confidence>=.10)
    strength[0]*=clamp(1-.15*outsideEvidence[4].confidence,.92,1);
+ }
+ // V0.7 bounded head-role correction when an outside starter may arrive early.
+ // Venue priors still apply; a fast ST by itself never guarantees a win.
+ if(startTrial){
+  for(const signal of startSignals.slice(3)){
+   if(!signal.head_evidence)continue;
+   const strengthOfEvidence=clamp((signal.nearest_gap_sec-.015)/.06,0,1);
+   strength[signal.course-1]*=1+clamp(.55*strengthOfEvidence+
+     .32*Math.max(0,signal.speed_ratio-1)+.22*(signal.wall_hole?1:0),0,1.18);
+  }
+  if(startSignals.slice(3).some(s=>s.head_evidence&&s.wall_hole))
+   strength[0]*=.96; // Do not automatically erase an inside survival branch.
  }
  // Incomplete hydrodynamic proxy: a makuri or sweeping outer turn may put
  // an inner boat across its wake. This score is not an observed trajectory,
@@ -226,6 +282,18 @@ function forecast(input){
       relation*=clamp(1+.55*lead.confidence,1,1.38);
     else if(headCourse===2||headCourse===3)
       relation*=own?.attack&&candidate.turn>=.93?clamp(1+.3*own.confidence,1,1.2):1;
+   }
+   if(startTrial&&secondCourse>=4){
+     const signal=startSignals[secondCourse-1];
+     if(signal.second_evidence){
+       // May finish 2nd despite a failed winning attack; head and 2nd
+       // are scored INDEPENDENTLY, including course 6 without a follower.
+       const lead=startSignals[headCourse-1];
+       const follow=(headCourse>=3&&headCourse<secondCourse)?
+         clamp(1+.30*(lead?.head_evidence?1:0),1,1.3):1;
+       relation*=follow*(1+clamp(.46*(signal.nearest_gap_sec/.05)+
+         .16*(signal.wall_hole?1:0),.08,.76));
+     }
    }
    if(wakeTrial)relation*=clamp(1-.82*estimatedWakeRisk(headCourse,secondCourse),.39,1);
    if(coupledTrial){
@@ -398,6 +466,36 @@ function forecast(input){
   }
  }
  }
+ // A 4/5/6 head or second can be missing from 4–12 picks even when its
+ // pre-race start gap is credible. Add the best distinct scenario only if
+ // it competes with the currently lowest-ticket evidence; NO seat quotas.
+ if(startTrial){
+   const ordered=startSignals.slice(3).filter(s=>s.head_evidence||s.second_evidence)
+    .sort((a,b)=>(b.nearest_gap_sec||0)-(a.nearest_gap_sec||0));
+   for(const signal of ordered){
+     for(const role of ['head','second']){
+       if(role==='head'&&!signal.head_evidence||role==='second'&&!signal.second_evidence)continue;
+       const pos=role==='head'?0:1;
+       const already=picks.some(p=>p.combination.split('-')[pos]===String(signal.lane));
+       if(already)continue;
+       const best=candidates.find(p=>p.combination.split('-')[pos]===String(signal.lane));
+       if(!best||picks.some(p=>p.combination===best.combination))continue;
+       const candidatesToReplace=picks.map((p,i)=>({p,i})).filter(({p,i})=>{
+         if(i===0)return false;
+         if(p.headCourse!==1&&picks.filter(q=>q.headCourse===p.headCourse).length===1)return false;
+         return true;
+       }).sort((a,b)=>a.p.pseudo-b.p.pseudo||b.i-a.i);
+       const worst=candidatesToReplace[0];
+       // Avoid an unconditional 4/5/6 ticket for very weak probabilities;
+       // allow a controlled loss of ranking to cover a DISTINCT supported path.
+       if(!worst||best.pseudo<worst.p.pseudo*.48)continue;
+       picks[worst.i]=best;
+       roleChanges.push({role,lane:signal.lane,combination:best.combination,
+        reason:'スタート先行・内側凹みの根拠で'+signal.course+'コースの'+
+          (role==='head'?'まくり／まくり差し頭':'展開2着')+'を試験採用'});
+     }
+   }
+ }
  const roleCoverage={};
  for(let lane=1;lane<=6;lane++){
   const combos=picks.map(p=>p.combination.split('-').map(Number));
@@ -422,13 +520,23 @@ function forecast(input){
  remainders.slice(0,unused).forEach(o=>floor[o.i]++);
  const bets=picks.map((c,i)=>({combination:c.combination,virtual_yen:(floor[i]+1)*1000,
   head_course:c.headCourse,scenario:c.scenario,
-  conditional_reason:coupledTrial?
+  conditional_reason:startTrial?
+   c.headCourse+'コース '+(startSignals[c.headCourse-1]?.tactic_candidates.join('／')||coupling[c.headCourse-1].tactic)+'（ST差の仮説） → '+c.secondCourse+'コース2着 → '+c.thirdCourse+'コース3着':
+   coupledTrial?
    c.headCourse+'コース '+coupling[c.headCourse-1].tactic+'（仮説） → '+c.secondCourse+'コースが2着を確保 → '+c.thirdCourse+'コースが3着に残存':
    c.scenario+'が成立 → '+c.secondCourse+'コースが追走 → '+c.thirdCourse+'コース残存',
   relative_score:+c.pseudo.toFixed(6)}));
  if(new Set(bets.map(x=>x.combination)).size!==bets.length||bets.reduce((sum,b)=>sum+b.virtual_yen,0)!==50000)throw Error('Invalid experimental virtual allocation');
+ // Conditional second-place evaluation is distinct from the global marginal.
+ // A rise in a boat's FIRST share can lower its unconditional SECOND share.
+ // Given inside-1 winning, expose each remaining boat's second-place weight.
+ const headOneScores=startTrial?Array.from({length:5},(_,i)=>({
+   course:i+2,lane:v[byCourse[i+1]].lane,weight:secondWeight(1,i+2)
+ })):[];
+ const headOneTotal=headOneScores.reduce((n,x)=>n+x.weight,0);
  return {
-   model:coupledTrial?'tactical-six-boat-coupling-v0.6-untrained':
+   model:startTrial?'tactical-outside-start-gap-v0.7-untrained':
+     coupledTrial?'tactical-six-boat-coupling-v0.6-untrained':
      outerStudyTrial?'tactical-outside-role-v0.5-untrained':
      roleAwareTrial?'tactical-role-consistency-v0.4-untrained':
      wakeTrial?'tactical-wake-attrition-v0.3-untrained':
@@ -436,6 +544,16 @@ function forecast(input){
    basis:'保存済み発走前選手情報と場別参考値のみ。結果・払戻・オッズ不使用。',
    venue:input.venue,head_course_shares:shares.map((s,i)=>({course:i+1,lane:v[byCourse[i]].lane,relative_share:+s.toFixed(4),tactic:nameTactic[i+1]})),
    metadata:{venue_reference_rate:rate,wind_speed:wind,validMetrics,exhibition_used:validMetrics.length>0,
+     ...(startTrial?{start_v07:{
+       slit_signals:startSignals,
+       second_given_inside_first:headOneScores.map(x=>({
+         course:x.course,lane:x.lane,
+         conditional_relative_weight:+(x.weight/headOneTotal).toFixed(5)
+       })),
+       description:'Pre-race average and legal exhibition ST estimates; relative nearest-course gap, inner wall and bounded role rescue',
+       prediction_only:true,calibrated:false,
+       disclaimer:'Not actual race ST, not guaranteed makuri / makuri-zashi. Exhibition F ignored.'
+     }}:{}),
      ...(coupledTrial?{coupled_v06:{
        interaction_graph:coupling,
        branch_definition:'1M head attack -> inner displacement / outer follow -> conditional 2nd and 3rd',
@@ -473,7 +591,8 @@ global.BoatTacticalModel={forecast,
  forecastRoleAware:input=>forecast({...input,experimental_variant:'role-consistency-v0.4'}),
  forecastOutsideRole:input=>forecast({...input,experimental_variant:'outside-role-v0.5'}),
  forecastCoupled:input=>forecast({...input,experimental_variant:'six-boat-coupling-v0.6'}),
+ forecastOutsideStart:input=>forecast({...input,experimental_variant:'outside-start-gap-v0.7'}),
  forecastOutside:input=>forecast({...input,experimental_variant:'outside-makuri-v0.2'}),
  forecastWake:input=>forecast({...input,experimental_variant:'wake-attrition-v0.3'}),
- RATE_BY_VENUE,OUTSIDE_VENUE_COURSES,nameTactic,version:'trial-v0.6-coupled-20261024'};
+ RATE_BY_VENUE,OUTSIDE_VENUE_COURSES,nameTactic,version:'trial-v0.7-outside-start-20261024'};
 })(typeof window!=='undefined'?window:globalThis);

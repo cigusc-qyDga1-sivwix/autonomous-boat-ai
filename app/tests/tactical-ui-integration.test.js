@@ -10,7 +10,9 @@ const original=JSON.stringify(r);
 const model=win.BoatTacticalModel.forecast(r),view=win.BoatRaceVisual;
 const html=view.animationHTML(r);
 assert.ok(view.tacticalOptions(r).length>0);
-assert.equal(view.tacticalOptions(r)[0].combo,model.top);
+assert.equal(view.tacticalOptions(r)[0].combo,
+  r.model_role==='main'?r.legacy_control.bets[0].combination:model.top,
+  'v0.7 main keeps old model only in shadow animation choices');
 assert.ok(view.choices(r).some(x=>x.kind==='tactical'));
 assert.match(html,/戦法別 v5/);
 assert.match(html,/戦法モデルの候補/);

@@ -7,7 +7,8 @@ for(const path of ['app/wake-study.js','app/race-visual.js']){
  vm.runInContext(fs.readFileSync(path,'utf8'),ctx,{filename:path});
 }
 const W=win.BoatWakeStudy,V=win.BoatRaceVisual;
-const mk=()=>({venue:'唐津',
+const mk=()=>({venue:'唐津',phase:'exhibition',
+  entry_exhibition_gate:{final_eligible:true,entry_watch:false},
   model_role:'main',
   racers:Array.from({length:6},(_,i)=>({lane:i+1,course:i+1,
     average_start_timing:.17-i*.008,
@@ -26,6 +27,11 @@ assert.deepEqual(Array.from(risk.map(x=>x.lane).sort((a,b)=>a-b)),[1,2,3],
 assert.ok(outer.exposures.some(x=>x.phase==='2M+'),'study wake after turn one too');
 assert.ok(outer.exposures.every(x=>x.risk>=0&&x.risk<=1));
 assert.ok(outer.exposures.every(x=>typeof x.note==='string'&&x.note.length>0),'each affected boat has a qualified scenario explanation');
+const provisional=mk();
+provisional.phase='baseline';
+provisional.entry_exhibition_gate={final_eligible:false,entry_watch:false};
+assert.equal(W.analysis('4-5-6',provisional).status,'partial',
+ 'baseline lane=course placeholder must not count as confirmed entry');
 const escape=W.analysis('1-2-3',race);
 assert.equal(escape.exposures.filter(x=>x.phase==='1M').length,0,
  'inside winner has no automatically crossed inner boats');

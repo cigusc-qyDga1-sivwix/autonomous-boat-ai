@@ -179,7 +179,10 @@
     var r=slot&&slot.forecast;
     var cutoff=slot&&slot.cutoff;
     var experiment=null;
-    if(r&&window.BoatTacticalModel&&!(r.entry_exhibition_gate?.entry_watch&&!r.entry_exhibition_gate?.final_eligible)){
+    if(r?.model_role==='main'&&r.legacy_control?.bets?.length){
+      experiment={top:r.legacy_control.bets[0].combination,
+        bets:r.legacy_control.bets,legacy:true,differs_from_frozen:true};
+    }else if(r&&window.BoatTacticalModel&&!(r.entry_exhibition_gate?.entry_watch&&!r.entry_exhibition_gate?.final_eligible)){
       try{experiment=window.BoatTacticalModel.forecast(r)}catch(e){experiment=null;}
     }
     var outcome=officialForSlot(data,venue,number,r);
@@ -194,8 +197,10 @@
     return '<div class="venue-race'+(r?' venue-race-available':' venue-race-empty')+'">' +
       '<div class="venue-race-top"><b>'+number+'R</b>'+raceStatus(r,slot,now,data,venue,number)+'</div>' +
       '<div class="venue-race-cutoff"><span>締切予定</span><strong>'+esc(cutoff||'—')+'</strong></div>' +
-      (r?'<div class="venue-race-main">🔒 固定：'+esc(r.bets.slice(0,2).map(function (b){return b.combination;}).join(' / '))+'</div>' +
-          (experiment?'<div class="venue-tactical">🧠 新・1M戦法研究：<b>'+esc(experiment.top)+'</b> ／ '+experiment.bets.length+'点'+(experiment.differs_from_frozen?'（変更あり）':'（配分同じ）')+'</div>':'') +
+      (r?'<div class="venue-race-main">'+(r.model_role==='main'?'✅ メインv0.7 固定：':'🔒 旧モデル固定：')+esc(r.bets.slice(0,2).map(function (b){return b.combination;}).join(' / '))+'</div>' +
+          (experiment?'<div class="venue-tactical">🧠 '+(experiment.legacy?'旧モデル検証：':'1M戦法研究：')+
+          '<b>'+esc(experiment.top)+'</b> ／ '+experiment.bets.length+'点'+
+          (experiment.legacy?'（結果は正式収支に重複計上しない）':experiment.differs_from_frozen?'（変更あり）':'（配分同じ）')+'</div>':'') +
           '<div class="venue-race-scene">'+esc(r.scenario||'展開予想あり')+'</div>' +
           weatherInfo+payInfo+
           '<button type="button" class="venue-race-action" data-race="'+esc(venue)+'|'+number+'">買い目 '+r.bets.length+'点を見る →</button>' :

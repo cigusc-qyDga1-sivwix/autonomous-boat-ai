@@ -29,7 +29,9 @@ function run(input){
  if(result.model!=='tactical-outside-start-wake-v0.9-untrained'||!validBets(result.bets))
   throw Error('v0.9 wake model returned invalid prediction / allocation');
  if(!Array.isArray(result.head_course_shares)||result.head_course_shares.length!==6||
-    result.metadata?.start_v07?.slit_signals?.length!==6)
+    result.metadata?.start_v07?.slit_signals?.length!==6||
+    result.metadata?.wake_v09?.pre_cutoff_only!==true||
+    result.metadata?.wake_v09?.head_course_exposure?.length!==6)
   throw Error('Missing ST / head coverage diagnostics');
  return {
   model_version:result.model,
@@ -39,6 +41,7 @@ function run(input){
   role_changes:result.role_changes,
   start_v07:result.metadata.start_v07,
   coupled_v06:result.metadata.coupled_v06,
+  wake_v09:result.metadata.wake_v09,
   relative_scores_uncalibrated:true
  };
 }

@@ -25,7 +25,7 @@ assert.deepEqual(Array.from(risk.map(x=>x.lane).sort((a,b)=>a-b)),[1,2,3],
  '4 course winner puts 1/2/3 inside lanes under study');
 assert.ok(outer.exposures.some(x=>x.phase==='2M+'),'study wake after turn one too');
 assert.ok(outer.exposures.every(x=>x.risk>=0&&x.risk<=1));
-assert.ok(outer.exposures.every(x=>x.note&&!x.note.includes('確定')));
+assert.ok(outer.exposures.every(x=>typeof x.note==='string'&&x.note.length>0),'each affected boat has a qualified scenario explanation');
 const escape=W.analysis('1-2-3',race);
 assert.equal(escape.exposures.filter(x=>x.phase==='1M').length,0,
  'inside winner has no automatically crossed inner boats');

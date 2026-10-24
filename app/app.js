@@ -27,6 +27,53 @@
   let favorites = [];
   let toastTimer = null;
 
+  const navigationHistory=[];
+  function snapshotNavigation(){
+    return {view:state.view,venue:state.venue,classification:state.classification,
+      detailVenue:state.raceDetail?.venue||null,detailRace:state.raceDetail?.race||null,
+      resultVenue:state.resultVenue,resultRace:state.resultRace};
+  }
+  function rememberNavigation(){
+    const current=snapshotNavigation(),last=navigationHistory.at(-1);
+    if(!last||JSON.stringify(last)!==JSON.stringify(current)){
+      navigationHistory.push(current);
+      if(navigationHistory.length>35)navigationHistory.shift();
+    }
+  }
+  function resetRaceWork(){
+    state.showExternalAnalysis=false;state.reanalysisResult=null;
+    state.reanalysisExtras={};state.reanalysisNotice='';
+  }
+  function restoreNavigation(previous){
+    state.view=previous.view;state.venue=previous.venue;
+    state.classification=previous.classification;
+    state.resultVenue=previous.resultVenue;state.resultRace=previous.resultRace;
+    state.raceDetail=previous.detailVenue?
+      findRace(previous.detailVenue,previous.detailRace)||null:null;
+    resetRaceWork();render();window.scrollTo(0,0);
+  }
+  function goBack(){
+    if(navigationHistory.length){restoreNavigation(navigationHistory.pop());return true;}
+    if(state.view==='races'&&state.raceDetail){
+      state.raceDetail=null;resetRaceWork();render();window.scrollTo(0,0);return true;
+    }
+    if(state.view==='races'&&state.venue!=='全場'){
+      state.venue='全場';state.view='overview';render();window.scrollTo(0,0);return true;
+    }
+    if(state.view!=='overview'){
+      state.view='overview';state.raceDetail=null;resetRaceWork();render();
+      window.scrollTo(0,0);return true;
+    }
+    return false;
+  }
+  function showRace(r){
+    if(!r)return;
+    rememberNavigation();
+    state.raceDetail=r;state.view='races';resetRaceWork();
+    render();window.scrollTo(0,0);
+  }
+
+
   function readJSON(key, fallback) {
     try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : fallback; }
     catch { return fallback; }
@@ -512,7 +559,9 @@
       </div>` : ''}
       <p class="external-footnote">BOATERSが掲載する独自展示指標は、元の競艇場公式でも公開されることがあります。データ利用条件を確認し、許可された提供元から取り込む方針です。<strong>この機能はBOATERSから自動取得したものではありません。</strong>この端末内の手動再評価では、固定済み買い目を変更しません。</p>
     </section>`;
-    return `<button class="back-btn" data-action="back-races">← レース一覧へ戻る</button><div class="detail-header"><div><div class="page-eyebrow">FORECAST DETAILS / ${escape(data.event_date)}</div><h1 class="detail-title">${escape(r.venue)} ${r.race}R <span style="font-size:17px;vertical-align:middle">${pill(r.classification)}</span></h1><div class="detail-sub">締切予定 ${escape(r.cutoff_jst)} JST　 ·　 ${r.phase==='exhibition'?'展示数値反映':r.phase==='baseline'?'展示前':'保存済み'}・結果未使用</div></div><button class="btn btn-primary" data-action="copy-bets" data-race="${escape(r.venue)}|${r.race}">⎘ 買い目をコピー</button></div>
+    return `<button class="back-btn" data-action="back-races">← レース一覧へ戻る</button>
+     ${window.BoatMobileRaceNav?.racePicker(r.venue,r.race,data.forecast_races,data.unforecast_races)||''}
+     <div class="detail-header"><div><div class="page-eyebrow">FORECAST DETAILS / ${escape(data.event_date)}</div><h1 class="detail-title">${escape(r.venue)} ${r.race}R <span style="font-size:17px;vertical-align:middle">${pill(r.classification)}</span></h1><div class="detail-sub">締切予定 ${escape(r.cutoff_jst)} JST　 ·　 ${r.phase==='exhibition'?'展示数値反映':r.phase==='baseline'?'展示前':'保存済み'}・結果未使用</div></div><button class="btn btn-primary" data-action="copy-bets" data-race="${escape(r.venue)}|${r.race}">⎘ 買い目をコピー</button></div>
     ${r.model_role==='main'?'<div class="notice"><strong>✅ メイン予想 v0.7：スタート差 × 6艇連動</strong>。以下の固定買い目が結果照合・仮想収支の対象。旧方式は別枠検証。</div>':
       '<div class="notice warn">過去に固定した旧モデルの予想（当時の買い目・SHAを維持）。新モデルへ事後書き換えしません。</div>'}
     ${r.phase?`<div class="notice">${escape(r.evidence||'')} ・ 発走前保存 ${escape(r.frozen_at_utc||'未記録')} ・ SHA256 ${escape((r.sha256||'').slice(0,18))}…${r.weather_observed?`<br>場内風速 ${escape(r.weather_observed.wind_speed)}m/s ／ 波高 ${escape(r.weather_observed.wave_height)}cm（非公式・取得時点）`:''}<br>予想モデル：未学習・確率未校正。展示動画とオッズは未反映。</div>`:''}
@@ -712,7 +761,10 @@
     // Refresh only the timeline. Never refetch, mutate a frozen prediction, or reset scroll.
     node.outerHTML=window.BoatRaceTimeline.render(data);
   }
-  function go(view) {state.view=view;state.raceDetail=null;state.showExternalAnalysis=false;state.reanalysisResult=null;state.reanalysisExtras={};state.reanalysisNotice='';render();window.scrollTo({top:0,behavior:'instant'});}
+  function go(view) {
+    rememberNavigation();state.view=view;state.raceDetail=null;resetRaceWork();
+    render();window.scrollTo({top:0,behavior:'instant'});
+  }
   function toast(message){const node=el('toast');node.textContent=message;node.classList.add('show');if(toastTimer)clearTimeout(toastTimer);toastTimer=setTimeout(()=>node.classList.remove('show'),3200);}
   function download(name,content,type='text/plain;charset=utf-8') {const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
   function exportResultsCSV(){const header=['date','venue','race','classification','cutoff_jst','finish','payout_per_100','is_hit','stake_yen','virtual_payout_yen','virtual_profit_yen','recorded_at','source'];const body=allRaces().map(r=>{let c=compute(r);return [data.event_date,r.venue,r.race,r.classification,r.cutoff_jst,c.record?.finish||'',c.record?.payout_per_100??'',c.record?Number(c.hit):'',c.record?c.stake:'',c.payout??'',c.profit??'',c.record?.recorded_at||'',c.record?(c.record.source||'manual'):''];});const csv=[header,...body].map(a=>a.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');download(`boatlab-results-${data.event_date}.csv`,'\uFEFF'+csv,'text/csv;charset=utf-8');toast('結果CSVを書き出したよ');}
@@ -725,8 +777,25 @@
       if(node)node.outerHTML=window.BoatRaceTimeline.render(data);
       return;
     }
-    const nav=e.target.closest('[data-view]');if(nav){if(nav.dataset.view==='races')state.venue='全場';go(nav.dataset.view);return;}
-    const venueOpen=e.target.closest('[data-open-venue]');if(venueOpen){if(venueOpen.disabled)return;state.venue=venueOpen.dataset.openVenue;state.raceDetail=null;state.view='races';render();window.scrollTo(0,0);return;}
+    const nav=e.target.closest('[data-view]');if(nav){
+      rememberNavigation();
+      if(nav.dataset.view==='races')state.venue='全場';
+      state.view=nav.dataset.view;state.raceDetail=null;resetRaceWork();
+      render();window.scrollTo(0,0);return;
+    }
+    const choice=e.target.closest('[data-select-race]');
+    if(choice){
+      if(choice.disabled)return;
+      const token=choice.dataset.selectRace||'';
+      const at=token.lastIndexOf('|'),venue=token.slice(0,at),number=Number(token.slice(at+1));
+      const found=at>0&&Number.isInteger(number)?findRace(venue,number):null;
+      if(found&&(!state.raceDetail||state.raceDetail.venue!==venue||state.raceDetail.race!==number))
+        showRace(found);
+      return;
+    }
+    const venueOpen=e.target.closest('[data-open-venue]');if(venueOpen){if(venueOpen.disabled)return;rememberNavigation();
+      state.venue=venueOpen.dataset.openVenue;state.raceDetail=null;resetRaceWork();
+      state.view='races';render();window.scrollTo(0,0);return;}
     const fav=e.target.closest('[data-favorite-venue]');if(fav){const name=fav.dataset.favoriteVenue;favorites=favorites.includes(name)?favorites.filter(x=>x!==name):favorites.concat([name]);try{localStorage.setItem(STORE_FAVORITES,JSON.stringify(favorites));}catch{}render();return;}
     const boardFilter=e.target.closest('[data-venue-filter]');if(boardFilter){state.boardFilter=boardFilter.dataset.venueFilter;render();return;}
     const quickFilter=e.target.closest('[data-result-filter]');
@@ -745,13 +814,14 @@
       if(last>0){
         const venue=token.slice(0,last),race=Number(token.slice(last+1));
         if(findRace(venue,race)){
+          rememberNavigation();
           state.resultVenue=venue;state.resultRace=race;
-          state.view='results';render();
+          state.view='results';state.raceDetail=null;resetRaceWork();render();
         }
       }
       return;
     }
-    const row=e.target.closest('[data-race]');if(row){const [v,n]=row.dataset.race.split('|');let r=findRace(v,n);if(!r)return;if(row.dataset.action==='settle-this'){state.resultVenue=v;state.resultRace=Number(n);go('results');return;}if(row.dataset.action==='copy-bets'){copyBets(r);return;}state.raceDetail=r;state.showExternalAnalysis=false;state.reanalysisResult=null;state.reanalysisExtras={};state.reanalysisNotice='';state.view='races';render();window.scrollTo(0,0);return;}
+    const row=e.target.closest('[data-race]');if(row){const [v,n]=row.dataset.race.split('|');let r=findRace(v,n);if(!r)return;if(row.dataset.action==='settle-this'){state.resultVenue=v;state.resultRace=Number(n);go('results');return;}if(row.dataset.action==='copy-bets'){copyBets(r);return;}showRace(r);return;}
     const btn=e.target.closest('[data-action]');if(!btn)return;
     switch(btn.dataset.action){
       case 'batch-image-read':{
@@ -870,7 +940,17 @@
         break;
       }
       case 'go-races':go('races');break;
-      case 'back-races':state.raceDetail=null;render();break;
+      case 'back-races':{
+        // Explicit back-to-list skips prior detail-to-detail hops in history.
+        let list=null;
+        while(navigationHistory.length){
+          const previous=navigationHistory.pop();
+          if(previous.view==='races'&&!previous.detailVenue){list=previous;break;}
+        }
+        if(list)restoreNavigation(list);
+        else {state.view='races';state.raceDetail=null;resetRaceWork();render();window.scrollTo(0,0);}
+        break;
+      }
       case 'back-overview':state.venue='全場';go('overview');break;
       case 'export-results':exportResultsCSV();break;
       case 'export-predictions':download(`boatlab-predictions-${data.event_date}.json`,JSON.stringify(data,null,2),'application/json');toast('予想データを保存したよ');break;
@@ -1050,6 +1130,7 @@
       autoResults=data.official_results||{};lastLiveUpdate=data.updated_at_utc||'';
       state.resultVenue=getVenues()[0];render();
       window.BoatExhibitionAudit?.load(data.event_date).then(()=>{if(data?.event_date)render()}).catch(()=>{});
+      window.BoatMobileRaceNav?.installSwipe(el('main'),()=>goBack());
       if('serviceWorker' in navigator&&['https:','http:'].includes(location.protocol))navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
       if(typeof setInterval==='function'){
         setInterval(reloadLiveIfNew,300000);

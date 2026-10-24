@@ -282,3 +282,24 @@
 .outer-evidence-good{color:#087863}
 .outer-study-summary{background:#e5f5f2;border-left:3px solid #64b8a3;border-radius:0 8px 8px 0;padding:9px}
 .outer-study-foot{color:#607e87!important}
+
+/* 1–12R venue/detail navigation: touch sized, with explicit unavailable state. */
+.venue-race-picker{background:var(--card,#ffffff);border:1px solid var(--border,#dae7ef);border-radius:14px;padding:14px;margin:14px 0 18px}
+.venue-race-picker-title{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:5px 12px;margin-bottom:12px}
+.venue-race-picker-title strong{font-size:13px;font-weight:900;color:var(--text,#1e4760)}
+.venue-race-picker-title span{font-size:11px;font-weight:600;color:var(--muted,#637f8c)}
+.venue-race-picker-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.venue-race-choice{display:flex;align-items:center;justify-content:center;gap:1px;min-height:47px;position:relative;padding:8px 4px;border:1px solid #c8dfeb;border-radius:10px;color:#1d5c78;background:#edf6fb;font-size:16px;font-weight:900;cursor:pointer;touch-action:manipulation}
+.venue-race-choice span{font-size:11px;font-weight:800;margin-top:3px}
+.venue-race-choice.is-active{color:#fff;background:#117d92;border-color:#0d6175;box-shadow:0 2px 8px rgba(14,96,112,.22)}
+.venue-race-choice.is-unavailable,.venue-race-choice:disabled{cursor:not-allowed;color:#8397a4;background:#edf0f2;border-color:#e1e8ec;box-shadow:none;opacity:.86}
+.venue-race-choice small{font-size:8px;font-weight:750;margin-left:3px;white-space:nowrap}
+.venue-race-choice:not(:disabled):active{transform:scale(.97)}
+.venue-race-choice:focus-visible{outline:3px solid #62abc8;outline-offset:2px}
+@media(max-width:640px){
+ .venue-race-picker{padding:11px 10px;margin:10px 0 14px}
+ .venue-race-picker-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+ .venue-race-choice{min-height:48px;font-size:16px}
+ .venue-race-choice small{font-size:7.5px}
+}
+@media(prefers-reduced-motion:reduce){.venue-race-choice{transition:none!important}}

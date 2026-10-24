@@ -1,0 +1,58 @@
+name: BOAT LAB official result backlog reconciliation
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/reconcile_official_backlog.py'
+      - 'tests/test_reconcile_official_backlog.py'
+      - '.github/workflows/boat-lab-result-reconcile.yml'
+  schedule:
+    # Best-effort JST daytime every 10 minutes; actual GitHub cron can lag.
+    - cron: '*/10 21-23 * * *'
+    - cron: '*/10 0-14 * * *'
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  # Serialize with the forecast workflow to avoid two writers of the daily ledger.
+  group: boat-lab-nationwide
+  cancel-in-progress: false
+jobs:
+  reconcile-and-publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify immutable forecast and conflict safeguards
+        run: python -m unittest discover -s tests -p 'test_reconcile_official_backlog.py' -v
+      - name: Recheck today's and previous four days' official payouts
+        run: |
+          set -euo pipefail
+          python -m scripts.reconcile_official_backlog --days 5
+          python -m json.tool app/data/live/result-sync-latest.json > /dev/null
+      - name: Persist results-only updates
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/data/live/
+          if ! git diff --cached --quiet; then
+            git commit -m 'data: catch up verified official race settlements'
+            git fetch origin main
+            git rebase origin/main
+            git push origin HEAD:main
+          fi
+      # GITHUB_TOKEN data commits do not trigger Pages' push workflow;
+      # deploy here so the iPhone app actually receives reconciled results.
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: './app'
+      - uses: actions/deploy-pages@v4

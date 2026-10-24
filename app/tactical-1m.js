@@ -6,6 +6,13 @@
 (function(global){
 'use strict';
 const START_PRIORS=[.48,.18,.16,.105,.05,.025];
+// Verified venue 2026 Q3 course rates; informational / shadow trial only.
+// Course-specific historical rates are NOT athlete-specific win probabilities.
+const OUTSIDE_VENUE_COURSES={
+ '唐津':{first:[.567,.127,.129,.106,.066,.015],second:[.196,.285,.192,.159,.140,.039],third:[.078,.204,.220,.197,.202,.110],source:'https://www.boatrace-karatsu.jp/modules/datafile/?page=index_suimen'},
+ 'びわこ':{first:[.566,.138,.138,.087,.060,.018],second:[.187,.245,.214,.165,.135,.063],third:[.080,.198,.198,.212,.169,.150],source:'https://www.boatrace-biwako.jp/modules/datafile/?kind=course&page=index_datacourse'},
+ '福岡':{first:[.618,.141,.143,.063,.032,.009],second:[.172,.278,.250,.147,.112,.047],third:[.082,.183,.197,.264,.193,.088],source:'https://boatrace-fukuoka.com/modules/fukuokainfo/?page=index_jodata'}
+};
 const RATE_BY_VENUE={
  '桐生':.515,'戸田':.429,'江戸川':.477,'平和島':.446,'多摩川':.535,
  '浜名湖':.525,'蒲郡':.565,'常滑':.583,'津':.564,'三国':.525,
@@ -22,8 +29,9 @@ const assign=(r,course)=>{
 const nameTactic=['','先マイ・逃げ','差し','まくり差し','カドまくり','外からのまくり差し','外の展開連動'];
 function forecast(input){
  const wakeTrial=input?.experimental_variant==='wake-attrition-v0.3';
- const roleAwareTrial=input?.experimental_variant==='role-consistency-v0.4';
- const outsideTrial=input?.experimental_variant==='outside-makuri-v0.2'||wakeTrial;
+ const outerStudyTrial=input?.experimental_variant==='outside-role-v0.5';
+ const roleAwareTrial=input?.experimental_variant==='role-consistency-v0.4'||outerStudyTrial;
+ const outsideTrial=input?.experimental_variant==='outside-makuri-v0.2'||wakeTrial||outerStudyTrial;
  const runners=input?.racers;
  if(!Array.isArray(runners)||runners.length!==6)throw Error('6艇の保存済み出走情報が必要');
  const sorted=[...runners].sort((a,b)=>a.lane-b.lane);
@@ -89,7 +97,12 @@ function forecast(input){
  let rateImpact=clamp(head1/.55,.7,1.3);
  const wind=finite(input.weather_used?.wind_speed,null);
  let hedge=wind!==null&&wind>=6?.82:wind!==null&&wind>=4?.9:1;
- let strength=START_PRIORS.map((prior,c)=>{
+ const officialReference=outerStudyTrial?OUTSIDE_VENUE_COURSES[input.venue]||null:null;
+ const refBlend=.35;
+ const effectivePriors=officialReference?
+   START_PRIORS.map((prior,c)=>prior*(1-refBlend)+officialReference.first[c]*refBlend):
+   [...START_PRIORS];
+ let strength=effectivePriors.map((prior,c)=>{
   const idx=byCourse[c],m=move[idx];
   const base=prior*(c===0?rateImpact:((1-rateImpact*.49)/.51));
   const skill= Math.pow(m.go,c===0?.85:1.55)*
@@ -110,6 +123,29 @@ function forecast(input){
   // A plausible kadomakuri slightly lowers the odds of an unchallenged
   // inside turn; never erase the inner survivor scenario.
   strength[0]*=clamp(1-.13*Math.max(0,outsideAttacks[0].multiplier-1),.92,1);
+ }
+ // V0.5: an outside boat receives an additional correction ONLY with
+ // independent pre-race evidence of attack and turn strength.
+ const outsideEvidence={};
+ if(outerStudyTrial){
+  for(const signal of outsideAttacks){
+   const course=signal.course,m=move[byCourse[course-1]];
+   const inner=move[byCourse[course-2]];
+   const entry=signal.launch>=1.04&&signal.steering>=.91&&
+     m.go>=Math.max(.68,inner.go*.97);
+   const confidence=entry?clamp((signal.launch-1.025)*1.8+
+     (signal.steering-.93)*.65,0,.7):0;
+   const followerCourse=course<6?course+1:null;
+   const follower=followerCourse?move[byCourse[followerCourse-1]]:null;
+   const follows=!!(confidence>=.10&&follower&&
+     follower.go>=m.go*.74&&follower.turn>=m.turn*.72);
+   outsideEvidence[course]={attack:entry,confidence:+confidence.toFixed(4),
+     follower_course:followerCourse,following_supported:follows,
+     launch:+signal.launch.toFixed(4),steering:+signal.steering.toFixed(4)};
+   if(entry)strength[course-1]*=1+.7*confidence;
+  }
+  if(outsideEvidence[4]?.confidence>=.10)
+   strength[0]*=clamp(1-.15*outsideEvidence[4].confidence,.92,1);
  }
  // Incomplete hydrodynamic proxy: a makuri or sweeping outer turn may put
  // an inner boat across its wake. This score is not an observed trajectory,
@@ -149,7 +185,18 @@ function forecast(input){
    if(headCourse===1&&secondCourse>=4)
       relation*=clamp(.95+.4*(z.turn-1)+.2*(z.go-1),.78,1.3);
   }
-  if(wakeTrial)relation*=clamp(1-.82*estimatedWakeRisk(headCourse,secondCourse),.39,1);
+  if(outerStudyTrial&&secondCourse>=4){
+    const candidate=move[byCourse[secondCourse-1]];
+    const lead=outsideEvidence[secondCourse-1],own=outsideEvidence[secondCourse];
+    const following=lead?.following_supported&&lead?.follower_course===secondCourse;
+    if(following&&headCourse===secondCourse-1)
+      relation*=clamp(1+1.05*lead.confidence,1,1.70);
+    else if(headCourse===1&&following&&candidate.go>=.9)
+      relation*=clamp(1+.55*lead.confidence,1,1.38);
+    else if(headCourse===2||headCourse===3)
+      relation*=own?.attack&&candidate.turn>=.93?clamp(1+.3*own.confidence,1,1.2):1;
+   }
+   if(wakeTrial)relation*=clamp(1-.82*estimatedWakeRisk(headCourse,secondCourse),.39,1);
   return Math.max(.01,relation*Math.pow(z.turn,.85)*Math.pow(z.go,.3));
  }
  function thirdWeight(h,s,c){
@@ -166,7 +213,12 @@ function forecast(input){
    if(h===1&&s>=4&&c===s+1)consistency*=1.26;
    if(h>=4&&s>=4&&c===1)consistency*=1.1;
   }
-  if(wakeTrial)consistency*=clamp(1-.75*estimatedWakeRisk(h,c),.43,1);
+  if(outerStudyTrial&&c>=4){
+    const earlier=outsideEvidence[c-1];
+    if(earlier?.following_supported&&earlier.follower_course===c&&h===c-1)
+      consistency*=clamp(1+.7*earlier.confidence,1,1.5);
+   }
+   if(wakeTrial)consistency*=clamp(1-.75*estimatedWakeRisk(h,c),.43,1);
   return Math.max(.01,consistency*Math.pow(x.turn,.65)*Math.pow(x.overall,.3));
  }
  const candidates=[];
@@ -244,6 +296,22 @@ function forecast(input){
      picks.some(p=>p.combination.split('-')[1]===String(lane)))continue;
   const candidate=candidates.find(p=>p.combination.split('-')[1]===String(lane));
   replaceWithEvidence(candidate,'second',lane);
+ // Preserve a 4/5/6 2nd-place role ONLY when that boat can follow a
+ // documented adjacent outer-course attack. No per-course ticket quota.
+ if(outerStudyTrial){
+  const supported=[4,5,6].map(course=>({
+    course,lane:v[byCourse[course-1]].lane,
+    second:roleShares.second[v[byCourse[course-1]].lane],
+    following:outsideEvidence[course-1]?.following_supported===true
+  })).filter(x=>x.following&&x.second>=.085).sort((a,b)=>b.second-a.second);
+  for(const x of supported.slice(0,2)){
+   if(!picks.some(p=>p.combination.split('-')[1]===String(x.lane))){
+    const candidate=candidates.find(p=>p.combination.split('-')[1]===String(x.lane)&&
+      p.headCourse===x.course-1);
+    replaceWithEvidence(candidate,'second',x.lane);
+   }
+  }
+ }
  }
  }else{
  // Preserve exact earlier selection for previously frozen v0.1/v0.2/v0.3.
@@ -291,12 +359,21 @@ function forecast(input){
   head_course:c.headCourse,scenario:c.scenario,conditional_reason:c.scenario+'が成立 → '+c.secondCourse+'コースが追走 → '+c.thirdCourse+'コース残存',relative_score:+c.pseudo.toFixed(6)}));
  if(new Set(bets.map(x=>x.combination)).size!==bets.length||bets.reduce((sum,b)=>sum+b.virtual_yen,0)!==50000)throw Error('Invalid experimental virtual allocation');
  return {
-   model:roleAwareTrial?'tactical-role-consistency-v0.4-untrained':
+   model:outerStudyTrial?'tactical-outside-role-v0.5-untrained':
+     roleAwareTrial?'tactical-role-consistency-v0.4-untrained':
      wakeTrial?'tactical-wake-attrition-v0.3-untrained':
      outsideTrial?'tactical-outside-makuri-v0.2-untrained':'tactical-1m-conditional-v0.1-untrained',
    basis:'保存済み発走前選手情報と場別参考値のみ。結果・払戻・オッズ不使用。',
    venue:input.venue,head_course_shares:shares.map((s,i)=>({course:i+1,lane:v[byCourse[i]].lane,relative_share:+s.toFixed(4),tactic:nameTactic[i+1]})),
    metadata:{venue_reference_rate:rate,wind_speed:wind,validMetrics,exhibition_used:validMetrics.length>0,
+     ...(outerStudyTrial?{outside_v05:{
+       reference_period:'2026-07-01/2026-09-30',
+       reference_source:officialReference?.source||null,
+       venue_specific_prior:!!officialReference,prior_blend:officialReference?refBlend:0,
+       effective_course_prior:effectivePriors.map(x=>+x.toFixed(4)),
+       conditional_outside_evidence:Object.values(outsideEvidence),
+       proof_note:'Untrained relative model, not calibrated win probabilities. No blanket exterior picks.'
+     }}:{}),
      source_at_utc:input.frozen_at_utc||null,
      ...(wakeTrial?{wake_research_only:true,wake_hypothesis:'inner boat may lose acceleration when crossed by outer makuri wash; not measured',
          wake_risk_by_attacker: [3,4,5,6].map(h=>({
@@ -318,7 +395,8 @@ function forecast(input){
 }
 global.BoatTacticalModel={forecast,
  forecastRoleAware:input=>forecast({...input,experimental_variant:'role-consistency-v0.4'}),
+ forecastOutsideRole:input=>forecast({...input,experimental_variant:'outside-role-v0.5'}),
  forecastOutside:input=>forecast({...input,experimental_variant:'outside-makuri-v0.2'}),
  forecastWake:input=>forecast({...input,experimental_variant:'wake-attrition-v0.3'}),
- RATE_BY_VENUE,nameTactic,version:'trial-v0.1-20261023'};
+ RATE_BY_VENUE,OUTSIDE_VENUE_COURSES,nameTactic,version:'trial-v0.5-outside-20261024'};
 })(typeof window!=='undefined'?window:globalThis);

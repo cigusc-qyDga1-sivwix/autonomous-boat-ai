@@ -351,6 +351,42 @@
       '<p class="muted text-sm">比較用v0.5と同じ事前情報で検証する研究モデル。結果判明後に同じ日の買い目を更新しません。前付けの可能性があれば展示進入の確認が先です。</p>'+
       '</details>';
   }
+  // Shadow-v0.7: actual lane/course and pre-race ST estimates, never outcomes.
+  function startGapTrialPanel(r,closed){
+    let trial;
+    try{trial=window.BoatTacticalModel?.forecastOutsideStart?.(r);}
+    catch(error){return '<div class="notice warn">ST連動v0.7の評価を保留：'+escape(error.message)+'</div>';}
+    if(!trial)return '';
+    const signals=trial.metadata?.start_v07?.slit_signals||[];
+    const rows=signals.filter(s=>s.course>=4).map(s=>{
+      const role=trial.role_coverage?.[s.lane]||{};
+      const gap=s.nearest_gap_sec;
+      const state=!Number.isFinite(gap)?'根拠不足':gap>=.03?'内側より先行傾向':gap<=-.03?'内側より出遅れ傾向':'大差なし';
+      const predicted=s.head_evidence?'1着攻め候補':s.second_evidence?'2着残存候補':'STによる加点なし';
+      return '<tr><td>'+escape(s.lane)+'号艇 <small>（'+s.course+'コース）</small></td>'+
+        '<td>'+escape(s.estimated_st==null?'未取得':s.estimated_st.toFixed(3))+'</td>'+
+        '<td>'+escape(gap==null?'比較不可':(gap>=0?'+':'')+gap.toFixed(3)+'秒')+'</td>'+
+        '<td>'+escape(state)+' / '+escape(predicted)+'</td>'+
+        '<td>'+escape(role.headTickets??0)+' / '+escape(role.secondTickets??0)+'</td></tr>';
+    }).join('');
+    const changed=trial.bets.map(b=>
+      '<tr><td><b>'+escape(b.combination)+'</b></td>'+
+      '<td>'+escape(b.conditional_reason)+'</td><td>'+money(b.virtual_yen)+'</td></tr>').join('');
+    return '<details class="card card-pad boat-start-gap-study" style="margin:12px 0">'+
+      '<summary style="cursor:pointer;font-weight:900">⚡ ④⑤⑥の1・2着｜ST・まくり／まくり差し v0.7（試験）</summary>'+
+      '<p class="muted text-sm">展示ST・平均STから想定スリット隊形を推定。正の差は外艇の展示先行傾向（実際の本番STではない）。展示Fを速いSTとして扱わず、進入コース順で比較します。</p>'+
+      (closed?'<div class="notice warn">締切後の表示は参考試算。正式発走前予想と区別します。</div>':
+        '<div class="notice">発走前でも画面内は未固定試験計算。正式BUYと分けます。</div>')+
+      '<div class="boat-entry-overflow"><table class="bets-table"><thead><tr>'+
+      '<th>艇・実進入</th><th>予測ST秒</th><th>直内艇との差</th><th>スタート攻め評価</th><th>買い目採用<br>1着 / 2着</th>'+
+      '</tr></thead><tbody>'+rows+'</tbody></table></div>'+
+      '<p><b>v0.7の参考3連単：'+trial.bets.length+'点／仮想50,000円</b></p>'+
+      '<div class="boat-entry-overflow"><table class="bets-table"><thead><tr>'+
+      '<th>3連単</th><th>スタート → 1M → 着順の仮説</th><th>仮想配分</th>'+
+      '</tr></thead><tbody>'+changed+'</tbody></table></div>'+
+      '<p class="muted text-sm">条件の合わない外艇は自動採用しません。まくり・まくり差しの成立確率は未校正。本番STや実際の進路を観測したものではありません。</p>'+
+      '</details>';
+  }
   function tacticalTrialPanel(r){
     if(r?.entry_exhibition_gate?.entry_watch && !r.entry_exhibition_gate.final_eligible)
       return '<div class="notice warn">⚠ 前付け警戒：6艇の展示進入が確認できるまで、戦法再計算の買い目は最終候補として表示しません。</div>';
@@ -380,7 +416,7 @@
       '<span class="tactical-change">'+(changed?'買い目・配分に違いあり':'比較結果：同じ配分')+'</span></div>'+
       '<div class="tactical-heads"><strong>1着戦法の相対評価（未校正）</strong>'+
       heads.map(h=>'<span>'+escape(h.lane)+'号艇：'+escape(h.tactic)+' '+(h.relative_share*100).toFixed(1)+'%</span>').join('')+
-      '</div>'+roleConsistencyPanel(r,trial)+outsideRoleTrialPanel(r,trial)+coupledTrialPanel(r,closed)+'<div class="boat-entry-overflow"><table class="bets-table tactical-bets"><thead><tr><th>3連単</th><th>頭の勝ち筋</th><th>仮想配分</th></tr></thead><tbody>'+
+      '</div>'+roleConsistencyPanel(r,trial)+outsideRoleTrialPanel(r,trial)+coupledTrialPanel(r,closed)+startGapTrialPanel(r,closed)+'<div class="boat-entry-overflow"><table class="bets-table tactical-bets"><thead><tr><th>3連単</th><th>頭の勝ち筋</th><th>仮想配分</th></tr></thead><tbody>'+
       trial.bets.map(b=>'<tr><td><strong>'+escape(b.combination)+'</strong></td>'+
       '<td>'+escape(b.scenario)+'</td><td>'+money(b.virtual_yen)+'</td></tr>').join('')+
       '</tbody></table></div><p class="tactical-foot">試験 '+trial.bets.length+'点／仮想5万円。'+

@@ -85,6 +85,18 @@ const pending=R.rate(unconfirmed);
 assert.equal(pending.provisional,true);
 assert.ok(pending.rows.every(x=>x.course_fit===null&&x.ability===null));
 assert.match(P.render(unconfirmed),/進入未確認/);
+// Even if lane/course values look valid, baseline before entrance verification
+// must not pretend that lane=course is a confirmed tactical fit.
+const baseline=source();
+baseline.phase='baseline';
+baseline.entry_exhibition_gate={final_eligible:false,entry_watch:false};
+const heldCourse=R.rate(baseline);
+assert.equal(heldCourse.provisional,true);
+assert.ok(heldCourse.rows.every(x=>x.course_fit===null&&x.ability===null));
+// Older exhibition snapshots with explicit six-course data remain usable.
+const legacyExhibition=source();
+delete legacyExhibition.entry_exhibition_gate;
+assert.equal(R.rate(legacyExhibition).provisional,false);
 // Guard against mistakenly treating exhibition false starts as good average ST.
 const flying=source();flying.racers[4].exhibition_st=-.01;
 const flagged=R.rate(flying);

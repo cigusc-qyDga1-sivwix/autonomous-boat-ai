@@ -218,7 +218,8 @@
       '<div class="venue-detail-hero"><span class="venue-detail-symbol">'+x.icon+'</span><div><div class="venue-hero-overline">BOAT LAB / '+esc(data.event_date)+'</div><h1>'+esc(venue)+' <small>全12R</small></h1><p>'+esc(x.grade||'グレード未取得')+' ・ '+esc(rawDay)+' ・ 自動予想 '+x.ready+'/12R ・ 展示反映 '+x.exhibition+'R</p></div></div>' +
       '<div class="venue-race-legend"><span>'+badge('公式 的中','ready')+' 公式払戻で的中</span><span>'+badge('展示反映','ready')+' 実測展示あり</span><span>'+badge('展示前','watch')+' 出走表中心</span><span>'+badge('未固定','missing')+' 後出し予想なし</span></div>' +
       ((data.venue_weather||{})[venue]?'<div class="venue-current-weather">🌦 最終取得時点の周辺予報：風'+esc(data.venue_weather[venue].wind_speed)+'m/s・突風'+esc(data.venue_weather[venue].wind_gust??'—')+'m/s・降水'+esc(data.venue_weather[venue].precipitation_mm??'—')+'mm/h　（現地実測ではありません） <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Weather data by Open-Meteo.com ↗</a></div>':'') +
-      '<div class="venue-race-grid">'+allRaces+'</div>' +
+      (window.BoatMobileRaceNav?.racePicker(venue,null,data.forecast_races,data.unforecast_races)||'') +
+       '<div class="venue-race-grid">'+allRaces+'</div>' +
       '<div class="notice">全12Rを表示していますが、データが来ていないレースや締切前の予想がなかったレースは買い目を作りません。表示時刻はJST・予定値で、公式の締切を優先してください。</div></div>';
   }
   window.BoatVenueBoard={

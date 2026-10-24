@@ -84,7 +84,7 @@ assert.equal(paths[0].d,visual.path(1,visual.ranks(other)[1],visual.tacticFor(ot
 assert.match(caption.textContent,/仮説/);
 assert.equal(buttons[1].pressed,'true');
 assert.match(wakeLabel.textContent,/🌀 ON/,'scenario changes keep wake ON');
-assert.equal(result.textContent,'予想：'+other);
+assert.equal(result.textContent,(visual.tacticalOptions(race).length?'表示中：':'予想：')+other);
 assert.equal(tactic.textContent,visual.tacticFor(other).label);
 assert.equal(forecast.textContent,'元の固定予想 '+other);
 actionNode(wakeButton);

@@ -45,6 +45,8 @@ jobs:
       - run: node --check app/racer-rating-panel.js
       - run: node app/tests/racer-rating.test.js
       - run: node app/tests/wake-animation.test.js
+      - run: node --check app/wake-study.js
+      - run: node app/tests/wake-all-on-v08.test.js
       - run: node app/tests/race-timeline.test.js
       - run: node --check app/tactical-1m.js
       - run: node app/tests/tactical-1m.test.js
@@ -56,6 +58,7 @@ jobs:
       - run: python3 -m scripts.test_research_start_gap
       - run: node app/tests/forward-coupling-freeze.test.js
       - run: python3 -m scripts.test_research_coupling_patterns
+      - run: python3 -m scripts.test_research_wake_hypotheses
       - run: python3 scripts/test_research_outside_roles.py
       - run: node app/tests/forward-tactical-freeze.test.js
       - run: node --check scripts/freeze_outside_trials.js

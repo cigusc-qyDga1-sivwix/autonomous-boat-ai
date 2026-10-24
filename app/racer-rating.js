@@ -20,13 +20,13 @@ function forecastForRace(r){
  if(blocked(r))return null;
  const api=global.BoatTacticalModel;
  if(!api)return null;
- // The newer main v0.7 is read as an identical shadow model only when
+ // The canonical main v0.7/v0.9 is shadow-read only when
  // the saved snapshot really has a uniquely verified 6-course formation.
  const eligible=r?.model_role==='main'&&r?.entry_exhibition_gate?.final_eligible===true&&
   Array.isArray(r.racers)&&new Set(r.racers.map(x=>number(x.course))).size===6&&
   r.racers.every(x=>validCourse(x.course));
  try{
-  const forecast=eligible?api.forecastOutsideStart?.(r):api.forecastRoleAware?.(r);
+  const forecast=eligible?(r.model_version?.includes('v0.9')?api.forecastWakeIntegrated?.(r):api.forecastOutsideStart?.(r)):api.forecastRoleAware?.(r);
   return forecast||api.forecast?.(r)||null;
  }catch{
   if(eligible){try{return api.forecastRoleAware?.(r)||null}catch{}}

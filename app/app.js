@@ -240,6 +240,45 @@
       '<p class="muted text-sm">過去率＝このレースの1号艇勝率ではありません。選手・モーター・展示と実測を優先。'+
       '戦法別の数値モデル、潮流補正、整備による性能変化は今後の検証課題です。</p></section>';
   }
+  // Cross-model read-only report. Trial scores/marks and frozen picks are NOT
+  // produced by one model. Show exactly which rank appears in which role.
+  function roleConsistencyPanel(r,trial){
+    const scores=trial?.head_course_shares,cover=trial?.role_coverage;
+    if(!Array.isArray(scores)||scores.length!==6||!cover)return '';
+    const ranking=[...scores].sort((a,b)=>b.relative_share-a.relative_share||a.lane-b.lane);
+    const rankByLane=Object.fromEntries(ranking.map((x,i)=>[x.lane,i+1]));
+    const tally=(bets,lane)=>[0,1,2].map(k=>(bets||[]).filter(b=>
+      b.combination?.split('-')[k]===String(lane)).length);
+    const mark=['◎','○','▲','△','☆','－'];
+    const rows=ranking.map(x=>{
+      const lane=Number(x.lane),role=cover[lane]||{},original=tally(r.bets,lane),
+        trialUse=tally(trial.bets,lane),rank=rankByLane[lane];
+      const headScore=Number(role.first||0),secondScore=Number(role.second||0),
+        thirdScore=Number(role.third||0);
+      const fixedGap=rank<=3&&original[0]===0&&original[1]===0;
+      const trialGap=rank<=3&&trialUse[0]===0&&trialUse[1]===0;
+      const flag=fixedGap||trialGap;
+      return '<tr'+(flag?' class="role-alignment-gap"':'')+'><th scope="row"><strong>'+
+        escape(mark[rank-1])+' '+escape(lane)+'号艇</strong><small> '+rank+'位</small></th>'+
+        '<td>'+[headScore,secondScore,thirdScore].map(v=>(v*100).toFixed(1)).join(' / ')+'</td>'+
+        '<td>'+original.join(' / ')+'</td><td>'+trialUse.join(' / ')+'</td>'+
+        '<td>'+(flag?'<b>要確認</b>':role.note?.includes('3着のみ')?'3着中心':'—')+'</td></tr>';
+    }).join('');
+    const warning=ranking.some(x=>{
+      const lane=x.lane;return rankByLane[lane]<=3&&
+        tally(r.bets,lane)[0]===0&&tally(r.bets,lane)[1]===0;
+    });
+    return '<div class="role-alignment-panel" aria-label="選手優位順位と買い目の整合性監査">'+
+      '<h3>🔎 選手評価 × 1・2・3着の整合性チェック</h3>'+
+      '<p>出走表の印は<strong>試験モデルの1着候補順位</strong>。正式固定の買い目は<strong>別モデル</strong>だから、順位が高くても着順が一致するとは限りません。</p>'+
+      '<div class="boat-entry-overflow"><table class="bets-table role-alignment-table"><thead><tr>'+
+      '<th>艇・1着順位</th><th>試験相対評価<br>1着/2着/3着</th><th>固定買い目<br>1着/2着/3着</th>'+
+      '<th>戦法試験買い目<br>1着/2着/3着</th><th>点検</th></tr></thead><tbody>'+
+      rows+'</tbody></table></div>'+
+      (warning?'<div class="notice warn">⚠ 1着上位3艇の中に、正式固定の買い目では1・2着の両方に登場しない艇があります。別モデル間の不整合候補として記録し、無条件の追加はしません。</div>':'')+
+      '<p class="help">相対評価は120通りの条件付き展開を着順ごとに合算した未校正のモデル重みで、実測的中確率ではありません。買い目は4〜12点の制約があり、2着候補は別途攻め・追走・差しの成立条件を要します。固定買い目や正式収支は変更しません。</p>'+
+      '</div>';
+  }
   function tacticalTrialPanel(r){
     if(r?.entry_exhibition_gate?.entry_watch && !r.entry_exhibition_gate.final_eligible)
       return '<div class="notice warn">⚠ 前付け警戒：6艇の展示進入が確認できるまで、戦法再計算の買い目は最終候補として表示しません。</div>';
@@ -269,7 +308,7 @@
       '<span class="tactical-change">'+(changed?'買い目・配分に違いあり':'比較結果：同じ配分')+'</span></div>'+
       '<div class="tactical-heads"><strong>1着戦法の相対評価（未校正）</strong>'+
       heads.map(h=>'<span>'+escape(h.lane)+'号艇：'+escape(h.tactic)+' '+(h.relative_share*100).toFixed(1)+'%</span>').join('')+
-      '</div><div class="boat-entry-overflow"><table class="bets-table tactical-bets"><thead><tr><th>3連単</th><th>頭の勝ち筋</th><th>仮想配分</th></tr></thead><tbody>'+
+      '</div>'+roleConsistencyPanel(r,trial)+'<div class="boat-entry-overflow"><table class="bets-table tactical-bets"><thead><tr><th>3連単</th><th>頭の勝ち筋</th><th>仮想配分</th></tr></thead><tbody>'+
       trial.bets.map(b=>'<tr><td><strong>'+escape(b.combination)+'</strong></td>'+
       '<td>'+escape(b.scenario)+'</td><td>'+money(b.virtual_yen)+'</td></tr>').join('')+
       '</tbody></table></div><p class="tactical-foot">試験 '+trial.bets.length+'点／仮想5万円。'+

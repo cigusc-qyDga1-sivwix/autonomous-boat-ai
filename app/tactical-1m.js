@@ -28,7 +28,8 @@ const assign=(r,course)=>{
 };
 const nameTactic=['','先マイ・逃げ','差し','まくり差し','カドまくり','外からのまくり差し','外の展開連動'];
 function forecast(input){
- const startTrial=input?.experimental_variant==='outside-start-gap-v0.7';
+ const wakeIntegrated=input?.experimental_variant==='outside-start-wake-v0.9';
+ const startTrial=input?.experimental_variant==='outside-start-gap-v0.7'||wakeIntegrated;
  const coupledTrial=input?.experimental_variant==='six-boat-coupling-v0.6'||startTrial;
  const wakeTrial=input?.experimental_variant==='wake-attrition-v0.3'||coupledTrial;
  const outerStudyTrial=input?.experimental_variant==='outside-role-v0.5'||coupledTrial;
@@ -254,6 +255,18 @@ function forecast(input){
  const denom=strength.reduce((a,b)=>a+b,0),shares=strength.map(v=>v/denom);
  // Condition second and third on WHICH first-turn maneuver succeeded. If c=3
  // attacks, nearby c2 and inside c1 can survive; if c1 escapes, c2/c3 can chase.
+ // New forward-only v0.9: an inside winner ALSO leaves wake for 2M followers.
+ // Bounded pre-race speed/turn proxy, NOT observed wave positions or speed loss.
+ function followingWakeFactor(headCourse,followerCourse,phase){
+  if(!wakeIntegrated)return 1;
+  const leader=move[byCourse[headCourse-1]],chaser=move[byCourse[followerCourse-1]];
+  if(!leader||!chaser)return 1;
+  const goRatio=chaser.go/Math.max(.38,leader.go);
+  const turnRatio=chaser.turn/Math.max(.35,leader.turn);
+  const avoidance=clamp(.55*(goRatio-1)+.42*(turnRatio-1),-.32,.38);
+  const exposure=clamp((phase==='second'?.10:.075)-avoidance*.31,.015,.21);
+  return clamp(1-exposure+Math.max(0,avoidance)*.37,.79,1.17);
+ }
  function secondWeight(headCourse,secondCourse){
   let relation;
   if(headCourse===1)relation=({2:1.45,3:1.3,4:1.02,5:.72,6:.43})[secondCourse]||.5;
@@ -296,6 +309,13 @@ function forecast(input){
      }
    }
    if(wakeTrial)relation*=clamp(1-.82*estimatedWakeRisk(headCourse,secondCourse),.39,1);
+   if(wakeIntegrated){
+    relation*=followingWakeFactor(headCourse,secondCourse,'second');
+    const attack=coupling[headCourse-1],chaser=move[byCourse[secondCourse-1]];
+    if(headCourse>=3&&secondCourse===attack.follower_course&&
+       attack.pressure>=.12&&attack.follower_readiness>=.55&&chaser.turn>=.88)
+      relation*=clamp(1+.26*attack.pressure*attack.follower_readiness,1,1.22);
+   }
    if(coupledTrial){
      const attack=coupling[headCourse-1];
      if(headCourse>=3){
@@ -335,6 +355,15 @@ function forecast(input){
       consistency*=clamp(1+.7*earlier.confidence,1,1.5);
    }
    if(wakeTrial)consistency*=clamp(1-.75*estimatedWakeRisk(h,c),.43,1);
+   if(wakeIntegrated){
+    // 3rd may follow the 2nd boat into choppy water. Preserve survivors.
+    consistency*=followingWakeFactor(s,c,'third');
+    if(h>=3&&c<h&&s<h){
+      const survivor=coupling[h-1].inside.find(z=>z.course===c);
+      if(survivor&&survivor.risk>.25)
+       consistency*=clamp(1-.18*survivor.risk,.85,1);
+    }
+   }
    if(coupledTrial){
      const attack=coupling[h-1];
      if(h>=3){
@@ -535,7 +564,8 @@ function forecast(input){
  })):[];
  const headOneTotal=headOneScores.reduce((n,x)=>n+x.weight,0);
  return {
-   model:startTrial?'tactical-outside-start-gap-v0.7-untrained':
+   model:wakeIntegrated?'tactical-outside-start-wake-v0.9-untrained':
+      startTrial?'tactical-outside-start-gap-v0.7-untrained':
      coupledTrial?'tactical-six-boat-coupling-v0.6-untrained':
      outerStudyTrial?'tactical-outside-role-v0.5-untrained':
      roleAwareTrial?'tactical-role-consistency-v0.4-untrained':
@@ -544,6 +574,19 @@ function forecast(input){
    basis:'保存済み発走前選手情報と場別参考値のみ。結果・払戻・オッズ不使用。',
    venue:input.venue,head_course_shares:shares.map((s,i)=>({course:i+1,lane:v[byCourse[i]].lane,relative_share:+s.toFixed(4),tactic:nameTactic[i+1]})),
    metadata:{venue_reference_rate:rate,wind_speed:wind,validMetrics,exhibition_used:validMetrics.length>0,
+      ...(wakeIntegrated?{wake_v09:{
+        pre_cutoff_only:true,calibrated:false,studied_phases:['1M','2M+'],
+        applies_to_all_head_courses:true,
+        note:'No measured wake crossings or speed loss. Bounded pre-race hypothetical scenario factors.',
+        head_course_exposure:[1,2,3,4,5,6].map(course=>({
+          course,one_mark_inner_risk:course>=3?
+            Array.from({length:course-1},(_,i)=>({course:i+1,
+              relative_risk:+estimatedWakeRisk(course,i+1).toFixed(4)})):[],
+          second_chasers:[1,2,3,4,5,6].filter(c=>c!==course).map(c=>({
+            course:c,relative_multiplier:+followingWakeFactor(course,c,'second').toFixed(4)
+          }))
+        }))
+      }}:{}),
      ...(startTrial?{start_v07:{
        slit_signals:startSignals,
        second_given_inside_first:headOneScores.map(x=>({
@@ -592,7 +635,8 @@ global.BoatTacticalModel={forecast,
  forecastOutsideRole:input=>forecast({...input,experimental_variant:'outside-role-v0.5'}),
  forecastCoupled:input=>forecast({...input,experimental_variant:'six-boat-coupling-v0.6'}),
  forecastOutsideStart:input=>forecast({...input,experimental_variant:'outside-start-gap-v0.7'}),
+ forecastWakeIntegrated:input=>forecast({...input,experimental_variant:'outside-start-wake-v0.9'}),
  forecastOutside:input=>forecast({...input,experimental_variant:'outside-makuri-v0.2'}),
  forecastWake:input=>forecast({...input,experimental_variant:'wake-attrition-v0.3'}),
- RATE_BY_VENUE,OUTSIDE_VENUE_COURSES,nameTactic,version:'trial-v0.7-outside-start-20261024'};
+ RATE_BY_VENUE,OUTSIDE_VENUE_COURSES,nameTactic,version:'trial-v0.9-wake-20261025'};
 })(typeof window!=='undefined'?window:globalThis);

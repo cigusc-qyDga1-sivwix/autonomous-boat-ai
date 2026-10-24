@@ -48,18 +48,39 @@ mismatch.race_records['14-1'].official_pay.snapshot_sha256='b'.repeat(64);
 assert.equal(api.summary(mismatch,day22).checked,1,'snapshot mismatch never contributes');
 (async()=>{
  const docs={[day22]:l22,[day23]:l23};
- await api.load(false,async url=>({ok:true,json:async()=>docs[url.match(/\d{4}-\d\d-\d\d/)[0]]}));
+ await api.load(false,async url=>({ok:true,json:async()=>docs[url.match(/\d{4}-\d\d-\d\d/)[0]]}),new Date('2026-10-23T10:00:00+09:00'));
  const html=api.render();
- assert.match(html,/10\/22・10\/23 累積収支/);
+ assert.match(html,/10\/22〜10\/23 累積収支/);
  assert.match(html,/−50,000円/);
  assert.match(html,/公式照合 3R/);
  assert.match(html,/150,000円/);
  assert.match(html,/100,000円/);
  assert.equal(api.status(),'ready');
- await api.load(true,async url=>url.includes(day23)?{ok:false,status:404}:{ok:true,json:async()=>l22});
+ await api.load(true,async url=>url.includes(day23)?{ok:false,status:404}:{ok:true,json:async()=>l22},new Date('2026-10-23T10:00:00+09:00'));
  const partial=api.render();
  assert.match(partial,/取得済み日だけの暫定累積/);
  assert.match(partial,/未取得・累積に含めない/);
  assert.doesNotMatch(partial,/−50,000円/);
- console.log('BOAT LAB 2-day official-only cumulative settlement: PASS');
+
+ const day24='2026-10-24',day25='2026-10-25';
+ const l24=ledger(day24,{'14-1':rec(day24,1,'1-2-3',500)});
+ const l25=ledger(day25,{'14-1':rec(day25,1,null,null)});
+ assert.deepEqual(api.daysThrough(new Date('2026-10-24T15:15:00Z')),
+  [day22,day23,day24,day25],'JST rollover includes today');
+ const seen=[];
+ await api.load(true,async url=>{
+  const date=url.match(/\d{4}-\d\d-\d\d/)[0];seen.push(date);
+  return {ok:true,json:async()=>({[day22]:l22,[day23]:l23,[day24]:l24,[day25]:l25})[date]};
+ },new Date('2026-10-25T07:30:00+09:00'));
+ assert.deepEqual(seen,[day22,day23,day24,day25]);
+ const today=api.render();
+ assert.match(today,/10\/22〜10\/25 累積収支/);
+ assert.match(today,/10\/24/);assert.match(today,/10\/25/);
+ assert.match(today,/公式照合 4R/);
+ assert.match(today,/200,000円/,'only verified races count as invested');
+ await api.load(true,async url=>url.includes(day24)?{ok:false,status:404}:
+  {ok:true,json:async()=>({[day22]:l22,[day23]:l23,[day25]:l25})[url.match(/\d{4}-\d\d-\d\d/)[0]]},
+  new Date('2026-10-25T07:45:00+09:00'));
+ assert.match(api.render(),/未取得・累積に含めない/);
+ console.log('BOAT LAB dynamic Oct22-to-today verified cumulative settlement: PASS');
 })().catch(err=>{console.error(err);process.exitCode=1});

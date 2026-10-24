@@ -28,7 +28,8 @@ assert.ok(html.includes('data-sim-pick="'+model.bets[0].combination+'"'));
 assert.match(html,/v0\.7本線/);
 assert.match(fs.readFileSync('app/app.js','utf8'),/legacyControlPanel\(r\)/);
 assert.match(fs.readFileSync('app/app.js','utf8'),/main_vs_legacy/);
-assert.match(fs.readFileSync('app/venue-board.js','utf8'),/メインv0\.7 固定/);
+assert.match(fs.readFileSync('app/venue-board.js','utf8'),/r\.model_version\?\.includes\('v0\.9'\)/,
+ 'venue board must label historical v0.7 and future v0.9 by saved model_version');
 const before=JSON.stringify(race);
 V.animationHTML(race);
 assert.equal(JSON.stringify(race),before,'UI may not rewrite canonical frozen tickets');

@@ -69,6 +69,9 @@ jobs:
       - run: node app/tests/tactical-daily-comparison.test.js
       - run: node app/tests/tactical-ui-integration.test.js
       - run: node app/tests/primary-v07-ui.test.js
+      - run: node --check scripts/main_v09_bridge.js
+      - run: node app/tests/main-wake-v09.test.js
+      - run: python3 -m scripts.test_main_wake_upgrade
       - run: node --check scripts/main_v07_bridge.js
       - run: node app/tests/race-tactics.test.js
       - run: node app/tests/first-mark-geometry.test.js

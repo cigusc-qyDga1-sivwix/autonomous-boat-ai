@@ -205,7 +205,7 @@
       '発走前の展示確認なしに最終買い目として扱わないでください。</p></div>';
   }
   function tacticalSummary(r){
-    if(r?.model_role==='main')return null; // v0.7 is already frozen as primary.
+    if(r?.model_role==='main')return null; // v0.7/v0.9 is already frozen as primary.
     if(r?.entry_exhibition_gate?.entry_watch && !r.entry_exhibition_gate.final_eligible)return null;
     try{
       const x=window.BoatTacticalModel?.forecast(r);
@@ -217,7 +217,7 @@
     return '<button type="button" class="race-tile" data-race="'+escape(r.venue)+'|'+r.race+'">'+
       '<div class="tile-top"><span class="tile-r">'+escape(r.venue)+' '+r.race+'R</span>'+pill(r.classification)+'</div>'+
       '<div class="tile-time">締切予定 '+escape(r.cutoff_jst)+' · 固定 '+r.bets.length+'点 · '+(r.phase==='exhibition'?'展示反映':'展示前')+'</div>'+
-      '<div class="tile-bets">'+(r.model_role==='main'?'✅ v0.7メイン固定：':'🔒 旧モデル固定：')+
+      '<div class="tile-bets">'+(r.model_role==='main'?'✅ '+(r.model_version?.includes('v0.9')?'v0.9':'v0.7')+'メイン固定：':'🔒 旧モデル固定：')+
       escape(r.bets.slice(0,2).map(b=>b.combination).join(' / '))+'</div>'+
       (r.model_role==='main'&&r.legacy_control?'<div class="tile-tactical">🔬 旧モデル比較：<strong>'+
        escape(r.legacy_control.bets?.[0]?.combination||'未取得')+'</strong> ／ 検証用（正式収支に二重計上なし）</div>':'')+
@@ -562,7 +562,7 @@
     return `<button class="back-btn" data-action="back-races">← レース一覧へ戻る</button>
      ${window.BoatMobileRaceNav?.racePicker(r.venue,r.race,data.forecast_races,data.unforecast_races)||''}
      <div class="detail-header"><div><div class="page-eyebrow">FORECAST DETAILS / ${escape(data.event_date)}</div><h1 class="detail-title">${escape(r.venue)} ${r.race}R <span style="font-size:17px;vertical-align:middle">${pill(r.classification)}</span></h1><div class="detail-sub">締切予定 ${escape(r.cutoff_jst)} JST　 ·　 ${r.phase==='exhibition'?'展示数値反映':r.phase==='baseline'?'展示前':'保存済み'}・結果未使用</div></div><button class="btn btn-primary" data-action="copy-bets" data-race="${escape(r.venue)}|${r.race}">⎘ 買い目をコピー</button></div>
-    ${r.model_role==='main'?'<div class="notice"><strong>✅ メイン予想 v0.7：スタート差 × 6艇連動</strong>。以下の固定買い目が結果照合・仮想収支の対象。旧方式は別枠検証。</div>':
+    ${r.model_role==='main'?'<div class="notice"><strong>✅ メイン予想 '+(r.model_version?.includes('v0.9')?'v0.9：ST差 × 6艇連動 × 1M・2M引き波評価':'v0.7：スタート差 × 6艇連動')+'</strong>。以下の固定買い目が結果照合・仮想収支の対象。旧方式は別枠検証。</div>':
       '<div class="notice warn">過去に固定した旧モデルの予想（当時の買い目・SHAを維持）。新モデルへ事後書き換えしません。</div>'}
     ${r.phase?`<div class="notice">${escape(r.evidence||'')} ・ 発走前保存 ${escape(r.frozen_at_utc||'未記録')} ・ SHA256 ${escape((r.sha256||'').slice(0,18))}…${r.weather_observed?`<br>場内風速 ${escape(r.weather_observed.wind_speed)}m/s ／ 波高 ${escape(r.weather_observed.wave_height)}cm（非公式・取得時点）`:''}<br>予想モデル：未学習・確率未校正。展示動画とオッズは未反映。</div>`:''}
     ${entryGateWarning(r)}
@@ -717,7 +717,7 @@
     const weatherTest=(data.weather_backtest||{}), weatherN=weatherTest.races||0;
     const ab=data.main_vs_legacy||{}, abN=ab.verified_comparisons||0;
     const legacyAnalysis='<section class="card card-pad" style="margin-bottom:16px">'+
-      '<h2 class="section-title">⚔️ メインv0.7 対 旧モデル（同時固定・検証用）</h2>'+
+      '<h2 class="section-title">⚔️ 当日のメインモデル 対 同時固定の旧モデル（検証専用）</h2>'+
       (abN?'<p>公式照合 <b>'+abN+'R</b> ／ メイン的中 <b>'+ab.main_hits+
        'R</b> ／ 旧モデル的中 <b>'+ab.legacy_hits+'R</b></p>'+
        '<p>メイン仮想回収率 <b>'+(100*ab.main_virtual_payout/ab.virtual_stake_per_model).toFixed(1)+
@@ -733,7 +733,7 @@
        '<div class="notice">気象あり・なしを同条件で公式照合できたレースはまだありません。効果は未検証です。</div>')+
       '<p class="help">この比較は未校正の試験モデル。気象補正が的中率や回収率を改善する保証はありません。</p></section>':'';
     const metrics=total.examined?`${metric('検証済み',`${total.examined} R`,live?'公式払戻で確認済み':'手入力の結果のみ','✓')}${metric('3連単的中',`${total.hits} R`,pct(total.hitRate),'◎')}${metric('仮想回収率',pct(total.returnRate),'照合済みだけ','↗',total.returnRate>=1?'positive':'negative')}${metric('仮想収支',`${total.profit>=0?'+':''}${money(total.profit)}`,'正式BUYは別管理','¥',total.profit>=0?'positive':'negative')}`:`${metric('検証済み','0 R','まず結果照合を入力','✓')}${metric('3連単的中','—','未検証','◎')}${metric('仮想回収率','—','未検証','↗')}${metric('仮想収支','—','未検証','¥')}`;
-    return `${head('成績分析',`${getVenues().length}場を比較 / 仮想5万円 × 保存済み${allRaces().length}R`)}<div class="metrics">${metrics}</div>${legacyAnalysis}${weaknessDiagnosis()}${weatherTestHtml}<div class="columns-2"><section class="card card-pad"><div class="section-head"><h2 class="section-title">競艇場別の的中率</h2>${pill('検証済みのみ','local')}</div><div class="chart-grid">${groups.map(g=>`<div class="chart-item"><strong>${escape(g.venue)}</strong><div class="bar-back"><span class="bar-value" style="width:${g.all.examined?(100*g.all.hitRate).toFixed(1):0}%"></span></div><b>${g.all.examined?pct(g.all.hitRate):'—'}</b></div>`).join('')}</div><p class="charts-note">予想点数は4〜12点（旧8点固定記録を含む）。仮想5万円で比較。的中率は${live?'BOATRACE公式確認済み':'結果入力済み'}レースのみが分母。</p><div class="notice">${total.examined?`頭候補捕捉 ${total.heads}/${total.examined}R、1・2着順一致 ${total.firstSeconds}/${total.examined}R、3着紐抜け ${total.thirdMiss}R。`:'まだ結果がないため、モデルの実力を判定できません。'}</div></section>
+    return `${head('成績分析',`${getVenues().length}場を比較 / 仮想5万円 × 保存済み${allRaces().length}R`)}${window.BoatCumulative?.render()||''}<div class="metrics">${metrics}</div>${legacyAnalysis}${weaknessDiagnosis()}${weatherTestHtml}<div class="columns-2"><section class="card card-pad"><div class="section-head"><h2 class="section-title">競艇場別の的中率</h2>${pill('検証済みのみ','local')}</div><div class="chart-grid">${groups.map(g=>`<div class="chart-item"><strong>${escape(g.venue)}</strong><div class="bar-back"><span class="bar-value" style="width:${g.all.examined?(100*g.all.hitRate).toFixed(1):0}%"></span></div><b>${g.all.examined?pct(g.all.hitRate):'—'}</b></div>`).join('')}</div><p class="charts-note">予想点数は4〜12点（旧8点固定記録を含む）。仮想5万円で比較。的中率は${live?'BOATRACE公式確認済み':'結果入力済み'}レースのみが分母。</p><div class="notice">${total.examined?`頭候補捕捉 ${total.heads}/${total.examined}R、1・2着順一致 ${total.firstSeconds}/${total.examined}R、3着紐抜け ${total.thirdMiss}R。`:'まだ結果がないため、モデルの実力を判定できません。'}</div></section>
     <section class="card card-pad"><div class="section-head"><h2 class="section-title">WATCHとSKIPの比較</h2></div>${[['WATCH',watchTotal],['SKIP',skipTotal]].map(([name,s])=>`<div class="feature-card"><span class="feature-label">${name} · ${s.examined}/${s.count}R</span><strong>的中 ${s.hits}R${s.examined?' / '+pct(s.hitRate):''}</strong><p>仮想回収率 ${s.returnRate===null?'未算出':pct(s.returnRate)} ・ 収支 ${s.examined?money(s.profit):'未算出'}</p></div>`).join('')}<div class="notice warn">SKIPの仮想配分はベンチマーク用。実際に買ったと仮定した場合の数字で、正式な投資収支ではありません。</div></section></div>
     <div class="card card-pad" style="margin-top:18px"><div class="section-head"><h2 class="section-title">場別・モデル検証サマリー</h2></div><table class="bets-table"><thead><tr><th>場</th><th>照合</th><th>的中</th><th>仮想回収</th></tr></thead><tbody>${groups.map(g=>`<tr><td>${escape(g.venue)}</td><td>${g.all.examined}/${g.all.count}</td><td>${g.all.hits}R</td><td>${g.all.returnRate===null?'—':pct(g.all.returnRate)}</td></tr>`).join('')}</tbody></table></div><p class="footer-disclaimer">検証値には事後作成の予想を混ぜない。データの入手時刻と発走前固定を確認できる予想のみを、正式なモデル評価に使用します。</p>`;
   }
@@ -749,8 +749,8 @@
     document.querySelectorAll('[data-view]').forEach(b=>{b.classList.toggle('active',b.dataset.view===state.view);if(b.dataset.view===state.view)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
     main.innerHTML=(window.BoatExhibitionAudit?.banner(data)||'')+
       ({overview,races,results:resultsPage,analysis,settings})[state.view]();
-    if(state.view==='results'&&window.BoatCumulative?.status()==='idle'){
-      void window.BoatCumulative.load().then(()=>{if(state.view==='results')render()}).catch(()=>{});
+    if(['results','analysis'].includes(state.view)&&window.BoatCumulative?.needsRefresh?.()){
+      void window.BoatCumulative.load().then(()=>{if(['results','analysis'].includes(state.view))render()}).catch(()=>{});
     }
     if(state.view==='races'&&state.raceDetail)window.BoatRaceVisual?.mount(main,state.raceDetail);
     else window.BoatRaceVisual?.dispose();

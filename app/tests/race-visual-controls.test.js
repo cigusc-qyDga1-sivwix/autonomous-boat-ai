@@ -13,7 +13,7 @@ const boats=Array.from({length:6},()=>({
  transform:'',setAttribute(k,v){if(k==='transform')this.transform=v}
 }));
 const buttons=Array.from({length:3},(_,i)=>({
- dataset:{simPick:race.bets[i].combination},
+ dataset:{simPick:race.bets[i].combination,simKind:'forecast'},
  classList:{toggle(){}},setAttribute(k,v){if(k==='aria-pressed')this.pressed=v}
 }));
 let clickHandler=null,inputHandler=null;
@@ -61,7 +61,7 @@ assert.match(wakeLabel.textContent,/🌀 ON/,'all races start with wake research
 assert.match(boats[0].transform,/translate/);
 function actionNode(node){clickHandler({target:{closest:()=>node}})}
 function action(control,pick){
- const node=pick?{dataset:{simPick:pick}}:{dataset:{simControl:control}};
+ const node=pick?{dataset:{simPick:pick,simKind:'forecast'}}:{dataset:{simControl:control}};
  actionNode(node);
 }
 action('play');
@@ -84,7 +84,7 @@ assert.equal(paths[0].d,visual.path(1,visual.ranks(other)[1],visual.tacticFor(ot
 assert.match(caption.textContent,/仮説/);
 assert.equal(buttons[1].pressed,'true');
 assert.match(wakeLabel.textContent,/🌀 ON/,'scenario changes keep wake ON');
-assert.equal(result.textContent,'予想：'+other);
+assert.equal(result.textContent,(visual.tacticalOptions(race).length?'表示中：':'予想：')+other);
 assert.equal(tactic.textContent,visual.tacticFor(other).label);
 assert.equal(forecast.textContent,'元の固定予想 '+other);
 actionNode(wakeButton);

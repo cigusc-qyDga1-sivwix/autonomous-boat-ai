@@ -43,7 +43,10 @@ VENUES = {
     "21": "芦屋", "22": "福岡", "23": "唐津", "24": "大村",
 }
 MAIN_MODEL = "tactical-outside-start-gap-v0.7-untrained"
+MAIN_WAKE_MODEL = "tactical-outside-start-wake-v0.9-untrained"
+WAKE_PROMOTION_DATE = date(2026, 10, 25)
 MAIN_BRIDGE = Path(__file__).resolve().parent / "main_v07_bridge.js"
+WAKE_BRIDGE = Path(__file__).resolve().parent / "main_v09_bridge.js"
 VIRTUAL_BUDGET_YEN = 50_000
 MIN_POINTS, MAX_POINTS = 4, 12
 STAKE_UNIT_YEN = 1_000
@@ -383,6 +386,50 @@ def promoted_v07(venue: str, phase: str, racers: list[dict],
     return answer
 
 
+def promoted_v09(venue: str, phase: str, racers: list[dict],
+                 profile: dict | None, weather: dict | None,
+                 frozen_at_utc: str) -> dict:
+    """New main (only for Oct 25+). Fail closed, same pre-cutoff data."""
+    inputs = {
+        "venue": venue, "phase": phase,
+        "racers": [{key: r.get(key) for key in (
+            "lane", "course", "national_win_rate", "motor_top_2_percent",
+            "average_start_timing", "exhibition_st", "exhibition_time",
+            "original_exhibition"
+        )} for r in racers],
+        "venue_profile": profile, "weather_used": weather,
+        "frozen_at_utc": frozen_at_utc,
+    }
+    try:
+        job = subprocess.run(
+            ["node", str(WAKE_BRIDGE)], input=json.dumps(inputs, ensure_ascii=False),
+            text=True, capture_output=True, timeout=12, check=True
+        )
+        answer = json.loads(job.stdout)
+    except (OSError, ValueError, subprocess.CalledProcessError,
+            subprocess.TimeoutExpired) as exc:
+        raise RuntimeError("v0.9 bridge unavailable: fail closed, no fallback freeze") from exc
+    bets = answer.get("bets")
+    if answer.get("model_version") != MAIN_WAKE_MODEL or not isinstance(bets, list):
+        raise ValueError("Wrong new main bridge model identity")
+    if not MIN_POINTS <= len(bets) <= MAX_POINTS or len({
+        b.get("combination") for b in bets
+    }) != len(bets) or any(
+        not isinstance(b.get("virtual_yen"), int)
+        or b["virtual_yen"] < STAKE_UNIT_YEN
+        or b["virtual_yen"] % STAKE_UNIT_YEN
+        or not isinstance(b.get("combination"), str)
+        or len(b["combination"].split("-")) != 3
+        or len(set(b["combination"].split("-"))) != 3
+        or any(x not in "123456" for x in b["combination"].split("-"))
+        for b in bets
+    ) or sum(b["virtual_yen"] for b in bets) != VIRTUAL_BUDGET_YEN:
+        raise ValueError("Invalid v0.9 ticket allocation")
+    if not answer.get("wake_v09", {}).get("pre_cutoff_only"):
+        raise ValueError("Wake provenance missing")
+    return answer
+
+
 def prediction(race: dict, venue: str, race_number: int, phase: str,
                now: datetime, source_url: str, nearby_weather: dict | None = None) -> dict:
     if phase not in ("baseline", "exhibition"):
@@ -434,24 +481,46 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         }
     legacy_control["sha256"] = stable_hash(legacy_control)
     profile = get_profile(venue_code) if venue_code else None
-    promoted = promoted_v07(venue, phase, racers, profile, selected_weather, frozen_at)
+    new_primary = cutoff.date() >= WAKE_PROMOTION_DATE
+    if new_primary:
+        same_time_old = promoted_v07(venue, phase, racers, profile, selected_weather, frozen_at)
+        legacy_control = {
+            "model_version": same_time_old["model_version"],
+            "bets": same_time_old["bets"],
+            "point_count": len(same_time_old["bets"]),
+            "frozen_at_utc": frozen_at,
+            "model_role": "shadow_validation",
+            "source_note": "v0.7 old main frozen at same pre-cutoff instant; no result",
+        }
+        legacy_control["sha256"] = stable_hash(legacy_control)
+        promoted = promoted_v09(venue, phase, racers, profile, selected_weather, frozen_at)
+        chosen_model = MAIN_WAKE_MODEL
+    else:
+        promoted = promoted_v07(venue, phase, racers, profile, selected_weather, frozen_at)
+        chosen_model = MAIN_MODEL
     bets = promoted["bets"]
     count = len(bets)
     shares = promoted["head_course_shares"]
     concentration = max(x["relative_share"] for x in shares)
     top_two = sorted((x["relative_share"] for x in shares), reverse=True)
     gap = top_two[0] - top_two[1]
-    reason = ("6艇連動＋平均ST／展示STと内艇の先行差による着順分岐"
-              "（4〜12点・未訓練・確率未校正）")
+    reason = ("6艇連動＋平均ST／展示ST＋1M・2M引き波回避の着順分岐"
+              if new_primary else
+              "6艇連動＋平均ST／展示STと内艇の先行差による着順分岐")
+    reason += "（4〜12点・未訓練・確率未校正）"
     top_combo = bets[0]["combination"].split("-")
     leader = racers[int(top_combo[0]) - 1]
     follower = racers[int(top_combo[1]) - 1]
     weather = observed
     body = {
-        "model_version": MAIN_MODEL,
+        "model_version": chosen_model,
         "model_role": "main",
         "legacy_control": legacy_control,
         "start_v07": promoted["start_v07"],
+        **({"wake_v09": promoted["wake_v09"],
+            "primary_promotion_date_jst": WAKE_PROMOTION_DATE.isoformat(),
+            "primary_model_ab": "v0.9 primary vs same-time frozen v0.7 control"}
+           if new_primary else {}),
         "coupled_v06": promoted["coupled_v06"],
         "head_course_shares": promoted["head_course_shares"],
         "role_coverage": promoted["role_coverage"],
@@ -519,6 +588,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
     venues_seen = set()
     weather_by_venue = weather_by_venue or {}
     new_baseline, new_exhibition, revised_exhibition, changed_exhibition = 0, 0, 0, 0
+    new_model_upgrades = 0
     exhibition_rows = exhibition_rows or {}
     race_source = (payload.get("programs") or {}).get("stadiums") or {}
     for venue_code, stadium in race_source.items():
@@ -592,6 +662,38 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                     record["versions"].append(new)
                     new_exhibition += 1
                     revised_exhibition += int(revision)
+            # 2026-10-25 onward, a race whose earlier v0.7 pre-cutoff
+            # baseline was already fixed may receive ONE new v0.9 revision
+            # BEFORE cutoff. NEVER replace the older version or backdate it.
+            # If last snapshot was exhibition, only promote with complete
+            # currently observed exhibition data; do not downgrade it.
+            upgrade_now = datetime.now(UTC) if enforce_wall_clock else runtime_now
+            if (cutoff.date() >= WAKE_PROMOTION_DATE
+                    and record["versions"]
+                    and record["versions"][-1].get("model_version") != MAIN_WAKE_MODEL
+                    and upgrade_now.astimezone(JST) < cutoff - timedelta(seconds=margin)):
+                latest_before = record["versions"][-1]
+                phase_to_promote = latest_before["phase"]
+                if phase_to_promote == "baseline" or preview_ready:
+                    candidate_now = candidate if phase_to_promote == "exhibition" else race
+                    latest_timestamp = datetime.now(UTC) if enforce_wall_clock else upgrade_now
+                    upgrade = prediction(
+                        candidate_now, VENUES[venue_code], n,
+                        phase_to_promote, latest_timestamp, source_url, nearby
+                    )
+                    # Unique immutable record, not a rewrite of earlier SHA.
+                    upgrade["model_upgrade"] = {
+                        "previous_sha256": latest_before["sha256"],
+                        "previous_model": latest_before["model_version"],
+                        "revision_at_utc": latest_timestamp.isoformat(),
+                        "new_model": MAIN_WAKE_MODEL,
+                        "same_race_pre_cutoff_revision": True,
+                    }
+                    upgrade["sha256"] = stable_hash({
+                        k: v for k, v in upgrade.items() if k != "sha256"
+                    })
+                    record["versions"].append(upgrade)
+                    new_model_upgrades += 1
             # Results are NEVER taken from the unofficial preview API.
             # Official pay-page evidence is attached only after forecasts are generated.
     # Preserve previous records even if a subsequent source request is incomplete.
@@ -617,7 +719,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "weather_used", "weather_adjustment", "weather_ab", "data_quality",
                       "exhibition_origin", "exhibition_change",
                       "venue_profile", "venue_adjustment", "model_role", "legacy_control",
-                      "start_v07", "coupled_v06", "head_course_shares",
+                      "start_v07", "coupled_v06", "wake_v09", "model_upgrade", "primary_model_ab", "head_course_shares",
                       "role_coverage", "role_changes", "relative_scores_uncalibrated"):
             if extra in current:
                 r[extra] = current[extra]
@@ -671,6 +773,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
               "forecast_races": len(latest_races),
               "missed_or_unavailable": len(unavailable),
               "new_baseline": new_baseline, "new_exhibition": new_exhibition,
+              "new_model_upgrades": new_model_upgrades,
               "revised_exhibition": revised_exhibition,
               "changed_exhibition": changed_exhibition,
               "entry_watch_races": out["entry_watch_races"],

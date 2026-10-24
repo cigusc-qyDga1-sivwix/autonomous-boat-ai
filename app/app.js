@@ -319,6 +319,38 @@
       '<p class="outer-study-foot">これは未訓練・確率未校正の試験。新モデルの正式BUY成績には未計上。外枠は不利ゼロではありません。判断に使った数値は発走前に保存された出走・展示情報のみ。結果や払戻では予想を後から変えません。</p>'+
       '</section>';
   }
+  // New v0.6 is a visible shadow calculation, NEVER an edit to frozen bets.
+  function coupledTrialPanel(r,closed){
+    let model;
+    try{model=window.BoatTacticalModel?.forecastCoupled?.(r);}
+    catch(e){return '<div class="notice warn">6艇連動の試験計算を保留：'+escape(e.message)+'</div>';}
+    if(!model)return '';
+    const graph=model.metadata?.coupled_v06?.interaction_graph||[];
+    const rows=graph.filter(x=>x.head_course>=3).map(x=>{
+      const inside=x.inside.filter(v=>v.risk>.1).map(v=>v.lane+'号艇').join('、')||'明確な押し下げは未推定';
+      const follow=x.follower_course&&x.pressure>.1&&x.follower_readiness>.4?
+        x.follower_lane+'号艇（'+x.follower_course+'コース）':'連動根拠が弱い';
+      return '<tr><td><b>'+escape(x.head_lane)+'号艇</b>（'+x.head_course+'コース）</td>'+
+        '<td>'+escape(x.tactic)+'</td>'+
+        '<td>'+inside+'</td><td>'+escape(follow)+'</td></tr>';
+    }).join('');
+    const picks=model.bets.map(b=>
+      '<tr><td><b>'+escape(b.combination)+'</b></td><td>'+escape(b.conditional_reason)+'</td>'+
+      '<td>'+money(b.virtual_yen)+'</td></tr>').join('');
+    return '<details class="card card-pad boat-coupled-study" style="margin:12px 0">'+
+      '<summary style="cursor:pointer;font-weight:900">🚤 6艇の攻防・追走・着残り｜連動モデル v0.6（試験）</summary>'+
+      '<p class="muted text-sm">進入 → スタート → 1Mの攻め → 内艇の失速・残存 → 外艇の追走 → 2・3着の成立条件をつなげる仮説。数値は実測進路・学習済み確率ではありません。</p>'+
+      (closed?'<div class="notice warn"><b>締切後の事後参考計算。発走前固定済み予想には加えません。</b></div>':
+        '<div class="notice">この画面での計算は未固定の参考試算。正式記録と分離しています。</div>')+
+      '<div class="boat-entry-overflow"><table class="bets-table"><thead><tr>'+
+      '<th>仕掛け艇</th><th>攻め方の仮説</th><th>影響を受ける内艇</th><th>追走候補</th>'+
+      '</tr></thead><tbody>'+rows+'</tbody></table></div>'+
+      '<p><b>v0.6の想定3連単：'+escape(model.bets.length)+'点・仮想50,000円</b>（結果・配当は入力しません）</p>'+
+      '<div class="boat-entry-overflow"><table class="bets-table"><thead><tr><th>3連単</th><th>艇の連動・着順条件</th><th>仮想配分</th>'+
+      '</tr></thead><tbody>'+picks+'</tbody></table></div>'+
+      '<p class="muted text-sm">比較用v0.5と同じ事前情報で検証する研究モデル。結果判明後に同じ日の買い目を更新しません。前付けの可能性があれば展示進入の確認が先です。</p>'+
+      '</details>';
+  }
   function tacticalTrialPanel(r){
     if(r?.entry_exhibition_gate?.entry_watch && !r.entry_exhibition_gate.final_eligible)
       return '<div class="notice warn">⚠ 前付け警戒：6艇の展示進入が確認できるまで、戦法再計算の買い目は最終候補として表示しません。</div>';
@@ -348,7 +380,7 @@
       '<span class="tactical-change">'+(changed?'買い目・配分に違いあり':'比較結果：同じ配分')+'</span></div>'+
       '<div class="tactical-heads"><strong>1着戦法の相対評価（未校正）</strong>'+
       heads.map(h=>'<span>'+escape(h.lane)+'号艇：'+escape(h.tactic)+' '+(h.relative_share*100).toFixed(1)+'%</span>').join('')+
-      '</div>'+roleConsistencyPanel(r,trial)+outsideRoleTrialPanel(r,trial)+'<div class="boat-entry-overflow"><table class="bets-table tactical-bets"><thead><tr><th>3連単</th><th>頭の勝ち筋</th><th>仮想配分</th></tr></thead><tbody>'+
+      '</div>'+roleConsistencyPanel(r,trial)+outsideRoleTrialPanel(r,trial)+coupledTrialPanel(r,closed)+'<div class="boat-entry-overflow"><table class="bets-table tactical-bets"><thead><tr><th>3連単</th><th>頭の勝ち筋</th><th>仮想配分</th></tr></thead><tbody>'+
       trial.bets.map(b=>'<tr><td><strong>'+escape(b.combination)+'</strong></td>'+
       '<td>'+escape(b.scenario)+'</td><td>'+money(b.virtual_yen)+'</td></tr>').join('')+
       '</tbody></table></div><p class="tactical-foot">試験 '+trial.bets.length+'点／仮想5万円。'+

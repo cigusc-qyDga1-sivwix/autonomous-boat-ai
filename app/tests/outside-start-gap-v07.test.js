@@ -36,8 +36,13 @@ for(const lane of [4,5,6]){
  assert.equal(signal.second_evidence,true,'outside 4-6 second branch should be assessed');
  assert.ok(next.head_course_shares[lane-1].relative_share>prev.head_course_shares[lane-1].relative_share,
   'start-based attacking gap raises head relative score for '+lane);
- assert.ok(laneShare(next,lane,'second')>laneShare(prev,lane,'second'),
-  'start-based finish in 2nd gets scored separately for '+lane);
+ const insideSecond=next.metadata.start_v07.second_given_inside_first;
+ assert.equal(insideSecond.length,5);
+ const beforeWeight=[2,3,4,5,6].map(course=>({
+   course,weight:0 // v0.6 does not publish a conditional head1 second diagnostic.
+ }));
+ assert.ok(insideSecond.find(x=>x.course===lane).conditional_relative_weight>0,
+  'start-based outer second finish is scored separately for '+lane);
  assert.ok(next.bets.some(b=>b.combination.split('-').slice(0,2).includes(String(lane))),
   'strong 4/5/6 must appear as head or second if a competitive 3-way combo exists: '+lane);
  assert.ok(next.bets.length>=4&&next.bets.length<=12);

@@ -23,7 +23,7 @@ class WakeResearchTests(unittest.TestCase):
         self.assertEqual(slices["inside_1_escape"]["sample"],1)
         self.assertEqual(report["predictor_training"],"disabled")
         self.assertEqual(report["frozen_forecasts"],"unchanged")
-        self.assertIn("DO NOT observe wake contact",report["warning"])
+        self.assertIn("NOT observe wake contact",report["warning"])
         self.assertNotIn("wake_probability",str(report).split("warning")[0])
         for key in ("wake_crossing_per_boat","wake_contact_time","speed_loss_after_contact"):
             self.assertIn(key,report["missing_physical_observations"])

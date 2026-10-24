@@ -894,10 +894,13 @@
     if(!source||!race||!data||!state.showExternalAnalysis||originalRefreshBusy)return;
     const date=data.event_date,key=date+'|'+race.venue+'|'+race.race;
     originalRefreshBusy=true;
-    if(state.view==='races')render(); // Show "確認中" immediately after tapping.
     try{
+      // The direct source marks its own status "loading" synchronously.
+      // Render only AFTER starting the request so the button visibly changes.
+      const pending=source.refresh(race,date,{force});
+      if(state.view==='races')render();
       // Direct public original-exhibition CSV (no results or payouts).
-      const result=await source.refresh(race,date,{force});
+      const result=await pending;
       // A manual refresh also updates the archived snapshot fallback.
       if(force)await window.BoatExhibitionAudit?.load(date);
       if(result?.state==='ready')state.reanalysisNotice='展示CSVを取得しました。入力欄に反映された値を確認して「再予想を実行」を押してね。';

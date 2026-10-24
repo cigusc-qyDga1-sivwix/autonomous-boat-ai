@@ -38,7 +38,7 @@ win.BoatOriginalExhibitionDirect={
   return state;
  }
 };
-win.BoatExhibitionAudit={metricsFor:()=>null,load:async()=>{},panel:()=>''};
+win.BoatExhibitionAudit={metricsFor:()=>null,load:async()=>{},panel:()=>'',banner:()=>''};
 const env=vm.createContext({window:win,document:doc,localStorage:store,
  fetch:async()=>({ok:true,json:async()=>JSON.parse(JSON.stringify(frozen))}),
  navigator:{},location:{protocol:'file:'},console,Intl,Date,Number,Math,

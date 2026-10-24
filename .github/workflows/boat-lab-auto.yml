@@ -13,6 +13,7 @@ on:
       - 'scripts/ingest_boatracecsv_exhibition.py'
       - 'scripts/research_outside_roles.py'
       - 'scripts/research_coupling_patterns.py'
+      - 'scripts/research_wake_hypotheses.py'
       - 'scripts/research_start_gap.py'
       - 'scripts/freeze_start_trials.js'
       - 'scripts/freeze_coupling_trials.js'
@@ -65,6 +66,7 @@ jobs:
           python -m json.tool app/data/exhibition/status-latest.json > /dev/null
           python scripts/research_outside_roles.py
           python -m scripts.research_coupling_patterns
+          python -m scripts.research_wake_hypotheses
           python -m scripts.research_start_gap
           # No results here can revise an immutable forecast or official settlement.
       - name: Collect all available venues and freeze only pre-cutoff forecasts

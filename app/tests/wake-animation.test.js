@@ -20,12 +20,14 @@ assert.deepEqual(Array.from(V.wakeAffected('2-3-5',swapped)),[1,4,6],
 const html=V.animationHTML(r);
 assert.match(html,/data-sim-wake/);
 assert.match(html,/引き波・失速の仮説/);
-assert.doesNotMatch(V.stageTexts('4-5-6',r)[1],/着外まで下がる仮説/,
- 'default must not assume that the boats physically crossed any wake');
-assert.match(V.stageTexts('4-5-6',r,true)[1],/着外まで下がる仮説/,
- 'only an explicitly enabled counterfactual depicts a washout');
-assert.match(html,/data-sim-wake-toggle/);
-assert.match(html,/初期OFF/);
-assert.doesNotMatch(V.stageTexts('1-2-3',r)[1],/着外まで下がる仮説/);
+assert.doesNotMatch(V.stageTexts('4-5-6',r)[1],/引き波の影響を受ける可能性/,
+ 'manual helper with OFF must not mark wake');
+assert.match(V.stageTexts('4-5-6',r,true)[1],/引き波の影響を受ける可能性/,
+ 'wake visualization ON covers potential washed inner boats');
+assert.match(html,/data-sim-wake-toggle aria-pressed="true"/);
+assert.match(html,/全レース初期ON/);
+assert.doesNotMatch(html,/初期OFF/);
+assert.match(html,/data-sim-wake-info/);
+assert.match(html,/引き波研究は全レース初期ON/);
 assert.match(html,/実際の進入や艇間の航跡・速度を再現したものではありません/);
 console.log('4C makuri wake washout scenario and animation caveats: PASS');

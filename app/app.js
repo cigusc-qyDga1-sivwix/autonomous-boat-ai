@@ -283,7 +283,7 @@
     if(r?.entry_exhibition_gate?.entry_watch && !r.entry_exhibition_gate.final_eligible)
       return '<div class="notice warn">⚠ 前付け警戒：6艇の展示進入が確認できるまで、戦法再計算の買い目は最終候補として表示しません。</div>';
     let trial=null;
-    try{trial=window.BoatTacticalModel?.forecast(r)}catch(err){
+    try{trial=window.BoatTacticalModel?.forecastRoleAware(r)}catch(err){
       return '<div class="notice warn">展開試験版を計算できません：'+escape(err.message)+'</div>';
     }
     if(!trial)return '<div class="notice warn">展開試験版の読み込みがありません。アプリを更新してください。</div>';
@@ -295,8 +295,8 @@
     const heads=trial.head_course_shares
       .filter(h=>h.relative_share>=.07)
       .sort((a,b)=>b.relative_share-a.relative_share).slice(0,5);
-    return '<section class="card card-pad boat-tactical-trial" aria-label="戦法連動型の新しい試験買い目">'+
-      '<div class="section-head"><div><h2 class="section-title">🧠 NEW｜1マーク戦法連動型 v0.1</h2>'+
+    return '<section class="card card-pad boat-tactical-trial" aria-label="着順別の評価整合性を検証する試験買い目">'+
+      '<div class="section-head"><div><h2 class="section-title">🧠 試験｜着順役割整合型 v0.4</h2>'+
       '<p class="boat-sim-mini">能力×モーター×展示×場別条件 → 逃げ/差し/まくり差し分岐 → 2・3着残存</p></div>'+
       '<span class="boat-sim-tag">新しい別モデル</span></div>'+
       '<div class="tactical-warning">'+
@@ -304,7 +304,7 @@
               '<b>現時点の試験再計算です。正式な発走前固定予想とは別です。</b>')+
       '<p>事前保存の選手・機体・展示データだけを使い、結果・払戻・オッズは不使用。実測的中確率ではありません。正式のBUY収支にも加えません。</p></div>'+
       '<div class="tactical-compare"><div><small>従来の固定本線</small><strong>'+escape(oldTop)+'</strong></div>'+
-      '<span>→</span><div><small>新・戦法別研究本線</small><strong>'+escape(newTop)+'</strong></div>'+
+      '<span>→</span><div><small>役割整合型v0.4研究本線</small><strong>'+escape(newTop)+'</strong></div>'+
       '<span class="tactical-change">'+(changed?'買い目・配分に違いあり':'比較結果：同じ配分')+'</span></div>'+
       '<div class="tactical-heads"><strong>1着戦法の相対評価（未校正）</strong>'+
       heads.map(h=>'<span>'+escape(h.lane)+'号艇：'+escape(h.tactic)+' '+(h.relative_share*100).toFixed(1)+'%</span>').join('')+

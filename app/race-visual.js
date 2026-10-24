@@ -306,7 +306,11 @@
      const exposures=study?.exposures||[];
      const affected=state.wakeAssumed?(study?.affected_lanes||wakeAffected(state.combo,r)):[];
      const wakeLayer=card.querySelector('[data-sim-wake]');
-     if(wakeLayer)wakeLayer.style.display=exposures.length && t>=.44?'':'none';
+     if(wakeLayer){
+       const early=exposures.some(x=>x.phase==='1M'&&x.risk>=.34)&&t>=.44;
+       const late=exposures.some(x=>x.phase==='2M+'&&x.risk>=.25)&&t>=.76;
+       wakeLayer.style.display=(early||late)?'':'none';
+     }
      const info=card.querySelector('[data-sim-wake-info]');
      if(info){
        if(!state.wakeAssumed)info.textContent='🌀 引き波研究 OFF（このアニメのみ）';

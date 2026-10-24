@@ -189,15 +189,17 @@
    if(!valid(combo))return ['スタートの攻防','1Mのターン','バックでの予想隊形'];
    const [a,b,c]=combo.split('-').map(Number),roles=rolesFor(combo,r);
    const inside=roles.find(x=>x.course===1);
-   const wash=assumeWakeContact?wakeAffected(combo,r):[];
+   const wakeStudy=assumeWakeContact?window.BoatWakeStudy?.analysis(combo,r):null;
+   const wash=wakeStudy?.exposures?.filter(x=>x.phase==='1M'&&x.risk>=.34).map(x=>x.lane)||
+    (assumeWakeContact?wakeAffected(combo,r):[]);
    const wakeNote=wash.length?
      ' 内側'+wash.map(x=>x+'号艇').join('・')+
-     'が引き波を踏んで減速し、着外まで下がる仮説。引き波位置は未観測。':'';
+     'が引き波の影響を受ける可能性。実際の接触・着外は未確認。':'';
    return [
      inside.lane+'号艇が1Mの先マイを狙う。2〜6コースは差し・まくり・まくり差し等を選ぶ仮説。展示STを本番STとみなさない。',
      '1M：'+inside.lane+'号艇の先マイに対し、'+a+'号艇が'+roles[a-1].label+
        'で攻める仮説。差し場・艇間は映像で未検証。'+wakeNote,
-     'バック：'+a+'–'+b+'–'+c+'を仮配置。実際の動きや4〜6番手を確定するアニメではない。'
+     'バック：'+a+'–'+b+'–'+c+'を仮配置。'+(wakeStudy?.exposures?.some(x=>x.phase==='2M+')?'2M以降の追走艇も先行艇の引き波に注意。差し直しの余地あり。':'')+'実際の動きや4〜6番手を確定するアニメではない。'
    ];
  }
  function glyph(lane){
@@ -265,11 +267,12 @@
      '<button type="button" data-sim-speed="1.5" aria-pressed="false">1.5×</button></div>'+
      '</div>'+
      '<div class="boat-sim-controls"><div class="boat-sim-buttons" role="group" aria-label="引き波の影響を仮定する研究切り替え">'+
-     '<button type="button" data-sim-wake-toggle aria-pressed="false">🌀 引き波直撃を仮定（初期OFF）</button>'+
+     '<button type="button" data-sim-wake-toggle aria-pressed="true">🌀 引き波研究 ON（全レース初期ON）</button>'+
      '</div></div>'+
-     '<p class="boat-sim-disclaimer">※ 引き波に入った事実は未観測。OFFでは一律の失速を仮定せず、ONは特定艇が引き波を踏んだ場合の反事実的な説明だけを表示します。実際の失速量・順位を意味しません。</p>'+
+     '<p class="boat-sim-disclaimer">※ 引き波研究は全レース初期ON。1Mの攻めと2M以降の追走でリスクを分け、全艇に一律の減速を適用しません。接触・減速量・着順は未観測です。切替はアニメ表示のみで、固定予想や買い目を変更しません。</p>'+
+     '<div class="boat-sim-wake-info" data-sim-wake-info aria-live="polite">🌀 引き波を展開別に確認中</div>'+ 
      '<div class="boat-sim-outcome"><span>バック想定</span><strong data-sim-order>'+combo+'</strong><span>1着 → 2着 → 3着</span></div>'+
-     '<p class="boat-sim-story" aria-live="polite" data-sim-story>'+stageTexts(combo,r)[0]+'</p>'+
+     '<p class="boat-sim-story" aria-live="polite" data-sim-story>'+stageTexts(combo,r,true)[0]+'</p>'+
      '<p class="boat-sim-disclaimer">※ 予想済み3連単の「どういう形でそうなるか」を表す<strong>説明用アニメ</strong>。艇速や実際のターン軌道を予測する計算、展示動画解析は未実装です。4〜6番手の表示は便宜上の隊列です。元の固定買い目や結果照合は変更しません。</p></section>';
  }
  function dispose(){
@@ -293,15 +296,26 @@
    const orderLabel=card.querySelector('[data-sim-order]'),tacticLabel=card.querySelector('[data-sim-tactic]');
    const forecastLabel=card.querySelector('[data-sim-forecast]');
    const selectedTrial=tacticalOptions(r);
-   const state={combo:selectedTrial[0]?.combo||options(r)[0],position:0,running:false,raf:null,last:null,speed:1,wakeAssumed:false};
+   const state={combo:r?.model_role==='main'?options(r)[0]:(selectedTrial[0]?.combo||options(r)[0]),position:0,running:false,raf:null,last:null,speed:1,wakeAssumed:true};
    current=state;
    function phaseIndex(t){return t<.4?0:t<.73?1:2;}
    function update(){
      const t=clamp(state.position,0,1);
      const projected=ranks(state.combo);
-     const affected=state.wakeAssumed?wakeAffected(state.combo,r):[];
+     const study=state.wakeAssumed?window.BoatWakeStudy?.analysis(state.combo,r):null;
+     const exposures=study?.exposures||[];
+     const affected=state.wakeAssumed?(study?.affected_lanes||wakeAffected(state.combo,r)):[];
      const wakeLayer=card.querySelector('[data-sim-wake]');
-     if(wakeLayer)wakeLayer.style.display=affected.length && t>=.44?'':'none';
+     if(wakeLayer)wakeLayer.style.display=exposures.length && t>=.44?'':'none';
+     const info=card.querySelector('[data-sim-wake-info]');
+     if(info){
+       if(!state.wakeAssumed)info.textContent='🌀 引き波研究 OFF（このアニメのみ）';
+       else if(study){
+         const inner=exposures.filter(x=>x.phase==='1M'&&x.risk>=.34).map(x=>x.lane+'号艇');
+         const follow=exposures.filter(x=>x.phase==='2M+'&&x.risk>=.25).map(x=>x.lane+'号艇');
+         info.textContent='🌀 ON｜1M：'+(inner.join('・')||'強い接触仮説なし')+' ／ 2M以降：'+(follow.join('・')||'条件付き')+'（接触は未観測）';
+       }else info.textContent='🌀 ON｜引き波は研究対象（接触未確認）';
+     }
      paths.forEach((p,i)=>{
        const len=p.getTotalLength();
        // Highlight a possible overtake only *after* 1M: no fictitious
@@ -310,8 +324,11 @@
        const leadOffset=edge*(7-projected[i+1])*.010;
        // Scenario-only slowdown: losing inner craft cross the attacking
        // 4th-course wake around 1M. No image tracking or fluid simulation.
-       const washLoss=affected.includes(i+1)&&t>.44?
-         .14*clamp((t-.44)/.20,0,1):0;
+       const crossing=exposures.find(x=>x.lane===i+1&&x.phase==='1M');
+       const following=exposures.find(x=>x.lane===i+1&&x.phase==='2M+');
+       const washLoss=state.wakeAssumed?
+         ((crossing?.risk>=.34&&t>.44)?.055*crossing.risk*clamp((t-.44)/.22,0,1):0)+
+         ((following?.risk>=.25&&t>.76)?.022*following.risk*clamp((t-.76)/.18,0,1):0):0;
        const progress=clamp(t+leadOffset-washLoss,0,1);
        const pos=p.getPointAtLength(progress*len);
        const prev=p.getPointAtLength(clamp(progress*len-2,0,len)),
@@ -351,9 +368,9 @@
    function select(combo,kind){
      const selectedChoice=choices(r).find(x=>x.combo===combo&&(!kind||x.kind===kind));
      if(!selectedChoice)return;
-     pause();state.position=0;state.combo=combo;state.wakeAssumed=false;
+     pause();state.position=0;state.combo=combo;
      const wakeButton=card.querySelector('[data-sim-wake-toggle]');
-     if(wakeButton)wakeButton.setAttribute('aria-pressed','false');
+     if(wakeButton)wakeButton.setAttribute('aria-pressed',String(state.wakeAssumed));
      const ranking=ranks(combo),tactic=tacticFor(combo,r),roles=rolesFor(combo,r);
      paths.forEach((p,i)=>{
        const curve=path(i+1,ranking[i+1],tactic.id,Number(combo[0]),roles[i].role,roles[i].course);
@@ -392,6 +409,7 @@
      if(button.dataset?.simWakeToggle!==undefined){
        state.wakeAssumed=!state.wakeAssumed;
        button.setAttribute('aria-pressed',String(state.wakeAssumed));
+       button.textContent=state.wakeAssumed?'🌀 引き波研究 ON（全レース初期ON）':'🌀 引き波研究 OFF';
        update();return;
      }
      if(button.dataset.simPick){select(button.dataset.simPick,button.dataset.simKind);return;}

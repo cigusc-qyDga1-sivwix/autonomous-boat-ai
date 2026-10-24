@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - 'scripts/autonomous_daily.py'
+      - 'scripts/main_v07_bridge.js'
       - 'scripts/entry_exhibition_gate.py'
       - 'scripts/test_entry_exhibition_gate.py'
       - 'scripts/venue_profiles.py'
@@ -49,6 +50,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate canonical main model bridge before forecasting
+        run: |
+          node --check scripts/main_v07_bridge.js
+          node --check app/tactical-1m.js
+          python -m compileall -q scripts/autonomous_daily.py
       - name: Collect exhibition measurements for research only
         continue-on-error: true
         run: |

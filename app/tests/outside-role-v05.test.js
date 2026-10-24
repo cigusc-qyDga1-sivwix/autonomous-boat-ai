@@ -6,14 +6,14 @@ const model=win.BoatTacticalModel;
 const mk=(venue='唐津')=>({
  venue,phase:'exhibition',weather_used:{wind_speed:2},
  frozen_at_utc:'2026-10-24T04:50:00Z',
- racers:[5.6,5.8,5.8,8.9,8.1,6.6].map((n,i)=>({
+ racers:[5.6,5.8,5.8,8.9,9.2,6.6].map((n,i)=>({
   lane:i+1,course:i+1,national_win_rate:n,
-  motor_top_2_percent:[24,32,31,77,63,39][i],
-  average_start_timing:[.18,.17,.17,.095,.12,.16][i],
-  exhibition_time:[6.82,6.80,6.81,6.53,6.61,6.77][i],
-  original_exhibition:{lap_time:[37.5,37.6,37.4,36.5,36.75,37.2][i],
-   turn_time:[5.9,6,5.95,5.5,5.6,5.85][i],
-   straight_time:[7.3,7.4,7.35,6.85,6.95,7.25][i]}
+  motor_top_2_percent:[24,32,31,77,83,39][i],
+  average_start_timing:[.18,.17,.17,.095,.095,.16][i],
+  exhibition_time:[6.82,6.80,6.81,6.53,6.54,6.77][i],
+  original_exhibition:{lap_time:[37.5,37.6,37.4,36.5,36.54,37.2][i],
+   turn_time:[5.9,6,5.95,5.5,5.54,5.85][i],
+   straight_time:[7.3,7.4,7.35,6.85,6.87,7.25][i]}
  })),
  bets:['1-2-3','1-3-2','2-1-3','3-1-2'].map(x=>({combination:x,virtual_yen:12500}))
 });

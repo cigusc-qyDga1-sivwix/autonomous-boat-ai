@@ -527,6 +527,13 @@ function forecast(input){
    c.scenario+'が成立 → '+c.secondCourse+'コースが追走 → '+c.thirdCourse+'コース残存',
   relative_score:+c.pseudo.toFixed(6)}));
  if(new Set(bets.map(x=>x.combination)).size!==bets.length||bets.reduce((sum,b)=>sum+b.virtual_yen,0)!==50000)throw Error('Invalid experimental virtual allocation');
+ // Conditional second-place evaluation is distinct from the global marginal.
+ // A rise in a boat's FIRST share can lower its unconditional SECOND share.
+ // Given inside-1 winning, expose each remaining boat's second-place weight.
+ const headOneScores=startTrial?Array.from({length:5},(_,i)=>({
+   course:i+2,lane:v[byCourse[i+1]].lane,weight:secondWeight(1,i+2)
+ })):[];
+ const headOneTotal=headOneScores.reduce((n,x)=>n+x.weight,0);
  return {
    model:startTrial?'tactical-outside-start-gap-v0.7-untrained':
      coupledTrial?'tactical-six-boat-coupling-v0.6-untrained':
@@ -539,6 +546,10 @@ function forecast(input){
    metadata:{venue_reference_rate:rate,wind_speed:wind,validMetrics,exhibition_used:validMetrics.length>0,
      ...(startTrial?{start_v07:{
        slit_signals:startSignals,
+       second_given_inside_first:headOneScores.map(x=>({
+         course:x.course,lane:x.lane,
+         conditional_relative_weight:+(x.weight/headOneTotal).toFixed(5)
+       })),
        description:'Pre-race average and legal exhibition ST estimates; relative nearest-course gap, inner wall and bounded role rescue',
        prediction_only:true,calibrated:false,
        disclaimer:'Not actual race ST, not guaranteed makuri / makuri-zashi. Exhibition F ignored.'

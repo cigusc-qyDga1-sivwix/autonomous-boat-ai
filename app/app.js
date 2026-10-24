@@ -761,7 +761,10 @@
     // Refresh only the timeline. Never refetch, mutate a frozen prediction, or reset scroll.
     node.outerHTML=window.BoatRaceTimeline.render(data);
   }
-  function go(view) {state.view=view;state.raceDetail=null;state.showExternalAnalysis=false;state.reanalysisResult=null;state.reanalysisExtras={};state.reanalysisNotice='';render();window.scrollTo({top:0,behavior:'instant'});}
+  function go(view) {
+    rememberNavigation();state.view=view;state.raceDetail=null;resetRaceWork();
+    render();window.scrollTo({top:0,behavior:'instant'});
+  }
   function toast(message){const node=el('toast');node.textContent=message;node.classList.add('show');if(toastTimer)clearTimeout(toastTimer);toastTimer=setTimeout(()=>node.classList.remove('show'),3200);}
   function download(name,content,type='text/plain;charset=utf-8') {const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
   function exportResultsCSV(){const header=['date','venue','race','classification','cutoff_jst','finish','payout_per_100','is_hit','stake_yen','virtual_payout_yen','virtual_profit_yen','recorded_at','source'];const body=allRaces().map(r=>{let c=compute(r);return [data.event_date,r.venue,r.race,r.classification,r.cutoff_jst,c.record?.finish||'',c.record?.payout_per_100??'',c.record?Number(c.hit):'',c.record?c.stake:'',c.payout??'',c.profit??'',c.record?.recorded_at||'',c.record?(c.record.source||'manual'):''];});const csv=[header,...body].map(a=>a.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');download(`boatlab-results-${data.event_date}.csv`,'\uFEFF'+csv,'text/csv;charset=utf-8');toast('結果CSVを書き出したよ');}
@@ -774,8 +777,25 @@
       if(node)node.outerHTML=window.BoatRaceTimeline.render(data);
       return;
     }
-    const nav=e.target.closest('[data-view]');if(nav){if(nav.dataset.view==='races')state.venue='全場';go(nav.dataset.view);return;}
-    const venueOpen=e.target.closest('[data-open-venue]');if(venueOpen){if(venueOpen.disabled)return;state.venue=venueOpen.dataset.openVenue;state.raceDetail=null;state.view='races';render();window.scrollTo(0,0);return;}
+    const nav=e.target.closest('[data-view]');if(nav){
+      rememberNavigation();
+      if(nav.dataset.view==='races')state.venue='全場';
+      state.view=nav.dataset.view;state.raceDetail=null;resetRaceWork();
+      render();window.scrollTo(0,0);return;
+    }
+    const choice=e.target.closest('[data-select-race]');
+    if(choice){
+      if(choice.disabled)return;
+      const token=choice.dataset.selectRace||'';
+      const at=token.lastIndexOf('|'),venue=token.slice(0,at),number=Number(token.slice(at+1));
+      const found=at>0&&Number.isInteger(number)?findRace(venue,number):null;
+      if(found&&(!state.raceDetail||state.raceDetail.venue!==venue||state.raceDetail.race!==number))
+        showRace(found);
+      return;
+    }
+    const venueOpen=e.target.closest('[data-open-venue]');if(venueOpen){if(venueOpen.disabled)return;rememberNavigation();
+      state.venue=venueOpen.dataset.openVenue;state.raceDetail=null;resetRaceWork();
+      state.view='races';render();window.scrollTo(0,0);return;}
     const fav=e.target.closest('[data-favorite-venue]');if(fav){const name=fav.dataset.favoriteVenue;favorites=favorites.includes(name)?favorites.filter(x=>x!==name):favorites.concat([name]);try{localStorage.setItem(STORE_FAVORITES,JSON.stringify(favorites));}catch{}render();return;}
     const boardFilter=e.target.closest('[data-venue-filter]');if(boardFilter){state.boardFilter=boardFilter.dataset.venueFilter;render();return;}
     const quickFilter=e.target.closest('[data-result-filter]');
@@ -794,13 +814,14 @@
       if(last>0){
         const venue=token.slice(0,last),race=Number(token.slice(last+1));
         if(findRace(venue,race)){
+          rememberNavigation();
           state.resultVenue=venue;state.resultRace=race;
-          state.view='results';render();
+          state.view='results';state.raceDetail=null;resetRaceWork();render();
         }
       }
       return;
     }
-    const row=e.target.closest('[data-race]');if(row){const [v,n]=row.dataset.race.split('|');let r=findRace(v,n);if(!r)return;if(row.dataset.action==='settle-this'){state.resultVenue=v;state.resultRace=Number(n);go('results');return;}if(row.dataset.action==='copy-bets'){copyBets(r);return;}state.raceDetail=r;state.showExternalAnalysis=false;state.reanalysisResult=null;state.reanalysisExtras={};state.reanalysisNotice='';state.view='races';render();window.scrollTo(0,0);return;}
+    const row=e.target.closest('[data-race]');if(row){const [v,n]=row.dataset.race.split('|');let r=findRace(v,n);if(!r)return;if(row.dataset.action==='settle-this'){state.resultVenue=v;state.resultRace=Number(n);go('results');return;}if(row.dataset.action==='copy-bets'){copyBets(r);return;}showRace(r);return;}
     const btn=e.target.closest('[data-action]');if(!btn)return;
     switch(btn.dataset.action){
       case 'batch-image-read':{
@@ -919,7 +940,17 @@
         break;
       }
       case 'go-races':go('races');break;
-      case 'back-races':state.raceDetail=null;render();break;
+      case 'back-races':{
+        // Explicit back-to-list skips prior detail-to-detail hops in history.
+        let list=null;
+        while(navigationHistory.length){
+          const previous=navigationHistory.pop();
+          if(previous.view==='races'&&!previous.detailVenue){list=previous;break;}
+        }
+        if(list)restoreNavigation(list);
+        else {state.view='races';state.raceDetail=null;resetRaceWork();render();window.scrollTo(0,0);}
+        break;
+      }
       case 'back-overview':state.venue='全場';go('overview');break;
       case 'export-results':exportResultsCSV();break;
       case 'export-predictions':download(`boatlab-predictions-${data.event_date}.json`,JSON.stringify(data,null,2),'application/json');toast('予想データを保存したよ');break;
@@ -1099,6 +1130,7 @@
       autoResults=data.official_results||{};lastLiveUpdate=data.updated_at_utc||'';
       state.resultVenue=getVenues()[0];render();
       window.BoatExhibitionAudit?.load(data.event_date).then(()=>{if(data?.event_date)render()}).catch(()=>{});
+      window.BoatMobileRaceNav?.installSwipe(el('main'),()=>goBack());
       if('serviceWorker' in navigator&&['https:','http:'].includes(location.protocol))navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
       if(typeof setInterval==='function'){
         setInterval(reloadLiveIfNew,300000);

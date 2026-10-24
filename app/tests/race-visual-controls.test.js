@@ -13,7 +13,7 @@ const boats=Array.from({length:6},()=>({
  transform:'',setAttribute(k,v){if(k==='transform')this.transform=v}
 }));
 const buttons=Array.from({length:3},(_,i)=>({
- dataset:{simPick:race.bets[i].combination},
+ dataset:{simPick:race.bets[i].combination,simKind:'forecast'},
  classList:{toggle(){}},setAttribute(k,v){if(k==='aria-pressed')this.pressed=v}
 }));
 let clickHandler=null,inputHandler=null;

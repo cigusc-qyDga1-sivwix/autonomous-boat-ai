@@ -308,7 +308,8 @@ function forecast(input){
      ...(outsideTrial?{research_only:true,outside_attack_signals:outsideAttacks.map(a=>({
        course:a.course,launch:+a.launch.toFixed(4),steering:+a.steering.toFixed(4),
        preceding:+a.preceding.toFixed(4),multiplier:+a.multiplier.toFixed(4)}))}:{})},
-   role_coverage:roleCoverage,role_changes:roleChanges,
+   role_coverage:roleCoverage,role_changes:roleChanges.filter(change=>
+    bets.some(b=>b.combination===change.combination)),
   bets,top:bets[0]?.combination,
    differs_from_frozen:JSON.stringify(bets.map(x=>[x.combination,x.virtual_yen]))!==
      JSON.stringify((input.bets||[]).map(x=>[x.combination,x.virtual_yen])),

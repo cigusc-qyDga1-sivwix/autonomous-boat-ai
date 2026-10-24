@@ -2,7 +2,7 @@
 import tempfile
 import json
 from pathlib import Path
-from scripts.research_outside_roles import rows_from_docs, summarize, research
+from research_outside_roles import rows_from_docs, summarize, research
 
 def make_record(code,finish,decision="まくり",courses=(1,2,3,4,5,6)):
     return {"race_code":code,"venue":"唐津",

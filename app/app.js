@@ -377,11 +377,11 @@
       '<td>'+escape(b.conditional_reason)+'</td><td>'+money(b.virtual_yen)+'</td></tr>').join('');
     return '<details class="card card-pad boat-start-gap-study" style="margin:12px 0">'+
       '<summary style="cursor:pointer;font-weight:900">⚡ ④⑤⑥の1・2着｜ST・まくり／まくり差し v0.7（試験）</summary>'+
-      '<p class="muted text-sm">展示ST・平均STから想定スリット隊形を推定。正の差は外艇の展示先行傾向（実際の本番STではない）。展示Fを速いSTとして扱わず、進入コース順で比較します。</p>'+
+      '<p class="muted text-sm">展示ST・平均STから想定スリット隊形を推定。正の差は外艇の事前先行仮説（実際の本番STではない）。展示Fを速いSTとして扱わず、進入コース順で比較します。展示前は進入も暫定です。</p>'+
       (closed?'<div class="notice warn">締切後の表示は参考試算。正式発走前予想と区別します。</div>':
         '<div class="notice">発走前でも画面内は未固定試験計算。正式BUYと分けます。</div>')+
       '<div class="boat-entry-overflow"><table class="bets-table"><thead><tr>'+
-      '<th>艇・実進入</th><th>予測ST秒</th><th>直内艇との差</th><th>スタート攻め評価</th><th>①逃げ時の2着相対重み</th><th>買い目採用<br>1着 / 2着</th>'+
+      '<th>艇・進入コース</th><th>推定ST秒</th><th>直内艇との差</th><th>スタート攻め評価</th><th>①逃げ時の2着相対重み</th><th>買い目採用<br>1着 / 2着</th>'+
       '</tr></thead><tbody>'+rows+'</tbody></table></div>'+
       '<p><b>v0.7の参考3連単：'+trial.bets.length+'点／仮想50,000円</b></p>'+
       '<div class="boat-entry-overflow"><table class="bets-table"><thead><tr>'+

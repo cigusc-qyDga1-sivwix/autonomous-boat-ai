@@ -6,6 +6,7 @@ on:
     paths:
       - 'scripts/autonomous_daily.py'
       - 'scripts/main_v07_bridge.js'
+      - 'scripts/main_v09_bridge.js'
       - 'scripts/entry_exhibition_gate.py'
       - 'scripts/test_entry_exhibition_gate.py'
       - 'scripts/venue_profiles.py'
@@ -57,6 +58,7 @@ jobs:
       - name: Validate canonical main model bridge before forecasting
         run: |
           node --check scripts/main_v07_bridge.js
+          node --check scripts/main_v09_bridge.js
           node --check app/tactical-1m.js
           python -m compileall -q scripts/autonomous_daily.py
       - name: Collect exhibition measurements for research only

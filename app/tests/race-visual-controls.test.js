@@ -19,6 +19,7 @@ const buttons=Array.from({length:3},(_,i)=>({
 let clickHandler=null,inputHandler=null;
 const slider={value:'0',addEventListener:(event,handler)=>{if(event==='input')inputHandler=handler}};
 const stage={textContent:''},caption={textContent:''},result={textContent:''},tactic={textContent:''},forecast={textContent:''};
+const wakeLabel={textContent:''},wakeButton={dataset:{simWakeToggle:''},pressed:'true',textContent:'',setAttribute(k,v){if(k==='aria-pressed')this.pressed=v}},wakeLayer={style:{display:'none'}};
 const stages=['start','turn','back'].map(simJump=>({dataset:{simJump},classList:{toggle(){}},setAttribute(k,v){if(k==='aria-pressed')this.pressed=v}}));
 const speedBtns=[.5,1,1.5].map(simSpeed=>({dataset:{simSpeed:String(simSpeed)},classList:{toggle(){}},setAttribute(k,v){if(k==='aria-pressed')this.pressed=v}}));
 const svg={querySelector(query){
@@ -35,6 +36,9 @@ const card={
   if(selector==='[data-sim-order]')return result;
   if(selector==='[data-sim-tactic]')return tactic;
   if(selector==='[data-sim-forecast]')return forecast;
+   if(selector==='[data-sim-wake-info]')return wakeLabel;
+   if(selector==='[data-sim-wake-toggle]')return wakeButton;
+   if(selector==='[data-sim-wake]')return wakeLayer;
   return null;
  },
  querySelectorAll:(selector)=>selector==='[data-sim-pick]'?buttons:selector==='[data-sim-jump]'?stages:selector==='[data-sim-speed]'?speedBtns:[],
@@ -47,11 +51,13 @@ const context=vm.createContext({
  requestAnimationFrame:cb=>{callback=cb;requests.push(cb);return nextId++},
  cancelAnimationFrame:id=>{cancelled++;callback=null}
 });
+vm.runInContext(fs.readFileSync('app/wake-study.js','utf8'),context);
 vm.runInContext(fs.readFileSync('app/race-visual.js','utf8'),context);
 const visual=win.BoatRaceVisual;
 visual.mount(root,race);
 assert.equal(stage.textContent,'START / スタートの攻防');
 assert.equal(slider.value,'0');
+assert.match(wakeLabel.textContent,/🌀 ON/,'all races start with wake research ON');
 assert.match(boats[0].transform,/translate/);
 function actionNode(node){clickHandler({target:{closest:()=>node}})}
 function action(control,pick){
@@ -77,9 +83,18 @@ action('',other);
 assert.equal(paths[0].d,visual.path(1,visual.ranks(other)[1],visual.tacticFor(other).id,Number(other[0])));
 assert.match(caption.textContent,/仮説/);
 assert.equal(buttons[1].pressed,'true');
+assert.match(wakeLabel.textContent,/🌀 ON/,'scenario changes keep wake ON');
 assert.equal(result.textContent,'予想：'+other);
 assert.equal(tactic.textContent,visual.tacticFor(other).label);
 assert.equal(forecast.textContent,'元の固定予想 '+other);
+actionNode(wakeButton);
+assert.equal(wakeButton.pressed,'false');
+assert.match(wakeLabel.textContent,/OFF/);
+action('',race.bets[0].combination);
+assert.match(wakeLabel.textContent,/OFF/,'switching back keeps manual OFF');
+actionNode(wakeButton);
+assert.equal(wakeButton.pressed,'true');
+assert.match(wakeLabel.textContent,/🌀 ON/);
 actionNode({dataset:{simJump:'turn'}});
 assert.match(stage.textContent,/1M/);
 assert.equal(stages[1].pressed,'true');

@@ -19,7 +19,13 @@ function analysis(combo,r){
   return {status:'unknown',exposures:[],affected_lanes:[],explanation:'レース展開を識別できません'};
  const all=(r?.racers||[]),headLane=parts[0],headCourse=courseOf(r,headLane);
  const winner=all.find(x=>Number(x.lane)===headLane);
- const validEntry=all.length===6&&all.every(x=>courseOf(r,Number(x.lane))>=1);
+ // A lane/course placeholder alone is not proof of measured exhibition entry.
+ const observedCourses=all.map(x=>num(x.course));
+ const uniqueCourseMap=all.length===6&&observedCourses.every(x=>
+  Number.isInteger(x)&&x>=1&&x<=6)&&new Set(observedCourses).size===6;
+ const entryConfirmed=r?.entry_exhibition_gate?.final_eligible===true||
+  (r?.entry_exhibition_gate==null&&r?.phase==='exhibition');
+ const validEntry=uniqueCourseMap&&entryConfirmed;
  const means=all.map(x=>num(x.average_start_timing)).filter(x=>x!==null&&x>=.01&&x<=.4);
  const firstRacerST=means.length===6?means.reduce((a,b)=>a+b,0)/6:null;
  const candidates=[];

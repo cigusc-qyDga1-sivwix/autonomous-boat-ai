@@ -279,6 +279,46 @@
       '<p class="help">相対評価は120通りの条件付き展開を着順ごとに合算した未校正のモデル重みで、実測的中確率ではありません。買い目は4〜12点の制約があり、2着候補は別途攻め・追走・差しの成立条件を要します。固定買い目や正式収支は変更しません。</p>'+
       '</div>';
   }
+  // Read-only research-only exterior conditional model, separate from official tickets.
+  function outsideRoleTrialPanel(r,baseline){
+    let study;
+    try{study=window.BoatTacticalModel?.forecastOutsideRole(r)}
+    catch(e){return '<div class="notice warn">外枠研究モデルの評価失敗：'+escape(e.message)+'</div>';}
+    if(!study)return '<p class="muted text-sm">外枠研究v0.5は未読込です。アプリを再読込してください。</p>';
+    const info=study.metadata?.outside_v05||{};
+    const evidence=info.conditional_outside_evidence||[];
+    const oldFirst=baseline?.head_course_shares||[];
+    const mark=(c)=>c>=4?'外枠 '+c+'コース':'内側 '+c+'コース';
+    const outsideRows=evidence.map((a)=>{
+      const lane=study.head_course_shares.find(x=>x.course===a.course)?.lane;
+      const before=oldFirst.find(x=>x.course===a.course)?.relative_share;
+      const after=study.head_course_shares.find(x=>x.course===a.course)?.relative_share;
+      const coverage=study.role_coverage?.[lane]||{};
+      const attack=a.attack&&a.confidence>=.10;
+      return '<tr><th>'+escape(lane||a.course)+'号艇<br><small>'+escape(mark(a.course))+'</small></th>'+
+       '<td>'+(attack?'<b class="outer-evidence-good">攻め条件あり</b>':'攻め根拠不足')+'</td>'+
+       '<td>'+(a.following_supported?'外の追走あり':'連動未確認')+'</td>'+
+       '<td>'+((before??0)*100).toFixed(1)+' → '+((after??0)*100).toFixed(1)+'</td>'+
+       '<td>'+escape(coverage.headTickets??0)+' / '+escape(coverage.secondTickets??0)+' / '+escape(coverage.thirdTickets??0)+'</td></tr>';
+    }).join('');
+    const oldSet=(baseline?.bets||[]).map(x=>x.combination);
+    const added=study.bets.map(x=>x.combination).filter(x=>!oldSet.includes(x));
+    const removed=oldSet.filter(x=>!study.bets.some(b=>b.combination===x));
+    const stats=info.venue_specific_prior?'この会場の公式コース統計（2026年7〜9月）を35%だけ参照':
+      'この会場の6コース別公式統計は未設定。従来の全国仮説値を暫定使用';
+    return '<section class="outer-role-study" aria-label="外枠を条件付きで評価した別モデル">'+
+      '<h3>🌊 外枠の過小評価を再検証｜v0.5</h3>'+
+      '<p>全艇同じ条件で比較。④⑤⑥の能力・展示・進入と<strong>攻め成立／外の追走</strong>を別々に判定。外枠だからという理由だけで買い目に追加しません。</p>'+
+      '<div class="outer-study-meta"><span>'+escape(stats)+'</span>'+
+      '<span>従来v0.4 '+escape(baseline?.top||'—')+' → 外枠v0.5 '+escape(study.top||'—')+'</span></div>'+
+      '<div class="boat-entry-overflow"><table class="bets-table outer-study-table"><thead><tr>'+
+      '<th>艇・進入</th><th>攻め</th><th>隣艇連動</th><th>1着相対評価<br>v0.4 → v0.5</th><th>v0.5採用点数<br>1/2/3着</th>'+
+      '</tr></thead><tbody>'+outsideRows+'</tbody></table></div>'+
+      '<p class="outer-study-summary">変更候補：追加 '+escape(added.join('、')||'なし')+
+      ' ／ 除外 '+escape(removed.join('、')||'なし')+'</p>'+
+      '<p class="outer-study-foot">これは未訓練・確率未校正の試験。新モデルの正式BUY成績には未計上。外枠は不利ゼロではありません。判断に使った数値は発走前に保存された出走・展示情報のみ。結果や払戻では予想を後から変えません。</p>'+
+      '</section>';
+  }
   function tacticalTrialPanel(r){
     if(r?.entry_exhibition_gate?.entry_watch && !r.entry_exhibition_gate.final_eligible)
       return '<div class="notice warn">⚠ 前付け警戒：6艇の展示進入が確認できるまで、戦法再計算の買い目は最終候補として表示しません。</div>';
@@ -308,7 +348,7 @@
       '<span class="tactical-change">'+(changed?'買い目・配分に違いあり':'比較結果：同じ配分')+'</span></div>'+
       '<div class="tactical-heads"><strong>1着戦法の相対評価（未校正）</strong>'+
       heads.map(h=>'<span>'+escape(h.lane)+'号艇：'+escape(h.tactic)+' '+(h.relative_share*100).toFixed(1)+'%</span>').join('')+
-      '</div>'+roleConsistencyPanel(r,trial)+'<div class="boat-entry-overflow"><table class="bets-table tactical-bets"><thead><tr><th>3連単</th><th>頭の勝ち筋</th><th>仮想配分</th></tr></thead><tbody>'+
+      '</div>'+roleConsistencyPanel(r,trial)+outsideRoleTrialPanel(r,trial)+'<div class="boat-entry-overflow"><table class="bets-table tactical-bets"><thead><tr><th>3連単</th><th>頭の勝ち筋</th><th>仮想配分</th></tr></thead><tbody>'+
       trial.bets.map(b=>'<tr><td><strong>'+escape(b.combination)+'</strong></td>'+
       '<td>'+escape(b.scenario)+'</td><td>'+money(b.virtual_yen)+'</td></tr>').join('')+
       '</tbody></table></div><p class="tactical-foot">試験 '+trial.bets.length+'点／仮想5万円。'+

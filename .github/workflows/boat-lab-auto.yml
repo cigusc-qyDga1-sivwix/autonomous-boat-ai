@@ -10,6 +10,7 @@ on:
       - 'scripts/venue_profiles.py'
       - 'scripts/export_venue_profiles.py'
       - 'scripts/ingest_boatracecsv_exhibition.py'
+      - 'scripts/research_outside_roles.py'
       - 'scripts/exhibition_bridge.py'
       - 'scripts/freeze_tactical_trials.js'
       - 'scripts/freeze_outside_trials.js'
@@ -49,6 +50,7 @@ jobs:
         run: |
           python scripts/ingest_boatracecsv_exhibition.py
           python -m json.tool app/data/exhibition/status-latest.json > /dev/null
+          python scripts/research_outside_roles.py
           # No results here can revise an immutable forecast or official settlement.
       - name: Collect all available venues and freeze only pre-cutoff forecasts
         shell: bash

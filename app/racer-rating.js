@@ -39,7 +39,11 @@ function rate(r,opts={}){
   return {status:'unknown',message:'6艇の出走データが揃っていません',byLane:{},rows:[]};
  }
  const courses=racers.map(x=>number(x.course));
- const confirmed=courses.every(validCourse)&&new Set(courses).size===6;
+ // Six distinct numbers alone do not prove that the pre-race exhibition
+ // entry formation was confirmed: baseline snapshots often record lane=course.
+ const entryVerified=r?.entry_exhibition_gate?.final_eligible===true||
+   (r?.entry_exhibition_gate==null&&r?.phase==='exhibition');
+ const confirmed=!!entryVerified&&courses.every(validCourse)&&new Set(courses).size===6;
  const courseOrder=confirmed?courses:[1,2,3,4,5,6];
  const byCourse=Array.from({length:6},(_,i)=>racers[courseOrder.indexOf(i+1)]);
  const avgST=x=>{const n=number(x.average_start_timing);return n!==null&&n>=.01&&n<=.4?n:null;};

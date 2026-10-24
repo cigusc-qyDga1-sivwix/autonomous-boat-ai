@@ -49,10 +49,14 @@ for(const x of result.rows){
  assert.ok(x.role_weights.third>=0&&x.role_weights.third<=1);
 }
 const panel=P.render(frozen);
-assert.equal((panel.match(/class="boat-ability-card"/g)||[]).length,6);
-for(const phrase of ['6艇の能力値','活躍期待指数','選手力45%','モーター30%','進入相性25%','1着 ','2着 ','3着 ','実測入着確率ではありません','金銭期待値とは異なります','SHA']){
+assert.equal((panel.match(/class="boat-entry-lane boat-entry-/g)||[]).length,6);
+assert.equal((panel.match(/<tr/g)||[]).length,7,'header row + six racers'); 
+for(const phrase of ['6艇の総合評価','総合能力','活躍期待','試験指数','選手・モーター・進入相性','的中確率や舟券の金銭的期待値ではありません','買い目は変更しません']){
  assert.ok(panel.includes(phrase),'must explain '+phrase);
 }
+assert.doesNotMatch(panel,/class="boat-ability-part"/,'individual score bars hidden');
+assert.doesNotMatch(panel,/class="boat-ability-roles"/,'per-position ratings hidden');
+assert.doesNotMatch(panel,/選手力45%|進入相性25%|<div class="boat-ability-card"/,'verbose components hidden');
 assert.match(win.BoatRaceVisual.entryHTML(frozen),/出走表/);
 assert.match(fs.readFileSync('app/app.js','utf8'),/BoatRacerRatingPanel\?\.render\(r\)/);
 assert.match(fs.readFileSync('app/index.html','utf8'),/racer-rating\.js/);

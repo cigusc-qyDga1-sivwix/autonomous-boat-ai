@@ -52,14 +52,18 @@ def test_six_boat_exhibition_creates_new_frozen_version_with_comparison():
     assert changed["race_records"]["18-3"]["versions"][0]==baseline
     latest=changed["race_records"]["18-3"]["versions"][-1]
     assert latest["phase"]=="exhibition"
-    assert latest["model_version"]=="heuristic-0.6-csv-exhibition-test-untrained"
+    assert latest["model_version"]=="tactical-outside-start-gap-v0.7-untrained"
+    assert latest["model_role"]=="main"
+    assert latest["legacy_control"]["model_version"]=="heuristic-0.6-csv-exhibition-test-untrained"
     assert latest["exhibition_origin"]["source"]=="BoatraceCSV"
     assert latest["racers"][2]["original_exhibition"]["lap_time"]==30
     assert latest["racers"][2]["exhibition_time"]==6.6
     assert latest["exhibition_change"]["previous_top"]==baseline["bets"][0]["combination"]
     assert latest["exhibition_change"]["new_top"]==latest["bets"][0]["combination"]
     assert latest["exhibition_change"]["bets_changed"]
-    assert latest["bets"] != baseline["bets"]
+    assert latest["start_v07"]["slit_signals"]
+    assert latest["legacy_control"]["bets"] != baseline["legacy_control"]["bets"]
+    assert latest["legacy_control"]["model_role"]=="shadow_validation"
     assert latest["sha256"]!=baseline["sha256"]
     assert sum(b["virtual_yen"] for b in latest["bets"])==50000
     assert 4<=len(latest["bets"])<=12

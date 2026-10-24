@@ -18,7 +18,7 @@
    if(r?.entry_exhibition_gate?.entry_watch&&!r.entry_exhibition_gate.final_eligible)
      return {status:'hold',reason:'前付け警戒・展示進入未確認のため順位を保留'};
    try{
-     const forecast=window.BoatTacticalModel?.forecast(r);
+     const forecast=window.BoatTacticalModel?.forecastRoleAware?.(r)||window.BoatTacticalModel?.forecast(r);
      const values=forecast?.head_course_shares;
      if(!Array.isArray(values)||values.length!==6)return {status:'unknown',reason:'評価に必要なデータがありません'};
      const candidates=values.map(v=>({lane:Number(v.lane),share:Number(v.relative_share)}));
@@ -40,7 +40,7 @@
    if(racers.length!==6||racers.some((x,i)=>Number(x.lane)!==i+1))
      return '<section class="card card-pad boat-entry"><h2>🚤 出走表</h2><p>出走データ未取得</p></section>';
    const ranking=predictionAdvantage(r);
-   let html='<section class="card card-pad boat-entry" aria-label="出走表とAI予想優位順位"><div class="section-head"><h2 class="section-title">🚤 出走表</h2><span>発走前の保存情報で評価</span></div><div class="boat-entry-overflow"><table class="boat-entry-table"><thead><tr><th>艇</th><th>AI優位<br>順位</th><th>選手</th><th>全国勝率</th><th>モーター<br>2連対率</th></tr></thead><tbody>';
+   let html='<section class="card card-pad boat-entry" aria-label="出走表とAI予想優位順位"><div class="section-head"><h2 class="section-title">🚤 出走表</h2><span>発走前の保存情報で評価</span></div><div class="boat-entry-overflow"><table class="boat-entry-table"><thead><tr><th>艇</th><th>AI優位<br>1着順位</th><th>選手</th><th>全国勝率</th><th>モーター<br>2連対率</th></tr></thead><tbody>';
    racers.forEach((x,i)=>{
      const win=num(x.national_win_rate),motor=num(x.motor_top_2_percent);
      const value=ranking.ranks?.[i+1];

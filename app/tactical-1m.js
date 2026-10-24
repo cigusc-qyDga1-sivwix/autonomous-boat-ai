@@ -22,6 +22,7 @@ const assign=(r,course)=>{
 const nameTactic=['','先マイ・逃げ','差し','まくり差し','カドまくり','外からのまくり差し','外の展開連動'];
 function forecast(input){
  const wakeTrial=input?.experimental_variant==='wake-attrition-v0.3';
+ const roleAwareTrial=input?.experimental_variant==='role-consistency-v0.4';
  const outsideTrial=input?.experimental_variant==='outside-makuri-v0.2'||wakeTrial;
  const runners=input?.racers;
  if(!Array.isArray(runners)||runners.length!==6)throw Error('6艇の保存済み出走情報が必要');
@@ -187,11 +188,65 @@ function forecast(input){
   }
  }
  candidates.sort((a,b)=>b.pseudo-a.pseudo||a.combination.localeCompare(b.combination));
- const dominant=Math.max(...shares);
- const close=shares.filter(x=>x>=.12).length;
+ // Marginal role strengths use all 120 combinations, BEFORE selecting tickets.
+ // First-place rank alone is never a guarantee of second-place suitability.
+ const roleShares={first:{},second:{},third:{}};
+ for(let lane=1;lane<=6;lane++){
+  roleShares.first[lane]=0;roleShares.second[lane]=0;roleShares.third[lane]=0;
+ }
+ for(const candidate of candidates){
+  const [a,b,c]=candidate.combination.split('-').map(Number);
+  roleShares.first[a]+=candidate.pseudo;
+  roleShares.second[b]+=candidate.pseudo;
+  roleShares.third[c]+=candidate.pseudo;
+ }
+ const dominant=Math.max(...shares),close=shares.filter(x=>x>=.12).length;
  const count=clamp(Math.round(6+5*close/4+4*(.58-dominant)),4,12);
  let picks=candidates.slice(0,count);
- // Provide 1M branches rather than silently dropping plausible runner-ups.
+ const roleChanges=[];
+ if(roleAwareTrial){
+ function replaceWithEvidence(candidate,role,lane){
+  if(!candidate||picks.some(p=>p.combination===candidate.combination))return false;
+  if(picks.some(p=>p.combination.split('-')[role==='head'?0:1]===String(lane)))return false;
+  // Do not remove the top combo or the last meaningful alternative winner.
+  const removable=picks.map((p,i)=>({p,i})).filter(({p,i})=>i!==0&&
+   (shares[p.headCourse-1]<.12||picks.filter(q=>q.headCourse===p.headCourse).length>1))
+   .sort((a,b)=>a.p.pseudo-b.p.pseudo||b.i-a.i);
+  if(!removable.length)return false;
+  const slot=removable[0];
+  if(candidate.pseudo<slot.p.pseudo*.55)return false;
+  picks[slot.i]=candidate;
+  roleChanges.push({role,lane,combination:candidate.combination,
+   reason:role==='head'?'攻め成功を持つ頭の勝ち筋':'条件付き展開で支持される2着浮上'});
+  return true;
+ }
+ const credibleHeads=shares.map((share,i)=>({course:i+1,share}))
+  .filter(x=>x.share>=.12).sort((a,b)=>b.share-a.share);
+ for(const {course} of credibleHeads){
+  if(!picks.some(p=>p.headCourse===course))
+   replaceWithEvidence(candidates.find(c=>c.headCourse===course),'head',v[byCourse[course-1]].lane);
+ }
+ if(outsideTrial){
+  // Outside-head protection requires evidence of an actual attacking advantage.
+  const strongOutside=outsideAttacks.filter(a=>a.multiplier>=1.14&&
+   shares[a.course-1]>=.045).sort((a,b)=>shares[b.course-1]-shares[a.course-1]);
+  for(const a of strongOutside.slice(0,2)){
+   if(!picks.some(p=>p.headCourse===a.course))
+    replaceWithEvidence(candidates.find(p=>p.headCourse===a.course),'head',v[byCourse[a.course-1]].lane);
+  }
+ }
+ // A 2nd-place branch must pass a separate marginal check, be a credible
+ // first-place contender, AND be a competitive full trifecta combination.
+ const firstOrder=shares.map((share,i)=>({lane:v[byCourse[i]].lane,share}))
+  .sort((a,b)=>b.share-a.share);
+ for(const {lane,share} of firstOrder.slice(0,3)){
+  if(share<.08||roleShares.second[lane]<.12||
+     picks.some(p=>p.combination.split('-')[1]===String(lane)))continue;
+  const candidate=candidates.find(p=>p.combination.split('-')[1]===String(lane));
+  replaceWithEvidence(candidate,'second',lane);
+ }
+ }else{
+ // Preserve exact earlier selection for previously frozen v0.1/v0.2/v0.3.
  for(let head=2;head<=6;head++){
   if(shares[head-1]<.12||picks.some(x=>x.headCourse===head))continue;
   const alternative=candidates.find(x=>x.headCourse===head);
@@ -200,16 +255,28 @@ function forecast(input){
   if(replace!==-1)picks[replace]=alternative;
  }
  if(outsideTrial){
-  // Include an explainable outside-head branch only where attack strength is
-  // supported by pre-race signals. No blanket 4/5/6 ticket quota.
   const strongOutside=outsideAttacks.filter(a=>a.multiplier>=1.14&&
-     shares[a.course-1]>=.045).sort((a,b)=>shares[b.course-1]-shares[a.course-1]);
+    shares[a.course-1]>=.045).sort((a,b)=>shares[b.course-1]-shares[a.course-1]);
   for(const a of strongOutside.slice(0,2)){
    if(picks.some(p=>p.headCourse===a.course))continue;
    const candidate=candidates.find(p=>p.headCourse===a.course);
    const replace=picks.findLastIndex(p=>p.headCourse===1);
    if(candidate&&replace>=0)picks[replace]=candidate;
   }
+ }
+ }
+ const roleCoverage={};
+ for(let lane=1;lane<=6;lane++){
+  const combos=picks.map(p=>p.combination.split('-').map(Number));
+  const presence=[1,2,3].map(n=>combos.filter(p=>p[n-1]===lane).length);
+  const first=roleShares.first[lane],second=roleShares.second[lane],third=roleShares.third[lane];
+  let note='展開条件別の役割評価';
+  if(first>=.12&&!presence[0])note='高い1着評価に対して頭が抜ける（要再検討）';
+  else if(first>=.08&&second>=.12&&!presence[1])note='1・2着とも候補だが2着筋は点数枠に残らず';
+  else if(presence[2]&&!presence[0]&&!presence[1])note='3着のみ採用（1・2着は成立条件を再検討）';
+  roleCoverage[lane]={first:+first.toFixed(4),second:+second.toFixed(4),
+   third:+third.toFixed(4),headTickets:presence[0],secondTickets:presence[1],
+   thirdTickets:presence[2],note};
  }
  picks.sort((a,b)=>b.pseudo-a.pseudo||a.combination.localeCompare(b.combination));
  const remaining=50-picks.length;
@@ -224,7 +291,8 @@ function forecast(input){
   head_course:c.headCourse,scenario:c.scenario,conditional_reason:c.scenario+'が成立 → '+c.secondCourse+'コースが追走 → '+c.thirdCourse+'コース残存',relative_score:+c.pseudo.toFixed(6)}));
  if(new Set(bets.map(x=>x.combination)).size!==bets.length||bets.reduce((sum,b)=>sum+b.virtual_yen,0)!==50000)throw Error('Invalid experimental virtual allocation');
  return {
-   model:wakeTrial?'tactical-wake-attrition-v0.3-untrained':
+   model:roleAwareTrial?'tactical-role-consistency-v0.4-untrained':
+     wakeTrial?'tactical-wake-attrition-v0.3-untrained':
      outsideTrial?'tactical-outside-makuri-v0.2-untrained':'tactical-1m-conditional-v0.1-untrained',
    basis:'保存済み発走前選手情報と場別参考値のみ。結果・払戻・オッズ不使用。',
    venue:input.venue,head_course_shares:shares.map((s,i)=>({course:i+1,lane:v[byCourse[i]].lane,relative_share:+s.toFixed(4),tactic:nameTactic[i+1]})),
@@ -240,13 +308,16 @@ function forecast(input){
      ...(outsideTrial?{research_only:true,outside_attack_signals:outsideAttacks.map(a=>({
        course:a.course,launch:+a.launch.toFixed(4),steering:+a.steering.toFixed(4),
        preceding:+a.preceding.toFixed(4),multiplier:+a.multiplier.toFixed(4)}))}:{})},
-   bets,top:bets[0]?.combination,
+   role_coverage:roleCoverage,role_changes:roleChanges.filter(change=>
+    bets.some(b=>b.combination===change.combination)),
+  bets,top:bets[0]?.combination,
    differs_from_frozen:JSON.stringify(bets.map(x=>[x.combination,x.virtual_yen]))!==
      JSON.stringify((input.bets||[]).map(x=>[x.combination,x.virtual_yen])),
    is_frozen:false
  };
 }
 global.BoatTacticalModel={forecast,
+ forecastRoleAware:input=>forecast({...input,experimental_variant:'role-consistency-v0.4'}),
  forecastOutside:input=>forecast({...input,experimental_variant:'outside-makuri-v0.2'}),
  forecastWake:input=>forecast({...input,experimental_variant:'wake-attrition-v0.3'}),
  RATE_BY_VENUE,nameTactic,version:'trial-v0.1-20261023'};

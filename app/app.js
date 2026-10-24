@@ -27,6 +27,53 @@
   let favorites = [];
   let toastTimer = null;
 
+  const navigationHistory=[];
+  function snapshotNavigation(){
+    return {view:state.view,venue:state.venue,classification:state.classification,
+      detailVenue:state.raceDetail?.venue||null,detailRace:state.raceDetail?.race||null,
+      resultVenue:state.resultVenue,resultRace:state.resultRace};
+  }
+  function rememberNavigation(){
+    const current=snapshotNavigation(),last=navigationHistory.at(-1);
+    if(!last||JSON.stringify(last)!==JSON.stringify(current)){
+      navigationHistory.push(current);
+      if(navigationHistory.length>35)navigationHistory.shift();
+    }
+  }
+  function resetRaceWork(){
+    state.showExternalAnalysis=false;state.reanalysisResult=null;
+    state.reanalysisExtras={};state.reanalysisNotice='';
+  }
+  function restoreNavigation(previous){
+    state.view=previous.view;state.venue=previous.venue;
+    state.classification=previous.classification;
+    state.resultVenue=previous.resultVenue;state.resultRace=previous.resultRace;
+    state.raceDetail=previous.detailVenue?
+      findRace(previous.detailVenue,previous.detailRace)||null:null;
+    resetRaceWork();render();window.scrollTo(0,0);
+  }
+  function goBack(){
+    if(navigationHistory.length){restoreNavigation(navigationHistory.pop());return true;}
+    if(state.view==='races'&&state.raceDetail){
+      state.raceDetail=null;resetRaceWork();render();window.scrollTo(0,0);return true;
+    }
+    if(state.view==='races'&&state.venue!=='全場'){
+      state.venue='全場';state.view='overview';render();window.scrollTo(0,0);return true;
+    }
+    if(state.view!=='overview'){
+      state.view='overview';state.raceDetail=null;resetRaceWork();render();
+      window.scrollTo(0,0);return true;
+    }
+    return false;
+  }
+  function showRace(r){
+    if(!r)return;
+    rememberNavigation();
+    state.raceDetail=r;state.view='races';resetRaceWork();
+    render();window.scrollTo(0,0);
+  }
+
+
   function readJSON(key, fallback) {
     try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : fallback; }
     catch { return fallback; }
@@ -512,7 +559,9 @@
       </div>` : ''}
       <p class="external-footnote">BOATERSが掲載する独自展示指標は、元の競艇場公式でも公開されることがあります。データ利用条件を確認し、許可された提供元から取り込む方針です。<strong>この機能はBOATERSから自動取得したものではありません。</strong>この端末内の手動再評価では、固定済み買い目を変更しません。</p>
     </section>`;
-    return `<button class="back-btn" data-action="back-races">← レース一覧へ戻る</button><div class="detail-header"><div><div class="page-eyebrow">FORECAST DETAILS / ${escape(data.event_date)}</div><h1 class="detail-title">${escape(r.venue)} ${r.race}R <span style="font-size:17px;vertical-align:middle">${pill(r.classification)}</span></h1><div class="detail-sub">締切予定 ${escape(r.cutoff_jst)} JST　 ·　 ${r.phase==='exhibition'?'展示数値反映':r.phase==='baseline'?'展示前':'保存済み'}・結果未使用</div></div><button class="btn btn-primary" data-action="copy-bets" data-race="${escape(r.venue)}|${r.race}">⎘ 買い目をコピー</button></div>
+    return `<button class="back-btn" data-action="back-races">← レース一覧へ戻る</button>
+     ${window.BoatMobileRaceNav?.racePicker(r.venue,r.race,data.forecast_races,data.unforecast_races)||''}
+     <div class="detail-header"><div><div class="page-eyebrow">FORECAST DETAILS / ${escape(data.event_date)}</div><h1 class="detail-title">${escape(r.venue)} ${r.race}R <span style="font-size:17px;vertical-align:middle">${pill(r.classification)}</span></h1><div class="detail-sub">締切予定 ${escape(r.cutoff_jst)} JST　 ·　 ${r.phase==='exhibition'?'展示数値反映':r.phase==='baseline'?'展示前':'保存済み'}・結果未使用</div></div><button class="btn btn-primary" data-action="copy-bets" data-race="${escape(r.venue)}|${r.race}">⎘ 買い目をコピー</button></div>
     ${r.model_role==='main'?'<div class="notice"><strong>✅ メイン予想 v0.7：スタート差 × 6艇連動</strong>。以下の固定買い目が結果照合・仮想収支の対象。旧方式は別枠検証。</div>':
       '<div class="notice warn">過去に固定した旧モデルの予想（当時の買い目・SHAを維持）。新モデルへ事後書き換えしません。</div>'}
     ${r.phase?`<div class="notice">${escape(r.evidence||'')} ・ 発走前保存 ${escape(r.frozen_at_utc||'未記録')} ・ SHA256 ${escape((r.sha256||'').slice(0,18))}…${r.weather_observed?`<br>場内風速 ${escape(r.weather_observed.wind_speed)}m/s ／ 波高 ${escape(r.weather_observed.wave_height)}cm（非公式・取得時点）`:''}<br>予想モデル：未学習・確率未校正。展示動画とオッズは未反映。</div>`:''}

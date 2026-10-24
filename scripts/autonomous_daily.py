@@ -667,20 +667,16 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
             # BEFORE cutoff. NEVER replace the older version or backdate it.
             # If last snapshot was exhibition, only promote with complete
             # currently observed exhibition data; do not downgrade it.
+            upgrade_now = datetime.now(UTC) if enforce_wall_clock else runtime_now
             if (cutoff.date() >= WAKE_PROMOTION_DATE
                     and record["versions"]
                     and record["versions"][-1].get("model_version") != MAIN_WAKE_MODEL
-                    and datetime.now(UTC).astimezone(JST) < cutoff - timedelta(seconds=margin)
-                    if enforce_wall_clock else
-                    cutoff.date() >= WAKE_PROMOTION_DATE
-                    and record["versions"]
-                    and record["versions"][-1].get("model_version") != MAIN_WAKE_MODEL
-                    and runtime_now.astimezone(JST) < cutoff - timedelta(seconds=margin)):
+                    and upgrade_now.astimezone(JST) < cutoff - timedelta(seconds=margin)):
                 latest_before = record["versions"][-1]
                 phase_to_promote = latest_before["phase"]
                 if phase_to_promote == "baseline" or preview_ready:
                     candidate_now = candidate if phase_to_promote == "exhibition" else race
-                    latest_timestamp = datetime.now(UTC) if enforce_wall_clock else runtime_now
+                    latest_timestamp = datetime.now(UTC) if enforce_wall_clock else upgrade_now
                     upgrade = prediction(
                         candidate_now, VENUES[venue_code], n,
                         phase_to_promote, latest_timestamp, source_url, nearby

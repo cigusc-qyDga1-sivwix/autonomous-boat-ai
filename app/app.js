@@ -15,7 +15,7 @@
   const raceKey = r => `${data.event_date}|${r.venue}|${r.race}`;
   const el = id => document.getElementById(id);
   const titles = {overview:'ダッシュボード',races:'レース・買い目',results:'結果照合',analysis:'成績分析',settings:'データ管理'};
-  const state = {view:'overview',venue:'全場',classification:'ALL',boardFilter:'all',boardSort:'official',raceDetail:null,resultQuickFilter:'recent',resultQuickExpanded:false,showExternalAnalysis:false,reanalysisResult:null,reanalysisExtras:{},resultVenue:'鳴門',resultRace:1,origin:'GitHubで発走前固定した予想のローカル写し'};
+  const state = {view:'overview',venue:'全場',classification:'ALL',boardFilter:'all',boardSort:'official',raceDetail:null,resultQuickFilter:'recent',resultQuickExpanded:false,showExternalAnalysis:false,reanalysisResult:null,reanalysisExtras:{},reanalysisNotice:'',resultVenue:'鳴門',resultRace:1,origin:'GitHubで発走前固定した予想のローカル写し'};
   let data = null;
   let results = {};
   let autoResults = {};
@@ -362,9 +362,10 @@
     const externalUrl=external?external.linkFor(r.venue,data.event_date,r.race):'https://boaters-boatrace.com/race';
     const predictionUrl=external?external.predictionLinkFor(r.venue,data.event_date,r.race):'https://boaters-boatrace.com/race';
     const recalc=window.BoatReanalysis;
-    const autoMetrics=recalc?.autoExtra?.(r,window.BoatExhibitionAudit?.metricsFor?.(r));
-    const filledMetrics=recalc?.mergeInput?.(autoMetrics?.values,state.reanalysisExtras)||state.reanalysisExtras;
     const directStatus=window.BoatOriginalExhibitionDirect?.status(r,data.event_date)||{state:'idle'};
+    const autoMetrics=recalc?.autoExtra?.(r,window.BoatExhibitionAudit?.metricsFor?.(r),
+      window.BoatOriginalExhibitionDirect?.get?.(r,data.event_date));
+    const filledMetrics=recalc?.mergeInput?.(autoMetrics?.values,state.reanalysisExtras)||state.reanalysisExtras;
     const originalRefreshLabel=directStatus.state==='ready'?'直接取得済み':directStatus.state==='loading'?'直前CSVを確認中':directStatus.state==='unpublished'?'直前CSV未公開':directStatus.state==='error'?'直接取得失敗':directStatus.state==='cutoff'?'締切後・新規取得停止':'直接取得未確認';
     const exhibitionUrl=external?.exhibitionLinkFor(r.venue,data.event_date,r.race)||externalUrl;
     const modelKey=data.event_date+'|'+r.venue+'|'+r.race+'|'+(r.sha256||'sample');
@@ -406,7 +407,8 @@
         <div class="recalc-data-status"><span>勝率・モーター・平均ST：${r.racers?.length===6?'取得済み':'未取得'}</span><span>展示タイム：${r.phase==='exhibition'?'取得済み':'未取得'}</span><span>1周・回り足・直線：自動入力 ${Object.values(autoMetrics?.complete||{}).filter(Boolean).length}/3項目（6艇揃い）</span></div>
         <div class="recalc-direct-status" role="status" aria-live="polite"><div><strong>📡 オリジナル展示：${escape(originalRefreshLabel)}</strong><p>${escape(directStatus.message||'画面を開くと対象レースの展示CSVを直接確認します。')}${directStatus.data?.source_observed_jst?' ／ データ元の記録 '+escape(directStatus.data.source_observed_jst):''}</p></div><button type="button" class="external-btn external-btn-white" data-action="refresh-original-exhibition" ${directStatus.state==='loading'?'disabled':''}>↻ 今すぐ取得</button></div>
         ${recalc?recalc.inputForm(r,filledMetrics,autoMetrics):'<p>再評価モジュールを読み込めませんでした。</p>'}
-        <button type="button" class="external-btn external-btn-primary recalc-run" data-action="run-reanalysis">🧠 取得済みデータで再予想（4〜12点）</button>
+        <button type="button" class="external-btn external-btn-primary recalc-run" data-action="run-reanalysis">🧠 取得済みデータで再予想を実行（4〜12点）</button>
+        <p class="recalc-execute-notice" role="status" aria-live="polite">${escape(state.reanalysisNotice||'タップすると表示中の6艇データを使って、この端末で試算します。')}</p>
         ${stored && recalc?recalc.resultHTML(stored.result,stored.afterCutoff):''}
       </div>` : ''}
       <p class="external-footnote">BOATERSが掲載する独自展示指標は、元の競艇場公式でも公開されることがあります。データ利用条件を確認し、許可された提供元から取り込む方針です。<strong>この機能はBOATERSから自動取得したものではありません。</strong>この端末内の手動再評価では、固定済み買い目を変更しません。</p>
@@ -599,7 +601,7 @@
     // Refresh only the timeline. Never refetch, mutate a frozen prediction, or reset scroll.
     node.outerHTML=window.BoatRaceTimeline.render(data);
   }
-  function go(view) {state.view=view;state.raceDetail=null;state.showExternalAnalysis=false;state.reanalysisResult=null;state.reanalysisExtras={};render();window.scrollTo({top:0,behavior:'instant'});}
+  function go(view) {state.view=view;state.raceDetail=null;state.showExternalAnalysis=false;state.reanalysisResult=null;state.reanalysisExtras={};state.reanalysisNotice='';render();window.scrollTo({top:0,behavior:'instant'});}
   function toast(message){const node=el('toast');node.textContent=message;node.classList.add('show');if(toastTimer)clearTimeout(toastTimer);toastTimer=setTimeout(()=>node.classList.remove('show'),3200);}
   function download(name,content,type='text/plain;charset=utf-8') {const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
   function exportResultsCSV(){const header=['date','venue','race','classification','cutoff_jst','finish','payout_per_100','is_hit','stake_yen','virtual_payout_yen','virtual_profit_yen','recorded_at','source'];const body=allRaces().map(r=>{let c=compute(r);return [data.event_date,r.venue,r.race,r.classification,r.cutoff_jst,c.record?.finish||'',c.record?.payout_per_100??'',c.record?Number(c.hit):'',c.record?c.stake:'',c.payout??'',c.profit??'',c.record?.recorded_at||'',c.record?(c.record.source||'manual'):''];});const csv=[header,...body].map(a=>a.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');download(`boatlab-results-${data.event_date}.csv`,'\uFEFF'+csv,'text/csv;charset=utf-8');toast('結果CSVを書き出したよ');}
@@ -638,7 +640,7 @@
       }
       return;
     }
-    const row=e.target.closest('[data-race]');if(row){const [v,n]=row.dataset.race.split('|');let r=findRace(v,n);if(!r)return;if(row.dataset.action==='settle-this'){state.resultVenue=v;state.resultRace=Number(n);go('results');return;}if(row.dataset.action==='copy-bets'){copyBets(r);return;}state.raceDetail=r;state.showExternalAnalysis=false;state.reanalysisResult=null;state.reanalysisExtras={};state.view='races';render();window.scrollTo(0,0);return;}
+    const row=e.target.closest('[data-race]');if(row){const [v,n]=row.dataset.race.split('|');let r=findRace(v,n);if(!r)return;if(row.dataset.action==='settle-this'){state.resultVenue=v;state.resultRace=Number(n);go('results');return;}if(row.dataset.action==='copy-bets'){copyBets(r);return;}state.raceDetail=r;state.showExternalAnalysis=false;state.reanalysisResult=null;state.reanalysisExtras={};state.reanalysisNotice='';state.view='races';render();window.scrollTo(0,0);return;}
     const btn=e.target.closest('[data-action]');if(!btn)return;
     switch(btn.dataset.action){
       case 'batch-image-read':{
@@ -743,13 +745,17 @@
             if(input.value!==''&&input.value!=null)extras[lane][metric]=input.value;
           }
           const clean=engine.normalizeExtra(extras),estimate=engine.model(r,clean);
-          const formatter=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
-          const afterCutoff=formatter.format(new Date()).replace(' ','T')>=data.event_date+'T'+r.cutoff_jst;
+          const cutoff=Date.parse(data.event_date+'T'+r.cutoff_jst+':00+09:00');
+          const afterCutoff=!Number.isFinite(cutoff)||Date.now()>=cutoff;
           state.reanalysisExtras=clean;
           state.reanalysisResult={key:data.event_date+'|'+r.venue+'|'+r.race+'|'+(r.sha256||'sample'),result:estimate,afterCutoff};
+          state.reanalysisNotice=estimate.bets.length+'点の再予想を実行しました。仮想配分合計50,000円。下に計算結果を表示しています。';
           state.showExternalAnalysis=true;render();
           toast(afterCutoff?'締切後の参考試算を生成したよ':'展開を再評価したよ（試験用）');
-        }catch(err){toast(err.message||'再評価に失敗しました');}
+        }catch(err){
+          state.reanalysisNotice='実行できませんでした：'+(err?.message||'原因未確認');
+          render();toast(err?.message||'再評価に失敗しました');
+        }
         break;
       }
       case 'go-races':go('races');break;
@@ -888,11 +894,14 @@
     if(!source||!race||!data||!state.showExternalAnalysis||originalRefreshBusy)return;
     const date=data.event_date,key=date+'|'+race.venue+'|'+race.race;
     originalRefreshBusy=true;
+    if(state.view==='races')render(); // Show "確認中" immediately after tapping.
     try{
       // Direct public original-exhibition CSV (no results or payouts).
       const result=await source.refresh(race,date,{force});
       // A manual refresh also updates the archived snapshot fallback.
       if(force)await window.BoatExhibitionAudit?.load(date);
+      if(result?.state==='ready')state.reanalysisNotice='展示CSVを取得しました。入力欄に反映された値を確認して「再予想を実行」を押してね。';
+      else if(force)state.reanalysisNotice=result?.message||'直前CSVを取得できませんでした。';
       if(result?.state==='error')console.warn('Original exhibition direct fetch:',result.message);
     }catch(error){console.warn('Original exhibition update:',error?.message);}
     finally{

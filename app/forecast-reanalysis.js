@@ -28,8 +28,10 @@ function normalizeExtra(extra){
 }
 // Automatic entry fills only approved original-exhibition categories.
 // Frozen pre-cutoff features take precedence over later research archives.
-function autoExtra(r,research){
- const values={},sources={frozen:0,research:0},complete={};
+function autoExtra(r,research,direct){
+ // Independently read, pre-cutoff original-exhibition CSV has priority over
+ // a delayed research archive, but NEVER replaces immutable frozen input.
+ const values={},sources={frozen:0,direct:0,research:0},complete={};
  const racers=Array.isArray(r?.racers)?r.racers:[];
  if(racers.length!==6||new Set(racers.map(x=>Number(x.lane))).size!==6)
   return {values,sources,complete,missing:true,source_observed_jst:null};
@@ -39,16 +41,18 @@ function autoExtra(r,research){
   values[lane]={};
   for(const metric of METRICS){
    const frozen=num(racer.original_exhibition?.[metric]);
+   const preview=num(direct?.values?.[lane]?.[metric]);
    const archive=num(research?.values?.[lane]?.[metric]);
    const fits=v=>v!==null&&v>=LIMITS[metric][0]&&v<=LIMITS[metric][1];
    if(fits(frozen)){values[lane][metric]=frozen;sources.frozen++;}
+   else if(fits(preview)){values[lane][metric]=preview;sources.direct++;}
    else if(fits(archive)){values[lane][metric]=archive;sources.research++;}
   }
  }
  for(const metric of METRICS)complete[metric]=Array.from({length:6},(_,i)=>values[i+1]?.[metric])
     .every(v=>v!=null);
- return {values,sources,complete,missing:sources.frozen+sources.research===0,
-   source_observed_jst:research?.source_observed_jst||null};
+ return {values,sources,complete,missing:sources.frozen+sources.direct+sources.research===0,
+   source_observed_jst:direct?.source_observed_jst||research?.source_observed_jst||null};
 }
 function mergeInput(auto,manual){
  const out={};
@@ -180,9 +184,9 @@ function inputForm(r,extra,automatic){
   out+='</tr>';
  }
  const complete=METRICS.filter(k=>automatic?.complete?.[k]).map(k=>LABEL[k]).join('・');
- const fixed=automatic?.sources?.frozen||0,archived=automatic?.sources?.research||0;
- const note=fixed+archived?
-   '自動入力 '+(fixed+archived)+'/18項目（発走前保存 '+fixed+'件・BoatraceCSV研究記録 '+archived+'件）'+
+ const fixed=automatic?.sources?.frozen||0,direct=automatic?.sources?.direct||0,archived=automatic?.sources?.research||0;
+ const note=fixed+direct+archived?
+   '自動入力 '+(fixed+direct+archived)+'/18項目（発走前保存 '+fixed+'件・直接CSV '+direct+'件・BoatraceCSV研究記録 '+archived+'件）'+
    (complete?' ／ 6艇分が揃った項目：'+complete:' ／ 6艇分が揃った項目なし'):
    '自動取得できるオリジナル展示項目がまだありません。未取得は空欄のままです。';
  out+='</tbody></table></div><p class="recalc-auto-note">'+esc(note)+'</p>'+

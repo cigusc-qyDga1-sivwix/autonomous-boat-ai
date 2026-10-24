@@ -80,10 +80,13 @@ def test_weather_is_reflected_in_early_baseline_without_exhibition():
     assert snap["weather_used"]["wind_speed"] == 7.0
     assert snap["weather_adjustment"]["applied"] is True
     assert snap["weather_adjustment"]["uncertainty_exponent"] < 1
-    assert snap["weather_ab"]["generated_pre_cutoff"] is True
-    assert 4 <= len(snap["weather_ab"]["control_bets"]) <= 12
-    assert sum(b["virtual_yen"] for b in snap["weather_ab"]["control_bets"]) == 50000
-    assert snap["point_reason"].find("気象補正試験") >= 0
+    assert snap["weather_ab"] is None  # do not conflate v0.7 with legacy weather A/B
+    assert snap["model_version"]=="tactical-outside-start-gap-v0.7-untrained"
+    old_weather=snap["legacy_control"]["weather_ab"]
+    assert old_weather["generated_pre_cutoff"] is True
+    assert 4 <= len(old_weather["control_bets"]) <= 12
+    assert sum(b["virtual_yen"] for b in old_weather["control_bets"]) == 50000
+    assert snap["legacy_control"]["point_reason"].find("気象補正試験") >= 0
     assert display["weather_venue_count"]==1
     assert display["forecast_races"][0]["weather_used"]["site_observed"] is False
     assert len(display["forecast_races"][0]["bets"]) in range(4,13)
@@ -160,14 +163,16 @@ def test_official_settlement_scores_weather_and_control_only_from_frozen_snapsho
     }
     finished=integrate_official(
         ledger,view,official,datetime(2026,10,22,11,30,tzinfo=JST))
-    comparison=finished["official_results"]["2026-10-22|徳山|1"]["weather_comparison"]
-    assert comparison["source"]=="pre_cutoff_shadow_frozen"
-    assert comparison["weather_hit"] is True
-    assert comparison["weather_payout"]>0
-    assert comparison["weather_minus_control_yen"] == (
-        comparison["weather_payout"]-comparison["control_payout"])
-    assert finished["weather_backtest"]["races"]==1
-    assert finished["weather_backtest"]["weather_hits"]==1
+    official=finished["official_results"]["2026-10-22|徳山|1"]
+    assert official["weather_comparison"] is None
+    comparison=official["legacy_comparison"]
+    assert comparison["source"]=="same_pre_cutoff_shadow_only"
+    assert comparison["legacy_sha256"]==original["legacy_control"]["sha256"]
+    assert comparison["virtual_stake"]==50000
+    assert comparison["main_minus_legacy_yen"] == (
+        official["virtual_payout"]-comparison["virtual_payout"])
+    assert finished["weather_backtest"]["races"]==0
+    assert finished["main_vs_legacy"]["verified_comparisons"]==1
     assert ledger["race_records"]["18-1"]["versions"][0]==original
 
 

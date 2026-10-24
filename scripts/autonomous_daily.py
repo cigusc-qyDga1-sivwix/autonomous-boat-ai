@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import math
+import subprocess
 from datetime import date, datetime, timedelta, timezone
 from itertools import permutations
 from pathlib import Path
@@ -41,6 +42,8 @@ VENUES = {
     "16": "児島", "17": "宮島", "18": "徳山", "19": "下関", "20": "若松",
     "21": "芦屋", "22": "福岡", "23": "唐津", "24": "大村",
 }
+MAIN_MODEL = "tactical-outside-start-gap-v0.7-untrained"
+MAIN_BRIDGE = Path(__file__).resolve().parent / "main_v07_bridge.js"
 VIRTUAL_BUDGET_YEN = 50_000
 MIN_POINTS, MAX_POINTS = 4, 12
 STAKE_UNIT_YEN = 1_000
@@ -332,6 +335,54 @@ def condition_weights(weights: list[float], weather: dict | None) -> tuple[list[
     }
 
 
+def promoted_v07(venue: str, phase: str, racers: list[dict],
+                 profile: dict | None, weather: dict | None,
+                 frozen_at_utc: str) -> dict:
+    """Invoke the exact browser v0.7 engine to avoid divergent implementations.
+
+    This is a strict, fail-closed adapter. Never silently revert to the legacy
+    model (which would mislabel the primary 3-trifecta selection). All inputs
+    come from the source race and weather already collected BEFORE cutoff.
+    """
+    inputs = {
+        "venue": venue, "phase": phase, "racers": [
+            {key: r.get(key) for key in (
+                "lane", "course", "national_win_rate",
+                "motor_top_2_percent", "average_start_timing",
+                "exhibition_st", "exhibition_time", "original_exhibition"
+            )} for r in racers
+        ],
+        "venue_profile": profile, "weather_used": weather,
+        "frozen_at_utc": frozen_at_utc,
+    }
+    try:
+        result = subprocess.run(
+            ["node", str(MAIN_BRIDGE)], input=json.dumps(inputs, ensure_ascii=False),
+            text=True, capture_output=True, timeout=12, check=True
+        )
+        answer = json.loads(result.stdout)
+    except (OSError, ValueError, subprocess.CalledProcessError,
+            subprocess.TimeoutExpired) as exc:
+        raise RuntimeError("v0.7 primary unavailable: fail closed, do not freeze legacy") from exc
+    bets = answer.get("bets")
+    if answer.get("model_version") != MAIN_MODEL or not isinstance(bets, list):
+        raise ValueError("Wrong model version in primary bridge")
+    if not MIN_POINTS <= len(bets) <= MAX_POINTS or len({
+        b.get("combination") for b in bets
+    }) != len(bets) or any(
+        not isinstance(b.get("virtual_yen"), int)
+        or b["virtual_yen"] < STAKE_UNIT_YEN
+        or b["virtual_yen"] % STAKE_UNIT_YEN
+        or not isinstance(b.get("combination"), str)
+        or len(b["combination"].split("-")) != 3
+        or len(set(b["combination"].split("-"))) != 3
+        or any(x not in "123456" for x in b["combination"].split("-"))
+        for b in bets
+    ) or sum(b["virtual_yen"] for b in bets) != VIRTUAL_BUDGET_YEN:
+        raise ValueError("Invalid primary allocation: no frozen forecast written")
+    return answer
+
+
 def prediction(race: dict, venue: str, race_number: int, phase: str,
                now: datetime, source_url: str, nearby_weather: dict | None = None) -> dict:
     if phase not in ("baseline", "exhibition"):
@@ -358,13 +409,54 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     count, reason, concentration, gap = point_count(weathered)
     if weather_adjustment['applied']:
         reason += ' ／ 気象補正試験：' + weather_adjustment['why']
-    leader = racers[int(ranked[0][0][0]) - 1]
-    follower = racers[int(ranked[0][0][2]) - 1]
+    # Preserve the previous canonical Python prediction as a deterministic
+    # same-time SHADOW control. It does not generate a second official stake.
+    legacy_name = ("heuristic-0.6-csv-exhibition-test-untrained"
+                   if phase == "exhibition" and race.get("_exhibition_origin")
+                   else "heuristic-0.7-venue-priors-test-untrained")
+    frozen_at = now.astimezone(UTC).isoformat()
+    legacy_control = {
+        "model_version": legacy_name,
+        "bets": bets,
+        "point_count": len(bets),
+        "point_reason": reason,
+        "frozen_at_utc": frozen_at,
+        "model_role": "shadow_validation",
+        "source_note": "Same pre-cutoff input, original Python heuristic; no hindsight",
+    }
+    if selected_weather:
+        legacy_control["weather_ab"] = {
+            "control_model": "old_heuristic_without_weather",
+            "control_bets": control_bets,
+            "weather_bets": bets,
+            "generated_pre_cutoff": True,
+            "scope": "old_shadow_only_never_count_as_primary_weather_ab",
+        }
+    legacy_control["sha256"] = stable_hash(legacy_control)
+    profile = get_profile(venue_code) if venue_code else None
+    promoted = promoted_v07(venue, phase, racers, profile, selected_weather, frozen_at)
+    bets = promoted["bets"]
+    count = len(bets)
+    shares = promoted["head_course_shares"]
+    concentration = max(x["relative_share"] for x in shares)
+    top_two = sorted((x["relative_share"] for x in shares), reverse=True)
+    gap = top_two[0] - top_two[1]
+    reason = ("6艇連動＋平均ST／展示STと内艇の先行差による着順分岐"
+              "（4〜12点・未訓練・確率未校正）")
+    top_combo = bets[0]["combination"].split("-")
+    leader = racers[int(top_combo[0]) - 1]
+    follower = racers[int(top_combo[1]) - 1]
     weather = observed
     body = {
-        "model_version": ("heuristic-0.6-csv-exhibition-test-untrained"
-                          if phase == "exhibition" and race.get("_exhibition_origin")
-                          else "heuristic-0.7-venue-priors-test-untrained"),
+        "model_version": MAIN_MODEL,
+        "model_role": "main",
+        "legacy_control": legacy_control,
+        "start_v07": promoted["start_v07"],
+        "coupled_v06": promoted["coupled_v06"],
+        "head_course_shares": promoted["head_course_shares"],
+        "role_coverage": promoted["role_coverage"],
+        "role_changes": promoted["role_changes"],
+        "relative_scores_uncalibrated": True,
         "exhibition_origin": race.get("_exhibition_origin") if phase == "exhibition" else None,
         "data_quality": {
             "average_start_timing_imputed_count": sum(
@@ -390,7 +482,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         "race": race_number,
         "cutoff_jst": cutoff.strftime("%H:%M"),
         "cutoff_iso_jst": cutoff.isoformat(),
-        "frozen_at_utc": now.astimezone(UTC).isoformat(),
+        "frozen_at_utc": frozen_at,
         "source_url": source_url,
         "scenario": f"{leader['lane']}号艇{leader['name']}中心・"
                     f"{follower['lane']}号艇{follower['name']}の残存を検証"
@@ -398,19 +490,13 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         "bets": bets,
         "racers": racers,
         "weather_observed": weather,
-        "venue_profile": get_profile(venue_code) if venue_code else None,
+        "venue_profile": profile,
         "venue_adjustment": venue_adjustment,
         "weather_used": selected_weather,
         "weather_adjustment": weather_adjustment,
-        "weather_ab": ({
-            "control_model": "same_features_without_weather",
-            "control_bets": control_bets,
-            "control_point_count": len(control_bets),
-            "weather_point_count": len(bets),
-            "different_combinations": len({b["combination"] for b in control_bets}
-                                         ^ {b["combination"] for b in bets}),
-            "generated_pre_cutoff": True,
-        } if selected_weather else None),
+        # Legacy weather A/B used the previous heuristic and cannot be
+        # mistaken for a v0.7 weather ablation. Keep it INSIDE the old shadow.
+        "weather_ab": None,
         "evidence": ("展示・場内気象あり" if weather and selected_weather and selected_weather.get("site_observed") else
                      "近隣予報（現地実測ではない）" if selected_weather else
                      "気象未取得") + ("・展示あり" if phase == "exhibition" else "・展示前"),
@@ -420,7 +506,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
 
 
 def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
-          weather_by_venue: dict | None = None, exhibition_rows: dict | None = None) -> tuple[dict, dict, dict]:
+          weather_by_venue: dict | None = None, exhibition_rows: dict | None = None,
+          enforce_wall_clock: bool = False) -> tuple[dict, dict, dict]:
     if now.tzinfo is None:
         raise ValueError("Timezone-aware now is mandatory")
     local_day = now.astimezone(JST).date().isoformat()
@@ -458,13 +545,18 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 raise ValueError("Recorded race identity mismatch")
             phases = {entry["phase"] for entry in record["versions"]}
             nearby = weather_at(weather_by_venue.get(venue_code), cutoff)
-            if now.astimezone(JST) < cutoff - timedelta(seconds=SAFE_MARGIN_SECONDS) and valid_entrants(race):
+            # Actual production per-race clock: a large nationwide Node batch
+            # must NEVER treat the timestamp from initial collection as current.
+            # Synthetic test fixtures explicitly leave this safeguard disabled.
+            runtime_now = datetime.now(UTC) if enforce_wall_clock else now
+            margin = max(SAFE_MARGIN_SECONDS, 180) if enforce_wall_clock else SAFE_MARGIN_SECONDS
+            if runtime_now.astimezone(JST) < cutoff - timedelta(seconds=margin) and valid_entrants(race):
                 if "baseline" not in phases:
                     record["versions"].append(prediction(race, VENUES[venue_code], n,
-                                                         "baseline", now, source_url, nearby))
+                                                         "baseline", runtime_now, source_url, nearby))
                     new_baseline += 1
                 code = f"{local_day.replace('-', '')}{int(venue_code):02d}{n:02d}"
-                csv_race, csv_origin = inject(race, exhibition_rows.get(code), now, venue_code, n)
+                csv_race, csv_origin = inject(race, exhibition_rows.get(code), runtime_now, venue_code, n)
                 candidate = csv_race if csv_origin else race
                 preview_ready = preview_complete(candidate)
                 existing_exhibition = [v for v in record["versions"] if v["phase"] == "exhibition"]
@@ -477,7 +569,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 if preview_ready and ("exhibition" not in phases or revision):
                     origin_url = csv_origin and "https://boatracecsv.github.io/docs/data/previews.html" or source_url
                     new = prediction(candidate, VENUES[venue_code], n,
-                                     "exhibition", now, origin_url, nearby)
+                                     "exhibition", (datetime.now(UTC) if enforce_wall_clock else now), origin_url, nearby)
                     before = record["versions"][-1] if record["versions"] else None
                     if before:
                         prev_bets = {b["combination"]: b["virtual_yen"] for b in before["bets"]}
@@ -524,7 +616,9 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         for extra in ("point_count", "point_reason", "head_weight_concentration", "head_weight_gap",
                       "weather_used", "weather_adjustment", "weather_ab", "data_quality",
                       "exhibition_origin", "exhibition_change",
-                      "venue_profile", "venue_adjustment"):
+                      "venue_profile", "venue_adjustment", "model_role", "legacy_control",
+                      "start_v07", "coupled_v06", "head_course_shares",
+                      "role_coverage", "role_changes", "relative_scores_uncalibrated"):
             if extra in current:
                 r[extra] = current[extra]
         r["version_count"] = len(versions)
@@ -541,7 +635,11 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         "mode": "auto-live",
         "updated_at_utc": ledger["last_updated_at_utc"],
         "timezone": "Asia/Tokyo",
-        "method": "全国24場対応・未訓練Plackett–Luceヒューリスティック／4〜12点・展示前後の発走前固定",
+        "method": ("全国24場・新規予想はv0.7スタート差＋6艇着順連動がメイン"
+                   "／旧モデル固定分は不変・同時点の旧方式を別枠検証"
+                   "／4〜12点・仮想5万円"
+                   if any(x.get("model_role") == "main" for x in latest_races)
+                   else "全国24場・既存の発走前固定予想（v0.7昇格前の旧モデル記録）"),
         "freeze_reference": "GitHub app/data/live/{date}.json のcommit履歴＋SHA256",
         "forecast_races": latest_races,
         "official_results": official_results,
@@ -701,6 +799,26 @@ def integrate_official(ledger: dict, view: dict, pay: dict,
                     "weather_point_count": len(snap["bets"]),
                     "source": "pre_cutoff_shadow_frozen",
                 }
+        old_control = snap.get("legacy_control")
+        old_comparison = None
+        if (isinstance(old_control, dict)
+                and old_control.get("model_role") == "shadow_validation"):
+            alternative = old_control.get("bets") or []
+            if (4 <= len(alternative) <= 12
+                    and all(isinstance(b.get("virtual_yen"), int)
+                            and isinstance(b.get("combination"), str) for b in alternative)
+                    and sum(b["virtual_yen"] for b in alternative) == VIRTUAL_BUDGET_YEN):
+                old_bet = next((b for b in alternative if b["combination"] == p["finish"]), None)
+                old_paid = old_bet["virtual_yen"] * p["payout_per_100"] // 100 if old_bet else 0
+                old_comparison = {
+                    "model_version": old_control["model_version"],
+                    "hit": bool(old_bet), "virtual_payout": old_paid,
+                    "virtual_stake": VIRTUAL_BUDGET_YEN,
+                    "virtual_profit": old_paid - VIRTUAL_BUDGET_YEN,
+                    "main_minus_legacy_yen": paid - old_paid,
+                    "source": "same_pre_cutoff_shadow_only",
+                    "legacy_sha256": old_control.get("sha256"),
+                }
         results[key] = {
             **p, "hit": bool(winning_bet), "virtual_stake": stake,
             "virtual_payout": paid, "virtual_profit": paid - stake,
@@ -708,6 +826,7 @@ def integrate_official(ledger: dict, view: dict, pay: dict,
             "third_miss": bool(first_second and not winning_bet),
             "snapshot_phase": snap["phase"], "snapshot_sha256": snap["sha256"],
             "weather_comparison": weather_comparison,
+            "legacy_comparison": old_comparison,
         }
 
     comparable = [
@@ -723,6 +842,18 @@ def integrate_official(ledger: dict, view: dict, pay: dict,
         "virtual_stake_per_model": len(comparable) * 50_000,
         "weather_minus_control_yen": sum(r["weather_minus_control_yen"] for r in comparable),
         "model_note": "発走前固定の気象補正あり・なしの試験比較。配当・結果はBOATRACE公式確定後に照合",
+    }
+    historical = [r["legacy_comparison"] for r in results.values()
+                  if r.get("legacy_comparison") is not None]
+    view["main_vs_legacy"] = {
+        "model": MAIN_MODEL, "verified_comparisons": len(historical),
+        "legacy_model_label": "old Python heuristic, same pre-cutoff inputs",
+        "main_hits": sum(bool(results[key]["hit"]) for key in results if results[key].get("legacy_comparison")),
+        "legacy_hits": sum(bool(r["hit"]) for r in historical),
+        "main_virtual_payout": sum(results[key]["virtual_payout"] for key in results if results[key].get("legacy_comparison")),
+        "legacy_virtual_payout": sum(r["virtual_payout"] for r in historical),
+        "virtual_stake_per_model": len(historical)*VIRTUAL_BUDGET_YEN,
+        "note": "Both models are independent pre-cutoff frozen comparisons. Only main tickets count in official primary performance."
     }
     view["official_results"] = results
     view["settlement_alerts"] = alerts
@@ -788,7 +919,7 @@ def main():
     research = (available_rows(Path("app/data/exhibition") / f"{day}.json", day)
                 if not args.input_json else {})
     ledger, webapp, summary = build(previous, source, now, source_url, nearby_forecasts,
-                                     exhibition_rows=research)
+                                     exhibition_rows=research, enforce_wall_clock=not bool(args.input_json))
     if weather_error:
         summary["weather_error"] = weather_error
         webapp["weather_fetch_status"] = "UNAVAILABLE"

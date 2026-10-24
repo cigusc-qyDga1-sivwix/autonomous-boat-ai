@@ -1,44 +1,43 @@
-/* BOAT LAB 6-boat pre-race ability & expectation overview. Read-only. */
+/* BOAT LAB six-racer overall summary.
+ * Calculation remains in racer-rating.js; display only the two overall scores.
+ * Source: saved pre-race data, no post-race outcomes or odds.
+ */
 (function(global){
 'use strict';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const shown=v=>v===null||v===undefined||!Number.isFinite(v)?'—':String(v);
 function render(r){
  const rating=global.BoatRacerRating?.rate?.(r);
- if(!rating||rating.rows?.length!==6)
-  return '<section class="card card-pad"><h2>📊 6艇の総合能力・期待指数</h2><p>能力計算に必要なモジュールがありません。</p></section>';
- const shown=x=>x===null||x===undefined||!Number.isFinite(x)?'—':String(x);
- const pct=x=>x===null||x===undefined||!Number.isFinite(x)?'—':(x*100).toFixed(1)+'%';
- const cards=rating.rows.map(x=>{
-  const parts=[['選手力',x.athlete,'player'],['モーター',x.motor,'motor'],['進入相性',x.course_fit,'course']];
-  const bars=parts.map(([name,value,type])=>'<div class="boat-ability-part"><span>'+esc(name)+'</span>'+
-   '<div class="boat-ability-track"><span class="boat-ability-fill boat-ability-'+type+
-   '" style="width:'+(value===null?0:Math.max(0,Math.min(100,value)))+'%"></span></div>'+
-   '<strong>'+shown(value)+'</strong></div>').join('');
-  const z=x.role_weights;
-  const roles=z?
-   '<div class="boat-ability-roles"><span>1着 '+pct(z.first)+'</span>'+
-   '<span>2着 '+pct(z.second)+'</span><span>3着 '+pct(z.third)+'</span></div>':
-   '<div class="boat-ability-roles is-pending">着順期待：'+
-    (rating.status==='hold'?'展示進入確認待ち':'計算不可')+'</div>';
-  const caution=x.confidence==='insufficient'?'選手・モーター・進入の必須情報が不足':
-    x.confidence==='partial_reference'?'一部のST・展示情報が未取得／暫定':'';
-  return '<article class="boat-ability-card" aria-label="'+x.lane+'号艇 能力値と期待指数">'+
-   '<div class="boat-ability-card-head"><span class="boat-entry-lane boat-entry-'+x.lane+'">'+x.lane+'</span>'+
-   '<div class="boat-ability-card-name"><strong>'+esc(x.name)+'</strong>'+
-    '<small>'+ (x.course_confirmed?x.course+'コース':'実進入未確認')+'</small></div>'+
-   '<div class="boat-ability-values"><div><span>総合能力値</span><strong>'+shown(x.ability)+'</strong><small>/100</small></div>'+
-   '<div class="boat-ability-expect"><span>活躍期待指数</span><strong>'+shown(x.race_expectation)+'</strong><small>/100</small></div></div></div>'+
-   bars+roles+(caution?'<p class="boat-ability-uncertain">※ '+esc(caution)+'</p>':'')+'</article>';
+ if(!rating||!Array.isArray(rating.rows)||rating.rows.length!==6)
+  return '<section class="card card-pad boat-overall-panel"><h2 class="section-title">📊 6艇の総合評価</h2><p>評価データを確認できません。</p></section>';
+ const scored=rating.rows.filter(x=>Number.isFinite(x.ability));
+ const expected=rating.rows.filter(x=>Number.isFinite(x.race_expectation));
+ const topAbility=scored.length===6?Math.max(...scored.map(x=>x.ability)):null;
+ const topExpected=expected.length===6?Math.max(...expected.map(x=>x.race_expectation)):null;
+ const names=items=>items.map(x=>x.lane+'号艇').join('・');
+ const leaders=topAbility!==null&&topExpected!==null?
+  '総合能力トップ：'+names(scored.filter(x=>x.ability===topAbility))+
+  ' ／ このレースの活躍期待トップ：'+names(expected.filter(x=>x.race_expectation===topExpected)):
+  '未取得・進入未確認の項目は評価保留';
+ const rows=rating.rows.map(x=>{
+  const ability=shown(x.ability),expectation=shown(x.race_expectation);
+  const bestAbility=topAbility!==null&&x.ability===topAbility;
+  const bestExpected=topExpected!==null&&x.race_expectation===topExpected;
+  return '<tr'+(bestExpected?' class="boat-overall-leading"':'')+'>'+
+   '<th scope="row"><span class="boat-entry-lane boat-entry-'+x.lane+'">'+x.lane+'</span></th>'+
+   '<td class="boat-overall-name">'+esc(x.name)+'</td>'+
+   '<td class="boat-overall-score'+(bestAbility?' is-top':'')+'">'+ability+'</td>'+
+   '<td class="boat-overall-score boat-overall-expect'+(bestExpected?' is-top':'')+'">'+expectation+'</td>'+
+   '</tr>';
  }).join('');
- return '<section class="card card-pad boat-ability-study" aria-label="6艇の総合能力とレース別活躍期待指数">'+
-  '<div class="boat-ability-heading"><h2 class="section-title">📊 6艇の能力値とレース期待指数</h2>'+
-  '<span>発走前保存データによる試験計算</span></div>'+
-  '<div class="boat-ability-grid">'+cards+'</div>'+
-  '<p class="boat-ability-explain"><strong>総合能力値（0〜100）：</strong>選手力45%・モーター30%・進入相性25%で合成。進入相性は実進入コース、隣艇との平均ST差、保存済み展示タイム・回り足から試算。本人の過去コース別実績そのものではありません。</p>'+
-  '<p class="boat-ability-explain"><strong>活躍期待指数（0〜100）：</strong>レース内の1着・2着・3着の相対モデル重みを55:30:15で合成し、最上位艇=100に換算。1着・2着・3着の各数値は未校正のモデル配分で実測入着確率ではありません。オッズがないため舟券の金銭期待値とは異なります。</p>'+
-  '<p class="boat-ability-explain">使用モデル：'+esc(rating.model||'評価保留')+'。'+
-  (rating.provisional?'進入未確認のためコース相性・総合能力は保留。':'保存されたコース進入を使用。')+
-  ' 欠損値は補完せず「—」で表示。結果・払戻・オッズを予測計算に含めず、正式固定の買い目・SHA・収支は変更しません。</p>'+
+ return '<section class="card card-pad boat-overall-panel" aria-label="6艇の総合能力とレース活躍期待指数">'+
+  '<div class="boat-overall-heading"><h2 class="section-title">📊 6艇の総合評価</h2>'+
+  '<span>0〜100点｜試験指数</span></div>'+
+  '<div class="boat-entry-overflow"><table class="boat-overall-table"><thead>'+
+  '<tr><th>艇</th><th>選手</th><th>総合能力</th><th>活躍期待</th></tr>'+
+  '</thead><tbody>'+rows+'</tbody></table></div>'+
+  '<p class="boat-overall-leaders">'+esc(leaders)+'</p>'+
+  '<p class="boat-overall-caveat">総合能力は選手・モーター・進入相性を合成。活躍期待はこのレース内の相対評価で最高値を100とした指数。いずれも<strong>未校正の試験値</strong>で、的中確率や舟券の金銭的期待値ではありません。予想・買い目は変更しません。</p>'+
   '</section>';
 }
 global.BoatRacerRatingPanel={render};

@@ -57,6 +57,38 @@ function summary(doc,day){
  out.profit=out.paid-out.invested;
  return out;
 }
+function overlayVerifiedPays(ledger,doc,day){
+ if(!ledger||ledger.event_date!==day||!ledger.race_records||
+    !doc||doc.date!==day||doc.status!=='verified_by_server_fetch'||
+    doc.evidence_type!=='official_boatrace_pay_snapshot'||
+    doc.source_url!=='https://www.boatrace.jp/owpc/pc/race/pay?hd='+day.replace(/-/g,'')||
+    !Number.isFinite(Date.parse(doc.retrieved_at_utc))||
+    !doc.results||typeof doc.results!=='object'||Array.isArray(doc.results)||
+    Object.keys(doc.results).length>288)return 0;
+ let added=0;
+ for(const [id,rec] of Object.entries(ledger.race_records)){
+  if(!rec||!Array.isArray(rec.versions)||!rec.versions.length||
+     rec.official_conflict||rec.official_review)continue;
+  const snap=rec.versions[rec.versions.length-1];
+  if(!snap||!/^[a-f0-9]{64}$/i.test(snap.sha256||''))continue;
+  const pay=doc.results[id];
+  if(doc.reviews?.[id]||doc.cancellations?.[id]||doc.conflicts?.[id])continue;
+  if(!pay||!combo(pay.finish)||!Number.isSafeInteger(pay.payout_per_100)||
+     pay.payout_per_100<100||pay.payout_per_100>10000000||
+     pay.payout_per_100%10!==0)continue;
+  const existing=rec.official_pay;
+  if(existing&&(!existing.verified||existing.finish!==pay.finish||
+      existing.payout_per_100!==pay.payout_per_100))continue;
+  if(existing?.verified)continue;
+  rec.official_pay={
+   finish:pay.finish,payout_per_100:pay.payout_per_100,
+   verified:true,source:'boatrace_official_pay',source_url:doc.source_url,
+   recorded_at:doc.retrieved_at_utc,snapshot_sha256:snap.sha256
+  };
+  added++;
+ }
+ return added;
+}
 let state={loading:false,ready:false,days:{},errors:{},range:[],lastFetchedAt:0};
 let inflight=null;
 async function load(force=false,fetcher=root.fetch?.bind(root),now=new Date()){
@@ -73,7 +105,17 @@ async function load(force=false,fetcher=root.fetch?.bind(root),now=new Date()){
     if(typeof fetcher!=='function')throw Error('取得機能が利用できません');
     const response=await fetcher('./data/live/'+day+'.json',{cache:'no-store'});
     if(!response?.ok)throw Error('HTTP '+(response?.status??'接続失敗'));
-    state.days[day]=summary(await response.json(),day);
+    const ledger=await response.json();
+    if(day===range[range.length-1]){
+     // Daily immutable ledger may lag the independently refreshed verified
+     // official pay snapshot by hours. Overlay ONLY official verified pays
+     // matching the same immutable prediction SHA, without changing bets.
+     try{
+      const payResponse=await fetcher('./data/live/official-pay/'+day+'.json?refresh='+Date.now(),{cache:'no-store'});
+      if(payResponse?.ok)overlayVerifiedPays(ledger,await payResponse.json(),day);
+     }catch(_e){/* older ledger is still useful; never guess a payoff */ }
+    }
+    state.days[day]=summary(ledger,day);
    }catch(e){
     delete state.days[day];state.errors[day]=e?.message||'データを取得できません';
    }
@@ -128,5 +170,5 @@ function render(){
   '今日を含め公式照合済みレースだけが仮想投資と払戻の集計対象です。未照合・中止・返還・矛盾・不正データは集計せず、日付欠損を0円扱いしません。'+
   '旧モデルと新モデルの買い目を二重計上しません。全研究予想の仮想収支であり、実際の購入成績・正式BUY収支ではありません。</p></section>';
 }
-root.BoatCumulative={summary,load,render,status,needsRefresh,daysThrough,jstDay,get dates(){return daysThrough(new Date())}};
+root.BoatCumulative={summary,overlayVerifiedPays,load,render,status,needsRefresh,daysThrough,jstDay,get dates(){return daysThrough(new Date())}};
 })(typeof window==='undefined'?globalThis:window);

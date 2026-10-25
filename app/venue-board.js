@@ -178,6 +178,7 @@
   function raceTile(venue,number,slot,now,data) {
     var r=slot&&slot.forecast;
     var cutoff=slot&&slot.cutoff;
+    var formal=!!(r&&window.BoatTicketPolicy?.classify(r,data.event_date).formal);
     var experiment=null;
     if(r?.model_role==='main'&&r.legacy_control?.bets?.length){
       experiment={top:r.legacy_control.bets[0].combination,
@@ -197,10 +198,8 @@
     return '<div class="venue-race'+(r?' venue-race-available':' venue-race-empty')+'">' +
       '<div class="venue-race-top"><b>'+number+'R</b>'+raceStatus(r,slot,now,data,venue,number)+'</div>' +
       '<div class="venue-race-cutoff"><span>締切予定</span><strong>'+esc(cutoff||'—')+'</strong></div>' +
-      (r?'<div class="venue-race-main">'+(r.model_role==='main'?'✅ メイン'+(r.model_version?.includes('v0.9')?'v0.9':'v0.7')+' 固定：':'🔒 旧モデル固定：')+esc(r.bets.slice(0,2).map(function (b){return b.combination;}).join(' / '))+'</div>' +
-          (experiment?'<div class="venue-tactical">🧠 '+(experiment.legacy?'旧モデル検証：':'1M戦法研究：')+
-          '<b>'+esc(experiment.top)+'</b> ／ '+experiment.bets.length+'点'+
-          (experiment.legacy?'（結果は正式収支に重複計上しない）':experiment.differs_from_frozen?'（変更あり）':'（配分同じ）')+'</div>':'') +
+      (r?'<div class="ticket-list-status '+(formal?'ticket-status-formal':'ticket-status-pending')+'">'+(formal?'✅ 正式買い目':'⏳ 暫定・購入判断保留')+'</div><div class="venue-race-main">'+(r.model_role==='main'?'✅ メイン'+(r.model_version?.includes('v0.9')?'v0.9':'v0.7')+' 固定：':'🔒 旧モデル固定：')+(formal?esc(r.bets.slice(0,2).map(function (b){return b.combination;}).join(' / ')):'正式買い目は未確定')+'</div>' +
+          (experiment?'<div class="venue-tactical">🔬 比較用モデルあり・正式買い目とは別</div>':'') +
           '<div class="venue-race-scene">'+esc(r.scenario||'展開予想あり')+'</div>' +
           weatherInfo+payInfo+
           '<button type="button" class="venue-race-action" data-race="'+esc(venue)+'|'+number+'">買い目 '+r.bets.length+'点を見る →</button>' :

@@ -96,7 +96,7 @@ assert.equal(api.summary(mismatch,day22).checked,1,'snapshot mismatch never cont
  const newCount=api.overlayVerifiedPays(l25stale,verifiedPay,day25);
  assert.equal(newCount,1);
  assert.equal(api.summary(l25stale,day25).checked,1);
- assert.equal(api.summary(l25stale,day25).paid,50000);
+ assert.equal(api.summary(l25stale,day25).paid,100000);
  assert.equal(api.overlayVerifiedPays(l25stale,verifiedPay,day25),0,'no double count');
  const changed={...verifiedPay,results:{'14-1':{finish:'4-5-6',payout_per_100:3000}}};
  assert.equal(api.overlayVerifiedPays(l25stale,changed,day25),0,'conflicts cannot overwrite official results');

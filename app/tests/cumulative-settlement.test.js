@@ -82,5 +82,36 @@ assert.equal(api.summary(mismatch,day22).checked,1,'snapshot mismatch never cont
   {ok:true,json:async()=>({[day22]:l22,[day23]:l23,[day25]:l25})[url.match(/\d{4}-\d\d-\d\d/)[0]]},
   new Date('2026-10-25T07:45:00+09:00'));
  assert.match(api.render(),/未取得・累積に含めない/);
+
+ // Same-day daily ledger is stale, but server-verified official pay snapshot
+ // is newer: only legitimate matching fixed bets are counted once.
+ const l25stale=ledger(day25,{'14-1':rec(day25,1,null,null)});
+ const verifiedPay={
+  date:day25,status:'verified_by_server_fetch',
+  evidence_type:'official_boatrace_pay_snapshot',
+  source_url:'https://www.boatrace.jp/owpc/pc/race/pay?hd=20261025',
+  retrieved_at_utc:'2026-10-25T07:54:53Z',
+  results:{'14-1':{finish:'1-2-3',payout_per_100:1000}}
+ };
+ const newCount=api.overlayVerifiedPays(l25stale,verifiedPay,day25);
+ assert.equal(newCount,1);
+ assert.equal(api.summary(l25stale,day25).checked,1);
+ assert.equal(api.summary(l25stale,day25).paid,50000);
+ assert.equal(api.overlayVerifiedPays(l25stale,verifiedPay,day25),0,'no double count');
+ const changed={...verifiedPay,results:{'14-1':{finish:'4-5-6',payout_per_100:3000}}};
+ assert.equal(api.overlayVerifiedPays(l25stale,changed,day25),0,'conflicts cannot overwrite official results');
+ const badSource={...verifiedPay,source_url:'https://fake.example/race/pay'};
+ assert.equal(api.overlayVerifiedPays(ledger(day25,{'14-1':rec(day25,1,null,null)}),badSource,day25),0);
+ const fetched=[];
+ await api.load(true,async url=>{
+  fetched.push(url);
+  if(url.includes('official-pay'))return {ok:true,json:async()=>verifiedPay};
+  const d=url.match(/\d{4}-\d\d-\d\d/)[0];
+  return {ok:true,json:async()=>({[day22]:l22,[day23]:l23,[day24]:l24,
+   [day25]:ledger(day25,{'14-1':rec(day25,1,null,null)})})[d]};
+ },new Date('2026-10-25T17:09:00+09:00'));
+ assert.equal(fetched.filter(url=>url.includes('official-pay')).length,1);
+ assert.match(api.render(),/10\/25/);
+ assert.match(api.render(),/公式照合 5R/,'today direct pay must enter cumulative');
  console.log('BOAT LAB dynamic Oct22-to-today verified cumulative settlement: PASS');
 })().catch(err=>{console.error(err);process.exitCode=1});

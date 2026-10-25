@@ -28,7 +28,7 @@ def fixture():
       {"event_date":DAY,"mode":"auto-live",
        "updated_at_utc":"2026-10-25T05:00:00+00:00",
        "forecast_races":[copy.deepcopy(snap)],
-       "official_results":{},"settlement_alerts":{}}
+       "official_results":{},"settlement_alerts":{}})
 
 def pay(finish="4-5-1",yen=1320):
     return {"date":DAY,"results":{"16-1":{"finish":finish,"payout_per_100":yen}},

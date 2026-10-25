@@ -53,7 +53,7 @@ async function main(){
  const ui=elements.get('main');
  assert.match(ui.innerHTML,/結果を更新/);
  assert.match(ui.innerHTML,/公式ページ確認/);
- assert.match(ui.innerHTML,/公開済み結果を再読み込み/);
+ assert.match(ui.innerHTML,/公式払戻の検証済み日別データを別々に再取得/);
  assert.match(ui.innerHTML,/BOATRACE 本日の払戻金一覧/);
  assert.match(ui.innerHTML,/公式照合/);
  assert.ok(window.BoatLab.officialStats(window.BoatLab.getData().forecast_races).count<

@@ -49,6 +49,8 @@ jobs:
       name: github-pages
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -117,11 +119,30 @@ jobs:
           git add app/data/live/ app/data/exhibition/ app/data/experiments/ app/data/venue-profiles.json
           if ! git diff --cached --quiet; then
             git commit -m 'data: automatic nationwide forecast snapshots and results'
-            # Human edits or a new workflow commit may have landed since checkout.
-            # Replay our data-only commit on top of the latest default branch.
-            git fetch origin main
-            git rebase origin/main
-            git push origin HEAD:main
+            # Retry on latest immutable ledger, never overwrite competing records.
+            for attempt in 1 2 3; do
+              if git push origin HEAD:main; then
+                break
+              fi
+              if [ "$attempt" = 3 ]; then
+                echo "Forecast save retry exhausted" >&2
+                exit 1
+              fi
+              git fetch origin main
+              git reset --hard origin/main
+              python scripts/ingest_boatracecsv_exhibition.py
+              python scripts/autonomous_daily.py | tee boat-lab-daily-status.json
+              python scripts/forecast_audit.py --input app/data/live/latest.json --out app/data/live/audit-latest.json
+              node scripts/freeze_tactical_trials.js
+              node scripts/freeze_outside_trials.js
+              node scripts/freeze_coupling_trials.js
+              node scripts/freeze_start_trials.js
+              git add app/data/live/ app/data/exhibition/ app/data/experiments/ app/data/venue-profiles.json
+              if git diff --cached --quiet; then
+                break
+              fi
+              git commit -m 'data: retry fresh pre-cutoff forecasts on latest ledger'
+            done
           fi
       - name: Configure Pages
         uses: actions/configure-pages@v5

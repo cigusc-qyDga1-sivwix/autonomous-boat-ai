@@ -21,7 +21,7 @@ def fixture():
           "sha256":"a"*64,"model_version":"tactical-outside-start-wake-v0.9-untrained",
           "model_role":"main","phase":"baseline",
           "bets":copy.deepcopy(BETS)}
-    return {
+    return ({
       "event_date":DAY,
       "race_records":{"16-1":{"venue":"児島","venue_code":"16",
         "race":1,"versions":[snap],"payouts":[]}}},

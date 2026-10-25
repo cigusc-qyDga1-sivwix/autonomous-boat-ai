@@ -1,5 +1,6 @@
 """Read-only BoatraceCSV exhibition backfill. NEVER modifies pre-cutoff forecasts."""
 import argparse, csv, io, json, math
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -125,7 +126,9 @@ def main():
     day=date.fromisoformat(args.date) if args.date else datetime.now(ZoneInfo("Asia/Tokyo")).date()
     path=args.output or Path(f"app/data/exhibition/{day.isoformat()}.json")
     prior=json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
-    sources={k:fetch(k,day) for k in SOURCES}
+    # Independent public CSVs: bound concurrency and keep each request timeout.
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        sources=dict(zip(SOURCES, pool.map(lambda name: fetch(name,day), SOURCES)))
     has_essential=all(sources[k] for k in ("stt","tkz","sui"))
     new=build(day,sources,prior) if has_essential else None
     if new and (not prior or new["records"]!=prior.get("records")):

@@ -13,7 +13,7 @@ initial.updated_at_utc='2026-10-22T00:00:00+00:00';
 const newVersion=deep(saved);
 newVersion.updated_at_utc='2026-10-22T07:20:00+00:00';
 let response=initial, hold=null, throws=false;
-const calls=[],listen={};
+const calls=[],listen={},intervals=[];
 const elements=new Map();
 for(const id of ['main','breadcrumb-label','reload-btn','toast']){
  elements.set(id,{innerHTML:'',textContent:'',
@@ -34,7 +34,7 @@ const fetch=async(url,opts)=>{
  return {ok:true,json:async()=>deep(response)};
 };
 const ctx=vm.createContext({window,document,localStorage,fetch,navigator:{},
- location:{protocol:'file:'},console,setTimeout,clearTimeout,Blob,URL,Intl,Date});
+ location:{protocol:'file:'},console,setTimeout,clearTimeout,setInterval:(cb,ms)=>{intervals.push({cb,ms});},Blob,URL,Intl,Date});
 vm.runInContext(fs.readFileSync('app/app.js','utf8'),ctx);
 function navResults(){
  for(const cb of listen.click||[])cb({
@@ -101,6 +101,16 @@ async function main(){
  await window.BoatLab.refreshOfficialResults();
  assert.match(ui.innerHTML,/より古いため/);
  assert.equal(window.BoatLab.getData().event_date,saved.event_date);
+ response=newVersion;
+ const scheduled=intervals.find(x=>x.ms===90000);
+ assert.ok(scheduled,'automatic results check must be installed');
+ let directChecks=0;
+ window.BoatOfficialDirect={refresh:async()=>{directChecks++;return {available:false};}};
+ const priorCalls=calls.length;
+ scheduled.cb();
+ await new Promise(r=>setTimeout(r,30));
+ assert.ok(calls.length>priorCalls,'automatic results screen update must fetch published results');
+ assert.equal(directChecks,1,'unchanged national timestamp must still query independent official results');
  console.log('BOAT LAB manual official result refresh tests: PASS');
 }
 main().catch(e=>{console.error(e);process.exitCode=1});

@@ -21,6 +21,7 @@ jobs:
         with:
           node-version: '22'
       - run: python3 scripts/test_entry_exhibition_gate.py
+      - run: node app/tests/ticket-policy.test.js
       - run: node --check app/app.js
       - run: node --check app/exhibition-research.js
       - run: node --check app/exhibition-audit.js

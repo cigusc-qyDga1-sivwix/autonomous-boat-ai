@@ -27,7 +27,7 @@ const validBets=bets=>Array.isArray(bets)&&bets.length>=4&&bets.length<=12&&
  bets.every(b=>b&&combo(b.combination)&&Number.isSafeInteger(b.virtual_yen)&&b.virtual_yen>=0&&b.virtual_yen%100===0)&&
  new Set(bets.map(b=>b.combination)).size===bets.length&&
  bets.reduce((s,b)=>s+b.virtual_yen,0)===50000;
-function summary(doc,day){
+function summary(doc,day,formalOnly=false){
  if(!doc||doc.event_date!==day||!doc.race_records||typeof doc.race_records!=='object'||Array.isArray(doc.race_records))
    throw Error('日付別の固定記録が不正です');
  const list=Object.entries(doc.race_records);
@@ -42,6 +42,7 @@ function summary(doc,day){
      !/(\+09:00)$/.test(r.cutoff_iso_jst)||
      !Number.isFinite(cutoff)||!Number.isFinite(frozen)||frozen>=cutoff||
      !validBets(r.bets)||r.venue!==record.venue||r.race!==record.race){out.excluded++;continue;}
+  if(formalOnly&&!root.BoatTicketPolicy?.classify(r,day).formal)continue;
   out.eligible++;
   if(record.official_conflict||record.official_review){out.excluded++;continue;}
   const p=record.official_pay;
@@ -89,7 +90,7 @@ function overlayVerifiedPays(ledger,doc,day){
  }
  return added;
 }
-let state={loading:false,ready:false,days:{},errors:{},range:[],lastFetchedAt:0};
+let state={loading:false,ready:false,days:{},formalDays:{},errors:{},range:[],lastFetchedAt:0};
 let inflight=null;
 async function load(force=false,fetcher=root.fetch?.bind(root),now=new Date()){
  if(inflight)return inflight;
@@ -98,7 +99,7 @@ async function load(force=false,fetcher=root.fetch?.bind(root),now=new Date()){
   Date.now()-state.lastFetchedAt<90000;
  if(!force&&fresh)return state;
  state={loading:true,ready:false,days:force?{}:{...state.days},errors:{},
-   range,lastFetchedAt:state.lastFetchedAt};
+   range,formalDays:force?{}:{...state.formalDays},lastFetchedAt:state.lastFetchedAt};
  inflight=(async()=>{
   for(const day of range){
    try{
@@ -116,8 +117,9 @@ async function load(force=false,fetcher=root.fetch?.bind(root),now=new Date()){
      }catch(_e){/* older ledger is still useful; never guess a payoff */ }
     }
     state.days[day]=summary(ledger,day);
+    state.formalDays[day]=summary(ledger,day,true);
    }catch(e){
-    delete state.days[day];state.errors[day]=e?.message||'データを取得できません';
+    delete state.days[day];delete state.formalDays[day];state.errors[day]=e?.message||'データを取得できません';
    }
   }
   state.loading=false;state.ready=true;state.lastFetchedAt=Date.now();
@@ -130,6 +132,12 @@ function needsRefresh(now=new Date()){
  const current=daysThrough(now);
  return !state.loading&&(!state.ready||state.range.join(',')!==current.join(',')||
   Date.now()-state.lastFetchedAt>=90000);
+}
+function renderFormal(){
+ if(!root.BoatTicketPolicy)return '';
+ const total=EMPTY();
+ for(const day of state.range){const s=state.formalDays[day];if(s)for(const key of Object.keys(total))total[key]+=s[key];}
+ return '<section class="card card-pad" aria-label="正式買い目の累積収支"><h2>正式買い目の累積収支</h2><p>展示反映・締切前固定 '+total.eligible+'R ／ 公式照合 '+total.checked+'R ／ 的中 '+total.hits+'R</p><p>仮想投資 '+yen(total.invested)+' ／ 仮想払戻 '+yen(total.paid)+' ／ 仮想収支 '+money(total.profit)+' ／ 回収率 '+(total.invested?(100*total.paid/total.invested).toFixed(1)+'%':'—')+'</p><p>各レースの最新の展示反映固定版だけ。暫定予想・未照合・返還・中止は正式収支に含めません。欠損日は集計対象外です。</p></section>';
 }
 function render(){
  const dates=state.range.length?state.range:daysThrough(new Date());
@@ -147,9 +155,9 @@ function render(){
  }
  const completed=found.length===dates.length;
  const current=label(dates.at(-1)||START_DAY);
- return '<section class="card card-pad cumulative-settlement" aria-label="10月22日からの累積仮想収支">'+
+ return renderFormal()+'<section class="card card-pad cumulative-settlement" aria-label="10月22日からの累積仮想収支">'+
   '<div class="section-head"><div><h2 class="section-title">📈 10/22〜'+current+' 累積収支</h2>'+
-  '<p class="cum-subtitle">発走前固定の研究用買い目 × 公式確認済み払戻だけ（当日は途中経過）</p></div>'+
+  '<p class="cum-subtitle">全研究予想（展示前の暫定を含む）× 公式確認済み払戻だけ（当日は途中経過）</p></div>'+
   '<button type="button" class="btn btn-white" data-action="reload-cumulative-results" '+
    (state.loading?'disabled':'')+'>'+(state.loading?'読み込み中…':'↻ 再集計')+'</button></div>'+
   (found.length?

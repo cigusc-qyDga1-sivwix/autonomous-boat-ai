@@ -135,6 +135,7 @@ function needsRefresh(now=new Date()){
 }
 function renderFormal(){
  if(!root.BoatTicketPolicy)return '';
+ if(!state.range.some(day=>state.formalDays[day]))return '<section class="card card-pad"><h2>正式買い目の累積収支</h2><p>日付別の固定記録を取得できていないため、正式収支は未集計です。</p></section>';
  const total=EMPTY();
  for(const day of state.range){const s=state.formalDays[day];if(s)for(const key of Object.keys(total))total[key]+=s[key];}
  return '<section class="card card-pad" aria-label="正式買い目の累積収支"><h2>正式買い目の累積収支</h2><p>展示反映・締切前固定 '+total.eligible+'R ／ 公式照合 '+total.checked+'R ／ 的中 '+total.hits+'R</p><p>仮想投資 '+yen(total.invested)+' ／ 仮想払戻 '+yen(total.paid)+' ／ 仮想収支 '+money(total.profit)+' ／ 回収率 '+(total.invested?(100*total.paid/total.invested).toFixed(1)+'%':'—')+'</p><p>各レースの最新の展示反映固定版だけ。暫定予想・未照合・返還・中止は正式収支に含めません。欠損日は集計対象外です。</p></section>';

@@ -61,15 +61,11 @@ jobs:
           node --check scripts/main_v09_bridge.js
           node --check app/tactical-1m.js
           python -m compileall -q scripts/autonomous_daily.py
-      - name: Collect exhibition measurements for research only
+      - name: Collect exhibition measurements before forecasting
         continue-on-error: true
         run: |
           python scripts/ingest_boatracecsv_exhibition.py
           python -m json.tool app/data/exhibition/status-latest.json > /dev/null
-          python scripts/research_outside_roles.py
-          python -m scripts.research_coupling_patterns
-          python -m scripts.research_wake_hypotheses
-          python -m scripts.research_start_gap
           # No results here can revise an immutable forecast or official settlement.
       - name: Collect all available venues and freeze only pre-cutoff forecasts
         shell: bash
@@ -81,6 +77,13 @@ jobs:
           # Read-only forecast diagnostics; does not modify frozen predictions.
           python scripts/forecast_audit.py --input app/data/live/latest.json --out app/data/live/audit-latest.json
           python -m json.tool app/data/live/audit-latest.json > /dev/null
+      - name: Analyze research only after primary pre-cutoff revisions are frozen
+        continue-on-error: true
+        run: |
+          python scripts/research_outside_roles.py
+          python -m scripts.research_coupling_patterns
+          python -m scripts.research_wake_hypotheses
+          python -m scripts.research_start_gap
       - name: Forward-freeze original vs tactical A/B forecast while cutoff is ahead
         shell: bash
         run: |

@@ -1196,7 +1196,7 @@
         setInterval(refreshTimelineClock,60000);
         // While the result screen is visible, check published snapshots more
         // frequently without notifications or source-site scraping.
-        setInterval(()=>{if(state.view==='results'&&!document.hidden)void reloadLiveIfNew();},90000);
+        setInterval(()=>{if(['results','analysis'].includes(state.view)&&!document.hidden&&!readJSON(STORE_DATA,null))void refreshOfficialResults();},90000);
       }
       document.addEventListener('visibilitychange',()=>{if(!document.hidden){reloadLiveIfNew();if(state.view==='races'&&state.showExternalAnalysis)void refreshOriginalExhibition(false);}});
     }catch(error){el('main').innerHTML=`<section class="card card-pad"><h1>データを読み込めませんでした</h1><p class="muted">${escape(error.message)}</p><p>アプリはHTTPSまたはローカルHTTPサーバー上で開いてください。ダウンロードしたHTMLを直接開くと、ブラウザの制限で予想データを取得できない場合があります。</p></section>`;}

@@ -607,7 +607,7 @@
       </div>
       <p class="results-refresh-status ${resultsRefreshIsError?'is-error':''}" role="status" aria-live="polite">${escape(resultsRefreshBusy?'最新の公開データを取得しています…':message)}</p>
       ${failed?'<p class="results-refresh-hint">直近の自動収集では公式サイトへのアクセスに失敗しています。未確認レースは的中・不的中として計上しません。</p>':''}
-      <p class="results-refresh-hint">結果はサーバー側の定期収集で更新されます。このボタンは最新の公開済み結果を再読み込みします。公式サイトへの即時取得を開始するものではありません。</p>
+      <p class="results-refresh-hint">全国予想の公開データと、公式払戻の検証済み日別データを別々に再取得します。公式サイトへ直接アクセスする機能ではありません。</p>
     </div>`;
   }
   function batchContext() {
@@ -1023,8 +1023,22 @@
     if(data&&incoming.event_date===data.event_date&&lastLiveUpdate&&incoming.updated_at_utc &&
        incoming.updated_at_utc<lastLiveUpdate)return false;
     const previous=(data?.event_date||'')+'|'+(lastLiveUpdate||'')+'|'+Object.keys(autoResults).length;
+    const priorDay=data?.event_date,priorResults=autoResults;
     data=incoming;
-    autoResults=incoming.official_results||{};
+    autoResults={...(incoming.official_results||{})};
+    if(priorDay===incoming.event_date){
+      // A newer verified official-pay snapshot may outrun the nationwide build.
+      for(const [key,p] of Object.entries(priorResults||{})){
+        if(p?.imported_from!=='server_verified_daily_pay_snapshot'||autoResults[key]||
+          data.settlement_alerts?.[key])continue;
+        const [day,venue,raceNo]=key.split('|');
+        const current=data.forecast_races?.find(r=>
+          r.venue===venue&&r.race===Number(raceNo));
+        if(day===incoming.event_date&&current?.sha256===p.snapshot_sha256)
+          autoResults[key]=p;
+      }
+      data.official_results=autoResults;
+    }
     lastLiveUpdate=incoming.updated_at_utc||'';
     state.origin='非公式API＋GitHub Actions・発走前スナップショット';
     if(state.raceDetail)state.raceDetail=findRace(state.raceDetail.venue,state.raceDetail.race);
@@ -1049,32 +1063,73 @@
     const oldVerified=new Set(Object.keys(autoResults).filter(key=>
       autoResults[key]?.verified===true&&autoResults[key]?.source==='boatrace_official_pay' &&
       !data?.settlement_alerts?.[key]));
+    let networkSucceeded=false,applied=false,extra=0;
+    let oldLive=false,liveError=null,directError=null;
     try{
       const incoming=await fetchLive();
-      if(data&&incoming.event_date<data.event_date){
+      networkSucceeded=true;
+      if(data&&incoming.event_date<data.event_date)oldLive=true;
+      else applied=acceptLiveData(incoming);
+    }catch(error){
+      liveError=error;
+      console.warn('Official-result nationwide snapshot refresh failed:',error?.message);
+    }
+    if(!oldLive&&window.BoatOfficialDirect?.refresh){
+      try{
+        const result=await window.BoatOfficialDirect.refresh(
+          data.event_date,allRaces(),autoResults,data.settlement_alerts||{}
+        );
+        networkSucceeded=true;
+        if(result?.available){
+          extra=result.added||0;
+          autoResults=result.results;
+          data.official_results=autoResults;
+          data.settlement_alerts=result.alerts;
+          if(result.retrieved_at_utc&&
+             Date.parse(result.retrieved_at_utc)>
+               Date.parse(data.official_pay_info?.retrieved_at_utc||0)){
+            data.official_pay_info={...(data.official_pay_info||{}),
+              retrieved_at_utc:result.retrieved_at_utc,
+              verified_on_page:result.verified_on_page,
+              confirmed_forecast_results:Object.keys(autoResults).length,
+              source_status:'OK'};
+          }
+        }
+      }catch(error){
+        directError=error;
+        console.warn('Independent verified official pay refresh:',error?.message);
+      }
+    }
+    try{
+      const newKeys=Object.keys(autoResults).filter(key=>
+        autoResults[key]?.verified===true&&autoResults[key]?.source==='boatrace_official_pay' &&
+        !data?.settlement_alerts?.[key]);
+      const added=newKeys.filter(key=>!oldVerified.has(key)).length;
+      const last=Date.parse(data?.official_pay_info?.retrieved_at_utc||
+        data?.updated_at_utc||'');
+      const stale=Number.isFinite(last)&&Date.now()-last>30*60*1000;
+      if(oldLive){
         resultsRefreshIsError=true;
         resultsRefreshNotice='公開先のデータは表示中の記録より古いため、上書きしませんでした。';
+      }else if(added){
+        resultsRefreshNotice='新たに'+added+'Rの公式結果を確認しました。合計'+newKeys.length+'Rを照合済みです。';
+      }else if(!networkSucceeded){
+        resultsRefreshIsError=true;
+        resultsRefreshNotice='公開データを取得できませんでした。最新の公式結果をまだ確認できません。';
+      }else if(oldDate!==data.event_date){
+        resultsRefreshNotice='対象日が'+data.event_date+'に更新されました。公式照合 '+newKeys.length+'Rを表示しています。';
+      }else if(applied||extra){
+        resultsRefreshNotice='公開データを更新しました。新しい公式照合結果はまだありません。';
       }else{
-        const applied=acceptLiveData(incoming);
-        const newKeys=Object.keys(autoResults).filter(key=>
-          autoResults[key]?.verified===true&&autoResults[key]?.source==='boatrace_official_pay' &&
-          !data?.settlement_alerts?.[key]);
-        const added=newKeys.filter(key=>!oldVerified.has(key)).length;
-        if(oldDate!==data.event_date){
-          resultsRefreshNotice='対象日が'+data.event_date+'に更新されました。公式照合 '+newKeys.length+'Rを表示しています。';
-        }else if(added>0){
-          resultsRefreshNotice='新たに'+added+'Rの公式結果を確認しました。合計'+newKeys.length+'Rを照合済みです。';
-        }else if(applied){
-          resultsRefreshNotice='公開データを更新しました。公式照合の追加はまだありません。';
-        }else{
-          resultsRefreshNotice='公開済みの最新データを確認しました。新しい公式照合結果はまだありません。';
-        }
-        resultsRefreshIsError=false;
+        resultsRefreshNotice='公開済みの最新データを確認しました。新しい公式照合結果はまだありません。';
       }
-    }catch(error){
-      resultsRefreshIsError=true;
-      resultsRefreshNotice='データを取得できませんでした。通信状態を確認して、もう一度押してね。';
-      console.warn('Official-result data refresh failed:',error.message);
+      if(stale&&added===0)
+        resultsRefreshNotice+=' ※公式データの最終確認から30分以上経過。サーバー側の更新遅延の可能性があります。';
+      if((liveError||directError)&&!networkSucceeded)
+        resultsRefreshNotice+=' ネットワークまたは公開元を確認してください。';
+      if(added>0&&window.BoatCumulative)
+        void window.BoatCumulative.load(true).then(()=>
+          {if(['results','analysis'].includes(state.view))render()}).catch(()=>{});
     }finally{
       resultsRefreshBusy=false;
       render();

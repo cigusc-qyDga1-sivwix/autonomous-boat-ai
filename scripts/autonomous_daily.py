@@ -727,6 +727,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         # This is a derived, non-hashed display gate. Do not alter any frozen
         # baseline/exhibition snapshot or re-create SHA with post-race facts.
         r["entry_exhibition_gate"] = summarize_gate(current, local_day)
+        r["ticket_status"] = "formal" if r["entry_exhibition_gate"]["final_eligible"] else "provisional"
+        r["formal_snapshot_sha256"] = current["sha256"] if r["ticket_status"] == "formal" else None
         latest_races.append(r)
         p = record.get("official_pay")
         if p and p.get("verified") and not record.get("official_conflict") and not record.get("official_review"):

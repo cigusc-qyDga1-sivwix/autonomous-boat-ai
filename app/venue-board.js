@@ -198,7 +198,7 @@
     return '<div class="venue-race'+(r?' venue-race-available':' venue-race-empty')+'">' +
       '<div class="venue-race-top"><b>'+number+'R</b>'+raceStatus(r,slot,now,data,venue,number)+'</div>' +
       '<div class="venue-race-cutoff"><span>締切予定</span><strong>'+esc(cutoff||'—')+'</strong></div>' +
-      (r?'<div class="ticket-list-status '+(formal?'ticket-status-formal':'ticket-status-pending')+'">'+(formal?'✅ 正式買い目':'⏳ 暫定・購入判断保留')+'</div><div class="venue-race-main">'+(r.model_role==='main'?'✅ メイン'+(r.model_version?.includes('v0.9')?'v0.9':'v0.7')+' 固定：':'🔒 旧モデル固定：')+(formal?esc(r.bets.slice(0,2).map(function (b){return b.combination;}).join(' / ')):'正式買い目は未確定')+'</div>' +
+      (r?'<div class="ticket-list-status '+(formal?'ticket-status-formal':'ticket-status-pending')+'">'+(formal?'✅ 正式買い目':'⏳ 暫定・購入判断保留')+'</div><div class="venue-race-main">'+(r.model_role==='main'?'✅ メイン'+(r.model_version?.includes('v0.9')?'v0.9':'v0.7')+' 固定：':'🔒 旧モデル固定：')+(formal?esc(r.bets.slice(0,2).map(function (b){return b.combination;}).join(' / ')):'暫定予想：'+esc(r.bets.slice(0,2).map(function (b){return b.combination;}).join(' / '))+'（展示後の正式買い目ではありません）')+'</div>' +
           (experiment?'<div class="venue-tactical">🔬 比較用モデルあり・正式買い目とは別</div>':'') +
           '<div class="venue-race-scene">'+esc(r.scenario||'展開予想あり')+'</div>' +
           weatherInfo+payInfo+

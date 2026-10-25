@@ -1,0 +1,86 @@
+name: BOAT LAB fast official result updates
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/refresh_official_results.py'
+      - '.github/workflows/official-results-fast.yml'
+  schedule:
+    # JST 06:00-23:59, best effort. No assumptions about cron punctuality.
+    - cron: '*/5 21-23 * * *'
+    - cron: '*/5 0-14 * * *'
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: boat-lab-official-fast
+  cancel-in-progress: false
+
+jobs:
+  official-quick:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate official-only updater
+        run: |
+          python -m compileall -q scripts/refresh_official_results.py
+          python -m scripts.test_refresh_official_results
+      - name: Fetch independent official pay and update completed races
+        id: refresh
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.name 'github-actions[bot]'
+          changed=false
+          # Never rebase a stale payout over a newer pre-race snapshot.
+          # Race a concurrent forecast writer safely by restarting from origin/main.
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main
+            python -m scripts.refresh_official_results | tee official-result-status.json
+            if git diff --quiet -- app/data/live/; then
+              echo "No new verified result in the latest official response"
+              break
+            fi
+            git add app/data/live/
+            git commit -m 'results: publish newly verified official payouts'
+            if git push origin HEAD:main; then
+              changed=true
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "Official update retry exhausted" >&2
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+      - uses: actions/configure-pages@v5
+        if: steps.refresh.outputs.changed == 'true'
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.refresh.outputs.changed == 'true'
+        with:
+          path: './app'
+      - uses: actions/deploy-pages@v4
+        if: steps.refresh.outputs.changed == 'true'
+      - name: Keep result updater diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-fast-status
+          path: official-result-status.json
+          if-no-files-found: ignore
+          retention-days: 3

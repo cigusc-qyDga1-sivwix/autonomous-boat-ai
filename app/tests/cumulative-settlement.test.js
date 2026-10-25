@@ -72,7 +72,7 @@ assert.equal(api.summary(mismatch,day22).checked,1,'snapshot mismatch never cont
   const date=url.match(/\d{4}-\d\d-\d\d/)[0];seen.push(date);
   return {ok:true,json:async()=>({[day22]:l22,[day23]:l23,[day24]:l24,[day25]:l25})[date]};
  },new Date('2026-10-25T07:30:00+09:00'));
- assert.deepEqual(seen,[day22,day23,day24,day25]);
+ assert.deepEqual(seen,[day22,day23,day24,day25,day25], 'latest-day verified-pay endpoint is also checked');
  const today=api.render();
  assert.match(today,/10\/22〜10\/25 累積収支/);
  assert.match(today,/10\/24/);assert.match(today,/10\/25/);

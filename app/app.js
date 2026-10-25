@@ -191,6 +191,14 @@
     <section class="card card-pad"><div class="section-head"><h2 class="section-title">${isLive?'展示時の場内気象':'時間帯別・気象見通し'}</h2>${pill(isLive?'実測由来・非公式':'予報値','pending')}</div>${isLive?all.filter(r=>r.weather_observed).slice(-6).map(r=>`<div class="weather-box"><div class="weather-symbol">≋</div><div class="weather-body"><strong>${escape(r.venue)} ${r.race}R・風 ${escape(r.weather_observed.wind_speed)}m/s・波高 ${escape(r.weather_observed.wave_height)}cm</strong><p>展示データ取得時点の観測情報（非公式）</p></div></div>`).join('')||'<p class="muted text-sm">展示時の気象はまだ取得できていません。</p>':`<div class="mini-caption">鳴門</div>${weatherHTML('鳴門')}<div class="mini-caption" style="margin-top:18px;margin-bottom:8px">徳山</div>${weatherHTML('徳山')}`}<div class="notice warn">${isLive?'展示前は場内気象未取得。時間別の気象予報と潮位予測は未接続。':'周辺気象の参考値。展示ST・波高・場内風速の実測は未反映。'}</div></section></div>
     <p class="footer-disclaimer">${escape(data.disclaimer||'仮想予想・研究用。自動購入や的中の保証はありません。')} SKIPを含む買い目は比較用の記録で、購入推奨ではありません。</p>`;
   }
+  function isFormalTicket(r){
+    if(readJSON(STORE_DATA,null))return false;
+    return window.BoatTicketPolicy?.classify(r,data.event_date).formal===true;
+  }
+  function ticketBanner(r){
+    const formal=isFormalTicket(r);
+    return '<div class="ticket-status '+(formal?'ticket-status-formal':'ticket-status-pending')+'" role="status"><strong>'+(formal?'✅ 正式買い目':'⏳ 暫定・購入判断保留')+'</strong><p>'+(formal?'展示情報を反映して締切前に固定。この下の買い目を正式版として採用しています。':'正式な買い目はまだありません。展示を確認して締切前に固定できるまで保留します。')+'</p></div>';
+  }
   function ticketLabel(r){
     if(readJSON(STORE_DATA,null))return "暫定買い目（インポート・固定未検証）";
     return window.BoatTicketPolicy?.classify(r,data.event_date).label||
@@ -227,13 +235,11 @@
     const trial=tacticalSummary(r);
     return '<button type="button" class="race-tile" data-race="'+escape(r.venue)+'|'+r.race+'">'+
       '<div class="tile-top"><span class="tile-r">'+escape(r.venue)+' '+r.race+'R</span>'+pill(r.classification)+'</div>'+
+      '<div class="ticket-list-status '+(isFormalTicket(r)?'ticket-status-formal':'ticket-status-pending')+'">'+(isFormalTicket(r)?'✅ 正式買い目':'⏳ 暫定・購入判断保留')+'</div>'+
       '<div class="tile-time">締切予定 '+escape(r.cutoff_jst)+' · 固定 '+r.bets.length+'点 · '+(r.phase==='exhibition'?'展示反映':'展示前')+'</div>'+
       '<div class="tile-bets">'+(r.model_role==='main'?'✅ '+(r.model_version?.includes('v0.9')?'v0.9':'v0.7')+'メイン固定：':'🔒 旧モデル固定：')+
-      escape(r.bets.slice(0,2).map(b=>b.combination).join(' / '))+'</div>'+
-      (r.model_role==='main'&&r.legacy_control?'<div class="tile-tactical">🔬 旧モデル比較：<strong>'+
-       escape(r.legacy_control.bets?.[0]?.combination||'未取得')+'</strong> ／ 検証用（正式収支に二重計上なし）</div>':'')+
-      (trial?'<div class="tile-tactical">🧠 戦法研究版：<strong>'+escape(trial.top)+'</strong> ／ '+trial.points+'点'+
-       (trial.different?' <span>新しい分岐・配分</span>':' <span>配分は旧版と同じ</span>')+'</div>':'')+
+      (isFormalTicket(r)?escape(r.bets.slice(0,2).map(b=>b.combination).join(' / ')):'正式買い目は未確定')+'</div>'+
+      (r.legacy_control||trial?'<div class="tile-tactical">🔬 比較用モデルあり・正式買い目とは別</div>':'')+
       (r.entry_exhibition_gate?.entry_watch&&!r.entry_exhibition_gate.final_eligible?
        '<div class="notice warn">⚠ 前付け警戒・展示進入未確認／最終予想保留</div>':
        r.entry_exhibition_gate&&!r.entry_exhibition_gate.final_eligible?
@@ -463,7 +469,7 @@
     const oldMatch=settlement&&old.bets.find(b=>b.combination===settlement.finish);
     const oldPaid=oldMatch?.virtual_yen*settlement?.payout_per_100/100||0;
     return '<details class="card card-pad legacy-model-compare" style="margin:12px 0">'+
-      '<summary style="cursor:pointer;font-weight:900">🔬 旧モデルの検証用買い目（同じ発走前データで固定）</summary>'+
+      '<summary style="cursor:pointer;font-weight:900">🔬 旧モデルの検証用買い目（比較用・正式買い目ではありません）</summary>'+
       '<p>メインv0.7：<b>'+escape(frozen)+'</b> ／ 旧モデル：<b>'+escape(previous)+'</b>。旧式は正式な払戻・BUY収支には加算しません。</p>'+
       '<p class="muted text-sm">旧モデル：'+escape(old.model_version||'不明')+
       ' ／ 固定時刻 '+escape(old.frozen_at_utc||'不明')+
@@ -570,10 +576,14 @@
       </div>` : ''}
       <p class="external-footnote">BOATERSが掲載する独自展示指標は、元の競艇場公式でも公開されることがあります。データ利用条件を確認し、許可された提供元から取り込む方針です。<strong>この機能はBOATERSから自動取得したものではありません。</strong>この端末内の手動再評価では、固定済み買い目を変更しません。</p>
     </section>`;
+    const mainTicketSection = `<section class="card card-pad"><div class="section-head"><h2 class="section-title">${escape(ticketLabel(r))}／3連単フォーメーション</h2>${pill(`${r.bets.length}点 / 仮想`,'pending')}</div><div class="feature-card"><span class="feature-label">SCENARIO / 展開の中心</span><strong>${escape(r.scenario)}</strong><p>着順連動型の仮説。1着の勝ち筋と2・3着の残り方を検証する。</p></div><table class="bets-table"><thead><tr><th>評価</th><th>3連単</th><th>仮想金額</th></tr></thead><tbody>${r.bets.map((b,i)=>`<tr class="${i<3?'top-bet':''}"><td>${i<3?'本線':i<6?'対抗':'穴'}</td><td>${escape(b.combination)}</td><td class="amount">${money(b.virtual_yen)}</td></tr>`).join('')}</tbody></table><div class="detail-total"><span>合計 / ${r.bets.length}点</span><strong>${money(c.stake)}</strong></div><div class="notice warn">実際の購入は0円。${r.phase==='exhibition'?'展示は取得時点の値を反映。':'展示は未反映。'} オッズは未反映。この金額は精度比較用の仮想配分です。</div></section>`;
+    const ticketBlock=isFormalTicket(r)?mainTicketSection:`<details class="ticket-provisional"><summary>暫定買い目を参考表示する（正式買い目ではありません）</summary>${mainTicketSection}</details>`;
     return `<button class="back-btn" data-action="back-races">← レース一覧へ戻る</button>
      ${window.BoatMobileRaceNav?.racePicker(r.venue,r.race,data.forecast_races,data.unforecast_races)||''}
-     <div class="detail-header"><div><div class="page-eyebrow">FORECAST DETAILS / ${escape(data.event_date)}</div><h1 class="detail-title">${escape(r.venue)} ${r.race}R <span style="font-size:17px;vertical-align:middle">${pill(r.classification)}</span></h1><div class="detail-sub">締切予定 ${escape(r.cutoff_jst)} JST　 ·　 ${r.phase==='exhibition'?'展示数値反映':r.phase==='baseline'?'展示前':'保存済み'}・結果未使用</div></div><button class="btn btn-primary" data-action="copy-bets" data-race="${escape(r.venue)}|${r.race}">⎘ 買い目をコピー</button></div>
-    ${r.model_role==='main'?'<div class="notice"><strong>✅ メイン予想 '+(r.model_version?.includes('v0.9')?'v0.9：ST差 × 6艇連動 × 1M・2M引き波評価':'v0.7：スタート差 × 6艇連動')+'</strong>。以下の固定買い目が結果照合・仮想収支の対象。旧方式は別枠検証。</div>':
+     <div class="detail-header"><div><div class="page-eyebrow">FORECAST DETAILS / ${escape(data.event_date)}</div><h1 class="detail-title">${escape(r.venue)} ${r.race}R <span style="font-size:17px;vertical-align:middle">${pill(r.classification)}</span></h1><div class="detail-sub">締切予定 ${escape(r.cutoff_jst)} JST　 ·　 ${r.phase==='exhibition'?'展示数値反映':r.phase==='baseline'?'展示前':'保存済み'}・結果未使用</div></div><button class="btn btn-primary" data-action="copy-bets" data-race="${escape(r.venue)}|${r.race}">${isFormalTicket(r)?'⎘ 正式買い目をコピー':'⎘ 暫定買い目をコピー'}</button></div>
+    ${ticketBanner(r)}
+    ${ticketBlock}
+    ${r.model_role==='main'?'<div class="notice"><strong>採用モデル '+(r.model_version?.includes('v0.9')?'v0.9：ST差 × 6艇連動 × 1M・2M引き波評価':'v0.7：スタート差 × 6艇連動')+'</strong>。正式・暫定の区分は上の表示を確認してください。旧方式は比較用です。</div>':
       '<div class="notice warn">過去に固定した旧モデルの予想（当時の買い目・SHAを維持）。新モデルへ事後書き換えしません。</div>'}
     ${r.phase?`<div class="notice">${escape(r.evidence||'')} ・ 発走前保存 ${escape(r.frozen_at_utc||'未記録')} ・ SHA256 ${escape((r.sha256||'').slice(0,18))}…${r.weather_observed?`<br>場内風速 ${escape(r.weather_observed.wind_speed)}m/s ／ 波高 ${escape(r.weather_observed.wave_height)}cm（非公式・取得時点）`:''}<br>予想モデル：未学習・確率未校正。展示動画とオッズは未反映。</div>`:''}
     ${entryGateWarning(r)}
@@ -586,7 +596,7 @@
     ${window.BoatRaceVisual?window.BoatRaceVisual.animationHTML(r):''}
     ${referencePanel}
     ${r.point_reason?`<div class="notice"><strong>点数を選んだ理由：</strong>${escape(r.point_reason)} ／ ${r.bets.length}点。これは未校正の相対指標で、実測的中確率ではありません。</div>`:''}
-    <div class="detail-grid"><section class="card card-pad"><div class="section-head"><h2 class="section-title">${escape(ticketLabel(r))}／3連単フォーメーション</h2>${pill(`${r.bets.length}点 / 仮想`,'pending')}</div><div class="feature-card"><span class="feature-label">SCENARIO / 展開の中心</span><strong>${escape(r.scenario)}</strong><p>着順連動型の仮説。1着の勝ち筋と2・3着の残り方を検証する。</p></div><table class="bets-table"><thead><tr><th>評価</th><th>3連単</th><th>仮想金額</th></tr></thead><tbody>${r.bets.map((b,i)=>`<tr class="${i<3?'top-bet':''}"><td>${i<3?'本線':i<6?'対抗':'穴'}</td><td>${escape(b.combination)}</td><td class="amount">${money(b.virtual_yen)}</td></tr>`).join('')}</tbody></table><div class="detail-total"><span>合計 / ${r.bets.length}点</span><strong>${money(c.stake)}</strong></div><div class="notice warn">実際の購入は0円。${r.phase==='exhibition'?'展示は取得時点の値を反映。':'展示は未反映。'} オッズは未反映。この金額は精度比較用の仮想配分です。</div></section>
+    <div class="detail-grid">
     <div><section class="card card-pad bottom-margin"><h3>レース情報</h3><div class="meta-list"><div class="meta"><span>開催</span><b>${escape(r.venue)}</b></div><div class="meta"><span>対象日</span><b>${dateDisplay(data.event_date)}</b></div><div class="meta"><span>締切予定</span><b>${escape(r.cutoff_jst)} JST</b></div><div class="meta"><span>予想区分</span><b>${escape(r.classification)}</b></div><div class="meta"><span>展示データ</span><b>${r.phase==='exhibition'?'反映済み（非公式）':'未反映'}</b></div><div class="meta"><span>オッズ</span><b>未反映</b></div></div></section>
     <section class="card card-pad bottom-margin"><h3>🌦 レース気象と試験補正</h3>${data.mode==='auto-live'?raceWeatherHTML(r):(w?`<div class="weather-box"><div class="weather-symbol">≋</div><div class="weather-body"><strong>${escape(w.wind)}</strong><p>${escape(w.note)}</p></div></div>`:'<p class="muted text-sm">気象見通し未登録</p>')}</section>
     <section class="card card-pad"><h3>結果照合</h3><div class="meta-list"><div class="meta"><span>現在の状態</span>${finishPill(r)}</div>${c.record?`<div class="meta"><span>${officialFor(r)?'公式確定着順':'手入力着順'}</span><b>${escape(c.record.finish)}</b></div><div class="meta"><span>仮想払戻</span><b>${money(c.payout)}</b></div>`:''}</div><button class="btn btn-soft" style="width:100%;margin-top:15px" data-action="settle-this" data-race="${escape(r.venue)}|${r.race}">照合する →</button></section></div></div>`;

@@ -51,6 +51,8 @@ jobs:
       - run: node --check app/wake-study.js
       - run: node app/tests/wake-all-on-v08.test.js
       - run: node app/tests/race-timeline.test.js
+      - run: node --check app/first-mark-block.js
+      - run: node -e "const m=require('./app/first-mark-block.js');const racers=Array.from({length:6},(_,i)=>({lane:i+1,course:i+1,national_win_rate:5,motor_top_2_percent:35,average_start_timing:.16,exhibition_st:.14}));const a=m.score({racers});if(!a.pre_cutoff_only||!a.no_midrace_recovery_model||!['block-inside-sashi','block-outside-makurisashi','third-boat-through-rivalry'].every(k=>a.paths.some(p=>p.kind===k))||JSON.stringify(a)!==JSON.stringify(m.score({racers,result:'5-1-2',payout:21380})))process.exit(1);console.log('first-mark block smoke PASS')"
       - run: node --check app/tactical-1m.js
       - run: node app/tests/tactical-1m.test.js
       - run: node app/tests/role-alignment-v04.test.js

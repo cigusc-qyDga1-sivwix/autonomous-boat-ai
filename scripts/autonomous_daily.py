@@ -97,6 +97,21 @@ def preview_complete(race: dict) -> bool:
     return validated_preview(preview) is not None
 
 
+def select_exhibition_source(race: dict, research_row: dict | None, now: datetime,
+                             venue_code: str, race_number: int):
+    """Keep one complete source per race: live OpenAPI first, validated CSV fallback.
+
+    The bridge itself enforces date, observed-time, and safe-cutoff constraints.
+    This helper cannot make an incomplete preview exhibition-confirmed.
+    """
+    if preview_complete(race):
+        return race, None, "openapi"
+    bridged, csv_origin = inject(race, research_row, now, venue_code, race_number)
+    if csv_origin and preview_complete(bridged):
+        return bridged, csv_origin, "boatracecsv"
+    return race, None, "unavailable"
+
+
 def valid_average_st(value) -> float | None:
     """0.00 / out-of-range average ST can be an unfilled source field.
 
@@ -626,14 +641,9 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                                                          "baseline", runtime_now, source_url, nearby))
                     new_baseline += 1
                 code = f"{local_day.replace('-', '')}{int(venue_code):02d}{n:02d}"
-                csv_race, csv_origin = inject(race, exhibition_rows.get(code), runtime_now, venue_code, n)
-                # Prefer the already-complete OpenAPI preview; use the independently
-                # collected CSV as a fallback only when OpenAPI is incomplete.
-                # Do not blend measurements from different observation times.
-                api_preview_ready = preview_complete(race)
-                candidate = race if api_preview_ready else (csv_race if csv_origin else race)
-                selected_csv_origin = csv_origin if not api_preview_ready else None
-                preview_ready = preview_complete(candidate)
+                candidate, selected_csv_origin, selected_source = select_exhibition_source(
+                    race, exhibition_rows.get(code), runtime_now, venue_code, n)
+                preview_ready = selected_source != "unavailable"
                 existing_exhibition = [v for v in record["versions"] if v["phase"] == "exhibition"]
                 previous_csv_time = (existing_exhibition[-1].get("exhibition_origin") or {}).get("observed_at_jst") if existing_exhibition else None
                 revision = bool(

@@ -1,0 +1,84 @@
+{
+  "schema": "boatlabs.manual-maneuver-observation.v1",
+  "race_id": "202610262208",
+  "event_date": "2026-10-26",
+  "venue": "福岡",
+  "venue_code": "22",
+  "race": 8,
+  "recorded_at_utc": "2026-10-26T22:47:33.271Z",
+  "provenance": {
+    "kind": "user_reported_race_observation",
+    "raw_text": "福岡8Rも2が１を直まくりしてそのうちを5がまくりざし",
+    "independently_video_reviewed": false,
+    "video_url": null,
+    "video_timecodes": null
+  },
+  "official_result_evidence": {
+    "final_order": [
+      5,
+      2,
+      1
+    ],
+    "winning_maneuver": {
+      "lane": 5,
+      "decision": "まくり差し"
+    },
+    "source_url": "https://www.boatrace.jp/owpc/pc/race/raceresult?hd=20261026&jcd=22&rno=8",
+    "verification": "Official final order and winner maneuver checked in preceding race review. Lane 2's initial maneuver and the causal sequence are user annotations, not official maneuver labels."
+  },
+  "source_forecast": {
+    "sha256": "1547a3a2a28394a485cf8cf41c8d2d6d812ab6542fdd86bd48d32a8542a78fef",
+    "phase": "exhibition",
+    "formal_exhibition_verified": true,
+    "model_version": "tactical-outside-start-wake-v0.9-untrained",
+    "archived_path": "app/data/live/2026-10-26.json",
+    "diagnostic": "The original exhibition forecast included 5-6-2 and 5-6-1, but no 5-2 pair. The earlier baseline included the eventual 5-2-1 finish."
+  },
+  "observation_sequence": [
+    {
+      "stage": "initial_attack",
+      "attacker_lane": 2,
+      "target_lane": 1,
+      "maneuver": "直まくり",
+      "status": "user_reported",
+      "description": "先に攻めた艇は2。1に対して直まくりを仕掛けた。"
+    },
+    {
+      "stage": "opportunity_response",
+      "responding_lane": 5,
+      "preceding_attacker_lane": 2,
+      "reported_route": "先行する2の攻めの内側",
+      "maneuver": "まくり差し",
+      "status": "user_reported",
+      "description": "2の攻めを受け、5がその内側へまくり差し。正確な軌道・区間時刻は未記録。"
+    },
+    {
+      "stage": "finish",
+      "order": [
+        5,
+        2,
+        1
+      ],
+      "winning_lane": 5,
+      "initial_attacker_finish": 2,
+      "target_lane_finish": 3,
+      "status": "official_order_confirmed",
+      "description": "先行攻撃艇2は2着、攻められた1も3着に残った。攻めの起点と勝者を同一視しない。"
+    }
+  ],
+  "research_targets": [
+    "先に攻める艇と、その攻めを利用して勝つ艇を別の役割として評価する。",
+    "2の攻め→5のまくり差し→2の攻め残りという分岐を、5の頭だけからの隣艇追走へ置き換えない。",
+    "攻撃対象になった1の減速仮説と最終3着残存を分け、攻められたことだけで着外扱いしない。",
+    "5が勝つ条件で、2と6の2着適性を選手能力・位置関係・攻め残りから比較する。",
+    "同日の福岡2Rと比較する。2が勝つケースと、2の攻めを別艇が利用するケースを混ぜて一つの定型買い目にしない。"
+  ],
+  "related_case": "research/manual-maneuvers/2026-10-26-fukuoka-02.json",
+  "use_policy": {
+    "retrospective_label_only": true,
+    "current_statistical_trainer_consumes_maneuver_labels": false,
+    "production_weights_changed": false,
+    "historical_forecast_modified": false,
+    "note": "Preserve attributed observation for future maneuver-label research. A winner's official decision does not independently verify the other boats' paths or maneuvers. Do not use post-race facts as pre-race features."
+  }
+}

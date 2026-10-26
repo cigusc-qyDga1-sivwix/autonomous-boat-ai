@@ -26,7 +26,7 @@ function forecastForRace(r){
   Array.isArray(r.racers)&&new Set(r.racers.map(x=>number(x.course))).size===6&&
   r.racers.every(x=>validCourse(x.course));
  try{
-  const forecast=eligible?(r.model_version==='four-factor-v1.0-untrained'?api.forecastFourFactor?.(r):r.model_version?.includes('v0.9')?api.forecastWakeIntegrated?.(r):api.forecastOutsideStart?.(r)):api.forecastRoleAware?.(r);
+  const forecast=eligible?(r.model_version==='four-factor-v1.1-untrained'?api.forecastFourFactorOpen?.(r):r.model_version==='four-factor-v1.0-untrained'?api.forecastFourFactor?.(r):r.model_version?.includes('v0.9')?api.forecastWakeIntegrated?.(r):api.forecastOutsideStart?.(r)):api.forecastRoleAware?.(r);
   return forecast||api.forecast?.(r)||null;
  }catch{
   if(eligible){try{return api.forecastRoleAware?.(r)||null}catch{}}
@@ -95,11 +95,11 @@ function rate(r,opts={}){
    fixed(WEIGHTS.racer*racerScore+WEIGHTS.motor*motorScore+WEIGHTS.course_fit*fitScore):null;
   const role=validShares?shares[lane]:null;
   const expected=!blocked(r)&&best!==null&&best>0?fixed(100*raws[lane]/best):null;
-  const fourRow=r.model_version==='four-factor-v1.0-untrained'?r.four_factor?.rows?.find(z=>z.lane===lane):null;
+  const fourRow=r.model_version?.startsWith('four-factor-')?r.four_factor?.rows?.find(z=>z.lane===lane):null;
   const fourPlayer=fourRow?.factors?.athlete?.raw_multiplier;
   const fourPlayerKnown=fourRow&&Object.entries(fourRow.available||{}).some(([k,val])=>val===true&&['national_win','national_top3','local_win','frame','average_st'].includes(k));
   const playerOnly=fourPlayerKnown&&typeof fourPlayer==='number'&&Number.isFinite(fourPlayer)&&fourPlayer>0?fixed(50+25*Math.log(fourPlayer)):null;
-  const isFour=r.model_version==='four-factor-v1.0-untrained';
+  const isFour=r.model_version?.startsWith('four-factor-');
   const record={lane,course,course_confirmed:confirmed,name:String(x.name||'未取得'),
    athlete:isFour?playerOnly:racerScore,motor:motorScore,course_fit:fitScore,ability:isFour?playerOnly:composite,
    race_expectation:expected,role_weights:role?{

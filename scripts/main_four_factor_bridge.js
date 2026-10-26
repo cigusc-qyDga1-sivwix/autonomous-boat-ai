@@ -22,12 +22,12 @@ function run(input){
  if(!input||typeof input!=='object'||!Array.isArray(input.racers)||
     input.racers.length!==6)throw Error('Six complete pre-cutoff racers required');
  if(!input.venue||!Number.isFinite(Date.parse(input.frozen_at_utc)))throw Error('Pre-cutoff source identity required');
- const result=model.forecastFourFactor({
+ const result=model.forecastFourFactorOpen({
   venue:input.venue,phase:input.phase,racers:input.racers,
   weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
   frozen_at_utc:input.frozen_at_utc
  });
- if(result.model!=='four-factor-v1.0-untrained'||!validBets(result.bets))
+ if(result.model!=='four-factor-v1.1-untrained'||!validBets(result.bets))
   throw Error('Four-factor model returned invalid prediction / allocation');
  if(!Array.isArray(result.head_course_shares)||result.head_course_shares.length!==6||
     result.metadata?.start_v07?.slit_signals?.length!==6||

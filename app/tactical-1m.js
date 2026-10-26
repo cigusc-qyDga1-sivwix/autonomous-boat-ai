@@ -28,7 +28,8 @@ const assign=(r,course)=>{
 };
 const nameTactic=['','先マイ・逃げ','差し','まくり差し','カドまくり','外からのまくり差し','外の展開連動'];
 function forecast(input){
- const fourFactor=input?.experimental_variant==='four-factor-v1.0';
+ const openChasers=input?.experimental_variant==='four-factor-v1.1';
+ const fourFactor=input?.experimental_variant==='four-factor-v1.0'||openChasers;
  const wakeIntegrated=input?.experimental_variant==='outside-start-wake-v0.9'||fourFactor;
  const startTrial=input?.experimental_variant==='outside-start-gap-v0.7'||wakeIntegrated;
  const coupledTrial=input?.experimental_variant==='six-boat-coupling-v0.6'||startTrial;
@@ -271,7 +272,18 @@ function forecast(input){
   const exposure=clamp((phase==='second'?.10:.075)-avoidance*.31,.015,.21);
   return clamp(1-exposure+Math.max(0,avoidance)*.37,.79,1.17);
  }
+ // v1.1: candidate ability first; no winner-neighbor lookup or stacked follow
+ // bonuses. The small course prior is unconditional. A bounded relative-strength
+ // adjustment represents competition, not an asserted maneuver or wake path.
+ function openRoleWeight(h,s,c,phase){
+  const own=move[byCourse[c-1]].overall;
+  const leader=move[byCourse[(phase==='second'?h:s)-1]].overall;
+  const prior=(phase==='second'?[1.10,1.10,1.06,1.02,.98,.94]:[1.04,1.04,1.03,1.02,1,.98])[c-1];
+  const interaction=clamp(1+.05*(own/leader-1),.95,1.05);
+  return prior*Math.pow(own,phase==='second'?1.15:.95)*interaction;
+ }
  function secondWeight(headCourse,secondCourse){
+  if(openChasers)return openRoleWeight(headCourse,null,secondCourse,'second');
   let relation;
   if(headCourse===1)relation=({2:1.45,3:1.3,4:1.02,5:.72,6:.43})[secondCourse]||.5;
   else if(headCourse===2)relation=({1:1.40,3:1.38,4:1.00,5:.64,6:.42})[secondCourse]||.5;
@@ -340,6 +352,7 @@ function forecast(input){
   return Math.max(.01,relation*Math.pow(z.turn,.85)*Math.pow(z.go,.3));
  }
  function thirdWeight(h,s,c){
+  if(openChasers)return openRoleWeight(h,s,c,'third');
   const x=move[byCourse[c-1]];
   let consistency=(c===1?1.27:c===2?1.25:c===3?1.12: c===4?1.03:c===5?.90:.76);
   if(h===3&&s===2&&c===1)consistency*=1.65; // possible 3-2-1 turn scenario
@@ -401,7 +414,7 @@ function forecast(input){
     const combo=boats.join('-');
     const pseudo=shares[h-1]*(secondScores.get(s)/secondTotal)*(thirdScores.get(t)/thirdTotal);
     candidates.push({combination:combo,pseudo,headCourse:h,
-      scenario:nameTactic[h],secondCourse:s,thirdCourse:t,headShare:shares[h-1]});
+      scenario:openChasers?'攻め方未確定・全艇の残存評価':nameTactic[h],secondCourse:s,thirdCourse:t,headShare:shares[h-1]});
    }
   }
  }
@@ -422,6 +435,7 @@ function forecast(input){
  const count=clamp(Math.round(6+5*close/4+4*(.58-dominant)),4,12);
  let picks=candidates.slice(0,count);
  const roleChanges=[];
+ if(!openChasers){
  if(roleAwareTrial){
  function replaceWithEvidence(candidate,role,lane){
   if(!candidate||picks.some(p=>p.combination===candidate.combination))return false;
@@ -529,6 +543,7 @@ function forecast(input){
      }
    }
  }
+ } // v1.1 keeps the top-ranked combinations; no legacy ticket rescue.
  const roleCoverage={};
  for(let lane=1;lane<=6;lane++){
   const combos=picks.map(p=>p.combination.split('-').map(Number));
@@ -553,7 +568,8 @@ function forecast(input){
  remainders.slice(0,unused).forEach(o=>floor[o.i]++);
  const bets=picks.map((c,i)=>({combination:c.combination,virtual_yen:(floor[i]+1)*1000,
   head_course:c.headCourse,scenario:c.scenario,
-  conditional_reason:startTrial?
+  conditional_reason:openChasers?
+   c.headCourse+'コース頭の条件で残り5艇を能力評価 → '+c.secondCourse+'コース2着 → 残り4艇から'+c.thirdCourse+'コース3着（攻め方未確定）':startTrial?
    c.headCourse+'コース '+(startSignals[c.headCourse-1]?.tactic_candidates.join('／')||coupling[c.headCourse-1].tactic)+'（ST差の仮説） → '+c.secondCourse+'コース2着 → '+c.thirdCourse+'コース3着':
    coupledTrial?
    c.headCourse+'コース '+coupling[c.headCourse-1].tactic+'（仮説） → '+c.secondCourse+'コースが2着を確保 → '+c.thirdCourse+'コースが3着に残存':
@@ -568,7 +584,7 @@ function forecast(input){
  })):[];
  const headOneTotal=headOneScores.reduce((n,x)=>n+x.weight,0);
  return {
-   model:fourFactor?'four-factor-v1.0-untrained':wakeIntegrated?'tactical-outside-start-wake-v0.9-untrained':
+   model:openChasers?'four-factor-v1.1-untrained':fourFactor?'four-factor-v1.0-untrained':wakeIntegrated?'tactical-outside-start-wake-v0.9-untrained':
       startTrial?'tactical-outside-start-gap-v0.7-untrained':
      coupledTrial?'tactical-six-boat-coupling-v0.6-untrained':
      outerStudyTrial?'tactical-outside-role-v0.5-untrained':
@@ -576,10 +592,23 @@ function forecast(input){
      wakeTrial?'tactical-wake-attrition-v0.3-untrained':
      outsideTrial?'tactical-outside-makuri-v0.2-untrained':'tactical-1m-conditional-v0.1-untrained',
    basis:'保存済み発走前選手情報と場別参考値のみ。結果・払戻・オッズ不使用。',
-   venue:input.venue,head_course_shares:shares.map((s,i)=>({course:i+1,lane:v[byCourse[i]].lane,relative_share:+s.toFixed(4),tactic:nameTactic[i+1]})),
-   metadata:{...(fourFactor?{four_factor:factorModel}:{}),venue_reference_rate:rate,wind_speed:wind,validMetrics,exhibition_used:validMetrics.length>0,
+   venue:input.venue,head_course_shares:shares.map((s,i)=>({course:i+1,lane:v[byCourse[i]].lane,relative_share:+s.toFixed(4),tactic:openChasers?'攻め方未確定':nameTactic[i+1]})),
+   metadata:{...(fourFactor?{four_factor:{...factorModel,...(openChasers?{chaser_policy:{
+        version:'ability-first-v1.1',fixed_neighbor_bonus:false,legacy_ticket_rescue:false,
+        interaction_bounds:[.95,1.05],calibrated:false,
+        second_by_head:[1,2,3,4,5,6].map(h=>{
+          const rows=[1,2,3,4,5,6].filter(c=>c!==h).map(c=>({course:c,lane:v[byCourse[c-1]].lane,weight:secondWeight(h,c)}));
+          const total=rows.reduce((n,x)=>n+x.weight,0);
+          return {head_course:h,candidates:rows.map(x=>({...x,relative_share:x.weight/total}))};
+        }),
+        third_by_pair:[1,2,3,4,5,6].flatMap(h=>[1,2,3,4,5,6].filter(s=>s!==h).map(s=>{
+          const rows=[1,2,3,4,5,6].filter(c=>c!==h&&c!==s).map(c=>({course:c,lane:v[byCourse[c-1]].lane,weight:thirdWeight(h,s,c)}));
+          const total=rows.reduce((n,x)=>n+x.weight,0);
+          return {head_course:h,second_course:s,candidates:rows.map(x=>({...x,relative_share:x.weight/total}))};
+        }))
+      }}:{})}}:{}),venue_reference_rate:rate,wind_speed:wind,validMetrics,exhibition_used:validMetrics.length>0,
       ...(wakeIntegrated?{wake_v09:{
-        pre_cutoff_only:true,calibrated:false,studied_phases:['1M','2M+'],
+        pre_cutoff_only:true,...(openChasers?{applied_to_chaser_scores:false}:{}),calibrated:false,studied_phases:['1M','2M+'],
         applies_to_all_head_courses:true,
         note:'No measured wake crossings or speed loss. Bounded pre-race hypothetical scenario factors.',
         head_course_exposure:[1,2,3,4,5,6].map(course=>({
@@ -602,7 +631,7 @@ function forecast(input){
        disclaimer:'Not actual race ST, not guaranteed makuri / makuri-zashi. Exhibition F ignored.'
      }}:{}),
      ...(coupledTrial?{coupled_v06:{
-       interaction_graph:coupling,
+       interaction_graph:coupling,...(openChasers?{applied_to_chaser_scores:false}:{}),
        branch_definition:'1M head attack -> inner displacement / outer follow -> conditional 2nd and 3rd',
        analysis_only:true,calibrated:false,
        disclaimer:'No actual hull coordinates or wake measurements; mechanism hypotheses only. Race results, payouts, odds not used.'
@@ -635,6 +664,7 @@ function forecast(input){
  };
 }
 global.BoatTacticalModel={forecast,
+ forecastFourFactorOpen:input=>forecast({...input,experimental_variant:'four-factor-v1.1'}),
  forecastFourFactor:input=>forecast({...input,experimental_variant:'four-factor-v1.0'}),
  forecastRoleAware:input=>forecast({...input,experimental_variant:'role-consistency-v0.4'}),
  forecastOutsideRole:input=>forecast({...input,experimental_variant:'outside-role-v0.5'}),

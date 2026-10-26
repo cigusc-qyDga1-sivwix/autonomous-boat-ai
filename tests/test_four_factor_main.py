@@ -59,3 +59,20 @@ def test_newly_available_context_upgrades_provisional_once_without_rewriting():
     assert versions[-1]['racer_context_upgrade']['new_quality']==18
     again,_,_=A.build(upgraded,src,now,'fixture',racer_context_rows=contexts)
     assert len(again['race_records']['18-1']['versions'])==2
+
+
+def test_v10_upgrade_appends_before_cutoff_and_never_after():
+    r=race(preview=False);src={'programs':{'stadiums':{'18':{'races':{'1':r}}}}}
+    ledger,_,_=A.build(None,src,NOW,'fixture')
+    previous=ledger['race_records']['18-1']['versions'][0]
+    previous['model_version']='four-factor-v1.0-untrained'
+    previous['sha256']=A.stable_hash({k:v for k,v in previous.items() if k!='sha256'})
+    frozen=copy.deepcopy(previous)
+    upgraded,_,_=A.build(copy.deepcopy(ledger),src,datetime.fromisoformat('2026-10-27T09:00:00+09:00'),'fixture')
+    versions=upgraded['race_records']['18-1']['versions']
+    assert len(versions)==2 and versions[0]==frozen
+    assert versions[-1]['four_factor']['chaser_policy']['fixed_neighbor_bonus'] is False
+    again,_,_=A.build(upgraded,src,datetime.fromisoformat('2026-10-27T09:10:00+09:00'),'fixture')
+    assert len(again['race_records']['18-1']['versions'])==2
+    closed,_,_=A.build(ledger,src,datetime.fromisoformat('2026-10-27T10:01:00+09:00'),'fixture')
+    assert closed['race_records']['18-1']['versions']==[frozen]

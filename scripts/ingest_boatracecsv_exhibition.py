@@ -94,6 +94,8 @@ def build(day, inputs, prior=None):
             } if pp else None)
         }
         old=merged.get(code)
+        # Earliest time THIS importer first persisted the race; never backdate.
+        entry["first_seen_at_utc"] = (old or {}).get("first_seen_at_utc") or datetime.now(timezone.utc).isoformat()
         if old and old.get("source_observed_jst","")>entry["source_observed_jst"]:
             continue
         if old:

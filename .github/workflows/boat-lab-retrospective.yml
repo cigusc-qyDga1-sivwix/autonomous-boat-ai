@@ -34,7 +34,7 @@ jobs:
       - name: Validate retrospective isolation and result-blind generation
         run: |
           set -euo pipefail
-          python scripts/test_replay_exhibition_today.py
+          python -m scripts.test_replay_exhibition_today
           python -m compileall -q scripts/replay_exhibition_today.py
       - name: Re-run TODAY's completed historical exhibitions, research only
         run: |

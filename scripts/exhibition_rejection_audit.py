@@ -18,14 +18,17 @@ def build(research, ledger, now=None):
     if not day or day != ledger.get("event_date"):
         raise ValueError("Research and ledger must be from the same JST date")
     records = ledger.get("race_records") or {}
+    by_race = {(str(int(r.get("venue_code"))), int(r.get("race"))): r
+               for r in records.values()
+               if str(r.get("venue_code", "")).isdigit()
+               and str(r.get("race", "")).isdigit()}
     reasons = Counter()
     details = []
     for row in research.get("records") or []:
         code = str(row.get("race_code") or "")
         venue = str(row.get("venue_code") or "")
         number = row.get("race")
-        matching = next((r for r in records.values()
-                         if str(r.get("venue_code")) == venue and r.get("race") == number), None)
+        matching = by_race.get((str(int(venue)), int(number))) if venue.isdigit() and str(number).isdigit() else None
         if not matching:
             reason = "no_matching_forecast_record"
         elif any(v.get("phase") == "exhibition" for v in matching.get("versions", [])):

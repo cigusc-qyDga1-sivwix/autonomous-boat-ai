@@ -30,3 +30,33 @@ Tests cover directionality, neutrality/missing fields, exhibition F, entry chang
 ## October 27 operation
 
 Renew the bounded prediction-freshness watchdog for October 27 JST. It waits until 06:00 JST without dispatching overnight, checks freshness independently of cron during the day, and stops at the next JST midnight. Five sequential shifts cover the wait and remaining day under per-job limits. This is a daily incident mitigation, not a permanent external scheduler; the following day requires a separately validated operating arrangement.
+
+
+## v1.1: ability-first second and third, October 27 prospective revision
+
+`four-factor-v1.1-untrained` supersedes v1.0 for newly generated pre-cutoff
+snapshots. Keep the same four base weights and the earlier same-time v0.9
+control. Append one model upgrade to eligible races; never alter earlier SHA
+records or closed races. The v1.0 function remains available for historical parity.
+
+Diagnosis: v1.0 inherited a fixed head-to-second course table and stacked
+adjacent-following, outer-following, wake and ticket-rescue multipliers. Those
+could overpower the newly added athlete factor. v1.1 bypasses these in both
+second and third scoring and selects the highest-ranked complete combinations
+without legacy rescue. All five second-place and four third-place candidates
+are evaluated and recorded, with no compulsory follower or lane quota.
+
+Second weight = unconditional course prior [1.10,1.10,1.06,1.02,.98,.94]
+× four-factor combined strength^1.15 × bounded relative-strength competition.
+Third uses [1.04,1.04,1.03,1.02,1,.98] and strength^.95. The competition factor
+is clamp(1+.05×(candidate strength/preceding strength−1),.95,1.05). It is a
+small untrained proxy, not observed wake or a measured maneuver. These priors
+are manual trial coefficients, not fitted course finish rates. Head priors and
+pre-race attack evidence remain. No course forces a named winning maneuver;
+ticket descriptions explicitly say it is undetermined. Legacy diagnostic
+wake/coupling graphs are marked unapplied to chaser scoring.
+
+This change removes the diagnosed structural bias; it does not establish an
+improvement in hit rate, missed-place rate or return. Athlete-specific historical
+second/third rates and maneuver success are still unavailable. Evaluate future
+frozen predictions rather than claiming an improvement from hindsight.

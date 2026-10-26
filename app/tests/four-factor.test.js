@@ -28,11 +28,11 @@ const c=F.evaluate(storm);assert.ok(c.rows[4].combined_multiplier<b.rows[4].comb
 const expo=fixture();expo.racers[0].exhibition_time=5.5;expo.racers[0].exhibition_st=0;
 assert.ok(F.evaluate(expo).rows.every(x=>x.factors.exhibition.applied_multiplier<=Math.exp(.10)+1e-9));
 const original=JSON.stringify(strong),result=bridge.run(strong);
-assert.equal(result.model_version,'four-factor-v1.0-untrained');assert.ok(bridge.validBets(result.bets));assert.equal(JSON.stringify(strong),original);
+assert.equal(result.model_version,'four-factor-v1.1-untrained');assert.ok(bridge.validBets(result.bets));assert.equal(JSON.stringify(strong),original);
 assert.deepEqual(result,bridge.run({...strong,result:{finish:'6-5-4'},odds:{x:999},payout:99999}),'no outcome/odds leakage');
 const win={};const ctx=vm.createContext({window:win,Number,Intl});
 for(const p of ['app/four-factor.js','app/tactical-1m.js'])vm.runInContext(fs.readFileSync(p,'utf8'),ctx);
-const browser=win.BoatTacticalModel.forecastFourFactor(strong);
+const browser=win.BoatTacticalModel.forecastFourFactorOpen(strong);
 assert.deepEqual(JSON.parse(JSON.stringify(browser.bets)),result.bets,'browser/server parity');
 assert.match(F.panel({four_factor:result.four_factor}),/選手60・モーター25・展示10・気象5/);
 assert.equal(F.panel({}),'', 'past snapshots acquire no new factor scores');

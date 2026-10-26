@@ -10,7 +10,7 @@ function render(r){
  const rating=global.BoatRacerRating?.rate?.(r);
  if(!rating||!Array.isArray(rating.rows)||rating.rows.length!==6)
   return '<section class="card card-pad boat-overall-panel"><h2 class="section-title">📊 6艇の総合評価</h2><p>評価データを確認できません。</p></section>';
- const four=r?.model_version==='four-factor-v1.0-untrained';
+ const four=r?.model_version?.startsWith('four-factor-');
  const scored=rating.rows.filter(x=>Number.isFinite(x.ability));
  const expected=rating.rows.filter(x=>Number.isFinite(x.race_expectation));
  const topAbility=scored.length===6?Math.max(...scored.map(x=>x.ability)):null;

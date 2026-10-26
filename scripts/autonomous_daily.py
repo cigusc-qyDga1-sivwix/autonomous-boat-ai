@@ -50,7 +50,7 @@ WAKE_PROMOTION_DATE = date(2026, 10, 25)
 MAIN_BRIDGE = Path(__file__).resolve().parent / "main_v07_bridge.js"
 WAKE_BRIDGE = Path(__file__).resolve().parent / "main_v09_bridge.js"
 FOUR_FACTOR_DATE = date(2026, 10, 27)
-FOUR_FACTOR_MODEL = 'four-factor-v1.0-untrained'
+FOUR_FACTOR_MODEL = 'four-factor-v1.1-untrained'
 FOUR_FACTOR_BRIDGE = Path(__file__).resolve().parent / 'main_four_factor_bridge.js'
 VIRTUAL_BUDGET_YEN = 50_000
 MIN_POINTS, MAX_POINTS = 4, 12
@@ -541,7 +541,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     follower = racers[int(top_combo[1]) - 1]
     weather = observed
     if four_factor:
-        reason = "選手60・モーター25・展示10・気象5の基礎倍率＋進入別の着順連動（試験・未校正）"
+        reason = "選手60・モーター25・展示10・気象5の基礎倍率＋2・3着の全艇評価（追走固定なし・試験・未校正）"
     body = {
         "model_version": chosen_model,
         **({"four_factor": promoted["four_factor"]} if four_factor else {}),

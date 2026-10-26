@@ -129,7 +129,9 @@ def main():
     # Independent public CSVs: bound concurrency and keep each request timeout.
     with ThreadPoolExecutor(max_workers=6) as pool:
         sources=dict(zip(SOURCES, pool.map(lambda name: fetch(name,day), SOURCES)))
-    has_essential=all(sources[k] for k in ("stt","tkz","sui"))
+    has_essential=all(sources[k] for k in ("stt","tkz"))
+    # Weather (sui) is optional: a missing weather feed must not suppress
+    # otherwise complete six-boat exhibition readings.
     new=build(day,sources,prior) if has_essential else None
     if new and (not prior or new["records"]!=prior.get("records")):
         path.parent.mkdir(parents=True,exist_ok=True)
@@ -149,6 +151,7 @@ def main():
         "event_date":day.isoformat(),
         "collected_at_utc":datetime.now(timezone.utc).isoformat(),
         "complete_sources":has_essential,
+        "weather_source_available":bool(sources["sui"]),
         "fetch_counts":{k:len(rows) for k,rows in sources.items()},
         "research_races":len(records),
         "latest_source_observed_jst":max((r.get("source_observed_jst") or "" for r in records),default=""),

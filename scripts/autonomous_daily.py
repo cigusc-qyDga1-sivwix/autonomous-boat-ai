@@ -19,12 +19,14 @@ from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 if __package__:
+    from .racer_context import collect as collect_racer_context, validated as validate_racer_context
     from .official_pay import fetch_official_pay
     from .venue_weather import fetch_weather, weather_at, VENUE_POINTS
     from .exhibition_bridge import available_rows, inject
     from .entry_exhibition_gate import validated_preview, summarize_gate
     from .venue_profiles import get_profile, adjust_weights as adjust_venue_weights
 else:
+    from racer_context import collect as collect_racer_context, validated as validate_racer_context
     from official_pay import fetch_official_pay
     from venue_weather import fetch_weather, weather_at, VENUE_POINTS
     from exhibition_bridge import available_rows, inject
@@ -47,6 +49,9 @@ MAIN_WAKE_MODEL = "tactical-outside-start-wake-v0.9-untrained"
 WAKE_PROMOTION_DATE = date(2026, 10, 25)
 MAIN_BRIDGE = Path(__file__).resolve().parent / "main_v07_bridge.js"
 WAKE_BRIDGE = Path(__file__).resolve().parent / "main_v09_bridge.js"
+FOUR_FACTOR_DATE = date(2026, 10, 27)
+FOUR_FACTOR_MODEL = 'four-factor-v1.0-untrained'
+FOUR_FACTOR_BRIDGE = Path(__file__).resolve().parent / 'main_four_factor_bridge.js'
 VIRTUAL_BUDGET_YEN = 50_000
 MIN_POINTS, MAX_POINTS = 4, 12
 STAKE_UNIT_YEN = 1_000
@@ -174,8 +179,12 @@ def features(race: dict, phase: str) -> tuple[list[float], list[dict]]:
                 # Lower time = better within the same venue/race, conservative bounded gain.
                 score *= max(.83, min(1.17, 1 + rate * (mean - values[i-1])))
         weights.append(max(.12, score))
+        registration = number(racer.get("number"))
         detail.append({
             "lane": i,
+            **({"racer_context": (race.get("_racer_context") or {}).get(str(i)),
+                "racer_id": int(registration) if registration is not None and registration.is_integer() else None}
+               if race.get("_racer_context") else {}),
             "name": str(racer.get("name", "")).strip(),
             "course": course,
             "national_win_rate": number(racer.get("national_win_rate")),
@@ -403,21 +412,21 @@ def promoted_v07(venue: str, phase: str, racers: list[dict],
 
 def promoted_v09(venue: str, phase: str, racers: list[dict],
                  profile: dict | None, weather: dict | None,
-                 frozen_at_utc: str) -> dict:
-    """New main (only for Oct 25+). Fail closed, same pre-cutoff data."""
+                 frozen_at_utc: str, four_factor: bool = False) -> dict:
+    """Invoke one explicit model identity; never fall back on bridge failure."""
     inputs = {
         "venue": venue, "phase": phase,
         "racers": [{key: r.get(key) for key in (
             "lane", "course", "national_win_rate", "motor_top_2_percent",
             "average_start_timing", "exhibition_st", "exhibition_time",
-            "original_exhibition"
+            "original_exhibition", "racer_context"
         )} for r in racers],
         "venue_profile": profile, "weather_used": weather,
         "frozen_at_utc": frozen_at_utc,
     }
     try:
         job = subprocess.run(
-            ["node", str(WAKE_BRIDGE)], input=json.dumps(inputs, ensure_ascii=False),
+            ["node", str(FOUR_FACTOR_BRIDGE if four_factor else WAKE_BRIDGE)], input=json.dumps(inputs, ensure_ascii=False),
             text=True, capture_output=True, timeout=12, check=True
         )
         answer = json.loads(job.stdout)
@@ -425,7 +434,8 @@ def promoted_v09(venue: str, phase: str, racers: list[dict],
             subprocess.TimeoutExpired) as exc:
         raise RuntimeError("v0.9 bridge unavailable: fail closed, no fallback freeze") from exc
     bets = answer.get("bets")
-    if answer.get("model_version") != MAIN_WAKE_MODEL or not isinstance(bets, list):
+    expected = FOUR_FACTOR_MODEL if four_factor else MAIN_WAKE_MODEL
+    if answer.get("model_version") != expected or not isinstance(bets, list):
         raise ValueError("Wrong new main bridge model identity")
     if not MIN_POINTS <= len(bets) <= MAX_POINTS or len({
         b.get("combination") for b in bets
@@ -496,20 +506,23 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         }
     legacy_control["sha256"] = stable_hash(legacy_control)
     profile = get_profile(venue_code) if venue_code else None
+    four_factor = cutoff.date() >= FOUR_FACTOR_DATE
     new_primary = cutoff.date() >= WAKE_PROMOTION_DATE
     if new_primary:
-        same_time_old = promoted_v07(venue, phase, racers, profile, selected_weather, frozen_at)
+        same_time_old = (promoted_v09(venue, phase, racers, profile, selected_weather, frozen_at) if four_factor else
+                         promoted_v07(venue, phase, racers, profile, selected_weather, frozen_at))
         legacy_control = {
             "model_version": same_time_old["model_version"],
             "bets": same_time_old["bets"],
             "point_count": len(same_time_old["bets"]),
             "frozen_at_utc": frozen_at,
             "model_role": "shadow_validation",
-            "source_note": "v0.7 old main frozen at same pre-cutoff instant; no result",
+            "source_note": ("v0.9 previous main frozen at same pre-cutoff instant; no result" if four_factor else
+                            "v0.7 old main frozen at same pre-cutoff instant; no result"),
         }
         legacy_control["sha256"] = stable_hash(legacy_control)
-        promoted = promoted_v09(venue, phase, racers, profile, selected_weather, frozen_at)
-        chosen_model = MAIN_WAKE_MODEL
+        promoted = promoted_v09(venue, phase, racers, profile, selected_weather, frozen_at, four_factor=four_factor)
+        chosen_model = FOUR_FACTOR_MODEL if four_factor else MAIN_WAKE_MODEL
     else:
         promoted = promoted_v07(venue, phase, racers, profile, selected_weather, frozen_at)
         chosen_model = MAIN_MODEL
@@ -527,14 +540,17 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     leader = racers[int(top_combo[0]) - 1]
     follower = racers[int(top_combo[1]) - 1]
     weather = observed
+    if four_factor:
+        reason = "選手60・モーター25・展示10・気象5の基礎倍率＋進入別の着順連動（試験・未校正）"
     body = {
         "model_version": chosen_model,
+        **({"four_factor": promoted["four_factor"]} if four_factor else {}),
         "model_role": "main",
         "legacy_control": legacy_control,
         "start_v07": promoted["start_v07"],
         **({"wake_v09": promoted["wake_v09"],
-            "primary_promotion_date_jst": WAKE_PROMOTION_DATE.isoformat(),
-            "primary_model_ab": "v0.9 primary vs same-time frozen v0.7 control"}
+            "primary_promotion_date_jst": (FOUR_FACTOR_DATE if four_factor else WAKE_PROMOTION_DATE).isoformat(),
+            "primary_model_ab": "four-factor primary vs same-time frozen v0.9 control" if four_factor else "v0.9 primary vs same-time frozen v0.7 control"}
            if new_primary else {}),
         "coupled_v06": promoted["coupled_v06"],
         "head_course_shares": promoted["head_course_shares"],
@@ -589,9 +605,17 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     return {**body, "sha256": stable_hash(body)}
 
 
+def context_quality(racers: list[dict]) -> int:
+    fields = {"national_top3", "local_win", "local_top3", "motor_top3",
+              "frame_win", "frame_st", "frame_start_order"}
+    return sum(number(value) is not None for r in racers
+               for key, value in (((r.get("racer_context") or {}).get("values") or {}).items())
+               if key in fields)
+
+
 def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
           weather_by_venue: dict | None = None, exhibition_rows: dict | None = None,
-          enforce_wall_clock: bool = False) -> tuple[dict, dict, dict]:
+          enforce_wall_clock: bool = False, racer_context_rows: dict | None = None) -> tuple[dict, dict, dict]:
     if now.tzinfo is None:
         raise ValueError("Timezone-aware now is mandatory")
     local_day = now.astimezone(JST).date().isoformat()
@@ -635,6 +659,14 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
             # Synthetic test fixtures explicitly leave this safeguard disabled.
             runtime_now = datetime.now(UTC) if enforce_wall_clock else now
             margin = max(SAFE_MARGIN_SECONDS, 180) if enforce_wall_clock else SAFE_MARGIN_SECONDS
+            if cutoff.date() >= FOUR_FACTOR_DATE and valid_entrants(race):
+                code = f"{local_day.replace('-', '')}{int(venue_code):02d}{n:02d}"
+                context = (racer_context_rows or {}).get(code) or {}
+                race = {**race, "_racer_context": {
+                    str(i): validate_racer_context(context.get(i), race["racers"][str(i)], i,
+                                                   runtime_now, cutoff.date()) for i in range(1, 7)
+                }}
+            expected_main = FOUR_FACTOR_MODEL if cutoff.date() >= FOUR_FACTOR_DATE else MAIN_WAKE_MODEL
             if runtime_now.astimezone(JST) < cutoff - timedelta(seconds=margin) and valid_entrants(race):
                 if "baseline" not in phases:
                     record["versions"].append(prediction(race, VENUES[venue_code], n,
@@ -683,9 +715,18 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
             # If last snapshot was exhibition, only promote with complete
             # currently observed exhibition data; do not downgrade it.
             upgrade_now = datetime.now(UTC) if enforce_wall_clock else runtime_now
+            previous_latest = record["versions"][-1] if record["versions"] else None
+            current_context_quality = sum(
+                number(value) is not None for row in (race.get("_racer_context") or {}).values()
+                for value in ((row or {}).get("values") or {}).values())
+            context_gain = bool(
+                cutoff.date() >= FOUR_FACTOR_DATE and previous_latest
+                and previous_latest.get("model_version") == FOUR_FACTOR_MODEL
+                and current_context_quality > context_quality(previous_latest.get("racers") or [])
+                and sum(bool(v.get("racer_context_upgrade")) for v in record["versions"]) < 3)
             if (cutoff.date() >= WAKE_PROMOTION_DATE
                     and record["versions"]
-                    and record["versions"][-1].get("model_version") != MAIN_WAKE_MODEL
+                    and (record["versions"][-1].get("model_version") != expected_main or context_gain)
                     and upgrade_now.astimezone(JST) < cutoff - timedelta(seconds=margin)):
                 latest_before = record["versions"][-1]
                 phase_to_promote = latest_before["phase"]
@@ -701,9 +742,16 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                         "previous_sha256": latest_before["sha256"],
                         "previous_model": latest_before["model_version"],
                         "revision_at_utc": latest_timestamp.isoformat(),
-                        "new_model": MAIN_WAKE_MODEL,
+                        "new_model": expected_main,
                         "same_race_pre_cutoff_revision": True,
                     }
+                    if context_gain:
+                        upgrade["racer_context_upgrade"] = {
+                            "previous_sha256": latest_before["sha256"],
+                            "previous_quality": context_quality(latest_before.get("racers") or []),
+                            "new_quality": current_context_quality,
+                            "reason": "Newly captured player/frame fields before cutoff; old snapshot retained",
+                        }
                     upgrade["sha256"] = stable_hash({
                         k: v for k, v in upgrade.items() if k != "sha256"
                     })
@@ -734,7 +782,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "weather_used", "weather_adjustment", "weather_ab", "data_quality",
                       "exhibition_origin", "exhibition_change",
                       "venue_profile", "venue_adjustment", "model_role", "legacy_control",
-                      "start_v07", "coupled_v06", "wake_v09", "model_upgrade", "primary_model_ab", "head_course_shares",
+                      "start_v07", "coupled_v06", "wake_v09", "four_factor", "racer_context_upgrade", "model_upgrade", "primary_model_ab", "head_course_shares",
                       "role_coverage", "role_changes", "relative_scores_uncalibrated"):
             if extra in current:
                 r[extra] = current[extra]
@@ -966,8 +1014,8 @@ def integrate_official(ledger: dict, view: dict, pay: dict,
     historical = [r["legacy_comparison"] for r in results.values()
                   if r.get("legacy_comparison") is not None]
     view["main_vs_legacy"] = {
-        "model": MAIN_MODEL, "verified_comparisons": len(historical),
-        "legacy_model_label": "old Python heuristic, same pre-cutoff inputs",
+        "model": (FOUR_FACTOR_MODEL if view.get("event_date", "") >= FOUR_FACTOR_DATE.isoformat() else MAIN_WAKE_MODEL if view.get("event_date", "") >= WAKE_PROMOTION_DATE.isoformat() else MAIN_MODEL), "verified_comparisons": len(historical),
+        "legacy_model_label": "Previous main, same pre-cutoff inputs",
         "main_hits": sum(bool(results[key]["hit"]) for key in results if results[key].get("legacy_comparison")),
         "legacy_hits": sum(bool(r["hit"]) for r in historical),
         "main_virtual_payout": sum(results[key]["virtual_payout"] for key in results if results[key].get("legacy_comparison")),
@@ -1038,8 +1086,15 @@ def main():
     # Tests with --input-json receive no historical research file by default.
     research = (available_rows(Path("app/data/exhibition") / f"{day}.json", day)
                 if not args.input_json else {})
+    contexts = {}
+    if not args.input_json and now.astimezone(JST).date() >= FOUR_FACTOR_DATE:
+        try:
+            contexts = collect_racer_context(now.astimezone(JST).date())
+        except Exception:
+            contexts = {}  # Missing sources stay neutral, never fabricate player history.
     ledger, webapp, summary = build(previous, source, now, source_url, nearby_forecasts,
-                                     exhibition_rows=research, enforce_wall_clock=not bool(args.input_json))
+                                     exhibition_rows=research, enforce_wall_clock=not bool(args.input_json),
+                                     racer_context_rows=contexts)
     if weather_error:
         summary["weather_error"] = weather_error
         webapp["weather_fetch_status"] = "UNAVAILABLE"

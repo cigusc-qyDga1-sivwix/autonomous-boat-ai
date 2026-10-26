@@ -1,4 +1,4 @@
-name: BOAT LAB prediction watchdog for 2026-10-26
+name: BOAT LAB prediction watchdog for 2026-10-27
 on:
   workflow_dispatch:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
   actions: write
 concurrency:
-  group: boat-lab-prediction-watchdog-20261026
+  group: boat-lab-prediction-watchdog-20261027
   cancel-in-progress: false
 jobs:
   monitor:
@@ -21,7 +21,7 @@ jobs:
       max-parallel: 1
       fail-fast: false
       matrix:
-        shift: [1, 2]
+        shift: [1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,4 +33,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: python -u scripts/prediction_watchdog.py --day 2026-10-26 --minutes 345
+        run: python -u scripts/prediction_watchdog.py --day 2026-10-27 --minutes 345 --start-hour 6

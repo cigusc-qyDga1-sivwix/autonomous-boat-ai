@@ -28,7 +28,8 @@ const assign=(r,course)=>{
 };
 const nameTactic=['','先マイ・逃げ','差し','まくり差し','カドまくり','外からのまくり差し','外の展開連動'];
 function forecast(input){
- const wakeIntegrated=input?.experimental_variant==='outside-start-wake-v0.9';
+ const fourFactor=input?.experimental_variant==='four-factor-v1.0';
+ const wakeIntegrated=input?.experimental_variant==='outside-start-wake-v0.9'||fourFactor;
  const startTrial=input?.experimental_variant==='outside-start-gap-v0.7'||wakeIntegrated;
  const coupledTrial=input?.experimental_variant==='six-boat-coupling-v0.6'||startTrial;
  const wakeTrial=input?.experimental_variant==='wake-attrition-v0.3'||coupledTrial;
@@ -65,7 +66,10 @@ function forecast(input){
  const meanWin=mean('win'),meanMotor=mean('motor'),meanST=mean('avg');
  const validMetrics=['exhibit','lap','turn','straight'].filter(key=>v.every(x=>x[key]!=null));
  const metricMean=Object.fromEntries(validMetrics.map(k=>[k,mean(k)]));
- const move=v.map(x=>{
+ const factorModel=fourFactor?global.BoatFourFactor?.evaluate(input):null;
+ if(fourFactor&&!factorModel)throw Error('Four-factor engine unavailable');
+ const move=v.map((x,i)=>{
+  if(fourFactor){const score=factorModel.rows[i].combined_multiplier;return {go:score,turn:score,straight:score,overall:score};}
   let skill=Math.exp(clamp(.145*(x.win-meanWin),-.45,.45));
   let motor=Math.exp(clamp(.010*(x.motor-meanMotor),-.35,.35));
   let start=Math.exp(clamp(2.6*(meanST-x.avg),-.25,.25));
@@ -103,7 +107,7 @@ function forecast(input){
  const startSignals=startTrial?Array.from({length:6},(_,i)=>{
    const own=v[byCourse[i]];
    const inner=i>0?v[byCourse[i-1]]:null;
-   const stEstimate=x=>x.avgValid?(x.estValid?
+   const stEstimate=x=>fourFactor?(x.avgValid?x.avg:null):x.avgValid?(x.estValid?
      .72*x.avg+.28*x.est:x.avg):(x.estValid?x.est:null);
    const ownST=stEstimate(own),innerST=inner?stEstimate(inner):null;
    const allInner=Array.from({length:i},(_,j)=>v[byCourse[j]]);
@@ -142,7 +146,7 @@ function forecast(input){
  // Retain conservative venue dependence, but no hardcoded course-1 winner.
  let rateImpact=clamp(head1/.55,.7,1.3);
  const wind=finite(input.weather_used?.wind_speed,null);
- let hedge=wind!==null&&wind>=6?.82:wind!==null&&wind>=4?.9:1;
+ let hedge=fourFactor?1:wind!==null&&wind>=6?.82:wind!==null&&wind>=4?.9:1;
  const officialReference=outerStudyTrial?OUTSIDE_VENUE_COURSES[input.venue]||null:null;
  const refBlend=.35;
  const effectivePriors=officialReference?
@@ -564,7 +568,7 @@ function forecast(input){
  })):[];
  const headOneTotal=headOneScores.reduce((n,x)=>n+x.weight,0);
  return {
-   model:wakeIntegrated?'tactical-outside-start-wake-v0.9-untrained':
+   model:fourFactor?'four-factor-v1.0-untrained':wakeIntegrated?'tactical-outside-start-wake-v0.9-untrained':
       startTrial?'tactical-outside-start-gap-v0.7-untrained':
      coupledTrial?'tactical-six-boat-coupling-v0.6-untrained':
      outerStudyTrial?'tactical-outside-role-v0.5-untrained':
@@ -573,7 +577,7 @@ function forecast(input){
      outsideTrial?'tactical-outside-makuri-v0.2-untrained':'tactical-1m-conditional-v0.1-untrained',
    basis:'保存済み発走前選手情報と場別参考値のみ。結果・払戻・オッズ不使用。',
    venue:input.venue,head_course_shares:shares.map((s,i)=>({course:i+1,lane:v[byCourse[i]].lane,relative_share:+s.toFixed(4),tactic:nameTactic[i+1]})),
-   metadata:{venue_reference_rate:rate,wind_speed:wind,validMetrics,exhibition_used:validMetrics.length>0,
+   metadata:{...(fourFactor?{four_factor:factorModel}:{}),venue_reference_rate:rate,wind_speed:wind,validMetrics,exhibition_used:validMetrics.length>0,
       ...(wakeIntegrated?{wake_v09:{
         pre_cutoff_only:true,calibrated:false,studied_phases:['1M','2M+'],
         applies_to_all_head_courses:true,
@@ -631,6 +635,7 @@ function forecast(input){
  };
 }
 global.BoatTacticalModel={forecast,
+ forecastFourFactor:input=>forecast({...input,experimental_variant:'four-factor-v1.0'}),
  forecastRoleAware:input=>forecast({...input,experimental_variant:'role-consistency-v0.4'}),
  forecastOutsideRole:input=>forecast({...input,experimental_variant:'outside-role-v0.5'}),
  forecastCoupled:input=>forecast({...input,experimental_variant:'six-boat-coupling-v0.6'}),

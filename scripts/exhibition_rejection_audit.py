@@ -39,7 +39,7 @@ def build(research, ledger, now=None):
             try:
                 cutoff = datetime.fromisoformat(day + "T" + matching["cutoff_jst"] + ":00+09:00")
                 observed = datetime.fromisoformat(row["source_observed_jst"]).astimezone(JST)
-                collected_raw = research.get("created_at_utc")
+                collected_raw = row.get("first_seen_at_utc") or research.get("created_at_utc")
                 collected = datetime.fromisoformat(collected_raw) if collected_raw else None
                 if collected is not None and collected.tzinfo is not None and collected.astimezone(JST) >= cutoff - timedelta(seconds=120):
                     reason = "research_import_after_safe_freeze_deadline"
@@ -52,11 +52,14 @@ def build(research, ledger, now=None):
             except (KeyError, ValueError, TypeError):
                 reason = "invalid_or_missing_timestamp"
         reasons[reason] += 1
-        details.append({"race_code": code, "reason": reason})
+        details.append({"race_code": code, "reason": reason,
+                        "first_seen_at_utc": row.get("first_seen_at_utc"),
+                        "source_observed_jst": row.get("source_observed_jst")})
     return {
         "event_date": day,
         "classification": "retrospective_diagnostic_not_live_eligibility",
         "research_rows_checked": len(details),
+        "first_seen_evidence_rows": sum(bool(r.get("first_seen_at_utc")) for r in research.get("records") or []),
         "reason_counts": dict(sorted(reasons.items())),
         "race_reasons": details,
         "warning": "Import creation time is evidence of this archived import, not proof of the earliest live availability; source timestamps alone never certify formal eligibility.",

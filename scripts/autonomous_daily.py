@@ -627,17 +627,22 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                     new_baseline += 1
                 code = f"{local_day.replace('-', '')}{int(venue_code):02d}{n:02d}"
                 csv_race, csv_origin = inject(race, exhibition_rows.get(code), runtime_now, venue_code, n)
-                candidate = csv_race if csv_origin else race
+                # Prefer the already-complete OpenAPI preview; use the independently
+                # collected CSV as a fallback only when OpenAPI is incomplete.
+                # Do not blend measurements from different observation times.
+                api_preview_ready = preview_complete(race)
+                candidate = race if api_preview_ready else (csv_race if csv_origin else race)
+                selected_csv_origin = csv_origin if not api_preview_ready else None
                 preview_ready = preview_complete(candidate)
                 existing_exhibition = [v for v in record["versions"] if v["phase"] == "exhibition"]
                 previous_csv_time = (existing_exhibition[-1].get("exhibition_origin") or {}).get("observed_at_jst") if existing_exhibition else None
                 revision = bool(
-                    csv_origin and existing_exhibition
+                    selected_csv_origin and existing_exhibition
                     and len(existing_exhibition) < 3
-                    and (not previous_csv_time or previous_csv_time < csv_origin["observed_at_jst"])
+                    and (not previous_csv_time or previous_csv_time < selected_csv_origin["observed_at_jst"])
                 )
                 if preview_ready and ("exhibition" not in phases or revision):
-                    origin_url = csv_origin and "https://boatracecsv.github.io/docs/data/previews.html" or source_url
+                    origin_url = selected_csv_origin and "https://boatracecsv.github.io/docs/data/previews.html" or source_url
                     new = prediction(candidate, VENUES[venue_code], n,
                                      "exhibition", (datetime.now(UTC) if enforce_wall_clock else now), origin_url, nearby)
                     before = record["versions"][-1] if record["versions"] else None

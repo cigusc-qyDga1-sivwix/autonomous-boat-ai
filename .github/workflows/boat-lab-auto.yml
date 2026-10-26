@@ -8,6 +8,9 @@ on:
       - 'scripts/autonomous_daily.py'
       - 'scripts/main_v07_bridge.js'
       - 'scripts/main_v09_bridge.js'
+      - 'scripts/main_four_factor_bridge.js'
+      - 'scripts/racer_context.py'
+      - 'app/four-factor.js'
       - 'scripts/entry_exhibition_gate.py'
       - 'scripts/test_entry_exhibition_gate.py'
       - 'scripts/venue_profiles.py'
@@ -73,6 +76,10 @@ jobs:
         run: |
           node --check scripts/main_v07_bridge.js
           node --check scripts/main_v09_bridge.js
+          node --check scripts/main_four_factor_bridge.js
+          node --check app/four-factor.js
+          node app/tests/four-factor.test.js
+          python -m unittest discover -s tests -p test_racer_context.py
           node --check app/tactical-1m.js
           python -m compileall -q scripts/autonomous_daily.py
       - name: Verify exhibition ingestion and pre-cutoff freeze invariants

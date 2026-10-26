@@ -40,12 +40,13 @@ def index(rows):
     return {r["レースコード"]:r for r in rows if r.get("レースコード")}
 
 def build(day, inputs, prior=None):
-    src={k:index(v) for k,v in inputs.items()}
+    # Missing optional feeds must behave like empty CSVs, not crash the importer.
+    src={k:index(inputs.get(k) or []) for k in SOURCES}
     merged={r["race_code"]:r for r in (prior or {}).get("records",[])}
     for code,st in src["stt"].items():
         tk=src["tkz"].get(code)
-        su=src["sui"].get(code)
-        if not tk or not su or len(code)!=12 or code[:8]!=day.strftime("%Y%m%d"):
+        su=src["sui"].get(code) or {}
+        if not tk or len(code)!=12 or code[:8]!=day.strftime("%Y%m%d"):
             continue
         og=src["original"].get(code,{})
         rr=src["result"].get(code)
@@ -129,7 +130,9 @@ def main():
     # Independent public CSVs: bound concurrency and keep each request timeout.
     with ThreadPoolExecutor(max_workers=6) as pool:
         sources=dict(zip(SOURCES, pool.map(lambda name: fetch(name,day), SOURCES)))
-    has_essential=all(sources[k] for k in ("stt","tkz","sui"))
+    has_essential=all(sources[k] for k in ("stt","tkz"))
+    # Weather (sui) is optional: a missing weather feed must not suppress
+    # otherwise complete six-boat exhibition readings.
     new=build(day,sources,prior) if has_essential else None
     if new and (not prior or new["records"]!=prior.get("records")):
         path.parent.mkdir(parents=True,exist_ok=True)
@@ -149,8 +152,12 @@ def main():
         "event_date":day.isoformat(),
         "collected_at_utc":datetime.now(timezone.utc).isoformat(),
         "complete_sources":has_essential,
+        "weather_source_available":bool(sources["sui"]),
         "fetch_counts":{k:len(rows) for k,rows in sources.items()},
         "research_races":len(records),
+        "research_venues":len({r.get("venue_code") for r in records}),
+        "complete_six_boat_research_races":sum(len(r.get("boats") or []) == 6 for r in records),
+        "research_only_not_formal_count":len(records),
         "latest_source_observed_jst":max((r.get("source_observed_jst") or "" for r in records),default=""),
         "forecast_eligibility":"not_certified_by_archived_sources",
         "warning":"Historical source timestamps do not prove ingestion before cutoff. Review immutable forecast ledger separately.",

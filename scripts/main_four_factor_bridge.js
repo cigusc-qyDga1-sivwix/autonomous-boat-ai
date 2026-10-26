@@ -25,10 +25,21 @@ function run(input){
  const result=model.forecastFourFactorOpen({
   venue:input.venue,phase:input.phase,racers:input.racers,
   weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
-  frozen_at_utc:input.frozen_at_utc
+  frozen_at_utc:input.frozen_at_utc,
+  surface_trial_disabled:input.surface_trial_disabled===true
  });
  if(result.model!=='four-factor-v1.1-untrained'||!validBets(result.bets))
   throw Error('Four-factor model returned invalid prediction / allocation');
+ const surface=result.metadata?.venue_surface_v1||null;
+ if(!surface||surface.version!=='venue-surface-v1-ex-edogawa')
+  throw Error('Missing prospective venue surface diagnostics');
+ const surfaceControl=surface.applied?model.forecastFourFactorOpen({
+  venue:input.venue,phase:input.phase,racers:input.racers,
+  weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
+  frozen_at_utc:input.frozen_at_utc,surface_trial_disabled:true
+ }):null;
+ if(surfaceControl&&!validBets(surfaceControl.bets))
+  throw Error('Invalid same-time surface control');
  if(!Array.isArray(result.head_course_shares)||result.head_course_shares.length!==6||
     result.metadata?.start_v07?.slit_signals?.length!==6||
     result.metadata?.wake_v09?.pre_cutoff_only!==true||
@@ -37,6 +48,15 @@ function run(input){
  return {
   model_version:result.model,
   four_factor:result.metadata.four_factor,
+  venue_surface_v1:surface,
+  venue_surface_ab:surfaceControl?{
+   control_model:'four-factor-v1.1-without-venue-surface',
+   control_bets:surfaceControl.bets,
+   trial_bets:result.bets,
+   generated_pre_cutoff:true,
+   same_inputs_except_surface:true,
+   scope:'shadow_research_only_no_formal_stake'
+  }:null,
   bets:result.bets,
   head_course_shares:result.head_course_shares,
   role_coverage:result.role_coverage,

@@ -27,6 +27,50 @@ const assign=(r,course)=>{
  return x||r[course-1]||null;
 };
 const nameTactic=['','先マイ・逃げ','差し','まくり差し','カドまくり','外からのまくり差し','外の展開連動'];
+// 2026-10-27 venue-surface trial: Edogawa is explicitly OUT OF SCOPE.
+ // Every other venue retains its existing historical 1-course prior.
+ // Extra tactical multipliers require official venue evidence AND independent
+ // pre-race ST / relative movement support. No tide height, flow or wind angle
+ // is invented. Only the four documented venues have an extra tactical test.
+const SURFACE_OFFICIAL=Object.freeze({
+ '戸田':{courses:[3,4],source:'https://www.boatrace-toda.jp/data/suimen_guide.html',focus:'狭い水面・大きな1Mの振り／センター速攻'},
+ '平和島':{courses:[4,5],source:'https://www.boatrace.jp/owpc/pc/site/place/stadium/br04/',focus:'1M振り・ダッシュ攻め／風向未校正'},
+ '福岡':{courses:[3,4],source:'https://www.boatrace.jp/owpc/pc/site/place/stadium/br22/',focus:'1Mの振り・センター攻め／満潮は未観測なら補正なし'},
+ '唐津':{courses:[4],source:'https://www.boatrace-karatsu.jp/modules/datafile/?page=index_suimen',focus:'2025年12月ピット変更後・実進入とカド攻めを監視'}
+});
+function surfaceVenueTrial(input,move,byCourse,startSignals,primary){
+ const name=input.venue,excluded=name==='江戸川';
+ const profile=input.venue_profile;
+ const profileValid=!!profile&&profile.name===name&&profile.code!=='03';
+ const eligible=!!primary&&profileValid&&!excluded&&input.surface_trial_disabled!==true;
+ const official=SURFACE_OFFICIAL[name]||null;
+ const multipliers=[1,1,1,1,1,1],evidence=[];
+ if(eligible&&official&&Array.isArray(startSignals)){
+  for(const course of official.courses){
+   const signal=startSignals[course-1],own=move[byCourse[course-1]],inside=move[byCourse[course-2]];
+   if(!signal||!own||!inside)continue;
+   const gap=signal.nearest_gap_sec,go=own.go/Math.max(.38,inside.go);
+   const turn=own.turn/Math.max(.35,inside.turn);
+   // Do not turn a venue anecdote into a free outside-lane bonus:
+   // need a measured average ST gap and usable boat-speed support.
+   if(signal.confidence<.60||gap===null||gap<.020||go<.95||turn<.90)continue;
+   const stPart=.020*clamp((gap-.015)/.040,0,1);
+   const movementPart=.025*clamp((go-.98)/.20,0,1);
+   const multiplier=1+Math.min(.045,stPart+movementPart);
+   if(multiplier<=1)continue;
+   multipliers[course-1]=+multiplier.toFixed(6);
+   evidence.push({course,st_gap_sec:gap,go_ratio:+go.toFixed(3),
+                  turn_ratio:+turn.toFixed(3),multiplier:multipliers[course-1]});
+  }
+ }
+ return {version:'venue-surface-v1-ex-edogawa',venue:name,excluded,
+  eligible,applied:evidence.length>0,official_evidence:official?.source||null,
+  registered_focus:profileValid?profile.tactical_focus:null,
+  registered_water_type:profileValid?profile.water_type:null,
+  center_attack_evidence:evidence,head_course_multipliers:multipliers,
+  limitations:'場別基準1コース率は従来どおり。追加は公式確認4場で最大+4.5%の試験補正のみ。残り19場は観測根拠待ち。潮位・風向からの推測補正なし。確率未校正。',
+  control_disabled:input.surface_trial_disabled===true};
+}
 function forecast(input){
  const openChasers=input?.experimental_variant==='four-factor-v1.1';
  const fourFactor=input?.experimental_variant==='four-factor-v1.0'||openChasers;
@@ -162,6 +206,11 @@ function forecast(input){
   const penalty=c===0?hedge:(2-hedge)**.65;
   return Math.max(.0001,base*clamp(skill,.25,3.1)*penalty);
  });
+ const venueSurface=surfaceVenueTrial(input,move,byCourse,startSignals,openChasers);
+ if(venueSurface.applied){
+  for(let course=1;course<=6;course++)
+   strength[course-1]*=venueSurface.head_course_multipliers[course-1];
+ }
  // If outside racer has demonstrably quicker legal exhibition ST and comparable
  // ability, reduce inside/2's assumed clean turn and shift to attack branches.
  const i1=move[byCourse[0]],i3=move[byCourse[2]];
@@ -644,6 +693,7 @@ function forecast(input){
        conditional_outside_evidence:Object.values(outsideEvidence),
        proof_note:'Untrained relative model, not calibrated win probabilities. No blanket exterior picks.'
      }}:{}),
+     ...(openChasers?{venue_surface_v1:venueSurface}:{}),
      source_at_utc:input.frozen_at_utc||null,
      ...(wakeTrial?{wake_research_only:true,wake_hypothesis:'inner boat may lose acceleration when crossed by outer makuri wash; not measured',
          wake_risk_by_attacker: [3,4,5,6].map(h=>({

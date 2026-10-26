@@ -544,7 +544,9 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         reason = "選手60・モーター25・展示10・気象5の基礎倍率＋2・3着の全艇評価（追走固定なし・試験・未校正）"
     body = {
         "model_version": chosen_model,
-        **({"four_factor": promoted["four_factor"]} if four_factor else {}),
+        **({"four_factor": promoted["four_factor"],
+            "venue_surface_v1": promoted.get("venue_surface_v1"),
+            "venue_surface_ab": promoted.get("venue_surface_ab")} if four_factor else {}),
         "model_role": "main",
         "legacy_control": legacy_control,
         "start_v07": promoted["start_v07"],
@@ -781,7 +783,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         for extra in ("point_count", "point_reason", "head_weight_concentration", "head_weight_gap",
                       "weather_used", "weather_adjustment", "weather_ab", "data_quality",
                       "exhibition_origin", "exhibition_change",
-                      "venue_profile", "venue_adjustment", "model_role", "legacy_control",
+                      "venue_profile", "venue_adjustment", "venue_surface_v1", "venue_surface_ab", "model_role", "legacy_control",
                       "start_v07", "coupled_v06", "wake_v09", "four_factor", "racer_context_upgrade", "model_upgrade", "primary_model_ab", "head_course_shares",
                       "role_coverage", "role_changes", "relative_scores_uncalibrated"):
             if extra in current:

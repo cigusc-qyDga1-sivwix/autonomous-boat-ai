@@ -25,7 +25,8 @@ function run(input){
  const result=model.forecastFourFactorOpen({
   venue:input.venue,phase:input.phase,racers:input.racers,
   weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
-  frozen_at_utc:input.frozen_at_utc
+  frozen_at_utc:input.frozen_at_utc,
+  surface_trial_disabled:input.surface_trial_disabled===true
  });
  if(result.model!=='four-factor-v1.1-untrained'||!validBets(result.bets))
   throw Error('Four-factor model returned invalid prediction / allocation');

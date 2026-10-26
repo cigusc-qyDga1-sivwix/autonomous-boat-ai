@@ -1,0 +1,105 @@
+{
+  "schema": "boatlabs.manual-maneuver-observation.v1",
+  "race_id": "202610260407",
+  "event_date": "2026-10-26",
+  "venue": "平和島",
+  "venue_code": "04",
+  "race": 7,
+  "recorded_at_utc": "2026-10-26T22:53:25.376Z",
+  "provenance": {
+    "kind": "user_reported_race_observation",
+    "raw_text": "平和島7Rは4は3にブロックされて外に飛ばされてる",
+    "independently_video_reviewed": false,
+    "video_url": null,
+    "video_timecodes": null,
+    "precision": "The exact mark, lap, timing and whether there was physical contact are not specified."
+  },
+  "official_result_evidence": {
+    "final_order": [
+      6,
+      1,
+      2
+    ],
+    "winning_maneuver": {
+      "lane": 6,
+      "decision": "まくり差し"
+    },
+    "source_url": "https://www.boatrace.jp/owpc/pc/race/raceresult?hd=20261026&jcd=04&rno=7",
+    "verification": "Official final order and winner maneuver were checked in the preceding race review. Lane 3 blocking lane 4 is a user annotation, not an official interference or penalty classification."
+  },
+  "source_forecast": {
+    "sha256": "eb5c3a2c64984cacd24666fa9f6c4d9c3c5ee7f8aa2d8bc583057a97678518d2",
+    "phase": "exhibition",
+    "formal_exhibition_verified": true,
+    "model_version": "tactical-outside-start-wake-v0.9-untrained",
+    "archived_path": "app/data/live/2026-10-26.json",
+    "saved_exhibition_course_order": [
+      1,
+      2,
+      5,
+      3,
+      4,
+      6
+    ],
+    "entry_note": "This order was saved before cutoff from exhibition, not independently video-verified actual-race entry.",
+    "relevant_pre_race_values": [
+      {
+        "lane": 3,
+        "exhibition_course": 4,
+        "average_start_timing": 0.19,
+        "exhibition_st": 0.15
+      },
+      {
+        "lane": 4,
+        "exhibition_course": 5,
+        "average_start_timing": 0.11,
+        "exhibition_st": 0.01
+      }
+    ],
+    "diagnostic": "The forecast held 6-4-1 and 6-4-2 as its only lane-6 winning pairs. A favorable lane-4 ST estimate was not sufficient evidence that its route would remain open."
+  },
+  "observation_sequence": [
+    {
+      "stage": "route_interaction",
+      "blocker_lane": 3,
+      "affected_lane": 4,
+      "reported_action": "3が4をブロック",
+      "reported_effect": "4が外へ振られる",
+      "exact_turn": null,
+      "lap": null,
+      "status": "user_reported",
+      "physical_contact": null,
+      "rule_violation": null,
+      "description": "他艇による進路干渉を、4自身の基礎能力や機力とは別の要因として記録する。"
+    },
+    {
+      "stage": "finish",
+      "order": [
+        6,
+        1,
+        2
+      ],
+      "status": "official_order_confirmed"
+    }
+  ],
+  "research_targets": [
+    "選手単体のST・行き足・旋回能力に加え、隣接艇が攻める進路を塞ぐ分岐を検証する。",
+    "実進入に基づき3号艇と4号艇の位置関係を扱い、号艇番号をコース番号へ読み替えない。",
+    "4が外へ振られた場合の、4の2着残存と6-4組み合わせを条件付きで再評価する。",
+    "ブロックされなかった対照例と比較し、ST優位が攻め成功へ結び付く条件を調べる。",
+    "4への干渉が6の勝利や1・2の残存を直接引き起こしたかは未検証。勝者の決まり手と最終着順だけから因果経路を補わない。",
+    "接触・失速量・距離損・正確な通過順位は、映像や計測がない限り数値化しない。"
+  ],
+  "related_cases": [
+    "research/manual-maneuvers/2026-10-26-fukuoka-02.json",
+    "research/manual-maneuvers/2026-10-26-fukuoka-08.json",
+    "research/manual-maneuvers/2026-10-26-marugame-10.json"
+  ],
+  "use_policy": {
+    "retrospective_label_only": true,
+    "current_statistical_trainer_consumes_maneuver_labels": false,
+    "production_weights_changed": false,
+    "historical_forecast_modified": false,
+    "note": "Preserve the attributed blocking/displacement observation for future interaction-label research. It is not a measured trajectory, a penalty finding, or a fitted coefficient; post-race facts must not become pre-race features."
+  }
+}

@@ -1,0 +1,83 @@
+name: BOAT LAB one-off retrospective exhibition replay
+
+# Only a deliberate code merge that creates/changes THIS workflow runs it,
+# or a human-triggered dispatch. Never convert old forecasts to formal picks.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/boat-lab-retrospective.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: boat-lab-nationwide
+  cancel-in-progress: false
+
+jobs:
+  retrospective-research-only:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate retrospective isolation and result-blind generation
+        run: |
+          set -euo pipefail
+          python scripts/test_replay_exhibition_today.py
+          python -m compileall -q scripts/replay_exhibition_today.py
+      - name: Re-run TODAY's completed historical exhibitions, research only
+        run: |
+          set -euo pipefail
+          DAY=$(TZ=Asia/Tokyo date +%F)
+          python scripts/replay_exhibition_today.py --date "$DAY" | tee /tmp/boat-retro-status.json
+          python -m json.tool "app/data/retrospective/$DAY.json" > /dev/null
+      - name: Commit ONLY separate retrospective report
+        run: |
+          set -euo pipefail
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.name 'github-actions[bot]'
+          DAY=$(TZ=Asia/Tokyo date +%F)
+          git add "app/data/retrospective/$DAY.json"
+          if git diff --cached --quiet; then
+            echo "No research-only changes"
+            exit 0
+          fi
+          git commit -m "research: non-formal $DAY exhibition replay and official scoring"
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "::error::Research-only report push failed; live forecasts were NOT modified"
+              exit 1
+            fi
+            git fetch origin main
+            git reset --hard origin/main
+            python scripts/replay_exhibition_today.py --date "$DAY" | tee /tmp/boat-retro-status.json
+            git add "app/data/retrospective/$DAY.json"
+            if git diff --cached --quiet; then
+              exit 0
+            fi
+            git commit -m "research: refreshed non-formal $DAY exhibition replay"
+          done
+      - name: Keep retrospective audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boat-lab-retrospective-report
+          path: |
+            app/data/retrospective/*.json
+            /tmp/boat-retro-status.json
+          if-no-files-found: ignore
+          retention-days: 30

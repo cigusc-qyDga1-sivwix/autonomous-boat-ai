@@ -2,14 +2,15 @@ name: BOAT LAB official result backlog reconciliation
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
       - 'scripts/reconcile_official_backlog.py'
       - 'tests/test_reconcile_official_backlog.py'
       - '.github/workflows/boat-lab-result-reconcile.yml'
   schedule:
     # Best-effort JST daytime every 10 minutes; actual GitHub cron can lag.
-    - cron: '*/10 21-23 * * *'
-    - cron: '*/10 0-14 * * *'
+    - cron: '3-59/10 21-23 * * *'
+    - cron: '3-59/10 0-14 * * *'
 permissions:
   contents: write
   pages: write
@@ -54,5 +55,8 @@ jobs:
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
+          name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
           path: './app'
       - uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}

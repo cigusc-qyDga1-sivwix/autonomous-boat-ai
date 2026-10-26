@@ -31,6 +31,9 @@ def run():
         "source_timestamp_too_late_for_safe_freeze": 1,
     }, counts
     assert ledger["race_records"]["a"]["versions"] == [{"phase": "baseline"}]
+    delayed = {**research, "created_at_utc": "2026-10-26T02:00:00+00:00"}
+    delayed_counts = build(delayed, ledger)["reason_counts"]
+    assert delayed_counts["research_import_after_safe_freeze_deadline"] == 3, delayed_counts
 
 
 if __name__ == "__main__":

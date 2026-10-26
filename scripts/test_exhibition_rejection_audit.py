@@ -34,6 +34,11 @@ def run():
     delayed = {**research, "created_at_utc": "2026-10-26T02:00:00+00:00"}
     delayed_counts = build(delayed, ledger)["reason_counts"]
     assert delayed_counts["research_import_after_safe_freeze_deadline"] == 3, delayed_counts
+    per_race = {**delayed, "records": [dict(r) for r in delayed["records"]]}
+    per_race["records"][0]["first_seen_at_utc"] = "2026-10-26T01:20:00+00:00"
+    corrected = build(per_race, ledger)
+    assert corrected["first_seen_evidence_rows"] == 1
+    assert corrected["reason_counts"]["research_import_after_safe_freeze_deadline"] == 2
 
 
 if __name__ == "__main__":

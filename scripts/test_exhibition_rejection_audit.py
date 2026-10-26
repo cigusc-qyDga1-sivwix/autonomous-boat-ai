@@ -20,7 +20,7 @@ def run():
               "versions": [{"phase": "baseline"}]},
         "b": {"venue_code": "21", "race": 2, "cutoff_jst": "10:30",
               "versions": [{"phase": "baseline"}]},
-        "c": {"venue_code": "21", "race": 3, "cutoff_jst": "10:30",
+        "c": {"venue_code": "021", "race": "3", "cutoff_jst": "10:30",
               "versions": [{"phase": "baseline"}]},
     }}
     counts = build(research, ledger)["reason_counts"]

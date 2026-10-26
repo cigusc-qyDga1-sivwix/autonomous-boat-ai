@@ -290,7 +290,7 @@
     </div>`;
   }
   function venuePanel(r) {
-    const p=r?.venue_profile,adj=r?.venue_adjustment;
+    const p=r?.venue_profile,adj=r?.venue_adjustment,surface=r?.venue_surface_v1;
     if(!p)return '';
     const rate=p.course1_reference_rate!=null?
       (Number(p.course1_reference_rate)*100).toFixed(1)+'%':'未取得';
@@ -299,7 +299,9 @@
       '<a href="./venue-profiles.html">全国24場を見る ↗</a></div>'+
       '<p><b>水質：</b>'+escape(p.water_type)+'　<b>風の注意：</b>'+escape(p.wind_exposure)+
       '　<b>潮・流れ：</b>'+(p.tide_sensitive?'実測不足なら数値補正なし':'対象外')+'</p>'+
-      '<p><b>水面・進入：</b>'+escape(p.layout_focus)+'</p>'+
+      '<p><b>水面・進入：</b>'+escape(p.layout_focus)+'</p>'+ 
+      (surface?'<p><b>水面展開v1：</b>'+(surface.excluded?'江戸川は今回対象外（従来方式を維持）':surface.applied?'公式水面特性＋発走前ST・舟足根拠でセンター攻めを試験補正':surface.eligible?'23場対象／追加攻防補正の発動条件なし':'適用対象外')+'</p>':'')+
+      (surface?.center_attack_evidence?.length?'<p><b>補正根拠：</b>'+surface.center_attack_evidence.map(s=>escape(s.course+'コース ×'+Number(s.multiplier).toFixed(3)+'／内隣ST差 '+s.st_gap_sec+'秒')).join('、')+'</p>':'')+
       '<p><b>攻防の着眼点：</b>'+escape(p.tactical_focus)+'</p>'+
       '<p><b>1コース相対重みの試験補正：</b>×'+
           escape(adj?.course1_relative_multiplier??'1.0000')+

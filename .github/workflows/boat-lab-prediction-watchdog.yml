@@ -1,0 +1,36 @@
+name: BOAT LAB prediction watchdog for 2026-10-26
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/boat-lab-prediction-watchdog.yml'
+      - 'scripts/prediction_watchdog.py'
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: boat-lab-prediction-watchdog-20261026
+  cancel-in-progress: false
+jobs:
+  monitor:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        shift: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Keep existing prediction collector running through today's close
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python -u scripts/prediction_watchdog.py --day 2026-10-26 --minutes 345

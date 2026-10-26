@@ -44,8 +44,8 @@ def build(day, inputs, prior=None):
     merged={r["race_code"]:r for r in (prior or {}).get("records",[])}
     for code,st in src["stt"].items():
         tk=src["tkz"].get(code)
-        su=src["sui"].get(code)
-        if not tk or not su or len(code)!=12 or code[:8]!=day.strftime("%Y%m%d"):
+        su=src["sui"].get(code) or {}
+        if not tk or len(code)!=12 or code[:8]!=day.strftime("%Y%m%d"):
             continue
         og=src["original"].get(code,{})
         rr=src["result"].get(code)

@@ -41,6 +41,7 @@ assert.deepEqual([ranking[2],ranking[4],ranking[6]],[4,5,6]);
 assert.notEqual(visual.path(1,1),visual.path(1,6));
 assert.equal(visual.tacticFor('1-3-2').id,'escape');
 assert.equal(visual.tacticFor('2-1-3').id,'sashi');
+assert.match(visual.tacticFor('2-1-3').label,/1コースのST遅れならまくりも候補/);
 assert.equal(visual.tacticFor('3-1-5').id,'makuri-zashi');
 assert.equal(visual.tacticFor('4-5-1').id,'makuri');
 assert.notEqual(visual.path(3,1,'makuri',3),visual.path(3,1,'makuri-zashi',3));

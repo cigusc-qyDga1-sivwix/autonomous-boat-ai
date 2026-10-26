@@ -60,3 +60,22 @@ This change removes the diagnosed structural bias; it does not establish an
 improvement in hit rate, missed-place rate or return. Athlete-specific historical
 second/third rates and maneuver success are still unavailable. Evaluate future
 frozen predictions rather than claiming an improvement from hindsight.
+
+
+## Two-course attack candidate — user rule, October 27
+
+When the actual 1-course boat is late at the start and the actual 2-course boat
+can arrive ahead, include an outside sweeping attack (まくり) by the 2-course
+boat alongside its inside passing (差し) option. A late inner boat is a condition
+for consideration, not a guaranteed winning maneuver. In normal entry this is
+lane 1 versus lane 2; after entry changes, use actual course positions and do not
+apply the rule to boat numbers blindly. Compare relative average-ST estimates
+and available pre-race exhibition evidence; exhibition ST is not actual race ST
+and exhibition F is not evidence of a faster legal start. Account for launch,
+turn ability, distance to the inner boat and pressure from the actual 3-course boat.
+
+This edit records the hypothesis and adds it to the animation's candidate
+explanation. The displayed path remains an illustrative sashi example; this edit
+does not invent observed paths, assign a learned maneuver probability, alter
+ranking coefficients, or revise previously frozen tickets. Statistical support
+for attack-specific coefficients requires suitable start/1M labels.

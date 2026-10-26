@@ -90,11 +90,7 @@ jobs:
           python scripts/forecast_audit.py --input app/data/live/latest.json --out app/data/live/audit-latest.json
           python -m json.tool app/data/live/audit-latest.json > /dev/null
           DAY=$(TZ=Asia/Tokyo date +%F)
-          if [ -s "app/data/exhibition/$DAY.json" ] && [ -s "app/data/live/$DAY.json" ]; then
-            python scripts/exhibition_rejection_audit.py --date "$DAY"
-          else
-            echo "Exhibition gap report skipped: same-day research or ledger unavailable"
-          fi
+          python scripts/exhibition_rejection_audit.py --date "$DAY"
       - name: Analyze research only after primary pre-cutoff revisions are frozen
         continue-on-error: true
         run: |
@@ -150,11 +146,7 @@ jobs:
               python scripts/autonomous_daily.py | tee boat-lab-daily-status.json
               python scripts/forecast_audit.py --input app/data/live/latest.json --out app/data/live/audit-latest.json
               DAY=$(TZ=Asia/Tokyo date +%F)
-              if [ -s "app/data/exhibition/$DAY.json" ] && [ -s "app/data/live/$DAY.json" ]; then
-                python scripts/exhibition_rejection_audit.py --date "$DAY"
-              else
-                echo "Exhibition gap report skipped: same-day research or ledger unavailable"
-              fi
+              python scripts/exhibition_rejection_audit.py --date "$DAY"
               node scripts/freeze_tactical_trials.js
               node scripts/freeze_outside_trials.js
               node scripts/freeze_coupling_trials.js

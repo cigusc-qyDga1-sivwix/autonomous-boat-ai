@@ -1,0 +1,114 @@
+{
+  "schema": "boatlabs.manual-maneuver-observation.v1",
+  "race_id": "202610260612",
+  "event_date": "2026-10-26",
+  "venue": "浜名湖",
+  "venue_code": "06",
+  "race": 12,
+  "recorded_at_utc": "2026-10-26T22:54:27.775Z",
+  "provenance": {
+    "kind": "user_reported_race_observation",
+    "raw_text": "浜名湖は道中戦が熾烈でコロコロ順位が変わってたけど船足は谷野が一番良さそうだった",
+    "race_resolution": "浜名湖12R, as identified in the preceding discussion; the latest message abbreviates the race name.",
+    "independently_video_reviewed": false,
+    "video_url": null,
+    "video_timecodes": null,
+    "precision": "Repeated changes of position are reported, but the affected positions, lap, exact sequence and number of overtakes are unspecified. The boat-performance assessment is a subjective impression."
+  },
+  "official_result_evidence": {
+    "final_order": [
+      1,
+      4,
+      3
+    ],
+    "winning_maneuver": {
+      "lane": 1,
+      "decision": "逃げ"
+    },
+    "third_place_racer": {
+      "lane": 3,
+      "racer_id": 4342,
+      "name": "谷野 錬志"
+    },
+    "source_url": "https://www.boatrace.jp/owpc/pc/race/raceresult?hd=20261026&jcd=06&rno=12",
+    "verification": "Official final order, racer identity and winner maneuver checked in the preceding race review. The on-course position changes and comparative boat performance below are attributed user observations."
+  },
+  "source_forecast": {
+    "sha256": "3f04f4575355a7f5ba5761e18b1c644ab5b7000a911e0def93f3add9e8551bd0",
+    "phase": "exhibition",
+    "formal_exhibition_verified": true,
+    "model_version": "tactical-outside-start-wake-v0.9-untrained",
+    "archived_path": "app/data/live/2026-10-26.json",
+    "relevant_saved_values": {
+      "lane": 3,
+      "national_win_rate": 6.91,
+      "average_start_timing": 0.15,
+      "motor_top_2_percent": 32.12,
+      "exhibition_st": 0.12,
+      "exhibition_time": 6.81
+    },
+    "diagnostic": "The original forecast held 1-4-5 and 1-4-2, but no 1-4-3. It captured the winning pair but omitted lane 3 in that pair's third-place branch."
+  },
+  "observations": [
+    {
+      "kind": "on_course_position_volatility",
+      "status": "user_reported",
+      "reported_intensity": "熾烈",
+      "repeated_position_changes": true,
+      "affected_lanes": null,
+      "affected_positions": null,
+      "lap": null,
+      "exact_passes": null,
+      "number_of_position_changes": null,
+      "description": "道中で順位が繰り返し入れ替わったという観察。全順位が変動した、または特定艇が特定の場面で抜いたとは補完しない。"
+    },
+    {
+      "kind": "relative_boat_performance_impression",
+      "lane": 3,
+      "racer_id": 4342,
+      "name": "谷野 錬志",
+      "assessment": "このレースでは舟足が最も良さそうに見えた",
+      "status": "user_subjective_assessment",
+      "measured_speed": null,
+      "objective_rank": null,
+      "dimension_assessments": {
+        "launch": null,
+        "straight_speed": null,
+        "turn_hold": null,
+        "corner_exit": null
+      },
+      "description": "伸び・出足・回り足のどれが優れていたかは未特定。着順3着と舟足の印象は別項目として保存する。"
+    },
+    {
+      "kind": "finish",
+      "order": [
+        1,
+        4,
+        3
+      ],
+      "third_lane": 3,
+      "status": "official_order_confirmed"
+    }
+  ],
+  "research_targets": [
+    "1→4が成立する条件で、3の3着残存・浮上を道中戦の分岐として検証する。",
+    "序盤の順位、道中の順位変動、最終順位を分け、初期隊列を最終着順に固定しない。",
+    "舟足の観察評価と、選手基礎能力・モーターの累積2連対率・展示タイムを区別して管理する。",
+    "舟足が良く見えたケースでの競り勝ち・残存と、良く見えても順位を落とす対照例を比較する。",
+    "今回の印象だけで谷野の舟足トップを客観的事実にしたり、今後の全レースへ固定加点したりしない。",
+    "舟足の具体的な優位箇所、抜き返しの時点や競り相手を、確認できる場合に追加ラベル化する。"
+  ],
+  "related_cases": [
+    "research/manual-maneuvers/2026-10-26-fukuoka-02.json",
+    "research/manual-maneuvers/2026-10-26-fukuoka-08.json",
+    "research/manual-maneuvers/2026-10-26-marugame-10.json",
+    "research/manual-maneuvers/2026-10-26-heiwajima-07.json"
+  ],
+  "use_policy": {
+    "retrospective_label_only": true,
+    "current_statistical_trainer_consumes_maneuver_labels": false,
+    "production_weights_changed": false,
+    "historical_forecast_modified": false,
+    "note": "Preserve attributed order-volatility and subjective boat-performance labels separately from verified final results. No measured performance, complete race order, or causal explanation is inferred. Post-race impressions must not be backfilled into pre-race forecasts."
+  }
+}

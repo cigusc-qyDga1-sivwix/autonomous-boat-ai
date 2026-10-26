@@ -74,14 +74,14 @@
    const [head,second]=combo.split('-').map(Number);
    const headCourse=r?.racers?courseOf(r,head):head;
    if(headCourse===1)return {id:'escape',label:'逃げ・先マイ'};
-   if(headCourse===2)return {id:'sashi',label:'差し'};
+   if(headCourse===2)return {id:'sashi',label:'差し（1コースのST遅れならまくりも候補）'};
    // A head from a centre/outside lane is NOT a proven race tactic.
    // These are selectable strategy hypotheses, not actual confirmed wins.
    if(headCourse===3||headCourse>=5)return {id:'makuri-zashi',label:'まくり差し'};
    if(headCourse===4)return {id:'makuri',label:'まくり'};
    return {id:second<=2?'makuri-zashi':'makuri',label:second<=2?'まくり差し':'まくり'};
  }
- const ROLES={'escape':'先マイ・逃げ狙い','sashi':'差し','makuri':'まくり',
+ const ROLES={'escape':'先マイ・逃げ狙い','sashi':'差し／内艇のST遅れならまくりも候補','makuri':'まくり',
                 'makuri-zashi':'まくり差し','follow':'展開待ち'};
  function courseOf(r,lane){
    const x=(r?.racers||[]).find(y=>Number(y.lane)===lane);
@@ -201,7 +201,7 @@
      'が引き波の影響を受ける可能性。実際の接触・着外は未確認。':'';
    return [
      inside.lane+'号艇が1Mの先マイを狙う。2〜6コースは差し・まくり・まくり差し等を選ぶ仮説。展示STを本番STとみなさない。',
-     '1M：'+inside.lane+'号艇の先マイに対し、'+a+'号艇が'+roles[a-1].label+
+     '1M：1コースがSTで遅れ、2コースが先行できる場合は、2コースのまくりも候補。'+inside.lane+'号艇の先マイに対し、'+a+'号艇が'+roles[a-1].label+
        'で攻める仮説。差し場・艇間は映像で未検証。'+wakeNote,
      'バック：'+a+'–'+b+'–'+c+'を仮配置。'+(wakeStudy?.exposures?.some(x=>x.phase==='2M+')?'2M以降の追走艇も先行艇の引き波に注意。差し直しの余地あり。':'')+'実際の動きや4〜6番手を確定するアニメではない。'
    ];

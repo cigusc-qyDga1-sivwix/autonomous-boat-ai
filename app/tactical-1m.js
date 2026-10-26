@@ -13,6 +13,13 @@ const OUTSIDE_VENUE_COURSES={
  'びわこ':{first:[.566,.138,.138,.087,.060,.018],second:[.187,.245,.214,.165,.135,.063],third:[.080,.198,.198,.212,.169,.150],source:'https://www.boatrace-biwako.jp/modules/datafile/?kind=course&page=index_datacourse'},
  '福岡':{first:[.618,.141,.143,.063,.032,.009],second:[.172,.278,.250,.147,.112,.047],third:[.082,.183,.197,.264,.193,.088],source:'https://boatrace-fukuoka.com/modules/fukuokainfo/?page=index_jodata'}
 };
+// Official Toda summer 2026 COURSE (not frame) finish distribution.
+// Experimental low-strength head-only reference, not a calibrated probability.
+const TODA_OFFICIAL_SUMMER_2026={
+ first:[.412,.183,.155,.144,.084,.030],
+ source:'https://www.boatrace-toda.jp/data/suimen_guide.html',
+ period:'2026-06-01/2026-08-31'
+};
 const RATE_BY_VENUE={
  '桐生':.515,'戸田':.429,'江戸川':.477,'平和島':.446,'多摩川':.535,
  '浜名湖':.525,'蒲郡':.565,'常滑':.583,'津':.564,'三国':.525,
@@ -72,7 +79,8 @@ function surfaceVenueTrial(input,move,byCourse,startSignals,primary){
   control_disabled:input.surface_trial_disabled===true};
 }
 function forecast(input){
- const openChasers=input?.experimental_variant==='four-factor-v1.1';
+ const venueLayoutTrial=input?.experimental_variant==='four-factor-venue-layout-v1.2';
+ const openChasers=input?.experimental_variant==='four-factor-v1.1'||venueLayoutTrial;
  const fourFactor=input?.experimental_variant==='four-factor-v1.0'||openChasers;
  const wakeIntegrated=input?.experimental_variant==='outside-start-wake-v0.9'||fourFactor;
  const startTrial=input?.experimental_variant==='outside-start-gap-v0.7'||wakeIntegrated;
@@ -192,7 +200,8 @@ function forecast(input){
  let rateImpact=clamp(head1/.55,.7,1.3);
  const wind=finite(input.weather_used?.wind_speed,null);
  let hedge=fourFactor?1:wind!==null&&wind>=6?.82:wind!==null&&wind>=4?.9:1;
- const officialReference=outerStudyTrial?OUTSIDE_VENUE_COURSES[input.venue]||null:null;
+ const officialReference=outerStudyTrial?(OUTSIDE_VENUE_COURSES[input.venue]||
+   (venueLayoutTrial&&input.venue==='戸田'?TODA_OFFICIAL_SUMMER_2026:null)):null;
  const refBlend=.35;
  const effectivePriors=officialReference?
    START_PRIORS.map((prior,c)=>prior*(1-refBlend)+officialReference.first[c]*refBlend):
@@ -259,6 +268,43 @@ function forecast(input){
   if(startSignals.slice(3).some(s=>s.head_evidence&&s.wall_hole))
    strength[0]*=.96; // Do not automatically erase an inside survival branch.
  }
+ // v1.2 is deliberately opt-in. Source descriptions alone cannot boost a
+ // course: require pre-race estimated ST advantage plus go/turn evidence.
+ // Karatsu also requires completed 6-boat exhibition and actual entry order.
+ // No water-layout correction for Edogawa or any other non-target venue.
+ const venueLayoutAdjustments=[];
+ const venueLayoutTargets=(input.venue==='戸田'||input.venue==='福岡')?[3,4]:
+   input.venue==='唐津'?[2,3,4]:[];
+ if(venueLayoutTrial&&venueLayoutTargets.length){
+   const entryCertified=input.phase==='exhibition'&&uniqueCourses;
+   for(const course of venueLayoutTargets){
+     if(input.venue==='唐津'&&!entryCertified)continue;
+     const signal=startSignals[course-1];
+     const inner=move[byCourse[course-2]],attacker=move[byCourse[course-1]];
+     const stGap=signal?.nearest_gap_sec;
+     if(stGap===null||stGap===undefined||stGap<.018)continue;
+     const goRatio=attacker.go/Math.max(.38,inner.go);
+     const turnRatio=attacker.turn/Math.max(.35,inner.turn);
+     if(goRatio<1.04||turnRatio<.90)continue;
+     const uplift=clamp(.010+.4*(stGap-.018)+.08*(goRatio-1.04),0,.05);
+     strength[course-1]*=1+uplift;
+     venueLayoutAdjustments.push({course,lane:v[byCourse[course-1]].lane,
+       relative_multiplier:+(1+uplift).toFixed(4),nearest_gap_sec:stGap,
+       go_ratio:+goRatio.toFixed(4),turn_ratio:+turnRatio.toFixed(4)});
+   }
+ }
+ const venueLayoutMeta=venueLayoutTrial?{
+   version:'venue-layout-v1.2-trial',venue:input.venue,
+   applied:venueLayoutAdjustments.length>0,
+   target_venue:venueLayoutTargets.length>0,
+   excluded_edogawa:input.venue==='江戸川',
+   adjustments:venueLayoutAdjustments,
+   course_prior_reference:officialReference?.source||null,
+   course_prior_period:officialReference?.period||null,
+   karatsu_real_entry_certified:input.venue==='唐津'&&input.phase==='exhibition'&&uniqueCourses,
+   tide_observation_used:false,wind_bearing_inferred:false,
+   note:'未訓練・未校正。風向や潮位を推測しない。結果・配当不使用。'
+ }:null;
  // Incomplete hydrodynamic proxy: a makuri or sweeping outer turn may put
  // an inner boat across its wake. This score is not an observed trajectory,
  // probability, or a guarantee of losing the top 3.
@@ -329,7 +375,18 @@ function forecast(input){
   const leader=move[byCourse[(phase==='second'?h:s)-1]].overall;
   const prior=(phase==='second'?[1.10,1.10,1.06,1.02,.98,.94]:[1.04,1.04,1.03,1.02,1,.98])[c-1];
   const interaction=clamp(1+.05*(own/leader-1),.95,1.05);
-  return prior*Math.pow(own,phase==='second'?1.15:.95)*interaction;
+  let value=prior*Math.pow(own,phase==='second'?1.15:.95)*interaction;
+  // A small conditional follower and inner-survivor adjustment ONLY after
+  // the head course passed the pre-race layout evidence gate.
+  if(venueLayoutTrial&&venueLayoutAdjustments.some(x=>x.course===h)){
+    if(phase==='second'&&c===h+1&&c<=6){
+      const follower=move[byCourse[c-1]],head=move[byCourse[h-1]];
+      if(follower.go>=head.go*.92&&follower.turn>=head.turn*.90)value*=1.04;
+    }
+    if(phase==='third'&&s===h+1&&(c===1||c===2)&&move[byCourse[c-1]].turn>=.90)
+      value*=1.025;
+  }
+  return value;
  }
  function secondWeight(headCourse,secondCourse){
   if(openChasers)return openRoleWeight(headCourse,null,secondCourse,'second');
@@ -633,7 +690,7 @@ function forecast(input){
  })):[];
  const headOneTotal=headOneScores.reduce((n,x)=>n+x.weight,0);
  return {
-   model:openChasers?'four-factor-v1.1-untrained':fourFactor?'four-factor-v1.0-untrained':wakeIntegrated?'tactical-outside-start-wake-v0.9-untrained':
+   model:venueLayoutTrial?'four-factor-venue-layout-v1.2-untrained':openChasers?'four-factor-v1.1-untrained':fourFactor?'four-factor-v1.0-untrained':wakeIntegrated?'tactical-outside-start-wake-v0.9-untrained':
       startTrial?'tactical-outside-start-gap-v0.7-untrained':
      coupledTrial?'tactical-six-boat-coupling-v0.6-untrained':
      outerStudyTrial?'tactical-outside-role-v0.5-untrained':
@@ -642,7 +699,7 @@ function forecast(input){
      outsideTrial?'tactical-outside-makuri-v0.2-untrained':'tactical-1m-conditional-v0.1-untrained',
    basis:'保存済み発走前選手情報と場別参考値のみ。結果・払戻・オッズ不使用。',
    venue:input.venue,head_course_shares:shares.map((s,i)=>({course:i+1,lane:v[byCourse[i]].lane,relative_share:+s.toFixed(4),tactic:openChasers?'攻め方未確定':nameTactic[i+1]})),
-   metadata:{...(fourFactor?{four_factor:{...factorModel,...(openChasers?{chaser_policy:{
+   metadata:{...(venueLayoutTrial?{venue_layout_v12:venueLayoutMeta}:{}),...(fourFactor?{four_factor:{...factorModel,...(openChasers?{chaser_policy:{
         version:'ability-first-v1.1',fixed_neighbor_bonus:false,legacy_ticket_rescue:false,
         interaction_bounds:[.95,1.05],calibrated:false,
         second_by_head:[1,2,3,4,5,6].map(h=>{
@@ -714,6 +771,7 @@ function forecast(input){
  };
 }
 global.BoatTacticalModel={forecast,
+ forecastVenueLayoutTrial:input=>forecast({...input,experimental_variant:'four-factor-venue-layout-v1.2'}),
  forecastFourFactorOpen:input=>forecast({...input,experimental_variant:'four-factor-v1.1'}),
  forecastFourFactor:input=>forecast({...input,experimental_variant:'four-factor-v1.0'}),
  forecastRoleAware:input=>forecast({...input,experimental_variant:'role-consistency-v0.4'}),

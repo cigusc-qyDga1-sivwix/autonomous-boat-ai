@@ -22,6 +22,11 @@ for(const venue of ['戸田','福岡','唐津']){
  assert.equal(trial.model,'four-factor-venue-layout-v1.2-untrained');
  assert.equal(main.model,'four-factor-v1.1-untrained','existing main remains v1.1');
  assert.equal(trial.metadata.venue_layout_v12.target_venue,true);
+ assert.equal(trial.metadata.venue_layout_v12.applied,true,
+  'the fixture has an estimated 3-course ST/go/turn attack advantage');
+ assert.ok(trial.metadata.venue_layout_v12.adjustments.some(x=>x.course===3));
+ assert.notDeepEqual(trial.head_course_shares,main.head_course_shares,
+  'evidence-gated target trial must actually change head rankings');
  assert.equal(trial.metadata.venue_layout_v12.excluded_edogawa,false);
  assert.equal(trial.metadata.venue_layout_v12.wind_bearing_inferred,false);
  assert.equal(trial.metadata.venue_layout_v12.tide_observation_used,false);
@@ -30,6 +35,13 @@ for(const venue of ['戸田','福岡','唐津']){
  assert.equal(new Set(trial.bets.map(b=>b.combination)).size,trial.bets.length);
  const gains=trial.metadata.venue_layout_v12.adjustments;
  assert.ok(gains.every(x=>x.relative_multiplier>=1&&x.relative_multiplier<=1.05));
+}
+// No inferred attack from site identity alone.
+for(const venue of ['戸田','福岡','唐津']){
+ const neutral=fixture(venue);
+ for(const boat of neutral.racers)boat.average_start_timing=.17;
+ assert.equal(pick(neutral).metadata.venue_layout_v12.applied,false,
+  'layout alone must not manufacture a favorable center attack');
 }
 const karatsuBaseline=pick(fixture('唐津','baseline'));
 assert.equal(karatsuBaseline.metadata.venue_layout_v12.applied,false,

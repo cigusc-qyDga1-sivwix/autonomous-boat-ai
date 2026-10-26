@@ -14,8 +14,7 @@ class OptionalWeatherTests(unittest.TestCase):
             st[f"艇{i}_スタート展示"] = "0.10"
             tk[f"艇{i}_展示タイム"] = "6.80"
         data = build(date(2026, 10, 26), {
-            "stt": [st], "tkz": [tk], "sui": [],
-            "original": [], "result": [], "payout": []
+            "stt": [st], "tkz": [tk]
         })
         self.assertEqual(data["coverage"]["race_count"], 1)
         self.assertEqual(len(data["records"][0]["boats"]), 6)

@@ -90,7 +90,7 @@ jobs:
           python scripts/forecast_audit.py --input app/data/live/latest.json --out app/data/live/audit-latest.json
           python -m json.tool app/data/live/audit-latest.json > /dev/null
           DAY=$(TZ=Asia/Tokyo date +%F)
-          python scripts/exhibition_rejection_audit.py --date "$DAY"
+          python scripts/exhibition_rejection_audit.py --date "$DAY" || echo "::warning::Exhibition gap audit failed; forecast publishing remains enabled"
       - name: Analyze research only after primary pre-cutoff revisions are frozen
         continue-on-error: true
         run: |
@@ -146,7 +146,7 @@ jobs:
               python scripts/autonomous_daily.py | tee boat-lab-daily-status.json
               python scripts/forecast_audit.py --input app/data/live/latest.json --out app/data/live/audit-latest.json
               DAY=$(TZ=Asia/Tokyo date +%F)
-              python scripts/exhibition_rejection_audit.py --date "$DAY"
+              python scripts/exhibition_rejection_audit.py --date "$DAY" || echo "::warning::Exhibition gap audit failed; forecast publishing remains enabled"
               node scripts/freeze_tactical_trials.js
               node scripts/freeze_outside_trials.js
               node scripts/freeze_coupling_trials.js

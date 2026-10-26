@@ -10,6 +10,10 @@ on:
       - 'scripts/main_v09_bridge.js'
       - 'scripts/main_four_factor_bridge.js'
       - 'scripts/racer_context.py'
+      - 'scripts/freeze_statistical_shadow.py'
+      - 'scripts/audit_statistical_shadow.py'
+      - 'boat_ai/statistical.py'
+      - 'app/data/statistical/latest-model.json'
       - 'app/four-factor.js'
       - 'scripts/entry_exhibition_gate.py'
       - 'scripts/test_entry_exhibition_gate.py'
@@ -139,13 +143,18 @@ jobs:
           set -euo pipefail
           node scripts/freeze_start_trials.js
           python -m json.tool app/data/experiments/outside-start-status-latest.json > /dev/null
+      - name: Freeze learned statistical comparison before cutoff
+        continue-on-error: true
+        run: |
+          python -m scripts.freeze_statistical_shadow
+          python -m scripts.audit_statistical_shadow
       - name: Persist predictions and immutable version history
         shell: bash
         run: |
           set -euo pipefail
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git config user.name 'github-actions[bot]'
-          git add app/data/live/ app/data/exhibition/ app/data/experiments/ app/data/venue-profiles.json
+          git add app/data/live/ app/data/exhibition/ app/data/experiments/ app/data/venue-profiles.json app/data/statistical/prospective-audit.json
           if ! git diff --cached --quiet; then
             git commit -m 'data: automatic nationwide forecast snapshots and results'
             # Retry on latest immutable ledger, never overwrite competing records.
@@ -168,7 +177,9 @@ jobs:
               node scripts/freeze_outside_trials.js
               node scripts/freeze_coupling_trials.js
               node scripts/freeze_start_trials.js
-              git add app/data/live/ app/data/exhibition/ app/data/experiments/ app/data/venue-profiles.json
+              python -m scripts.freeze_statistical_shadow || echo "::warning::Statistical shadow unavailable"
+              python -m scripts.audit_statistical_shadow || echo "::warning::Statistical audit unavailable"
+              git add app/data/live/ app/data/exhibition/ app/data/experiments/ app/data/venue-profiles.json app/data/statistical/prospective-audit.json
               if git diff --cached --quiet; then
                 break
               fi

@@ -3,8 +3,9 @@
 import copy
 import unittest
 from datetime import datetime
+from unittest.mock import patch
 from entry_exhibition_gate import validated_courses, validated_preview, summarize_gate
-from autonomous_daily import preview_complete
+from autonomous_daily import preview_complete, select_exhibition_source
 
 DAY = "2026-10-23"
 COURSES = [1, 4, 5, 3, 6, 2]  # By lane => start-exhibition 1-6-4-2-3-5.
@@ -76,6 +77,34 @@ class EntryGateTests(unittest.TestCase):
             self.assertFalse(summarize_gate(
                 race_snapshot(courses=COURSES,frozen=stamp),DAY)["final_eligible"])
         self.assertFalse(summarize_gate(race_snapshot(courses=COURSES),None)["final_eligible"])
+    def test_multi_source_keeps_complete_openapi_and_does_not_fetch_csv(self):
+        live = {"preview": preview()}
+        original = copy.deepcopy(live)
+        with patch("autonomous_daily.inject", side_effect=AssertionError("CSV must not override valid API")):
+            chosen, origin, source = select_exhibition_source(
+                live, {"race_code": "202610260908"}, datetime.now().astimezone(), "09", 8)
+        self.assertIs(chosen, live)
+        self.assertIsNone(origin)
+        self.assertEqual(source, "openapi")
+        self.assertEqual(live, original)
+
+    def test_multi_source_csv_fallback_requires_complete_six_boat_preview(self):
+        live = {"preview": {"racers": {}}}
+        bridged = {"preview": preview()}
+        evidence = {"source": "BoatraceCSV", "observed_at_jst": "2026-10-26T13:42:00+09:00"}
+        with patch("autonomous_daily.inject", return_value=(bridged, evidence)):
+            chosen, origin, source = select_exhibition_source(
+                live, {}, datetime.now().astimezone(), "09", 8)
+        self.assertIs(chosen, bridged)
+        self.assertEqual(origin, evidence)
+        self.assertEqual(source, "boatracecsv")
+        with patch("autonomous_daily.inject", return_value=(live, evidence)):
+            chosen, origin, source = select_exhibition_source(
+                live, {}, datetime.now().astimezone(), "09", 8)
+        self.assertIs(chosen, live)
+        self.assertIsNone(origin)
+        self.assertEqual(source, "unavailable")
+
     def test_negative_exhibition_st_is_not_fast_bonus(self):
         p=preview();p["racers"]["6"]["start_timing"]=-.12
         self.assertTrue(preview_complete({"preview":p}))

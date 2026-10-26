@@ -583,6 +583,7 @@
      <div class="detail-header"><div><div class="page-eyebrow">FORECAST DETAILS / ${escape(data.event_date)}</div><h1 class="detail-title">${escape(r.venue)} ${r.race}R <span style="font-size:17px;vertical-align:middle">${pill(r.classification)}</span></h1><div class="detail-sub">締切予定 ${escape(r.cutoff_jst)} JST　 ·　 ${r.phase==='exhibition'?'展示数値反映':r.phase==='baseline'?'展示前':'保存済み'}・結果未使用</div></div><button class="btn btn-primary" data-action="copy-bets" data-race="${escape(r.venue)}|${r.race}">${isFormalTicket(r)?'⎘ 正式買い目をコピー':'⎘ 暫定買い目をコピー'}</button></div>
     ${ticketBanner(r)}
     ${window.BoatFourFactor?.panel(r)||''}
+    ${window.BoatHeadShareChart?.render(r)||''}
     ${ticketBlock}
     ${window.BoatStatisticalShadow?.placeholder(r)||''}
     ${r.model_role==='main'?'<div class="notice"><strong>採用モデル '+(r.model_version==='four-factor-v1.1-untrained'?'四要素v1.1：選手60 × モーター25 × 展示10 × 気象5／2・3着は全艇評価':r.model_version==='four-factor-v1.0-untrained'?'四要素v1.0：選手60 × モーター25 × 展示10 × 気象5':r.model_version?.includes('v0.9')?'v0.9：ST差 × 6艇連動 × 1M・2M引き波評価':'v0.7：スタート差 × 6艇連動')+'</strong>。正式・暫定の区分は上の表示を確認してください。旧方式は比較用です。</div>':

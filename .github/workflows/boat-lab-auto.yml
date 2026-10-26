@@ -63,6 +63,11 @@ jobs:
           node --check scripts/main_v09_bridge.js
           node --check app/tactical-1m.js
           python -m compileall -q scripts/autonomous_daily.py
+      - name: Verify Mikuni exhibition bridge replay safety
+        run: |
+          python scripts/test_mikuni_1r_replay.py
+          python scripts/test_exhibition_ingest_optional_weather.py
+          python scripts/test_entry_exhibition_gate.py
       - name: Collect exhibition measurements before forecasting
         continue-on-error: true
         run: |

@@ -1,0 +1,97 @@
+{
+  "schema": "boatlabs.manual-maneuver-observation.v1",
+  "race_id": "202610262202",
+  "event_date": "2026-10-26",
+  "venue": "福岡",
+  "venue_code": "22",
+  "race": 2,
+  "recorded_at_utc": "2026-10-26T22:47:05.174Z",
+  "provenance": {
+    "kind": "user_reported_race_observation",
+    "raw_text": "福岡2R\n2が1の頭を叩いて１を沈めて3・4・5がそれに続いて2の内側をまくりざしをして2→3→4・5みたいな感じになって最後は5が三着とった",
+    "independently_video_reviewed": false,
+    "video_url": null,
+    "video_timecodes": null
+  },
+  "official_result_evidence": {
+    "final_order": [
+      2,
+      3,
+      5
+    ],
+    "winning_maneuver": {
+      "lane": 2,
+      "decision": "まくり"
+    },
+    "source_url": "https://www.boatrace.jp/owpc/pc/race/raceresult?hd=20261026&jcd=22&rno=2",
+    "verification": "Official final order and winner maneuver checked in preceding race review. Other boats' maneuvers below are user annotations, not official classifications."
+  },
+  "source_forecast": {
+    "sha256": "f1c2914f6de77a33f1d16e163b4118ed8931a66cef8b3f66a65f66f27c18dac5",
+    "phase": "baseline",
+    "formal_exhibition_verified": false,
+    "model_version": "tactical-outside-start-wake-v0.9-untrained",
+    "archived_path": "app/data/live/2026-10-26.json",
+    "note": "Exhibition was unavailable in this original forecast; do not retroactively claim its observation or a pre-race maneuver prediction."
+  },
+  "observation_sequence": [
+    {
+      "stage": "initial_attack",
+      "attacker_lane": 2,
+      "maneuver": "まくり",
+      "displaced_lane": 1,
+      "status": "user_reported",
+      "description": "2が1の頭を叩き、1が後退した。"
+    },
+    {
+      "stage": "following_response",
+      "candidate_lanes": [
+        3,
+        4,
+        5
+      ],
+      "reported_route": "2の内側",
+      "reported_maneuver": "まくり差し",
+      "status": "user_reported_group_description",
+      "description": "2の攻めを受け、3・4・5がその内側へ入る展開。各艇の正確な軌道・通過時刻は未記録。"
+    },
+    {
+      "stage": "intermediate_order",
+      "leading_lanes": [
+        2,
+        3
+      ],
+      "remaining_place_candidates": [
+        4,
+        5
+      ],
+      "status": "user_reported_approximate",
+      "location_and_lap": null,
+      "description": "2→3→4・5のような態勢。どの区間の順位かは未特定。"
+    },
+    {
+      "stage": "finish",
+      "order": [
+        2,
+        3,
+        5
+      ],
+      "third_lane": 5,
+      "status": "official_order_confirmed"
+    }
+  ],
+  "research_targets": [
+    "2の捲り候補を、1との相対的なST差・行き足・艇間から検証する。",
+    "攻撃艇の隣1艇だけでなく、開いた進路を使える3・4・5を候補として評価する。",
+    "同じ進路を狙う艇を独立した確定追走と扱わず、進路競合と2・3着の分岐を検証する。",
+    "2→3が成立した条件で、4と5の3着争いを選手能力・ターン・道中の残存から比較する。",
+    "同じ2の攻めでも1が残る例、追走艇が残れない例と比較し、1レースから固定フォーメーションを作らない。"
+  ],
+  "use_policy": {
+    "retrospective_label_only": true,
+    "current_statistical_trainer_consumes_maneuver_labels": false,
+    "production_weights_changed": false,
+    "historical_forecast_modified": false,
+    "note": "Retain the user's interpretation as an attributed label. It is not an independently measured trajectory, a causal proof, or permission to feed post-race facts into pre-race features."
+  }
+}

@@ -41,6 +41,7 @@ def test_registered_context_reaches_factor_score_without_outcomes():
     final=ledger['race_records']['18-1']['versions'][-1]
     assert all(x['available']['frame'] for x in final['four_factor']['rows'])
     assert final['racers'][0]['racer_context']['racer_id']==4001
+    assert final['racers'][0]['racer_id']==4001
     assert 'result' not in final['racers'][0]['racer_context']
 
 

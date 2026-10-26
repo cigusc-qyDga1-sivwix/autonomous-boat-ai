@@ -179,9 +179,11 @@ def features(race: dict, phase: str) -> tuple[list[float], list[dict]]:
                 # Lower time = better within the same venue/race, conservative bounded gain.
                 score *= max(.83, min(1.17, 1 + rate * (mean - values[i-1])))
         weights.append(max(.12, score))
+        registration = number(racer.get("number"))
         detail.append({
             "lane": i,
-            **({"racer_context": (race.get("_racer_context") or {}).get(str(i))}
+            **({"racer_context": (race.get("_racer_context") or {}).get(str(i)),
+                "racer_id": int(registration) if registration is not None and registration.is_integer() else None}
                if race.get("_racer_context") else {}),
             "name": str(racer.get("name", "")).strip(),
             "course": course,

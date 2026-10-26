@@ -693,7 +693,7 @@ function forecast(input){
        conditional_outside_evidence:Object.values(outsideEvidence),
        proof_note:'Untrained relative model, not calibrated win probabilities. No blanket exterior picks.'
      }}:{}),
-     venue_surface_v1:venueSurface,
+     ...(openChasers?{venue_surface_v1:venueSurface}:{}),
      source_at_utc:input.frozen_at_utc||null,
      ...(wakeTrial?{wake_research_only:true,wake_hypothesis:'inner boat may lose acceleration when crossed by outer makuri wash; not measured',
          wake_risk_by_attacker: [3,4,5,6].map(h=>({

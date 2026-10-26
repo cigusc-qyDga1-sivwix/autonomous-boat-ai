@@ -1,0 +1,98 @@
+{
+  "schema": "boatlabs.manual-maneuver-observation.v1",
+  "race_id": "202610261510",
+  "event_date": "2026-10-26",
+  "venue": "丸亀",
+  "venue_code": "15",
+  "race": 10,
+  "recorded_at_utc": "2026-10-26T22:50:23.439Z",
+  "provenance": {
+    "kind": "user_reported_race_observation",
+    "raw_text": "丸亀10Rは最初4→1→5→6・3みたいな感じだけど3・5・6が道中競り合って最後は3が取ったみたいな感じ",
+    "independently_video_reviewed": false,
+    "video_url": null,
+    "video_timecodes": null,
+    "precision": "Approximate early order; exact turn, lap and location are not specified."
+  },
+  "official_result_evidence": {
+    "final_order": [
+      4,
+      1,
+      3
+    ],
+    "winning_maneuver": {
+      "lane": 4,
+      "decision": "まくり差し"
+    },
+    "source_url": "https://www.boatrace.jp/owpc/pc/race/raceresult?hd=20261026&jcd=15&rno=10",
+    "verification": "Official final order and winner maneuver checked in preceding race review. Intermediate order and the 3/5/6 battle are attributed user observations."
+  },
+  "source_forecast": {
+    "sha256": "09f5d75e4c02a43f64493568f3fbe52793545d4c8b0128915597a61e7a4b2709",
+    "phase": "exhibition",
+    "formal_exhibition_verified": true,
+    "model_version": "tactical-outside-start-wake-v0.9-untrained",
+    "archived_path": "app/data/live/2026-10-26.json",
+    "diagnostic": "The original forecast contained 4-1-5, but no 4-1-3. Its only third-place candidate given the 4-1 pair was lane 5."
+  },
+  "observation_sequence": [
+    {
+      "stage": "early_order",
+      "leading_lanes": [
+        4,
+        1,
+        5
+      ],
+      "following_group": [
+        6,
+        3
+      ],
+      "exact_turn": null,
+      "lap": null,
+      "status": "user_reported_approximate",
+      "description": "序盤は4→1→5→6・3のような態勢。正確な通過地点、6と3の前後関係は未特定。"
+    },
+    {
+      "stage": "on_course_position_battle",
+      "contested_position": 3,
+      "participant_lanes": [
+        3,
+        5,
+        6
+      ],
+      "lap": null,
+      "exact_passes": null,
+      "status": "user_reported",
+      "description": "3・5・6が道中で競り合った。誰がどのマークで抜いたか、接触や失速の有無は未記録。"
+    },
+    {
+      "stage": "finish",
+      "order": [
+        4,
+        1,
+        3
+      ],
+      "third_lane": 3,
+      "status": "official_order_confirmed",
+      "description": "最終3着は3。序盤に5が3番手だったという観察と、最終着順を別ラベルとして扱う。"
+    }
+  ],
+  "research_targets": [
+    "序盤の隊列と最終着順を分け、1マーク後の暫定3番手をそのまま最終3着に固定しない。",
+    "4→1が残る条件で、3・5・6の3着争いを複数候補として評価する。",
+    "同じ選手について、道中で追う場合と追われる場合の順位変化を、観測区間が分かる事例で集計する。",
+    "道中の競り勝ち・抜き返しを、選手能力・機力・実測ターン情報との関連として検証する。今回だけから3が競り勝った原因を断定しない。",
+    "序盤3番手が維持された対照例も集め、すべてのレースで候補を一律に広げるルールへ置き換えない。"
+  ],
+  "related_cases": [
+    "research/manual-maneuvers/2026-10-26-fukuoka-02.json",
+    "research/manual-maneuvers/2026-10-26-fukuoka-08.json"
+  ],
+  "use_policy": {
+    "retrospective_label_only": true,
+    "current_statistical_trainer_consumes_maneuver_labels": false,
+    "production_weights_changed": false,
+    "historical_forecast_modified": false,
+    "note": "Keep attributed intermediate-order and on-course battle labels separate from verified final results. No measured coordinates, exact passes or causal claims are inferred; post-race facts must not become pre-race features."
+  }
+}

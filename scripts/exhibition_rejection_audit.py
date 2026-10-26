@@ -71,10 +71,21 @@ def main():
     parser = ArgumentParser()
     parser.add_argument("--date", required=True)
     args = parser.parse_args()
-    research = json.loads((ROOT / "exhibition" / (args.date + ".json")).read_text())
-    ledger = json.loads((ROOT / "live" / (args.date + ".json")).read_text())
-    report = build(research, ledger)
+    research_path = ROOT / "exhibition" / (args.date + ".json")
+    ledger_path = ROOT / "live" / (args.date + ".json")
+    if research_path.exists() and ledger_path.exists():
+        research = json.loads(research_path.read_text())
+        ledger = json.loads(ledger_path.read_text())
+        report = build(research, ledger)
+        report["status"] = "analyzed"
+    else:
+        report = {"event_date": args.date, "status": "inputs_missing",
+                  "research_file_present": research_path.exists(),
+                  "ledger_file_present": ledger_path.exists(),
+                  "research_rows_checked": 0, "reason_counts": {}, "race_reasons": [],
+                  "warning": "Diagnostic inputs missing; this is not proof of no exhibition gaps."}
     out = ROOT / "exhibition" / "rejection-audit-latest.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     print(json.dumps(report["reason_counts"], ensure_ascii=False))
 

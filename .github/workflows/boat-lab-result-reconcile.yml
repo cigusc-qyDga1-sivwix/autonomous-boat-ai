@@ -28,28 +28,39 @@ jobs:
       name: github-pages
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: Verify immutable forecast and conflict safeguards
         run: python -m unittest discover -s tests -p 'test_reconcile_official_backlog.py' -v
-      - name: Recheck today's and previous four days' official payouts
-        run: |
-          set -euo pipefail
-          python -m scripts.reconcile_official_backlog --days 5
-          python -m json.tool app/data/live/result-sync-latest.json > /dev/null
-      - name: Persist results-only updates
+      - name: Recheck official payouts and retry results-only saves on the latest ledger
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add app/data/live/
-          if ! git diff --cached --quiet; then
-            git commit -m 'data: catch up verified official race settlements'
+          # Recompute on the latest ledger instead of rebasing stale JSON over
+          # concurrent result/forecast updates. Frozen versions remain untouched.
+          for attempt in 1 2 3; do
             git fetch origin main
-            git rebase origin/main
-            git push origin HEAD:main
-          fi
+            git reset --hard origin/main
+            python -m scripts.reconcile_official_backlog --days 5
+            python -m json.tool app/data/live/result-sync-latest.json > /dev/null
+            git add app/data/live/
+            if git diff --cached --quiet; then
+              break
+            fi
+            git commit -m 'data: catch up verified official race settlements'
+            if git push origin HEAD:main; then
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "::error::Official backlog save retries exhausted" >&2
+              exit 1
+            fi
+            sleep 2
+          done
       # GITHUB_TOKEN data commits do not trigger Pages' push workflow;
       # deploy here so the iPhone app actually receives reconciled results.
       - uses: actions/configure-pages@v5

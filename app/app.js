@@ -584,6 +584,7 @@
     ${ticketBanner(r)}
     ${window.BoatFourFactor?.panel(r)||''}
     ${ticketBlock}
+    ${window.BoatStatisticalShadow?.placeholder(r)||''}
     ${r.model_role==='main'?'<div class="notice"><strong>採用モデル '+(r.model_version==='four-factor-v1.1-untrained'?'四要素v1.1：選手60 × モーター25 × 展示10 × 気象5／2・3着は全艇評価':r.model_version==='four-factor-v1.0-untrained'?'四要素v1.0：選手60 × モーター25 × 展示10 × 気象5':r.model_version?.includes('v0.9')?'v0.9：ST差 × 6艇連動 × 1M・2M引き波評価':'v0.7：スタート差 × 6艇連動')+'</strong>。正式・暫定の区分は上の表示を確認してください。旧方式は比較用です。</div>':
       '<div class="notice warn">過去に固定した旧モデルの予想（当時の買い目・SHAを維持）。新モデルへ事後書き換えしません。</div>'}
     ${r.phase?`<div class="notice">${escape(r.evidence||'')} ・ 発走前保存 ${escape(r.frozen_at_utc||'未記録')} ・ SHA256 ${escape((r.sha256||'').slice(0,18))}…${r.weather_observed?`<br>場内風速 ${escape(r.weather_observed.wind_speed)}m/s ／ 波高 ${escape(r.weather_observed.wave_height)}cm（非公式・取得時点）`:''}<br>予想モデル：未学習・確率未校正。展示動画とオッズは未反映。</div>`:''}
@@ -774,7 +775,10 @@
     if(['results','analysis'].includes(state.view)&&window.BoatCumulative?.needsRefresh?.()){
       void window.BoatCumulative.load().then(()=>{if(['results','analysis'].includes(state.view))render()}).catch(()=>{});
     }
-    if(state.view==='races'&&state.raceDetail)window.BoatRaceVisual?.mount(main,state.raceDetail);
+    if(state.view==='races'&&state.raceDetail){
+      window.BoatRaceVisual?.mount(main,state.raceDetail);
+      void window.BoatStatisticalShadow?.mount(main,state.raceDetail,data.event_date);
+    }
     else window.BoatRaceVisual?.dispose();
   }
   function refreshTimelineClock(){

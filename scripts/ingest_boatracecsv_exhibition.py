@@ -40,7 +40,8 @@ def index(rows):
     return {r["レースコード"]:r for r in rows if r.get("レースコード")}
 
 def build(day, inputs, prior=None):
-    src={k:index(v) for k,v in inputs.items()}
+    # Missing optional feeds must behave like empty CSVs, not crash the importer.
+    src={k:index(inputs.get(k) or []) for k in SOURCES}
     merged={r["race_code"]:r for r in (prior or {}).get("records",[])}
     for code,st in src["stt"].items():
         tk=src["tkz"].get(code)

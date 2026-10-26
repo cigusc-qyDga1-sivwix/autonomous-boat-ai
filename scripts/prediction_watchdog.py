@@ -13,10 +13,18 @@ TARGET = '.github/workflows/boat-lab-auto.yml'
 def should_dispatch(age_seconds, active, since_dispatch):
     return not active and age_seconds >= 120 and since_dispatch >= 180
 
+def target_window(now, day, start_hour):
+    local = now.astimezone(JST)
+    if local.date().isoformat() != day:
+        return 'expired'
+    return 'waiting' if local.hour < start_hour else 'open'
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--day', required=True)
     parser.add_argument('--minutes', type=int, default=345)
+    parser.add_argument('--start-hour', type=int, choices=range(24), default=0)
     args = parser.parse_args()
     repo = os.environ['GITHUB_REPOSITORY']
     if repo != 'cigusc-qyDga1-sivwix/autonomous-boat-ai':
@@ -37,9 +45,13 @@ def main():
     last_dispatch = float('-inf')
     while time.monotonic() < end:
         now = datetime.now(timezone.utc)
-        if now.astimezone(JST).date().isoformat() != args.day:
+        window = target_window(now, args.day, args.start_hour)
+        if window == 'expired':
             print('Target day ended; watchdog stopped', flush=True)
             break
+        if window == 'waiting':
+            time.sleep(30)
+            continue
         try:
             runs = request(api + '/actions/runs?per_page=50')['workflow_runs']
             active = any(r.get('path') == TARGET and r.get('head_branch') == 'main'

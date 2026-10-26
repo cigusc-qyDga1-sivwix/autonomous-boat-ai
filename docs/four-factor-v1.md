@@ -26,3 +26,7 @@ The immutable racer rows preserve source hashes, URLs, capture times and context
 The race detail shows the factor multipliers. Pure player ability is displayed separately from the motor/exhibition/weather factors for v1.0; past model displays retain their definitions. Browser and server use the same JavaScript factor and tactical engine.
 
 Tests cover directionality, neutrality/missing fields, exhibition F, entry changes, weather flattening, player-versus-motor separation, no outcome leakage, browser/server parity, budgets, cutoff gates, old snapshot preservation, date/ID/source freshness and historical model parity. Accuracy, return-rate improvement and optimal weighting require future pre-cutoff comparisons; no performance claim is made from October 26 hindsight.
+
+## October 27 operation
+
+Renew the bounded prediction-freshness watchdog for October 27 JST. It waits until 06:00 JST without dispatching overnight, checks freshness independently of cron during the day, and stops at the next JST midnight. Five sequential shifts cover the wait and remaining day under per-job limits. This is a daily incident mitigation, not a permanent external scheduler; the following day requires a separately validated operating arrangement.

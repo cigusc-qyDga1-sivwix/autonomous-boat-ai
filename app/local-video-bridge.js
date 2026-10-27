@@ -53,7 +53,10 @@ function summarizePixels(rgba,width,height,{step=4,topCrop=.18,bottomCrop=.03}={
          [Math.round(a.rx/a.count),Math.round(a.ry/a.count)]:null,
          verified_boat_id:null}];
  }));
- return {status:deviation<8||changed<10?'BLANK_OR_UNUSABLE_FRAME':'UNVERIFIED_COLOR_REGIONS',
+ const colourGroups=COLORS.filter(k=>n[k].count>=8).length;
+ // Different brightly coloured regions may have nearly identical luma.
+ // Pure black or a flat monochrome/protected stream stays unusable.
+ return {status:(changed<10||(deviation<8&&colourGroups<2))?'BLANK_OR_UNUSABLE_FRAME':'UNVERIFIED_COLOR_REGIONS',
   width,height,luma_sd:Math.round(deviation*100)/100,
   meaningful_sample_count:count,colour_candidates:candidates,
   caveat:'Raw colour regions include water, graphics, reflections; NOT six confirmed boats.'};

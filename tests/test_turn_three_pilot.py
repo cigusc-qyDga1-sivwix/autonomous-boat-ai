@@ -4,7 +4,7 @@ from datetime import datetime
 import unittest
 
 from scripts.turn_three_pilot import (
-    build, outcome_label, sha, STUDY_DAY, PLACES, SCHEMA, race_cutoff,
+    build, outcome_label, sha, STUDY_DAY, PLACES, SCHEMA, LEGACY_SCHEMA, EXCLUDED_FROM_TURN_MODEL, race_cutoff,
 )
 
 
@@ -34,9 +34,17 @@ class TestThreeVenueTurnAudit(unittest.TestCase):
     def test_model_case_scope(self):
         out=build(STUDY_DAY,None,now=datetime.fromisoformat("2026-10-27T22:20:00+00:00"))
         self.assertEqual(out["schema"],SCHEMA)
-        self.assertEqual(len(out["targets"]),36)
+        self.assertEqual(len(out["targets"]),120)
+        self.assertEqual(out["summary"]["study_venues"],10)
+        self.assertEqual(out["summary"]["primary_races"],36)
+        self.assertEqual(out["summary"]["extended_races"],84)
+        self.assertEqual([out["summary"][x] for x in ("morning_races","day_races","night_races")],[24,60,36])
+        self.assertEqual(len({t["venue_code"] for t in out["targets"]}),10)
+        self.assertFalse(any(t["venue_code"]=="03" for t in out["targets"]))
         self.assertEqual({(t["session"],t["venue_code"]) for t in out["targets"]},
-                         {("morning","23"),("day","16"),("night","07")})
+                         {("morning","23"),("morning","10"),
+                          ("day","16"),("day","13"),("day","09"),("day","08"),("day","22"),
+                          ("night","07"),("night","01"),("night","15")})
         self.assertEqual(out["summary"]["video_races_analyzed"],0)
         self.assertEqual(out["summary"]["precutoff_numeric_pilot_captures"],0)
         self.assertTrue(all(t["video"]["status"]=="NO_LICENSED_VIDEO_ANALYZED" for t in out["targets"]))
@@ -91,9 +99,32 @@ class TestThreeVenueTurnAudit(unittest.TestCase):
         records=[fixture(code=code,race_no=r)
                  for code in ("23","16","07") for r in range(1,13)]
         full=build(STUDY_DAY,archived(*records),now=datetime.fromisoformat("2026-10-28T00:20:00+00:00"))
-        self.assertEqual(full["summary"]["target_races"],36)
+        self.assertEqual(full["summary"]["target_races"],120)
+        self.assertEqual(full["summary"]["observed_venues"],3)
         self.assertEqual(full["summary"]["exhibition_rows_seen"],36)
         self.assertEqual(full["summary"]["unofficial_result_rows"],0)
+
+    def test_ten_venue_full_exhibition_research_coverage(self):
+        codes=[value["venue_code"] for value in PLACES.values()]
+        self.assertEqual(len(codes),len(set(codes)))
+        rows=[fixture(code=code,race_no=r) for code in codes for r in range(1,13)]
+        rows.append(fixture(code="03",race_no=1))  # 江戸川 nationally collected, not turn-scored.
+        full=build(STUDY_DAY,archived(*rows),now=datetime.fromisoformat("2026-10-28T00:25:00+00:00"))
+        self.assertEqual(full["summary"]["target_races"],120)
+        self.assertEqual(full["summary"]["exhibition_rows_seen"],120)
+        self.assertEqual(full["summary"]["observed_venues"],10)
+        self.assertEqual(full["summary"]["precutoff_numeric_pilot_captures"],120)
+        self.assertEqual(full["summary"]["video_races_analyzed"],0)
+        self.assertFalse(any(x["venue_code"]=="03" for x in full["targets"]))
+
+    def test_old_three_venue_snapshot_migrates_unchanged(self):
+        first=build(STUDY_DAY,archived(fixture()),now=datetime.fromisoformat("2026-10-28T00:25:00+00:00"))
+        expected=copy.deepcopy(first["targets"][0]["first_numeric_observation"])
+        first["schema"]=LEGACY_SCHEMA
+        new=build(STUDY_DAY,archived(),first,now=datetime.fromisoformat("2026-10-28T02:00:00+00:00"))
+        self.assertEqual(new["targets"][0]["first_numeric_observation"],expected)
+        self.assertEqual(new["summary"]["target_races"],120)
+        self.assertEqual(new["summary"]["precutoff_numeric_pilot_captures"],1)
 
     def test_no_fabricated_outcome_on_invalid_result(self):
         rec=fixture(finish="1-1-3")

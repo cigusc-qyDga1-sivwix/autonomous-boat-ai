@@ -51,6 +51,8 @@ MAIN_BRIDGE = Path(__file__).resolve().parent / "main_v07_bridge.js"
 WAKE_BRIDGE = Path(__file__).resolve().parent / "main_v09_bridge.js"
 FOUR_FACTOR_DATE = date(2026, 10, 27)
 FOUR_FACTOR_MODEL = 'four-factor-v1.1-untrained'
+HEAD_COVERAGE_MODEL = 'four-factor-v1.2-head-coverage-untrained'
+HEAD_COVERAGE_ROLLOUT = json.loads((Path(__file__).resolve().parents[1] / 'config/head-coverage-2026-10-27.json').read_text())
 FOUR_FACTOR_BRIDGE = Path(__file__).resolve().parent / 'main_four_factor_bridge.js'
 VIRTUAL_BUDGET_YEN = 50_000
 MIN_POINTS, MAX_POINTS = 4, 12
@@ -412,7 +414,7 @@ def promoted_v07(venue: str, phase: str, racers: list[dict],
 
 def promoted_v09(venue: str, phase: str, racers: list[dict],
                  profile: dict | None, weather: dict | None,
-                 frozen_at_utc: str, four_factor: bool = False) -> dict:
+                 frozen_at_utc: str, four_factor: bool = False, head_coverage: bool = False) -> dict:
     """Invoke one explicit model identity; never fall back on bridge failure."""
     inputs = {
         "venue": venue, "phase": phase,
@@ -423,6 +425,7 @@ def promoted_v09(venue: str, phase: str, racers: list[dict],
         )} for r in racers],
         "venue_profile": profile, "weather_used": weather,
         "frozen_at_utc": frozen_at_utc,
+        "head_coverage_trial": head_coverage,
     }
     try:
         job = subprocess.run(
@@ -434,7 +437,7 @@ def promoted_v09(venue: str, phase: str, racers: list[dict],
             subprocess.TimeoutExpired) as exc:
         raise RuntimeError("v0.9 bridge unavailable: fail closed, no fallback freeze") from exc
     bets = answer.get("bets")
-    expected = FOUR_FACTOR_MODEL if four_factor else MAIN_WAKE_MODEL
+    expected = HEAD_COVERAGE_MODEL if four_factor and head_coverage else FOUR_FACTOR_MODEL if four_factor else MAIN_WAKE_MODEL
     if answer.get("model_version") != expected or not isinstance(bets, list):
         raise ValueError("Wrong new main bridge model identity")
     if not MIN_POINTS <= len(bets) <= MAX_POINTS or len({
@@ -453,6 +456,19 @@ def promoted_v09(venue: str, phase: str, racers: list[dict],
     if not answer.get("wake_v09", {}).get("pre_cutoff_only"):
         raise ValueError("Wake provenance missing")
     return answer
+
+
+def head_coverage_eligible(record: dict, key: str, now: datetime, cutoff: datetime) -> bool:
+    """Explicit pending cohort; never promote an existing exhibition prediction."""
+    rollout = HEAD_COVERAGE_ROLLOUT
+    if (cutoff.date().isoformat() != rollout['event_date'] or key not in rollout['targets']
+            or now < datetime.fromisoformat(rollout['created_at_utc'])
+            or now >= cutoff - timedelta(seconds=180)):
+        return False
+    versions = record.get('versions') or []
+    if any(v.get('model_version') == HEAD_COVERAGE_MODEL for v in versions):
+        return True
+    return bool(versions) and all(v.get('phase') == 'baseline' for v in versions)
 
 
 def prediction(race: dict, venue: str, race_number: int, phase: str,
@@ -521,8 +537,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
                             "v0.7 old main frozen at same pre-cutoff instant; no result"),
         }
         legacy_control["sha256"] = stable_hash(legacy_control)
-        promoted = promoted_v09(venue, phase, racers, profile, selected_weather, frozen_at, four_factor=four_factor)
-        chosen_model = FOUR_FACTOR_MODEL if four_factor else MAIN_WAKE_MODEL
+        promoted = promoted_v09(venue, phase, racers, profile, selected_weather, frozen_at, four_factor=four_factor, head_coverage=bool(race.get("_head_coverage_trial")))
+        chosen_model = promoted["model_version"]
     else:
         promoted = promoted_v07(venue, phase, racers, profile, selected_weather, frozen_at)
         chosen_model = MAIN_MODEL
@@ -542,8 +558,11 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     weather = observed
     if four_factor:
         reason = "選手60・モーター25・展示10・気象5の基礎倍率＋2・3着の全艇評価（追走固定なし・試験・未校正）"
+        if chosen_model == HEAD_COVERAGE_MODEL:
+            reason += "／頭候補保持・点数維持の試験修正"
     body = {
         "model_version": chosen_model,
+        **({"head_coverage_control": promoted["head_coverage_control"]} if promoted.get("head_coverage_control") else {}),
         **({"four_factor": promoted["four_factor"],
             "venue_surface_v1": promoted.get("venue_surface_v1"),
             "venue_surface_ab": promoted.get("venue_surface_ab")} if four_factor else {}),
@@ -668,7 +687,9 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                     str(i): validate_racer_context(context.get(i), race["racers"][str(i)], i,
                                                    runtime_now, cutoff.date()) for i in range(1, 7)
                 }}
-            expected_main = FOUR_FACTOR_MODEL if cutoff.date() >= FOUR_FACTOR_DATE else MAIN_WAKE_MODEL
+            coverage_active = head_coverage_eligible(record, key, runtime_now, cutoff)
+            race = {**race, "_head_coverage_trial": coverage_active}
+            expected_main = HEAD_COVERAGE_MODEL if coverage_active else FOUR_FACTOR_MODEL if cutoff.date() >= FOUR_FACTOR_DATE else MAIN_WAKE_MODEL
             if runtime_now.astimezone(JST) < cutoff - timedelta(seconds=margin) and valid_entrants(race):
                 if "baseline" not in phases:
                     record["versions"].append(prediction(race, VENUES[venue_code], n,
@@ -677,6 +698,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 code = f"{local_day.replace('-', '')}{int(venue_code):02d}{n:02d}"
                 candidate, selected_csv_origin, selected_source = select_exhibition_source(
                     race, exhibition_rows.get(code), runtime_now, venue_code, n)
+                candidate = {**candidate, "_head_coverage_trial": coverage_active}
                 preview_ready = selected_source != "unavailable"
                 existing_exhibition = [v for v in record["versions"] if v["phase"] == "exhibition"]
                 previous_csv_time = (existing_exhibition[-1].get("exhibition_origin") or {}).get("observed_at_jst") if existing_exhibition else None
@@ -723,7 +745,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 for value in ((row or {}).get("values") or {}).values())
             context_gain = bool(
                 cutoff.date() >= FOUR_FACTOR_DATE and previous_latest
-                and previous_latest.get("model_version") == FOUR_FACTOR_MODEL
+                and previous_latest.get("model_version") == expected_main
                 and current_context_quality > context_quality(previous_latest.get("racers") or [])
                 and sum(bool(v.get("racer_context_upgrade")) for v in record["versions"]) < 3)
             if (cutoff.date() >= WAKE_PROMOTION_DATE
@@ -785,7 +807,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "exhibition_origin", "exhibition_change",
                       "venue_profile", "venue_adjustment", "venue_surface_v1", "venue_surface_ab", "model_role", "legacy_control",
                       "start_v07", "coupled_v06", "wake_v09", "four_factor", "racer_context_upgrade", "model_upgrade", "primary_model_ab", "head_course_shares",
-                      "role_coverage", "role_changes", "relative_scores_uncalibrated"):
+                      "role_coverage", "role_changes", "head_coverage_control", "relative_scores_uncalibrated"):
             if extra in current:
                 r[extra] = current[extra]
         r["version_count"] = len(versions)

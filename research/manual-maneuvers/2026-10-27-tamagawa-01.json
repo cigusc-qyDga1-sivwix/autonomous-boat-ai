@@ -1,0 +1,95 @@
+{
+  "schema": "boatlabs.manual-maneuver-observation.v1",
+  "event_date": "2026-10-27",
+  "provenance": {
+    "kind": "user_reported_race_observation",
+    "independently_video_reviewed": false,
+    "video_url": null,
+    "video_timecodes": null,
+    "interpretation_status": "hypothesis_from_user_observation_not_verified_geometry",
+    "raw_text": "多摩川1Rはまくりざしだね。6月艇が1〜5号艇よりスタートで先行して1号艇が早めに回ったうちを指したね",
+    "normalization_notes": "「6月艇」は文脈上6号艇、「指した」は差したとして解釈。発走後の視覚的な先行と公式スタートタイミングを混同しない。"
+  },
+  "use_policy": {
+    "retrospective_label_only": true,
+    "current_statistical_trainer_consumes_maneuver_labels": false,
+    "production_weights_changed": false,
+    "historical_forecast_modified": false,
+    "official_result_does_not_verify_other_boats_paths": true,
+    "no_postrace_features_in_predictions": true
+  },
+  "race_id": "202610270501",
+  "venue": "多摩川",
+  "venue_code": "05",
+  "race": 1,
+  "official_result_evidence": {
+    "final_order": [
+      6,
+      1,
+      2
+    ],
+    "winning_maneuver": {
+      "lane": 6,
+      "decision": "まくり差し"
+    },
+    "source_url": "https://www.boatrace.jp/owpc/pc/race/raceresult?hd=20261027&jcd=05&rno=1",
+    "provenance": "Result/method recorded in earlier official-source case research in draft PR #79. User-reported relative positions and trajectories are not independently confirmed by a video review."
+  },
+  "pre_cutoff_observable_context_from_prior_review": {
+    "exhibit_time_lane_6": 6.64,
+    "exhibit_time_next_best_lane_3": 6.71,
+    "exhibit_time_lead_seconds": 0.07,
+    "exhibit_st_lane_6": -0.01,
+    "exhibit_f_or_negative_rule": "Negative exhibition ST is NOT a legal fastest-ST advantage; leave start-timing signal unavailable."
+  },
+  "after_start_outcome_only_diagnostics": {
+    "official_actual_race_start_timing_seconds": {
+      "1": 0.06,
+      "6": 0.13
+    },
+    "discrepancy": "User saw lane 6 ahead of 1–5 at 'start'; published actual race ST has lane 1 0.06 < lane 6 0.13. Timing disagreement is unresolved without video timestamps. May describe speed/position after slit rather than timing at slit. Do not assert lane 6 was earlier at start line.",
+    "strict_no_use_as_pre_race_features": true
+  },
+  "observation_sequence": [
+    {
+      "stage": "early_run",
+      "boat": 6,
+      "user_report": "6号艇が1〜5号艇より先行していたように見えた",
+      "tag": "perceived_early_advance",
+      "status": "user_reported_disputed_by_race_ST_for_lane_1"
+    },
+    {
+      "stage": "first_turn",
+      "boat": 1,
+      "user_report": "1号艇が早めに回った",
+      "tag": "inside_early_turn",
+      "status": "user_reported_not_video_verified"
+    },
+    {
+      "stage": "counter_attack",
+      "boat": 6,
+      "target": 1,
+      "user_report": "1号艇の旋回の内側を6号艇がまくり差しした",
+      "tag": "outer_makuri_sashi_inside_early_turn",
+      "status": "user_reported_path_not_video_verified"
+    },
+    {
+      "stage": "finish",
+      "order": [
+        6,
+        1,
+        2
+      ],
+      "tag": "outer_win_inner_survives_second",
+      "status": "result_in_prior_official_review"
+    }
+  ],
+  "research_targets": [
+    "勝者の6号艇まくり差しと、差された1号艇が2着に残る条件を着順連動で推定する。",
+    "発走後の主観的『先行』を、発走前に使える平均ST/展示ST/展示タイムと分離する。実際のSTを予測特徴量に入れない。",
+    "1号艇の早回り→6号艇の差し場は映像仮説。コース進入・ターン半径・艇間を映像で確認できるまでは幾何学的事実としない。",
+    "仮説を新規の発走前固定A/Bで検証。後出しで6-1-2を過去予想に加えない。"
+  ],
+  "research_group": "2026-10-27-outside-attacker-vs-follower",
+  "related_document": "docs/observed-outside-attack-coupling-2026-10-27.md"
+}

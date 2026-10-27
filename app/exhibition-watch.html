@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#081b33">
+  <meta name="description" content="BOAT LABから公式展示リプレイへ移動・許諾済み動画を端末内で再生">
+  <title>展示映像を見る | BOAT LAB</title>
+  <link rel="icon" type="image/svg+xml" href="./icons/mark.svg">
+  <style>
+  :root{color-scheme:dark;font:16px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#081b33;color:#e9f5ff}
+  *{box-sizing:border-box}body{margin:0;background:linear-gradient(155deg,#102e48 0%,#081b33 40%)}
+  main{max-width:960px;margin:auto;padding:20px 16px 60px}
+  a{color:#80e5d4}header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  h1{font-size:1.7rem;margin:22px 0 5px}h2{font-size:1.13rem;margin:0 0 12px}
+  .muted{color:#a8bfd4}.small{font-size:.85rem}.card{background:#112a41;border:1px solid #315370;border-radius:16px;padding:19px;margin:18px 0}
+  .form{display:grid;grid-template-columns:1.2fr 1fr .7fr;gap:12px}
+  label{display:grid;gap:6px;font-size:.86rem;color:#cce1f0}
+  select,input[type="date"]{width:100%;padding:12px;border:1px solid #5b8498;border-radius:10px;background:#163751;color:#effcff;font:inherit;min-height:46px}
+  .link-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  .action{padding:13px 12px;min-height:55px;display:flex;align-items:center;justify-content:center;text-align:center;text-decoration:none;font-weight:700;border:1px solid #548a9b;border-radius:11px;color:#e7ffff;background:#17445b}
+  .action.main{background:#147f81;color:white;border-color:#22aaa5}
+  .action:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #80e5d4;outline-offset:2px}
+  .notice{border-left:4px solid #53c2b4;padding:10px 12px;background:#102f43;border-radius:6px;margin:14px 0;font-size:.92rem}
+  .warning{border-left-color:#eda957}.preview{width:100%;background:#050d18;border-radius:12px;max-height:62vh;aspect-ratio:16/9}
+  .row{display:flex;gap:10px;align-items:flex-start}.row input{width:22px;height:22px;flex:none;margin:1px 0}
+  .file{width:100%;border:1px dashed #67839d;background:#102b42;padding:13px;border-radius:10px;color:#e2f5fd;margin:12px 0}
+  .status{font-size:.88rem;color:#b8cedb;min-height:1.5rem}.status.error{color:#ffd0ae}
+  .source{font-size:.81rem;color:#b2c6d7;margin:12px 0 0}
+  @media(max-width:600px){.form{grid-template-columns:1fr 1fr}.form label:first-child{grid-column:1/-1}
+    .link-grid{grid-template-columns:1fr}h1{font-size:1.45rem}.card{padding:15px}}
+  </style>
+</head>
+<body><main>
+<header><a href="./index.html">← BOAT LABに戻る</a><a href="./exhibition.html">展示数値・研究記録</a></header>
+<h1>🎥 展示映像を見る</h1>
+<p class="muted">公式の展示リプレイを開く／利用権限のある動画をこの端末で再生する。</p>
+<section class="card" aria-labelledby="race-heading">
+<h2 id="race-heading">対象レース</h2>
+<div class="form">
+<label>開催日<input type="date" id="watch-date" min="2020-01-01" max="2035-12-31"></label>
+<label>競艇場<select id="watch-venue" aria-label="競艇場"></select></label>
+<label>レース<select id="watch-race" aria-label="レース番号"></select></label>
+</div>
+<p id="selected-race" class="muted" aria-live="polite"></p>
+<div class="link-grid">
+<a class="action main" id="watch-boatcast" href="https://boatcast.jp/" target="_blank" rel="noopener noreferrer">▶ BOATCASTで展示を見る</a>
+<a class="action" id="watch-beforeinfo" href="https://www.boatrace.jp/" target="_blank" rel="noopener noreferrer">展示タイム・ST（公式）</a>
+<a class="action" id="watch-racelist" href="https://www.boatrace.jp/" target="_blank" rel="noopener noreferrer">出走表（公式）</a>
+</div>
+<div class="notice">BOATCASTを開いたら「レースLIVE → 選択した競艇場 → 展示リプレイ → 対象R」を選んでください。ページ内の動画再生は公式側で行われます。</div>
+<p class="small muted">映像の公開前・配信終了・非開催日は視聴できない場合があります。BOATCASTは外部サイトからのフレーム内表示を認めておらず、リンクは原則トップページへの案内です。</p>
+<a id="watch-records" href="./exhibition.html">この日の展示研究データを見る</a>
+</section>
+<section class="card" aria-labelledby="local-heading">
+<h2 id="local-heading">端末内の動画を再生（任意）</h2>
+<p class="small muted">自分が表示・解析する権限を持つ動画だけを選択してください。選択したファイルはこのページからサーバーへアップロードしません。動画の解析・レースへの自動紐づけもしません。</p>
+<label class="row"><input id="watch-permission" type="checkbox"><span>この動画をBOAT LABで再生する利用権限があることを確認した</span></label>
+<input class="file" type="file" id="watch-file" accept="video/mp4,video/webm,video/quicktime,video/x-msvideo,.mp4,.m4v,.mov,.avi,.webm" aria-label="再生する許諾済み動画" disabled>
+<p id="watch-status" role="status" aria-live="polite" class="status">利用権限を確認すると動画を選べます。</p>
+<video id="watch-player" class="preview" controls playsinline preload="metadata" hidden></video>
+<p class="small muted">iPhoneではH.264形式のMP4がおすすめ。動画のコーデック次第で再生できない場合があります。最大250MB。</p>
+</section>
+<section class="card">
+<h2>AIの展示解析とは別</h2>
+<p class="small muted">この画面は視聴用。映像をAIが自動取得・分析する機能はまだ許可・精度検証が必要です。発走前予想を過去映像の結果で上書きしません。</p>
+<p class="source">出典：<a href="https://boatcast.jp/" target="_blank" rel="noopener noreferrer">BOATCAST公式</a>・<a href="https://boatcast.jp/static/sitepolicy/index.html" target="_blank" rel="noopener noreferrer">サイトポリシー</a>。</p>
+</section>
+</main>
+<script src="./exhibition-watch.js?v=20261027" defer></script>
+</body></html>

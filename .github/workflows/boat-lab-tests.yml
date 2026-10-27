@@ -21,6 +21,7 @@ jobs:
         with:
           node-version: '22'
       - run: python3 scripts/test_entry_exhibition_gate.py
+      - run: python3 -m unittest discover -s tests -p test_turn_three_pilot.py
       - run: node app/tests/ticket-policy.test.js
       - run: node app/tests/four-factor.test.js
       - run: node app/tests/postrace-conditional-v13.test.js

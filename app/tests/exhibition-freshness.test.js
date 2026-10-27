@@ -17,7 +17,7 @@ assert.match(index,/app\.js\?v=20261027-venue-v14/);
 assert.match(index,/tactical-1m\.js\?v=20261027-venue-v14/);
 assert.match(index,/venue-tactics-v2\.js\?v=20261027-venue23/);
 assert.match(venue,/four-factor-v1\.3-conditional-scenarios-untrained/);
-assert.match(sw,/boat-lab-static-v51/);
+assert.match(sw,/boat-lab-static-v52/);
 const listeners={};
 const fetchCalls=[],cacheCalls=[];
 const self={
@@ -40,5 +40,6 @@ async function verify(url){
  await verify('https://example.test/data/exhibition/status-latest.json');
  await verify('https://example.test/data/exhibition/2026-10-27.json');
  await verify('https://example.test/data/live/latest.json');
+ await verify('https://example.test/data/experiments/turn-video-pilot-2026-10-28.json');
  console.log('Exhibition heartbeat / automatic research reload / network-only JSON / v1.3 label checks PASS');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#081b33">
+<title>映像を端末内で読み取る｜BOAT LAB</title>
+<meta name="description" content="許可された競艇の映像ファイル、または本人の画面共有を端末内でフレーム解析する研究用入口。">
+<style>
+:root{font:16px/1.55 system-ui,-apple-system,sans-serif;background:#081b33;color:#edf9ff;color-scheme:dark}
+*{box-sizing:border-box}body{margin:0}main{max-width:960px;margin:auto;padding:18px 16px 70px}
+a{color:#9beedc}h1{font-size:1.65rem;margin:18px 0 4px}h2{font-size:1.14rem;margin:0 0 10px}
+small,.muted{color:#bed0df}header{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.card{background:#122b44;border:1px solid #335674;border-radius:15px;padding:17px;margin:14px 0}
+.notice{padding:12px;background:#233344;border-left:4px solid #57d6c5;border-radius:6px}
+.warning{border-left-color:#ffb960}label{display:block;margin:10px 0}
+input[type=file],input[type=number],select{background:#0a2138;border:1px solid #6286a0;border-radius:8px;color:#fff;padding:11px;font:inherit;max-width:100%}
+input[type=file]{width:100%}input[type=checkbox]{width:20px;height:20px;vertical-align:middle;margin-right:9px}
+button{background:#197b88;color:white;border:1px solid #5bc0c0;border-radius:10px;padding:11px 14px;font:inherit;font-weight:650;cursor:pointer}
+button.secondary{background:#183952}button:disabled{opacity:.38;cursor:not-allowed}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #98ecdf;outline-offset:2px}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.fields label{display:flex;flex-direction:column;gap:6px}.fields input{width:100%}
+video{display:block;width:100%;background:#071728;max-height:57vh;aspect-ratio:16/9;border-radius:10px}
+#bridge-frame-canvas{width:100%;height:auto;max-height:60vh;background:#061526;border:1px solid #4a6e83;border-radius:9px;touch-action:manipulation;cursor:crosshair}
+#bridge-frame-list{display:flex;gap:8px;overflow:auto;padding:10px 0}
+.frame-select{min-width:112px;max-width:112px;padding:5px;background:#122a41;border-color:#355577;font-size:.77rem}
+.frame-select.selected{border-color:#64eacb;box-shadow:inset 0 0 0 2px #64eacb}
+.frame-select img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;border-radius:5px}
+.frame-select span{display:block;text-align:center}.error{color:#ffbead}
+#bridge-json{font-size:.82rem;white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:600px){.fields{grid-template-columns:1fr}.card{padding:13px}h1{font-size:1.4rem}}
+</style>
+</head>
+<body><main>
+<header><a href="./index.html">← BOAT LAB</a><a href="./exhibition-watch.html">公式展示を見る</a><a href="./turn-vision-pilot-20261028.html">10場・720艇研究</a></header>
+<h1>🎥 映像を端末内で読み取る</h1>
+<p class="muted">BOAT LAB 映像フレーム取込 v0.1｜外部動画サイトを直接読み込まず、本人が用意した映像を端末の中で解析する。</p>
+<div class="notice warning"><strong>実映像の取得問題について</strong>
+<p>外部の公式動画ページはWeb上で視聴できても、他サイトから動画フレームを直接取り出せるとは限りません。再生制限・著作権・利用規約を回避せずに使える方法として、①端末の動画ファイル、②対応ブラウザでの本人許可の画面共有を用意しました。**端末内の解析結果を保存するまでは動画やフレーム画像をサーバーへ送信しません。**</p>
+<p>画面共有は非対応の端末があります。保護された映像が黒画面になる場合、技術的制限を回避せず解析を停止します。</p></div>
+<section class="card">
+<h2>1. 正規に利用できる映像を開く</h2>
+<label><input id="bridge-permission" type="checkbox">視聴・ローカル解析に使える映像であり、必要な権利と利用条件を確認した</label>
+<label>端末の動画を選ぶ（iPhoneでも利用可能な方式）
+<input id="bridge-file" type="file" accept="video/mp4,video/quicktime,video/webm,video/x-msvideo,.mp4,.mov,.m4v,.webm,.avi" disabled></label>
+<div class="controls"><button id="bridge-share" type="button" class="secondary" disabled>画面を選んで共有（対応ブラウザ）</button>
+<button id="bridge-stop" type="button" class="secondary" disabled>共有停止</button></div>
+<p class="muted"><small>画面共有する場合は、必ず対象の動画だけが表示された画面・タブを選んでください。ブラウザが毎回確認画面を表示します。iPhoneは環境によって画面共有に未対応です。</small></p>
+<video id="bridge-preview" playsinline controls preload="metadata" muted hidden></video>
+</section>
+<section class="card">
+<h2>2. 動画からフレームを抽出する</h2>
+<div class="fields">
+<label>読み取り開始位置（秒）
+<input id="bridge-start" type="number" inputmode="decimal" min="0" step="0.1" value="0"></label>
+<label>読み取り間隔（秒）
+<input id="bridge-interval" type="number" inputmode="decimal" min="0.2" max="3" step="0.1" value="0.5"></label>
+</div>
+<p class="muted"><small>ファイルは指定位置から最大24フレーム、画面共有は約8秒間に16フレーム。画面の白・黒・赤・青・黄・緑の領域候補を検出。**艇番の自動識別、旋回精度・伸びの確定計測ではありません。**</small></p>
+<div class="controls"><button id="bridge-extract" type="button" disabled>フレーム読み取りを実行</button></div>
+<p id="bridge-status" role="status" aria-live="polite" class="muted">利用条件を確認してください。</p>
+</section>
+<section class="card">
+<h2>3. 1マークと①〜⑥の位置を確認</h2>
+<p class="muted">抽出したフレームをタップして表示し、ラベルを選んで画像をタップすると、マーク中心や艇位置を<strong>人の確認した座標候補</strong>として記録できます。別フレームも同様に記録可能。</p>
+<div id="bridge-frame-list" aria-label="抽出フレーム一覧"></div>
+<p id="bridge-frame-title" class="muted">まだフレームを取得していません。</p>
+<label>タップする対象
+<select id="bridge-annotation-mode"></select></label>
+<canvas id="bridge-frame-canvas" width="640" height="360" aria-label="動画フレームと手動マーク位置"></canvas>
+<p class="muted"><small>タップした位置は画素座標であり、実際の距離（m）ではありません。カメラの移動や水面座標の校正を行わない限り、速度・旋回半径の数値を確定しません。</small></p>
+</section>
+<section class="card">
+<h2>4. 結果を研究データとして保存</h2>
+<button id="bridge-export" type="button" disabled>研究JSONを端末に保存</button>
+<p class="muted"><small>保存するのはフレームの時間・色領域候補・任意の手動位置だけ。元動画やフレーム画像は書き出しません。予想・BUY・買い目・公式結果・収支は変更しません。</small></p>
+<pre id="bridge-json"></pre>
+</section>
+<div class="notice"><strong>次の研究段階</strong>
+<p>動画が端末で読み取れたら、固定カメラ・実際の艇番・1マーク・スタートラインを検証し、全6艇のターン軌道とスタート後の加速を研究モデルに接続していく。</p></div>
+</main>
+<script src="./local-video-bridge.js?v=20261028-bridge01" defer></script>
+</body></html>

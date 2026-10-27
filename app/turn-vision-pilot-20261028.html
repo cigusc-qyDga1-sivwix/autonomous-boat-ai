@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#081b33">
+<title>10/28 3場ターン映像AI研究 | BOAT LAB</title>
+<style>
+:root{color-scheme:dark;font:16px/1.55 system-ui,-apple-system,sans-serif;background:#081b33;color:#eff9ff}
+*{box-sizing:border-box}body{margin:0}main{max-width:1120px;margin:auto;padding:18px 16px 50px}
+a{color:#8be9d2}header{display:flex;gap:15px;flex-wrap:wrap;align-items:center}h1{font-size:1.6rem;margin:22px 0 4px}
+p{color:#b6cedf}h2{font-size:1.15rem}button{background:#195477;color:white;border:1px solid #4c9da4;border-radius:10px;padding:11px;font:inherit;cursor:pointer}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
+.card{padding:15px;border:1px solid #355973;background:#112a43;border-radius:15px;min-width:0}
+.card h2{margin:2px 0 8px}.card p{font-size:.9rem;margin:4px 0}
+.card a{display:inline-block;margin-top:10px}
+.note{padding:13px;border:1px solid #6b6473;background:#2b273c;border-radius:12px}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.stat{border:1px solid #345676;background:#112b43;border-radius:10px;padding:11px}
+.stat strong{font-size:1.45rem;display:block}.stat small{color:#acc4d5}
+.table{overflow-x:auto;border:1px solid #355973;border-radius:12px}
+table{border-collapse:collapse;width:100%;font-size:.86rem}th,td{padding:9px;border-bottom:1px solid #355066;text-align:left;white-space:nowrap}
+th{background:#1b3b54;position:sticky;top:0}.meta{font-size:.85rem;color:#b5ccdd}
+.tag{background:#35465d;border-radius:6px;padding:2px 6px}
+@media(max-width:700px){.cards{grid-template-columns:1fr}.grid{grid-template-columns:1fr 1fr}h1{font-size:1.35rem}}
+</style></head><body><main>
+<header><a href="./index.html">← BOAT LAB</a><a href="./exhibition-watch.html">🎥 展示を見る</a><a href="./exhibition.html?date=2026-10-28">展示データ</a></header>
+<h1>10月28日｜3場ターン映像AI研究</h1>
+<p>モーニング「唐津」・デイ「児島」・ナイター「蒲郡」。各12Rの研究データを確認する試験ページ。</p>
+<div class="note"><strong>映像解析の現状：公式映像は未解析</strong>
+<p>公式展示・レース映像の自動取得許可を確認できていないため、ブイとの距離、旋回半径、ターン出口失速は未測定。数値データや確定着順だけを見て「ターンが膨らんだ」「差し場ができた」と断定しません。事後結果は正式予想に反映しません。</p></div>
+<div class="cards">
+<section class="card"><h2>🌅 唐津｜モーニング</h2><p>研究テーマ：①の旋回軌道と②の差し場</p><a href="https://www.boatrace.jp/owpc/pc/race/beforeinfo?rno=1&jcd=23&hd=20261028" target="_blank" rel="noopener noreferrer">公式直前情報を見る</a></section>
+<section class="card"><h2>☀️ 児島｜デイ</h2><p>研究テーマ：ターン流れ・出口加速・追走</p><a href="https://www.boatrace.jp/owpc/pc/race/beforeinfo?rno=1&jcd=16&hd=20261028" target="_blank" rel="noopener noreferrer">公式直前情報を見る</a></section>
+<section class="card"><h2>🌙 蒲郡｜ナイター</h2><p>研究テーマ：イン逃げ失敗と③〜⑥の攻め</p><a href="https://www.boatrace.jp/owpc/pc/race/beforeinfo?rno=1&jcd=07&hd=20261028" target="_blank" rel="noopener noreferrer">公式直前情報を見る</a></section>
+</div>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+<h2>研究進捗（最大36R）</h2><button type="button" id="reload">↻ 最新の保存記録を確認</button>
+</div>
+<p id="status" role="status" class="meta">研究ファイルを読み込み中…</p>
+<div id="summary" class="grid" aria-label="集計"></div>
+<h2>レース別研究一覧</h2>
+<div class="table"><table><thead><tr><th>時間帯</th><th>場・R</th><th>締切</th><th>展示数値</th><th>①コースの結果</th><th>映像・ターン</th><th>公式確認</th></tr></thead><tbody id="rows"></tbody></table></div>
+<p class="meta">展示数値・結果はBoatraceCSVを用いた研究用参考データ。公式確定結果の照合とは別。発走前取得を証明できない記録は「事前確認済み」と扱いません。</p>
+<p class="meta">映像視聴は <a href="https://boatcast.jp/" target="_blank" rel="noopener noreferrer">BOATCAST（公式サイト）</a> で行います。無断コピー、埋め込み、自動録画は行いません。</p>
+<script>
+(function(){
+"use strict";
+const DAY="2026-10-28";
+const path="./data/experiments/turn-video-pilot-"+DAY+".json";
+const el=id=>document.getElementById(id);
+const esc=value=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const sourceUrl=r=>"https://www.boatrace.jp/owpc/pc/race/beforeinfo?rno="+Number(r.race)+"&jcd="+encodeURIComponent(r.venue_code)+"&hd=20261028";
+function show(data){
+ const sum=data.summary||{};
+ el("summary").innerHTML=[
+  ["研究対象",(sum.target_races??0)+"R"],
+  ["展示6艇データ",(sum.exhibition_rows_seen??0)+"R"],
+  ["締切前の研究用保存",(sum.precutoff_numeric_pilot_captures??0)+"R"],
+  ["実映像の解析済み",(sum.video_races_analyzed??0)+"R"],
+ ].map(([name,count])=>'<div class="stat"><small>'+esc(name)+'</small><strong>'+esc(count)+'</strong></div>').join("");
+ const labels={RESULT_UNAVAILABLE:"結果未取得",UNOFFICIAL_RESULT_RESEARCH_ONLY:"暫定結果のみ",RESULT_INVALID:"結果データ要確認"};
+ el("rows").innerHTML=(data.targets||[]).map(r=>{
+   const state=r.outcome?.outcome;
+   let desc=r.outcome?.state==="UNOFFICIAL_RESULT_RESEARCH_ONLY"?
+     (state==="COURSE_ONE_WON"?"1コース艇が1着（暫定）":
+     state==="COURSE_ONE_LOST"?"1コース艇が1着以外（暫定）":"結果要確認"):
+     (labels[r.outcome?.state]||"結果未取得");
+   const numeric=r.first_numeric_observation?"締切前の研究記録あり":
+     r.data_status==="SIX_BOAT_EXHIBITION_RESEARCH_AVAILABLE"?"研究数値あり／事前未確認":"未取得";
+   return '<tr><td>'+esc(r.session)+'</td><td>'+esc(r.venue)+' '+esc(r.race)+'R</td><td>'+
+      esc(r.cutoff_jst||"未取得")+'</td><td>'+esc(numeric)+'</td><td>'+esc(desc)+
+      '</td><td><span class="tag">未解析</span></td><td><a target="_blank" rel="noopener noreferrer" href="'+sourceUrl(r)+'">直前情報</a></td></tr>';
+ }).join("");
+ const updated=data.updated_at_utc?
+   new Date(data.updated_at_utc).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo"}):"不明";
+ el("status").textContent="研究記録の最終更新："+updated+" JST｜"+esc(data.source_status||"状態未確認");
+}
+async function load(){
+ try{
+  const res=await fetch(path+"?v="+Date.now(),{cache:"no-store"});
+  if(!res.ok)throw Error("HTTP "+res.status);
+  const data=await res.json();
+  if(data.schema!=="boatlabs.turn_video_three_venues.v1"||data.event_date!==DAY)throw Error("研究データの形式または日付が不一致");
+  show(data);
+ }catch(err){el("status").textContent="公開研究記録が未生成、または取得失敗："+err.message;}
+}
+el("reload").addEventListener("click",load);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)load();});
+setInterval(()=>{if(!document.hidden)load();},60000);
+load();
+})();
+</script>
+</main></body></html>

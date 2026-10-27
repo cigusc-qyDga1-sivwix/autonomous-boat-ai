@@ -1,0 +1,89 @@
+{
+  "schema": "boatlabs.manual-maneuver-observation.v1",
+  "event_date": "2026-10-27",
+  "provenance": {
+    "kind": "user_reported_race_observation",
+    "independently_video_reviewed": false,
+    "video_url": null,
+    "video_timecodes": null,
+    "interpretation_status": "hypothesis_from_user_observation_not_verified_geometry",
+    "raw_text": "三国5Rは5号艇がまくってそれを追走した6がにちゃくだね",
+    "normalization_notes": "「にちゃく」は2着として解釈。"
+  },
+  "use_policy": {
+    "retrospective_label_only": true,
+    "current_statistical_trainer_consumes_maneuver_labels": false,
+    "production_weights_changed": false,
+    "historical_forecast_modified": false,
+    "official_result_does_not_verify_other_boats_paths": true,
+    "no_postrace_features_in_predictions": true
+  },
+  "race_id": "202610271005",
+  "venue": "三国",
+  "venue_code": "10",
+  "race": 5,
+  "official_result_evidence": {
+    "final_order": [
+      5,
+      6,
+      1
+    ],
+    "winning_maneuver": {
+      "lane": 5,
+      "decision": "まくり"
+    },
+    "source_url": "https://www.boatrace.jp/owpc/pc/race/raceresult?hd=20261027&jcd=10&rno=5",
+    "provenance": "Result/method recorded in earlier official-source case research in draft PR #79. Lane 6 following lane 5 is user path annotation only."
+  },
+  "pre_cutoff_observable_context_from_prior_review": {
+    "exhibit_st_lane_5": 0.03,
+    "exhibit_st_lane_6": 0.01,
+    "exhibit_st_lane_1": -0.05,
+    "exhibit_time_lane_5": 6.87,
+    "exhibit_time_lane_6": 6.81,
+    "key_model_gap": "Lane 5 is slower in exhibition time than lane 6. A v1.3 rule requiring the prospective outside HEAD itself to be globally fastest will not activate for lane 5 in this case.",
+    "exhibit_f_or_negative_rule": "Lane 1 exhibition F cannot be counted as a fast legal start signal."
+  },
+  "after_start_outcome_only_diagnostics": {
+    "official_actual_race_start_timing_seconds": {
+      "1": 0.24,
+      "5": 0.09,
+      "6": 0.12
+    },
+    "strict_no_use_as_pre_race_features": true
+  },
+  "observation_sequence": [
+    {
+      "stage": "first_turn_attack",
+      "boat": 5,
+      "maneuver": "まくり",
+      "tag": "outside_primary_attacker",
+      "status": "user_reported_and_winning_method_in_prior_official_review"
+    },
+    {
+      "stage": "following",
+      "boat": 6,
+      "follows": 5,
+      "tag": "outside_adjacent_follower",
+      "status": "user_reported_not_video_verified"
+    },
+    {
+      "stage": "finish",
+      "order": [
+        5,
+        6,
+        1
+      ],
+      "tag": "attacker_wins_follower_second_inner_survives_third",
+      "status": "result_in_prior_official_review"
+    }
+  ],
+  "research_targets": [
+    "5号艇が最速展示タイムでなくても、選手力・モーター・合法展示ST・外の6号艇の伸びから5頭+6追走を試験候補にする。",
+    "5号艇1着×6号艇2着を、単なる『最速展示艇が頭』から分離して条件付き2着確率として推定する。",
+    "攻める5、追走6、残る1の3つの役割を別軸で評価する。6が展示で速くても必ず6頭とはしない。",
+    "実際のまくりと追走は結果後ラベル。実レースST・結果は事前モデルの入力禁止。"
+  ],
+  "research_group": "2026-10-27-outside-attacker-vs-follower",
+  "related_document": "docs/observed-outside-attack-coupling-2026-10-27.md"
+}

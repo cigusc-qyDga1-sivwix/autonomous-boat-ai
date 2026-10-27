@@ -55,9 +55,12 @@ def _verify_race(r: dict, p: dict, day: str) -> tuple[bool, str]:
     if not isinstance(p.get("payout_per_100"), int) or p["payout_per_100"] < 100:
         return False, "payout_invalid"
     bets = r.get("bets") or []
-    if not 4 <= len(bets) <= 12:
+    point_free = r.get("model_version") == "four-factor-v1.5-point-free-untrained"
+    if not (1 <= len(bets) <= 120 if point_free else 4 <= len(bets) <= 12):
         return False, "bets_count_invalid"
-    if any(not isinstance(b.get("virtual_yen"), int) or b["virtual_yen"] < 0 for b in bets):
+    if any(not isinstance(b.get("virtual_yen"), int) or isinstance(b.get("virtual_yen"), bool)
+           or b["virtual_yen"] < (100 if point_free else 0)
+           or (point_free and b["virtual_yen"] % 100) for b in bets):
         return False, "stake_invalid"
     if len({b["combination"] for b in bets}) != len(bets):
         return False, "duplicate_bets"
@@ -93,6 +96,7 @@ def analyze(dataset: dict) -> dict:
     exclusions = Counter()
     all_bet_heads = Counter()
     race_examples = []
+    point_free_rows, prior_rows = [], []
     for r in raw:
         bets = r.get("bets") or []
         if bets:
@@ -127,6 +131,21 @@ def analyze(dataset: dict) -> dict:
             "frozen_at_utc": r.get("frozen_at_utc"),
         }
         verified.append(row)
+        comparison = r.get('point_free_control') or {}
+        if (r.get('model_version') == 'four-factor-v1.5-point-free-untrained'
+                and comparison.get('generated_pre_cutoff') is True
+                and comparison.get('frozen_at_utc') == r.get('frozen_at_utc')):
+            cb = comparison.get('bets') or []
+            if (4 <= len(cb) <= 12 and len({b.get('combination') for b in cb}) == len(cb)
+                    and all(isinstance(b.get('virtual_yen'), int) and b['virtual_yen'] >= 1000
+                            and b['virtual_yen'] % 1000 == 0 for b in cb)
+                    and sum(b['virtual_yen'] for b in cb) == RESEARCH_BUDGET):
+                match = next((b for b in cb if b['combination'] == win), None)
+                prior_stage = ('hit' if match else 'head_miss' if win[0] not in {b['combination'][0] for b in cb}
+                               else 'second_miss' if win[:3] not in {b['combination'][:3] for b in cb} else 'third_miss')
+                point_free_rows.append(row)
+                prior_rows.append({**row, 'stage': prior_stage,
+                                   'virtual_payout_yen': match['virtual_yen'] * p['payout_per_100'] // 100 if match else 0})
         if stage != "hit":
             race_examples.append({k: row[k] for k in
                 ("venue", "race", "stage", "actual_finish", "first_bet_head", "model_version")})
@@ -163,6 +182,13 @@ def analyze(dataset: dict) -> dict:
             "actual_winner_1_share": round(actual1 / len(verified), 4) if verified else None,
             "winner_lane_counts": dict(sorted(Counter(x["actual_head"] for x in verified).items())),
             "first_bet_head_lane_counts": dict(sorted(all_bet_heads.items())),
+        },
+        "point_free_comparison": {
+            "selection": "Same-race, same-input, same-time pre-cutoff controls; virtual 50000 each",
+            "trial": _metrics(point_free_rows), "previous": _metrics(prior_rows),
+            "by_phase": {phase: {"trial": _metrics([r for r in point_free_rows if r['phase'] == phase]),
+                                  "previous": _metrics([r for r in prior_rows if r['phase'] == phase])}
+                         for phase in ['baseline', 'exhibition']},
         },
         "by_phase": _group(verified, "phase"),
         "by_model": _group(verified, "model_version"),

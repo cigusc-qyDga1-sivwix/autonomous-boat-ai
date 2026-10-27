@@ -23,15 +23,18 @@ def audit(data_dir=Path('app/data/live'),shadow_dir=Path('app/data/experiments')
                 cutoff=datetime.fromisoformat(day+'T'+original['cutoff_jst']+':00+09:00')
                 frozen=datetime.fromisoformat(shadow['frozen_at_utc'])
                 bets=shadow['bets']
+                point_free=original.get('model_version')=='four-factor-v1.5-point-free-untrained'
+                unit=100 if point_free else 1000
                 valid=(shadow.get('sha256')==digest({k:v for k,v in shadow.items() if k!='sha256'})
                        and valid_snapshot(original,day) and shadow['trained_through']<day
                        and shadow['cutoff_jst']==original['cutoff_jst']
                        and datetime.fromisoformat(original['frozen_at_utc'])<=frozen<=cutoff-timedelta(seconds=120)
-                       and 4<=len(bets)<=12 and len({b['combination'] for b in bets})==len(bets)
+                       and (1<=len(bets)<=120 if point_free else 4<=len(bets)<=12)
+                       and len(bets)==len(original['bets']) and len({b['combination'] for b in bets})==len(bets)
                        and all(len(b['combination'])==5 and len(set(b['combination'].split('-')))==3
                                and all(len(c)==1 and c in '123456' for c in b['combination'].split('-'))
                                and isinstance(b['virtual_yen'],int) and not isinstance(b['virtual_yen'],bool)
-                               and b['virtual_yen']>=1000 and b['virtual_yen']%1000==0 for b in bets)
+                               and b['virtual_yen']>=unit and b['virtual_yen']%unit==0 for b in bets)
                        and sum(b['virtual_yen'] for b in bets)==50000)
             except (ValueError,TypeError,KeyError):valid=False
             if not valid:rejected+=1;continue

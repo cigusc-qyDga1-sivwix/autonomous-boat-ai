@@ -96,13 +96,14 @@ def distributions(snapshot, model):
     return sorted(all_rows,key=lambda x:(-x['score'],x['combination']))
 
 
-def allocate(ranked,count):
-    if isinstance(count,bool) or not isinstance(count,int) or not 4<=count<=12:raise ValueError('4-12 points required')
+def allocate(ranked,count,*,point_free=False):
+    if isinstance(count,bool) or not isinstance(count,int) or not (1<=count<=120 if point_free else 4<=count<=12):raise ValueError('Invalid point count')
+    budget_units=500 if point_free else 50;stake_unit=100 if point_free else 1000
     selected=ranked[:count];total=sum(x['score'] for x in selected)
-    target=[(50-count)*x['score']/total for x in selected]
+    target=[(budget_units-count)*x['score']/total for x in selected]
     units=[math.floor(x)+1 for x in target]
-    for i in sorted(range(count),key=lambda i:(-(target[i]-math.floor(target[i])),i))[:50-sum(units)]:units[i]+=1
-    return [{'combination':r['combination'],'virtual_yen':units[i]*1000,'relative_score':r['score']} for i,r in enumerate(selected)]
+    for i in sorted(range(count),key=lambda i:(-(target[i]-math.floor(target[i])),i))[:budget_units-sum(units)]:units[i]+=1
+    return [{'combination':r['combination'],'virtual_yen':units[i]*stake_unit,'relative_score':r['score']} for i,r in enumerate(selected)]
 
 
 def valid_snapshot(v,day):

@@ -30,11 +30,13 @@ def freeze(latest,model,previous,now):
         identity=(source['sha256'],model['model_sha256'])
         if any((v['source_sha256'],v['model_sha256'])==identity for v in versions):continue
         ranked=distributions(source,model)
-        bets=allocate(ranked,len(source['bets']))
+        point_free=source.get('model_version')=='four-factor-v1.5-point-free-untrained'
+        bets=allocate(ranked,len(source['bets']),point_free=point_free)
         body={'model_version':SCHEMA,'model_role':'research_shadow','classification':'WATCH','event_date':day,
               'venue':source['venue'],'race':source['race'],'phase':source['phase'],'frozen_at_utc':now.astimezone(timezone.utc).isoformat(),
               'cutoff_jst':source['cutoff_jst'],'source_sha256':source['sha256'],'model_sha256':model['model_sha256'],
               'trained_through':model['trained_through'],'training_n':model.get('training_n'),'bets':bets,'all_120':ranked,'uncalibrated':True,
+              **({'source_point_free':True,'stake_unit_yen':100} if point_free else {}),
               'point_policy':'Matched to original source point count; no ticket rescue or lane quota'}
         body['sha256']=digest(body);versions.append(body);n+=1
     return result,n

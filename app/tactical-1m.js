@@ -90,9 +90,29 @@ function headCoveragePicks(candidates,count,shares){
   selected_head_courses:selected,selected_relative_mass:mass,point_count_unchanged:true,
   head_scores_unchanged:true,scope:'2026-10-27 pending cohort only; not a win probability guarantee'}};
 }
+// No target count, head quota, cumulative-mass target or ticket rescue.
+// The neutral reference is the mean joint score of the 120 feasible trifectas.
+// This is an explicit uncalibrated selection rule, NOT a learned win threshold.
+function pointFreePicks(candidates){
+ if(candidates.length!==120||new Set(candidates.map(c=>c.combination)).size!==120||
+    candidates.some(c=>!Number.isFinite(c.pseudo)||c.pseudo<0))throw Error('120 valid joint evaluations required');
+ const total=candidates.reduce((n,c)=>n+c.pseudo,0);
+ if(!(total>0))throw Error('No relative evidence');
+ const reference=total/candidates.length;
+ const picks=candidates.filter(c=>c.pseudo+reference*1e-12>=reference);
+ return {picks,policy:{version:'point-free-v1.5',calibrated:false,learned_selection:false,
+  point_target:null,head_quota:null,tickets_per_head:null,selection_before_allocation:true,
+  rule:'joint_relative_score_at_least_neutral_mean',reference_relative_score:reference,
+  selected_count:picks.length,feasible_combinations:candidates.length,stake_unit_yen:100,
+  scoring_basis:'v1.4 conditional scores (v1.3 in Edogawa); untrained hypotheses',
+  candidates:candidates.map(c=>({combination:c.combination,relative_score:c.pseudo,
+    selected:c.pseudo+reference*1e-12>=reference,
+    reason:c.pseudo+reference*1e-12>=reference?'平均相対評価以上':'平均相対評価未満'}))}};
+}
 function forecast(input){
- const venueAware=input?.experimental_variant==='four-factor-v1.4';
- const postraceConditional=input?.experimental_variant==='four-factor-v1.3'||venueAware;
+ const pointFree=input?.experimental_variant==='four-factor-v1.5';
+ const venueAware=input?.experimental_variant==='four-factor-v1.4'||(pointFree&&input.venue!=='江戸川');
+ const postraceConditional=input?.experimental_variant==='four-factor-v1.3'||venueAware||pointFree;
  const headCoverage=input?.experimental_variant==='four-factor-v1.2';
  const openChasers=input?.experimental_variant==='four-factor-v1.1'||headCoverage||postraceConditional;
  const fourFactor=input?.experimental_variant==='four-factor-v1.0'||openChasers;
@@ -554,11 +574,11 @@ function forecast(input){
   roleShares.third[c]+=candidate.pseudo;
  }
  const dominant=Math.max(...shares),close=shares.filter(x=>x>=.12).length;
- const count=clamp(Math.round(6+5*close/4+4*(.58-dominant)),4,12);
- const coverage=(headCoverage||postraceConditional)?headCoveragePicks(candidates,count,shares):null;
+ const count=pointFree?null:clamp(Math.round(6+5*close/4+4*(.58-dominant)),4,12);
+ const coverage=pointFree?pointFreePicks(candidates):(headCoverage||postraceConditional)?headCoveragePicks(candidates,count,shares):null;
  let picks=coverage?coverage.picks:candidates.slice(0,count);
  const roleChanges=[];
- if(postraceConditional){
+ if(postraceConditional&&!pointFree){
   // No hard-coded outside ticket quota; allow up to two competitive, evidenced
   // attack/inside-survivor branches, without increasing the total points.
   let corrected=0;
@@ -705,7 +725,8 @@ function forecast(input){
    thirdTickets:presence[2],note};
  }
  picks.sort((a,b)=>b.pseudo-a.pseudo||a.combination.localeCompare(b.combination));
- const remaining=50-picks.length;
+ const stakeUnit=pointFree?100:1000;
+ const remaining=50000/stakeUnit-picks.length;
  const powered=picks.map(x=>Math.pow(x.pseudo,.8));
  const totalPower=powered.reduce((a,b)=>a+b,0);
  const target=powered.map(x=>remaining*x/totalPower);
@@ -713,7 +734,7 @@ function forecast(input){
  let unused=remaining-floor.reduce((a,b)=>a+b,0);
  const remainders=target.map((x,i)=>({delta:x-floor[i],i})).sort((a,b)=>b.delta-a.delta||a.i-b.i);
  remainders.slice(0,unused).forEach(o=>floor[o.i]++);
- const bets=picks.map((c,i)=>({combination:c.combination,virtual_yen:(floor[i]+1)*1000,
+ const bets=picks.map((c,i)=>({combination:c.combination,virtual_yen:(floor[i]+1)*stakeUnit,
   head_course:c.headCourse,scenario:c.scenario,
   conditional_reason:openChasers?
    c.headCourse+'コース頭の条件で残り5艇を能力評価 → '+c.secondCourse+'コース2着 → 残り4艇から'+c.thirdCourse+'コース3着（攻め方未確定）':startTrial?
@@ -731,7 +752,7 @@ function forecast(input){
  })):[];
  const headOneTotal=headOneScores.reduce((n,x)=>n+x.weight,0);
  return {
-   model:venueAware?'four-factor-v1.4-venue-aware-23-untrained':postraceConditional?'four-factor-v1.3-conditional-scenarios-untrained':headCoverage?'four-factor-v1.2-head-coverage-untrained':openChasers?'four-factor-v1.1-untrained':fourFactor?'four-factor-v1.0-untrained':wakeIntegrated?'tactical-outside-start-wake-v0.9-untrained':
+   model:pointFree?'four-factor-v1.5-point-free-untrained':venueAware?'four-factor-v1.4-venue-aware-23-untrained':postraceConditional?'four-factor-v1.3-conditional-scenarios-untrained':headCoverage?'four-factor-v1.2-head-coverage-untrained':openChasers?'four-factor-v1.1-untrained':fourFactor?'four-factor-v1.0-untrained':wakeIntegrated?'tactical-outside-start-wake-v0.9-untrained':
       startTrial?'tactical-outside-start-gap-v0.7-untrained':
      coupledTrial?'tactical-six-boat-coupling-v0.6-untrained':
      outerStudyTrial?'tactical-outside-role-v0.5-untrained':
@@ -811,7 +832,7 @@ function forecast(input){
      ...(postraceConditional?{postrace_v13:{
       version:'forward-conditional-scenarios-v1.3',pre_cutoff_only:true,
       result_data_used:false,calibrated:false,training_status:'untrained_hypothesis',
-      max_points_unchanged:true,observations:postraceEvidence,
+      max_points_unchanged:!pointFree,observations:postraceEvidence,
       caveat:'艇の軌跡・因果を観測したものではない。過去結果はモデル入力に使わない。'
      }}:{}),
      source_at_utc:input.frozen_at_utc||null,
@@ -834,7 +855,8 @@ function forecast(input){
  };
 }
 global.BoatTacticalModel={forecast,
- headCoveragePicks,
+ headCoveragePicks,pointFreePicks,
+ forecastFourFactorPointFree:input=>forecast({...input,experimental_variant:'four-factor-v1.5'}),
  forecastFourFactorCoverage:input=>forecast({...input,experimental_variant:'four-factor-v1.2'}),
  forecastFourFactorConditional:input=>forecast({...input,experimental_variant:'four-factor-v1.3'}),
  forecastFourFactorVenueAware:input=>forecast({...input,experimental_variant:'four-factor-v1.4'}),

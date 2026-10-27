@@ -46,6 +46,18 @@ class TestThreeVenueTurnAudit(unittest.TestCase):
                           ("day","16"),("day","13"),("day","09"),("day","08"),("day","22"),
                           ("night","07"),("night","01"),("night","15")})
         self.assertEqual(out["summary"]["video_races_analyzed"],0)
+        self.assertEqual(out["summary"]["motion_slots_registered"],720)
+        self.assertEqual(out["summary"]["video_boat_turn_metrics_measured"],0)
+        self.assertEqual(out["summary"]["video_boat_post_start_stretch_measured"],0)
+        self.assertTrue(out["separate_official_st_from_video_post_start_stretch"])
+        self.assertEqual(out["format_version"],3)
+        self.assertTrue(all(len(r["video"]["video_motion_by_boat"])==6 for r in out["targets"]))
+        self.assertTrue(all([x["boat_id"] for x in r["video"]["video_motion_by_boat"]]==list(range(1,7))
+                            for r in out["targets"]))
+        self.assertTrue(all(x["turn"]["closest_mark_distance_m_approx"] is None and
+                            x["post_start_stretch"]["late_to_early_speed_ratio"] is None
+                            for r in out["targets"] for x in r["video"]["video_motion_by_boat"]))
+
         self.assertEqual(out["summary"]["precutoff_numeric_pilot_captures"],0)
         self.assertTrue(all(t["video"]["status"]=="NO_LICENSED_VIDEO_ANALYZED" for t in out["targets"]))
         self.assertTrue(all(t["outcome"]["first_mark_cause"]=="UNOBSERVED" for t in out["targets"]))
@@ -125,6 +137,31 @@ class TestThreeVenueTurnAudit(unittest.TestCase):
         self.assertEqual(new["targets"][0]["first_numeric_observation"],expected)
         self.assertEqual(new["summary"]["target_races"],120)
         self.assertEqual(new["summary"]["precutoff_numeric_pilot_captures"],1)
+
+    def test_previous_ten_venue_version_migrates_without_rewriting_sha(self):
+        previous=build(STUDY_DAY,archived(fixture()),now=datetime.fromisoformat("2026-10-28T00:25:00+00:00"))
+        stored=copy.deepcopy(previous["targets"][0]["first_numeric_observation"])
+        previous["schema"]="boatlabs.turn_video_multivenue.v2"
+        upgraded=build(STUDY_DAY,archived(),previous,
+                       now=datetime.fromisoformat("2026-10-28T05:00:00+00:00"))
+        self.assertEqual(upgraded["targets"][0]["first_numeric_observation"],stored)
+        self.assertEqual(upgraded["schema"],SCHEMA)
+        self.assertEqual(len(upgraded["targets"][0]["video"]["video_motion_by_boat"]),6)
+        self.assertEqual(upgraded["summary"]["motion_slots_registered"],720)
+
+    def test_video_slots_do_not_depend_on_winning_lane(self):
+        row=fixture(code="23",race_no=1,finish="5-2-6")
+        ledger=build(STUDY_DAY,archived(row),now=datetime.fromisoformat("2026-10-28T01:30:00+00:00"))
+        first=ledger["targets"][0]
+        self.assertEqual(first["outcome"]["outcome"],"COURSE_ONE_LOST")
+        self.assertEqual(len(first["video"]["video_motion_by_boat"]),6)
+        for boat in first["video"]["video_motion_by_boat"]:
+            self.assertEqual(boat["turn"]["status"],"UNMEASURED_NO_VERIFIED_VIDEO")
+            self.assertEqual(boat["post_start_stretch"]["status"],"UNMEASURED_NO_VERIFIED_VIDEO")
+            self.assertIsNone(boat["turn"]["inside_gap_observed"])
+            self.assertIsNone(boat["post_start_stretch"]["official_st"])
+        self.assertEqual(ledger["summary"]["video_boat_turn_metrics_measured"],0)
+        self.assertEqual(ledger["summary"]["video_boat_post_start_stretch_measured"],0)
 
     def test_no_fabricated_outcome_on_invalid_result(self):
         rec=fixture(finish="1-1-3")

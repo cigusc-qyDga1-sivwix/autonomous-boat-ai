@@ -5,6 +5,7 @@
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fixed = v => v===null||v===undefined ? '—' : Number(v).toFixed(2);
   let payload = null;
+  let reading = false;
   const parts = Intl.DateTimeFormat('en-US',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
   const jst = Object.fromEntries(parts.map(p=>[p.type,p.value]));
   const today = [jst.year,jst.month,jst.day].join('-');
@@ -50,31 +51,46 @@
   }
   async function load() {
     const date = el('date').value;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
-    el('status').textContent = '公開データを読み込み中…';
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||reading)return;
+    reading=true;
+    if(!payload)el('status').textContent = '公開データを読み込み中…';
     try {
       const res = await fetch('./data/exhibition/'+date+'.json?ts='+Date.now(),{cache:'no-store'});
       if (!res.ok) throw Error('HTTP '+res.status+'（未保存日付の可能性）');
       const value = await res.json();
       if (value.schema!=='boatlabs.exhibition_research.v1'||value.event_date!==date||
           !Array.isArray(value.records)) throw Error('データ形式不正');
+      if(el('date').value!==date)return; // Never paint a previous date's response.
       payload = value;
       const selected = el('venue').value;
       el('venue').innerHTML = '<option value="">全場</option>'+Array.from(new Set(value.records.map(r=>r.venue)))
         .sort().map(name=>'<option value="'+esc(name)+'">'+esc(name)+'</option>').join('');
       el('venue').value = selected;
-      el('status').textContent = date+'｜取得済み '+value.coverage.race_count+
-        'R｜公開ファイル読込: '+new Date().toLocaleTimeString('ja-JP');
+      const recorded = value.created_at_utc ?
+        new Date(value.created_at_utc).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}) : '不明';
+      const newest = value.records.reduce((a,r)=>r.source_observed_jst>a?r.source_observed_jst:a,'');
+      el('status').textContent = date+'｜展示 '+value.coverage.race_count+
+        'R｜研究データ保存 '+recorded+' JST｜最新観測 '+(newest?newest.slice(11,19):'不明')+
+        ' JST｜画面確認 '+new Date().toLocaleTimeString('ja-JP');
       display();
     } catch(err) {
-      payload = null;
-      el('status').textContent = '取得できません：'+err.message;
-      el('summary').innerHTML = '';el('races').innerHTML='';el('details').innerHTML='';
+      if(el('date').value!==date)return;
+      el('status').textContent = '⚠ 更新確認に失敗：'+err.message+
+        (payload?'（以前の記録を表示中。最新情報ではありません）':'');
+      if(!payload){
+        el('summary').innerHTML = '';el('races').innerHTML='';el('details').innerHTML='';
+      }
+    } finally {
+      reading=false;
     }
   }
   el('date').addEventListener('change',load);
   el('reload').addEventListener('click',load);
   el('venue').addEventListener('change',display);
   el('mode').addEventListener('change',display);
+  // The research page previously refreshed ONLY on click. Poll while open,
+  // and do not backfill formal predictions from these retrospective records.
+  setInterval(()=>{if(!document.hidden&&el('date').value===today)void load();},60000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&el('date').value===today)void load();});
   load();
 })();

@@ -2,7 +2,7 @@
 <html lang="ja"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#081b33">
-<title>10/28 10場ターン映像AI研究 | BOAT LAB</title>
+<title>10/28 全6艇ターン・スタート伸び研究 | BOAT LAB</title>
 <style>
 :root{color-scheme:dark;font:16px/1.55 system-ui,-apple-system,sans-serif;background:#081b33;color:#eff9ff}
 *{box-sizing:border-box}body{margin:0}main{max-width:1120px;margin:auto;padding:18px 16px 50px}
@@ -23,10 +23,23 @@ th{background:#1b3b54;position:sticky;top:0}.meta{font-size:.85rem;color:#b5ccdd
 @media(max-width:700px){.cards{grid-template-columns:1fr}.grid{grid-template-columns:1fr 1fr}h1{font-size:1.35rem}}
 </style></head><body><main>
 <header><a href="./index.html">← BOAT LAB</a><a href="./exhibition-watch.html">🎥 展示を見る</a><a href="./exhibition.html?date=2026-10-28">展示データ</a></header>
-<h1>10月28日｜10場ターン映像AI研究</h1>
-<p>開催11場から江戸川を除く10場・最大120R。元の唐津・児島・蒲郡を重点研究に残し、追加7場は拡張研究として別管理。展示数値の解析と実映像の解析は区別します。</p>
+<h1>10月28日｜全6艇ターン・スタート伸び研究</h1>
+<p>開催11場から江戸川を除く10場・最大120R。元の唐津・児島・蒲郡を重点研究に残し、追加7場は拡張研究として別管理。①〜⑥の全選手を、共通1マークとスタートラインを基準に評価する研究。展示STとスタート後の伸びは別々に扱います。</p>
 <div class="note"><strong>映像解析の現状：公式映像は未解析</strong>
-<p>公式展示・レース映像の自動取得許可を確認できていないため、ブイとの距離、旋回半径、ターン出口失速は未測定。数値データや確定着順だけを見て「ターンが膨らんだ」「差し場ができた」と断定しません。事後結果は正式予想に反映しません。</p></div>
+<p>実映像の自動取得・機械解析の条件と、正しい6艇識別・水面校正がそろっていないため、今は全艇のターンとスタート後の伸びを未測定とする。公式ST、展示タイム、着順から旋回軌道や加速を捏造しない。結果を正式予想に混入させない。</p></div>
+<section class="card" aria-label="6艇共通基準の評価設計">
+<h2>解析の二本柱（全艇同じ基準）</h2>
+<div class="cards" style="margin:8px 0 0">
+<div><strong>①〜⑥｜共通1マーク基準</strong>
+<p>ターンマークへの距離、旋回半径、入口と出口の速度、出口での失速・加速を各艇で計測する。</p>
+<p class="meta">ターンが小さければ必ず良い、とは判断しない。差し・まくりなど戦法による適切な軌道も後で検証。</p></div>
+<div><strong>①〜⑥｜スタートライン通過後</strong>
+<p>スタートライン通過後0〜5m、5〜15m、15〜30mの区間速度と、後半／前半の伸び比を各艇で計測する。</p>
+<p class="meta">ST（タイミング）とその後の伸びは別の変数。競走結果から後知恵で補正しない。</p></div>
+<div><strong>6艇の艇間連動</strong>
+<p>伸びの差から1マークへの到達位置がどう変わるか、ターン後に差し・まくり差しが成立する条件を比較する。</p>
+<p class="meta">実際の映像と正しい艇追跡が必要。数値の欠損は低評価ではなく未測定。</p></div>
+</div></section>
 <div class="cards">
 <section class="card"><h2>🌅 唐津｜モーニング</h2><p>研究テーマ：①の旋回軌道と②の差し場</p><a href="https://www.boatrace.jp/owpc/pc/race/beforeinfo?rno=1&jcd=23&hd=20261028" target="_blank" rel="noopener noreferrer">公式直前情報を見る</a></section>
 <section class="card"><h2>☀️ 児島｜デイ</h2><p>研究テーマ：ターン流れ・出口加速・追走</p><a href="https://www.boatrace.jp/owpc/pc/race/beforeinfo?rno=1&jcd=16&hd=20261028" target="_blank" rel="noopener noreferrer">公式直前情報を見る</a></section>
@@ -42,7 +55,7 @@ th{background:#1b3b54;position:sticky;top:0}.meta{font-size:.85rem;color:#b5ccdd
 </div>
 <p id="status" role="status" class="meta">研究ファイルを読み込み中…</p>
 <div id="summary" class="grid" aria-label="集計"></div>
-<h2>レース別研究一覧</h2>
+<h2>レース別研究一覧（各レース6艇）</h2>
 <div class="filter" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:10px 0 16px">
 <label for="study-session">時間帯</label><select id="study-session" style="background:#193954;color:#fff;border:1px solid #547890;border-radius:9px;padding:8px">
 <option value="all">すべて</option><option value="morning">モーニング</option><option value="day">デイ</option><option value="night">ナイター</option></select>
@@ -50,7 +63,12 @@ th{background:#1b3b54;position:sticky;top:0}.meta{font-size:.85rem;color:#b5ccdd
 <option value="all">重点＋拡張</option><option value="primary">重点3場</option><option value="extended">追加7場</option></select>
 <span id="visible-count" class="meta"></span>
 </div>
-<div class="table"><table><thead><tr><th>時間帯</th><th>場・R</th><th>締切</th><th>展示数値</th><th>①コースの結果</th><th>映像・ターン</th><th>公式確認</th></tr></thead><tbody id="rows"></tbody></table></div>
+<div class="table"><table><thead><tr><th>時間帯</th><th>場・R</th><th>締切</th><th>展示数値</th><th>1コース艇の結果</th><th>全艇ターン</th><th>スタート後の伸び</th><th>6艇詳細</th><th>公式確認</th></tr></thead><tbody id="rows"></tbody></table></div>
+<section id="boat-detail" class="card" aria-live="polite">
+<h2 id="boat-detail-title">6艇それぞれの評価</h2>
+<p id="boat-detail-note">レース一覧の「確認」を選ぶと、①〜⑥のターンとスタート後の伸びの測定状況が表示されます。</p>
+<div class="table"><table><thead><tr><th>艇</th><th>選手（取得済みの場合）</th><th>ターンマーク基準</th><th>ターン出口</th><th>スタート後0〜5m</th><th>5〜15m</th><th>15〜30m</th><th>伸び比</th></tr></thead><tbody id="boat-detail-rows"></tbody></table></div>
+</section>
 <p class="meta">展示数値・結果はBoatraceCSVを用いた研究用参考データ。公式確定結果の照合とは別。発走前取得を証明できない記録は「事前確認済み」と扱いません。</p>
 <p class="meta">映像視聴は <a href="https://boatcast.jp/" target="_blank" rel="noopener noreferrer">BOATCAST（公式サイト）</a> で行います。無断コピー、埋め込み、自動録画は行いません。</p>
 <script>
@@ -58,10 +76,31 @@ th{background:#1b3b54;position:sticky;top:0}.meta{font-size:.85rem;color:#b5ccdd
 "use strict";
 const DAY="2026-10-28";
 let lastData=null;
+let selectedRaceKey=null;
 const path="./data/experiments/turn-video-pilot-"+DAY+".json";
 const el=id=>document.getElementById(id);
 const esc=value=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const sourceUrl=r=>"https://www.boatrace.jp/owpc/pc/race/beforeinfo?rno="+Number(r.race)+"&jcd="+encodeURIComponent(r.venue_code)+"&hd=20261028";
+function detailFor(key){
+ const item=(lastData?.targets||[]).find(r=>r.race_key===key);
+ if(!item)return;
+ selectedRaceKey=key;
+ el("boat-detail-title").textContent=item.venue+" "+item.race+"R｜①〜⑥全艇の解析状況";
+ el("boat-detail-note").textContent="全艇共通1マーク基準／スタートライン通過後の伸びを個別評価。未測定は評価0点を意味しません。";
+ const boats=item.video?.video_motion_by_boat||[];
+ const names=new Map((item.first_numeric_observation?.boats||[]).map(b=>[Number(b.lane),b.name]));
+ el("boat-detail-rows").innerHTML=boats.map(b=>{
+   const turn=b.turn||{},start=b.post_start_stretch||{};
+   const view=(val)=>Number.isFinite(val)?esc(val):"未測定";
+   return '<tr><td>'+esc("①②③④⑤⑥"[b.boat_id-1]||b.boat_id)+'</td><td>'+esc(names.get(b.boat_id)||"未取得")+'</td>'+
+    '<td>'+view(turn.closest_mark_distance_m_approx)+' m／半径 '+view(turn.local_turn_radius_m_approx)+' m</td>'+
+    '<td>出口／入口 '+view(turn.exit_to_entry_speed_ratio)+'</td>'+
+    '<td>'+view(start.speed_0_to_5m_mps_approx)+' m/s</td>'+
+    '<td>'+view(start.speed_5_to_15m_mps_approx)+' m/s</td>'+
+    '<td>'+view(start.speed_15_to_30m_mps_approx)+' m/s</td>'+
+    '<td>'+view(start.late_to_early_speed_ratio)+'</td></tr>';
+ }).join("");
+}
 function show(data){
  lastData=data;
  const sum=data.summary||{};
@@ -69,7 +108,7 @@ function show(data){
   ["研究対象",(sum.target_races??0)+"R／"+(sum.study_venues??0)+"場"],
   ["展示6艇データ",(sum.exhibition_rows_seen??0)+"R"],
   ["締切前の研究用保存",(sum.precutoff_numeric_pilot_captures??0)+"R"],
-  ["実映像の解析済み",(sum.video_races_analyzed??0)+"R"],
+  ["6艇ターン＋スタート後の伸び",(sum.video_boat_turn_metrics_measured??0)+"／"+(sum.video_boat_post_start_stretch_measured??0)+"艇"],
  ].map(([name,count])=>'<div class="stat"><small>'+esc(name)+'</small><strong>'+esc(count)+'</strong></div>').join("");
  const labels={RESULT_UNAVAILABLE:"結果未取得",UNOFFICIAL_RESULT_RESEARCH_ONLY:"暫定結果のみ",RESULT_INVALID:"結果データ要確認"};
  const selectedSession=el("study-session").value;
@@ -93,24 +132,36 @@ function show(data){
      r.data_status==="SIX_BOAT_EXHIBITION_RESEARCH_AVAILABLE"?"研究数値あり／事前未確認":"未取得";
    const sessionLabels={morning:"朝",day:"デイ",night:"ナイター"};
    const role=r.study_role==="primary"?"重点":"拡張";
+   const motion=r.video?.video_motion_by_boat||[];
+   const turnCount=motion.filter(v=>v.turn?.status==="MEASURED").length;
+   const stretchCount=motion.filter(v=>v.post_start_stretch?.status==="MEASURED").length;
    return '<tr><td>'+esc(sessionLabels[r.session]||r.session)+'</td><td>'+esc(r.venue)+' '+esc(r.race)+'R ('+role+')</td><td>'+
       esc(r.cutoff_jst||"未取得")+'</td><td>'+esc(numeric)+'</td><td>'+esc(desc)+
-      '</td><td><span class="tag">未解析</span></td><td><a target="_blank" rel="noopener noreferrer" href="'+sourceUrl(r)+'">直前情報</a></td></tr>';
+      '</td><td>'+turnCount+'/6艇</td><td>'+stretchCount+'/6艇</td>'+
+      '<td><button type="button" data-race-key="'+esc(r.race_key)+'">確認</button></td>'+
+      '<td><a target="_blank" rel="noopener noreferrer" href="'+sourceUrl(r)+'">直前情報</a></td></tr>';
  }).join("");
  const updated=data.updated_at_utc?
    new Date(data.updated_at_utc).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo"}):"不明";
  el("status").textContent="研究記録の最終更新："+updated+" JST｜"+esc(data.source_status||"状態未確認");
+ if(selectedRaceKey && (data.targets||[]).some(r=>r.race_key===selectedRaceKey))detailFor(selectedRaceKey);
 }
 async function load(){
  try{
   const res=await fetch(path+"?v="+Date.now(),{cache:"no-store"});
   if(!res.ok)throw Error("HTTP "+res.status);
   const data=await res.json();
-  if(data.schema!=="boatlabs.turn_video_multivenue.v2"||data.event_date!==DAY)throw Error("研究データの形式または日付が不一致");
+  if(data.schema!=="boatlabs.turn_video_multivenue.v3"||data.event_date!==DAY)throw Error("研究データの形式または日付が不一致");
   show(data);
  }catch(err){el("status").textContent="公開研究記録が未生成、または取得失敗："+err.message;}
 }
 el("reload").addEventListener("click",load);
+el("rows").addEventListener("click",event=>{
+ const button=event.target.closest("button[data-race-key]");
+ if(!button)return;
+ detailFor(button.dataset.raceKey);
+ el("boat-detail").scrollIntoView({behavior:"smooth",block:"nearest"});
+});
 el("study-session").addEventListener("change",()=>{if(lastData)show(lastData);});
 el("study-role").addEventListener("change",()=>{if(lastData)show(lastData);});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)load();});

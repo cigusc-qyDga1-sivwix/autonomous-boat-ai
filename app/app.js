@@ -1189,6 +1189,37 @@
          state.raceDetail&&date+'|'+state.raceDetail.venue+'|'+state.raceDetail.race===key)render();
     }
   }
+  let lastExhibitionHeartbeat='';
+  let exhibitionHeartbeatBusy=false;
+  // This is a lightweight ~700-byte heartbeat: never download the large
+  // frozen forecast JSON on every timer tick. The live file remains the
+  // ONLY source of formal exhibition-phase picks.
+  async function pollExhibitionHeartbeat(){
+    if(exhibitionHeartbeatBusy||document.hidden||readJSON(STORE_DATA,null))return;
+    exhibitionHeartbeatBusy=true;
+    try{
+      const response=await fetch('./data/exhibition/status-latest.json?fresh='+Date.now(),{cache:'no-store'});
+      if(!response.ok)throw Error('展示取得監査 HTTP '+response.status);
+      const h=await response.json();
+      if(!h||h.event_date!==data?.event_date||!h.collected_at_utc)return;
+      const t=Date.parse(h.collected_at_utc);
+      if(!Number.isFinite(t))return;
+      if(!lastExhibitionHeartbeat){
+        lastExhibitionHeartbeat=h.collected_at_utc;
+        if(t>Date.parse(lastLiveUpdate||0))await reloadLiveIfNew();
+        return;
+      }
+      if(t>Date.parse(lastExhibitionHeartbeat)){
+        lastExhibitionHeartbeat=h.collected_at_utc;
+        // Refresh the immutable pre-cutoff forecast ledger only AFTER its
+        // source heartbeat advances. Never turn archived results into picks.
+        await reloadLiveIfNew();
+        await window.BoatExhibitionAudit?.load(h.event_date);
+        if(data?.event_date===h.event_date)render();
+      }
+    }catch(e){console.warn('Exhibition heartbeat unavailable:',e?.message);}
+    finally{exhibitionHeartbeatBusy=false;}
+  }
   let liveUpdateInFlight=false;
   async function reloadLiveIfNew(){
     if(readJSON(STORE_DATA,null)||resultsRefreshBusy||liveUpdateInFlight||document.hidden)return;
@@ -1219,6 +1250,9 @@
       if('serviceWorker' in navigator&&['https:','http:'].includes(location.protocol))navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
       if(typeof setInterval==='function'){
         setInterval(reloadLiveIfNew,300000);
+        // Frequent, low-bandwidth exhibition freshness detection while visible.
+        setInterval(pollExhibitionHeartbeat,60000);
+        void pollExhibitionHeartbeat();
         // While reanalysis is open, query the public original-exhibition-only CSV directly.
         // The external publisher is periodic; this is best-effort, not true realtime.
         setInterval(()=>{if(state.view==='races'&&state.raceDetail&&state.showExternalAnalysis&&!document.hidden)void refreshOriginalExhibition(false);},20000);
@@ -1227,7 +1261,7 @@
         // frequently without notifications or source-site scraping.
         setInterval(()=>{if(['results','analysis'].includes(state.view)&&!document.hidden&&!readJSON(STORE_DATA,null))void refreshOfficialResults();},90000);
       }
-      document.addEventListener('visibilitychange',()=>{if(!document.hidden){reloadLiveIfNew();if(state.view==='races'&&state.showExternalAnalysis)void refreshOriginalExhibition(false);}});
+      document.addEventListener('visibilitychange',()=>{if(!document.hidden){void reloadLiveIfNew();void pollExhibitionHeartbeat();if(state.view==='races'&&state.showExternalAnalysis)void refreshOriginalExhibition(false);}});
     }catch(error){el('main').innerHTML=`<section class="card card-pad"><h1>データを読み込めませんでした</h1><p class="muted">${escape(error.message)}</p><p>アプリはHTTPSまたはローカルHTTPサーバー上で開いてください。ダウンロードしたHTMLを直接開くと、ブラウザの制限で予想データを取得できない場合があります。</p></section>`;}
   }
   window.BoatLab={validate:normalizeData,stats,officialStats,officialFor,compute,getData:()=>data,refreshOfficialResults};

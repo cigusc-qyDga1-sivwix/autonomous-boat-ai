@@ -91,8 +91,9 @@ function headCoveragePicks(candidates,count,shares){
   head_scores_unchanged:true,scope:'2026-10-27 pending cohort only; not a win probability guarantee'}};
 }
 function forecast(input){
+ const postraceConditional=input?.experimental_variant==='four-factor-v1.3';
  const headCoverage=input?.experimental_variant==='four-factor-v1.2';
- const openChasers=input?.experimental_variant==='four-factor-v1.1'||headCoverage;
+ const openChasers=input?.experimental_variant==='four-factor-v1.1'||headCoverage||postraceConditional;
  const fourFactor=input?.experimental_variant==='four-factor-v1.0'||openChasers;
  const wakeIntegrated=input?.experimental_variant==='outside-start-wake-v0.9'||fourFactor;
  const startTrial=input?.experimental_variant==='outside-start-gap-v0.7'||wakeIntegrated;
@@ -267,6 +268,27 @@ function forecast(input){
   if(outsideEvidence[4]?.confidence>=.10)
    strength[0]*=clamp(1-.15*outsideEvidence[4].confidence,.92,1);
  }
+ // v1.3: result-blind test signals from current six-boat pre-cutoff observations.
+ // The historical results motivated hypotheses but never enter this function.
+ const expoComplete=postraceConditional&&input.phase==='exhibition'&&
+   v.every(x=>x.exhibit!==null&&x.exhibit>=5&&x.exhibit<=10);
+ const postraceEvidence=postraceConditional?[3,4,5,6].map(course=>{
+   const own=v[byCourse[course-1]],inner=move[byCourse[course-2]];
+   const current=move[byCourse[course-1]];
+   const lead=expoComplete?Math.min(...v.filter(x=>x.lane!==own.lane).map(x=>x.exhibit))-own.exhibit:null;
+   const ratio=current.go/Math.max(.38,inner.go);
+   const supported=lead!==null&&lead>=.04&&ratio>=.78&&own.win>=Math.max(3.5,meanWin*.78);
+   const multiplier=supported?1+Math.min(.35,.15+.20*clamp((lead-.04)/.12,0,1)):1;
+   const next=course<6?move[byCourse[course]]:null;
+   const follow=!!(supported&&next&&next.go>=current.go*.82&&next.turn>=current.turn*.78);
+   const one=move[byCourse[0]];
+   const inside=!!(supported&&one.go>=current.go*.62&&one.turn>=current.turn*.66);
+   if(supported)strength[course-1]*=multiplier;
+   return {course,lane:own.lane,exhibition_lead_sec:lead===null?null:+lead.toFixed(3),
+     go_ratio:+ratio.toFixed(3),exhibition_f_ignored:own.est!==null&&!own.estValid,
+     outside_head_supported:supported,head_multiplier:+multiplier.toFixed(4),
+     adjacent_follow_supported:follow,inside_one_survivor_supported:inside};
+ }):[];
  // V0.7 bounded head-role correction when an outside starter may arrive early.
  // Venue priors still apply; a fast ST by itself never guarantees a win.
  if(startTrial){
@@ -352,7 +374,15 @@ function forecast(input){
   return prior*Math.pow(own,phase==='second'?1.15:.95)*interaction;
  }
  function secondWeight(headCourse,secondCourse){
-  if(openChasers)return openRoleWeight(headCourse,null,secondCourse,'second');
+  if(openChasers){
+   let weight=openRoleWeight(headCourse,null,secondCourse,'second');
+   if(postraceConditional){
+    const evidence=postraceEvidence.find(e=>e.course===headCourse&&e.outside_head_supported);
+    if(evidence?.adjacent_follow_supported&&secondCourse===headCourse+1)weight*=1.20;
+    if(evidence?.inside_one_survivor_supported&&secondCourse===1)weight*=1.14;
+   }
+   return weight;
+  }
   let relation;
   if(headCourse===1)relation=({2:1.45,3:1.3,4:1.02,5:.72,6:.43})[secondCourse]||.5;
   else if(headCourse===2)relation=({1:1.40,3:1.38,4:1.00,5:.64,6:.42})[secondCourse]||.5;
@@ -421,7 +451,15 @@ function forecast(input){
   return Math.max(.01,relation*Math.pow(z.turn,.85)*Math.pow(z.go,.3));
  }
  function thirdWeight(h,s,c){
-  if(openChasers)return openRoleWeight(h,s,c,'third');
+  if(openChasers){
+   let weight=openRoleWeight(h,s,c,'third');
+   if(postraceConditional){
+    const evidence=postraceEvidence.find(e=>e.course===h&&e.outside_head_supported);
+    if(evidence?.inside_one_survivor_supported&&c===1&&s>=h)weight*=1.14;
+    if(evidence?.adjacent_follow_supported&&s===h+1&&c===1)weight*=1.10;
+   }
+   return weight;
+  }
   const x=move[byCourse[c-1]];
   let consistency=(c===1?1.27:c===2?1.25:c===3?1.12: c===4?1.03:c===5?.90:.76);
   if(h===3&&s===2&&c===1)consistency*=1.65; // possible 3-2-1 turn scenario
@@ -502,9 +540,33 @@ function forecast(input){
  }
  const dominant=Math.max(...shares),close=shares.filter(x=>x>=.12).length;
  const count=clamp(Math.round(6+5*close/4+4*(.58-dominant)),4,12);
- const coverage=headCoverage?headCoveragePicks(candidates,count,shares):null;
+ const coverage=(headCoverage||postraceConditional)?headCoveragePicks(candidates,count,shares):null;
  let picks=coverage?coverage.picks:candidates.slice(0,count);
  const roleChanges=[];
+ if(postraceConditional){
+  // No hard-coded outside ticket quota; allow up to two competitive, evidenced
+  // attack/inside-survivor branches, without increasing the total points.
+  let corrected=0;
+  const supported=postraceEvidence.filter(e=>e.outside_head_supported&&shares[e.course-1]>=.045)
+   .sort((a,b)=>shares[b.course-1]-shares[a.course-1]);
+  for(const signal of supported){
+   if(corrected>=2||picks.some(p=>p.headCourse===signal.course))continue;
+   const candidatesForHead=candidates.filter(c=>c.headCourse===signal.course);
+   const conditional=candidatesForHead.filter(c=>
+    (signal.adjacent_follow_supported&&c.secondCourse===signal.course+1)||
+    (signal.inside_one_survivor_supported&&c.secondCourse===1));
+   const pick=conditional[0]||candidatesForHead[0];
+   if(!pick||picks.some(p=>p.combination===pick.combination))continue;
+   const slots=picks.map((p,i)=>({p,i})).filter(({p,i})=>i>0&&
+     picks.filter(q=>q.headCourse===p.headCourse).length>1)
+     .sort((a,b)=>a.p.pseudo-b.p.pseudo||b.i-a.i);
+   const slot=slots[0];
+   if(!slot||pick.pseudo<slot.p.pseudo*.50)continue;
+   picks[slot.i]=pick; corrected++;
+   roleChanges.push({role:'head',lane:signal.lane,combination:pick.combination,
+     reason:'展示タイム突出と選手・機力の独立条件に基づく外攻め／内残りの検証分岐'});
+  }
+ }
  if(!openChasers){
  if(roleAwareTrial){
  function replaceWithEvidence(candidate,role,lane){
@@ -654,7 +716,7 @@ function forecast(input){
  })):[];
  const headOneTotal=headOneScores.reduce((n,x)=>n+x.weight,0);
  return {
-   model:headCoverage?'four-factor-v1.2-head-coverage-untrained':openChasers?'four-factor-v1.1-untrained':fourFactor?'four-factor-v1.0-untrained':wakeIntegrated?'tactical-outside-start-wake-v0.9-untrained':
+   model:postraceConditional?'four-factor-v1.3-conditional-scenarios-untrained':headCoverage?'four-factor-v1.2-head-coverage-untrained':openChasers?'four-factor-v1.1-untrained':fourFactor?'four-factor-v1.0-untrained':wakeIntegrated?'tactical-outside-start-wake-v0.9-untrained':
       startTrial?'tactical-outside-start-gap-v0.7-untrained':
      coupledTrial?'tactical-six-boat-coupling-v0.6-untrained':
      outerStudyTrial?'tactical-outside-role-v0.5-untrained':
@@ -715,6 +777,12 @@ function forecast(input){
        proof_note:'Untrained relative model, not calibrated win probabilities. No blanket exterior picks.'
      }}:{}),
      ...(openChasers?{venue_surface_v1:venueSurface}:{}),
+     ...(postraceConditional?{postrace_v13:{
+      version:'forward-conditional-scenarios-v1.3',pre_cutoff_only:true,
+      result_data_used:false,calibrated:false,training_status:'untrained_hypothesis',
+      max_points_unchanged:true,observations:postraceEvidence,
+      caveat:'艇の軌跡・因果を観測したものではない。過去結果はモデル入力に使わない。'
+     }}:{}),
      source_at_utc:input.frozen_at_utc||null,
      ...(wakeTrial?{wake_research_only:true,wake_hypothesis:'inner boat may lose acceleration when crossed by outer makuri wash; not measured',
          wake_risk_by_attacker: [3,4,5,6].map(h=>({
@@ -737,6 +805,7 @@ function forecast(input){
 global.BoatTacticalModel={forecast,
  headCoveragePicks,
  forecastFourFactorCoverage:input=>forecast({...input,experimental_variant:'four-factor-v1.2'}),
+ forecastFourFactorConditional:input=>forecast({...input,experimental_variant:'four-factor-v1.3'}),
  forecastFourFactorOpen:input=>forecast({...input,experimental_variant:'four-factor-v1.1'}),
  forecastFourFactor:input=>forecast({...input,experimental_variant:'four-factor-v1.0'}),
  forecastRoleAware:input=>forecast({...input,experimental_variant:'role-consistency-v0.4'}),

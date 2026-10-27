@@ -71,7 +71,7 @@ MISSING_VIDEO={
         }
     } for i in range(1,7)],
 }
-RECORD_VERSION=2
+RECORD_VERSION=3
 
 
 def sha(data):

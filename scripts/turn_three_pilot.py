@@ -170,7 +170,7 @@ def build(day, archived, previous=None, *, now=None):
         key=target["race_key"]
         prior=old.get(key,{})
         # First accepted capture is immutable and cannot be backfilled post-cutoff.
-        for field in ("first_captured_at_utc","first_numeric_observation","earliest_observation_before_cutoff"):
+        for field in ("first_captured_at_utc","first_numeric_observation","earliest_observation_before_cutoff","cutoff_jst","outcome"):
             if field in prior:
                 target[field]=prior[field]
         row=bycode.get(key)
@@ -184,7 +184,8 @@ def build(day, archived, previous=None, *, now=None):
         observed=check_time(row.get("source_observed_jst"))
         first_seen=check_time(row.get("first_seen_at_utc"))
         source_is_before=bool(cutoff and observed and first_seen and
-                             observed<cutoff and first_seen<cutoff)
+                             observed<cutoff and first_seen<cutoff and
+                             observed<=timestamp and first_seen<=timestamp)
         # "first_seen" is source import timestamp, not independent forecast freeze.
         first_here_is_before=bool(cutoff and timestamp.astimezone(JST)<cutoff)
         if target["first_numeric_observation"] is None:

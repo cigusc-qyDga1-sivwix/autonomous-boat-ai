@@ -1,7 +1,7 @@
 """BOAT LAB 2026-10-28 morning/day/night first-turn VIDEO study audit.
 
 This is an observation ledger, NOT a trained video model. Public historical
-exhibition / unofficial result rows are mirrored for 3 venues, with evidence
+exhibition / unofficial result rows are mirrored for 10 approved venues, with evidence
 gaps explicit. Nothing here rewrites/feeds forecasts or the official ledger.
 """
 from __future__ import annotations
@@ -15,12 +15,25 @@ from zoneinfo import ZoneInfo
 
 JST=ZoneInfo("Asia/Tokyo")
 STUDY_DAY="2026-10-28"
-SCHEMA="boatlabs.turn_video_three_venues.v1"
+SCHEMA="boatlabs.turn_video_multivenue.v2"
+LEGACY_SCHEMA="boatlabs.turn_video_three_venues.v1"
+# Preserve the original three cases and their prior SHA-fixed research snapshots.
+# Today BOATRACE lists 11 venues. 江戸川 (03) remains out of this turn model
+# under the user's venue-tactics exclusion; it is still collected nationally.
 PLACES={
-    "morning":{"venue":"唐津","venue_code":"23","focus":"①の旋回軌道と内側に生じる差し場"},
-    "day":{"venue":"児島","venue_code":"16","focus":"ターンの流れ・立ち上がり・2〜3着追走"},
-    "night":{"venue":"蒲郡","venue_code":"07","focus":"①の逃げ失敗と③〜⑥の攻め連動"},
+    "morning":{"venue":"唐津","venue_code":"23","session":"morning","focus":"①の旋回軌道と内側に生じる差し場","primary":True},
+    "morning_mikuni":{"venue":"三国","venue_code":"10","session":"morning","focus":"モーニングの旋回動作・差し場と唐津の比較","primary":False},
+    "day":{"venue":"児島","venue_code":"16","session":"day","focus":"ターンの流れ・立ち上がり・2〜3着追走","primary":True},
+    "day_amagasaki":{"venue":"尼崎","venue_code":"13","session":"day","focus":"SG戦でのターン位置関係とイン逃げ失敗","primary":False},
+    "day_tsu":{"venue":"津","venue_code":"09","session":"day","focus":"ターン出口の失速・差しと場別連動","primary":False},
+    "day_tokoname":{"venue":"常滑","venue_code":"08","session":"day","focus":"ターンの安定性と実際の進入コース","primary":False},
+    "day_fukuoka":{"venue":"福岡","venue_code":"22","session":"day","focus":"差し・まくり差しと1コースの残存","primary":False},
+    "night":{"venue":"蒲郡","venue_code":"07","session":"night","focus":"①の逃げ失敗と③〜⑥の攻め連動","primary":True},
+    "night_kiryu":{"venue":"桐生","venue_code":"01","session":"night","focus":"ナイターのターン出口と外艇追走","primary":False},
+    "night_marugame":{"venue":"丸亀","venue_code":"15","session":"night","focus":"1マーク周辺の位置関係と先行艇残存","primary":False},
 }
+EXCLUDED_FROM_TURN_MODEL={"03":"江戸川"}  # national exhibition ingestion remains unchanged.
+
 MISSING_VIDEO={
     "status":"NO_LICENSED_VIDEO_ANALYZED",
     "turn_mark_clearance_m":None,
@@ -30,7 +43,7 @@ MISSING_VIDEO={
     "inside_gap_observed":None,
     "reason":"Official video machine-use permission and verified first-mark tracks are not established.",
 }
-RECORD_VERSION=1
+RECORD_VERSION=2
 
 
 def sha(data):
@@ -124,7 +137,8 @@ def _blank(day,now):
         for r in range(1,13):
             cases.append({
                 "race_key":day.replace("-","")+config["venue_code"]+f"{r:02d}",
-                "session":part,"venue":config["venue"],"venue_code":config["venue_code"],"race":r,
+                "session":config["session"],"venue":config["venue"],"venue_code":config["venue_code"],"race":r,
+                "study_role":"primary" if config["primary"] else "extended",
                 "focus":config["focus"],"cutoff_jst":None,
                 "data_status":"WAITING_EXHIBITION_DATA",
                 "first_captured_at_utc":None,
@@ -137,7 +151,10 @@ def _blank(day,now):
         "schema":SCHEMA,"event_date":day,"created_at_utc":now.isoformat(),
         "updated_at_utc":now.isoformat(),
         "format_version":RECORD_VERSION,
-        "scope":"12R each: 23唐津 morning / 16児島 day / 07蒲郡 night",
+        "scope":"2026-10-28 JST: 10 venues x 12R (original three primary; 7 additional); 江戸川 excluded from turn comparison",
+        "planned_venue_count":len(PLACES),
+        "excluded_from_turn_model":EXCLUDED_FROM_TURN_MODEL,
+        "scheduled_venue_source":"https://www.boatrace.jp/owpc/pc/race/index?hd=20261028",
         "source":"BoatraceCSV exhibition archive, not a video stream",
         "model_state":"UNTRAINED_TURN_VIDEO_RESEARCH_PILOT",
         "video_auto_ingestion":"DISABLED_NO_CONFIRMED_RIGHTS",
@@ -155,7 +172,7 @@ def build(day, archived, previous=None, *, now=None):
     if timestamp.tzinfo is None:
         raise ValueError("timezone_aware_now_required")
     ledger=_blank(day,timestamp)
-    if isinstance(previous,dict) and previous.get("schema")==SCHEMA and previous.get("event_date")==day:
+    if isinstance(previous,dict) and previous.get("schema") in (SCHEMA,LEGACY_SCHEMA) and previous.get("event_date")==day:
         old={x.get("race_key"):x for x in previous.get("targets",[]) if isinstance(x,dict)}
     else:
         old={}
@@ -210,6 +227,13 @@ def build(day, archived, previous=None, *, now=None):
         target["video"]=dict(MISSING_VIDEO)
     counts={
         "target_races":len(ledger["targets"]),
+        "study_venues":len(PLACES),
+        "primary_races":sum(t["study_role"]=="primary" for t in ledger["targets"]),
+        "extended_races":sum(t["study_role"]=="extended" for t in ledger["targets"]),
+        "morning_races":sum(t["session"]=="morning" for t in ledger["targets"]),
+        "day_races":sum(t["session"]=="day" for t in ledger["targets"]),
+        "night_races":sum(t["session"]=="night" for t in ledger["targets"]),
+        "observed_venues":len({t["venue_code"] for t in ledger["targets"] if t["data_status"]=="SIX_BOAT_EXHIBITION_RESEARCH_AVAILABLE"}),
         "exhibition_rows_seen":sum(t["data_status"]=="SIX_BOAT_EXHIBITION_RESEARCH_AVAILABLE" for t in ledger["targets"]),
         "precutoff_numeric_pilot_captures":sum(t["first_numeric_observation"] is not None for t in ledger["targets"]),
         "unofficial_result_rows":sum(t["outcome"]["state"]=="UNOFFICIAL_RESULT_RESEARCH_ONLY" for t in ledger["targets"]),

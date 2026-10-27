@@ -94,7 +94,7 @@ function run(input){
   four_factor:result.metadata.four_factor,
   venue_surface_v1:surface,
   venue_surface_ab:surfaceControl?{
-   control_model:coverage?'four-factor-v1.2-head-coverage-without-venue-surface':'four-factor-v1.1-without-venue-surface',
+   control_model:venueAware?'four-factor-v1.4-without-venue-surface':coverage?'four-factor-v1.2-head-coverage-without-venue-surface':'four-factor-v1.1-without-venue-surface',
    control_bets:surfaceControl.bets,
    trial_bets:result.bets,
    generated_pre_cutoff:true,

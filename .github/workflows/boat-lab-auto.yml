@@ -121,7 +121,9 @@ jobs:
           python -m scripts.research_coupling_patterns
           python -m scripts.research_wake_hypotheses
           python -m scripts.research_start_gap
-          # Independent 2026-10-28 three-venue VIDEO research audit; NO video acquisition or prediction changes.
+      - name: 28 Oct three-venue turn-motion research audit (no video downloads)
+        continue-on-error: true
+        run: |
           if [ "$(TZ=Asia/Tokyo date +%F)" = "2026-10-28" ]; then
             python scripts/turn_three_pilot.py --date 2026-10-28
           fi

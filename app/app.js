@@ -1251,8 +1251,9 @@
       if(typeof setInterval==='function'){
         setInterval(reloadLiveIfNew,300000);
         // Frequent, low-bandwidth exhibition freshness detection while visible.
+        // The initial page load already fetches the latest frozen JSON.
+        // Begin low-bandwidth heartbeat checks on the next minute.
         setInterval(pollExhibitionHeartbeat,60000);
-        void pollExhibitionHeartbeat();
         // While reanalysis is open, query the public original-exhibition-only CSV directly.
         // The external publisher is periodic; this is best-effort, not true realtime.
         setInterval(()=>{if(state.view==='races'&&state.raceDetail&&state.showExternalAnalysis&&!document.hidden)void refreshOriginalExhibition(false);},20000);

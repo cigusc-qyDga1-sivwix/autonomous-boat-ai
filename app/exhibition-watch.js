@@ -44,7 +44,7 @@ function mount(doc,loc,api){
  const el=id=>doc.getElementById(id);
  const day=el('watch-date'),venue=el('watch-venue'),race=el('watch-race');
  const selected=el('selected-race'),link=el('watch-boatcast'),before=el('watch-beforeinfo'),
-   list=el('watch-racelist'),records=el('watch-records');
+   list=el('watch-racelist'),records=el('watch-records'),bridge=el('watch-local-bridge');
  const permission=el('watch-permission'),file=el('watch-file'),player=el('watch-player'),status=el('watch-status');
  if(!day||!venue||!race||!permission||!file||!player)return false;
  const init=initial(loc.search);
@@ -57,6 +57,7 @@ function mount(doc,loc,api){
   selected.textContent=state?state.heading:'有効な開催日・場・Rを選んでください';
   if(!state)return;
   link.href=state.boatcast;before.href=state.beforeinfo;list.href=state.racelist;records.href=state.records;
+  if(bridge)bridge.href='./local-video-bridge.html?date='+encodeURIComponent(state.day)+'&venue='+encodeURIComponent(state.venue)+'&race='+state.race;
  };
  for(const elem of [day,venue,race])elem.addEventListener('change',refresh);
  refresh();

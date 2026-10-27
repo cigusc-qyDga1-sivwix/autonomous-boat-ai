@@ -29,11 +29,11 @@ def version(ledger,code):
 def test_v14_preserves_existing_v13_sha_and_gets_same_time_controls():
     before_t=datetime.fromisoformat("2026-10-27T18:20:00+09:00")
     after_t=datetime.fromisoformat("2026-10-27T19:20:00+09:00")
-    old,_,_=A.build(None,payload("02"),before_t,"fixture")
-    versions=copy.deepcopy(version(old,"02"))
+    old,_,_=A.build(None,payload("2"),before_t,"fixture")
+    versions=copy.deepcopy(version(old,"2"))
     assert versions[-1]["model_version"]==A.POSTRACE_CONDITIONAL_MODEL
-    new,ui,status=A.build(old,payload("02"),after_t,"fixture")
-    now_versions=version(new,"02")
+    new,ui,status=A.build(old,payload("2"),after_t,"fixture")
+    now_versions=version(new,"2")
     assert now_versions[:len(versions)]==versions
     v=now_versions[-1]
     assert v["model_version"]==A.VENUE_TACTICS_MODEL
@@ -50,27 +50,27 @@ def test_v14_preserves_existing_v13_sha_and_gets_same_time_controls():
     assert sum(x["virtual_yen"] for x in v["bets"])==50_000
     assert ui["forecast_races"][0]["venue_tactics_v2"]["eligible"] is True
     unchanged=copy.deepcopy(now_versions)
-    same,_,_=A.build(new,payload("02"),after_t,"fixture")
-    assert version(same,"02")==unchanged
-    closed,_,_=A.build(new,payload("02"),datetime.fromisoformat("2026-10-27T21:01:00+09:00"),"fixture")
-    assert version(closed,"02")==unchanged
+    same,_,_=A.build(new,payload("2"),after_t,"fixture")
+    assert version(same,"2")==unchanged
+    closed,_,_=A.build(new,payload("2"),datetime.fromisoformat("2026-10-27T21:01:00+09:00"),"fixture")
+    assert version(closed,"2")==unchanged
 
 
 def test_edogawa_remains_on_v13_while_others_upgrade():
     t=datetime.fromisoformat("2026-10-27T19:20:00+09:00")
-    toda,_,_=A.build(None,payload("02"),t,"fixture")
-    edogawa,_,_=A.build(None,payload("03"),t,"fixture")
-    assert version(toda,"02")[-1]["model_version"]==A.VENUE_TACTICS_MODEL
-    assert version(edogawa,"03")[-1]["model_version"]==A.POSTRACE_CONDITIONAL_MODEL
-    assert "venue_tactics_v2" not in version(edogawa,"03")[-1]
+    toda,_,_=A.build(None,payload("2"),t,"fixture")
+    edogawa,_,_=A.build(None,payload("3"),t,"fixture")
+    assert version(toda,"2")[-1]["model_version"]==A.VENUE_TACTICS_MODEL
+    assert version(edogawa,"3")[-1]["model_version"]==A.POSTRACE_CONDITIONAL_MODEL
+    assert "venue_tactics_v2" not in version(edogawa,"3")[-1]
 
 
 def test_result_and_payout_cannot_change_pre_cutoff_venue_model():
     t=datetime.fromisoformat("2026-10-27T19:20:00+09:00")
-    a,_,_=A.build(None,payload("02"),t,"fixture")
-    b=payload("02")
-    b["programs"]["stadiums"]["02"]["races"]["12"].update({
+    a,_,_=A.build(None,payload("2"),t,"fixture")
+    b=payload("2")
+    b["programs"]["stadiums"]["2"]["races"]["12"].update({
        "result":{"finish":"3-4-1"},"payout":123000,"odds":{"3-4-1":10},
        "actual_race_st":{"3":.02}})
     c,_,_=A.build(None,b,t,"fixture")
-    assert version(a,"02")==version(c,"02")
+    assert version(a,"2")==version(c,"2")

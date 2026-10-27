@@ -7,7 +7,10 @@ assert.ok(raw.forecast_races.length>0);
 assert.ok(raw.forecast_races.length<=288);
 for(const r of raw.forecast_races){
   assert.ok(r.sha256 && r.frozen_at_utc);
-  assert.ok(r.bets.length>=4&&r.bets.length<=12);
+  // 2026-10-28 point-free main v1.5 explicitly permits 1–120 tickets.
+  // Keep the old 4–12 bound for every other frozen model.
+  const pointFree=r.model_version==='four-factor-v1.5-point-free-untrained';
+  assert.ok(r.bets.length>=(pointFree?1:4)&&r.bets.length<=(pointFree?120:12));
   if(r.point_count!==undefined)assert.equal(r.point_count,r.bets.length);
   assert.equal(r.bets.reduce((a,b)=>a+b.virtual_yen,0),50000);
   assert.ok(['baseline','exhibition'].includes(r.phase));

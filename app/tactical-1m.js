@@ -91,7 +91,8 @@ function headCoveragePicks(candidates,count,shares){
   head_scores_unchanged:true,scope:'2026-10-27 pending cohort only; not a win probability guarantee'}};
 }
 function forecast(input){
- const postraceConditional=input?.experimental_variant==='four-factor-v1.3';
+ const venueAware=input?.experimental_variant==='four-factor-v1.4';
+ const postraceConditional=input?.experimental_variant==='four-factor-v1.3'||venueAware;
  const headCoverage=input?.experimental_variant==='four-factor-v1.2';
  const openChasers=input?.experimental_variant==='four-factor-v1.1'||headCoverage||postraceConditional;
  const fourFactor=input?.experimental_variant==='four-factor-v1.0'||openChasers;
@@ -231,6 +232,18 @@ function forecast(input){
  if(venueSurface.applied){
   for(let course=1;course<=6;course++)
    strength[course-1]*=venueSurface.head_course_multipliers[course-1];
+ }
+ // v1.4: all 23 venue historical winning-method patterns, with independent
+ // pre-race ST and boat movement support. 江戸川 explicitly remains excluded.
+ const venueTactics=venueAware?global.BoatVenueTacticsV2?.evaluate({
+   venue:input.venue,venue_profile:input.venue_profile,
+   venue_tactics_disabled:input.venue_tactics_disabled===true,
+   move,byCourse,startSignals
+ }):null;
+ if(venueAware&&!venueTactics)throw Error('Venue tactical history unavailable');
+ if(venueTactics?.eligible&&!venueTactics.disabled){
+   for(let course=1;course<=6;course++)
+     strength[course-1]*=venueTactics.head_course_multipliers[course-1];
  }
  // If outside racer has demonstrably quicker legal exhibition ST and comparable
  // ability, reduce inside/2's assumed clean turn and shift to attack branches.
@@ -381,6 +394,7 @@ function forecast(input){
     if(evidence?.adjacent_follow_supported&&secondCourse===headCourse+1)weight*=1.20;
     if(evidence?.inside_one_survivor_supported&&secondCourse===1)weight*=1.14;
    }
+   if(venueAware)weight*=venueTactics.secondMultiplier(headCourse,secondCourse);
    return weight;
   }
   let relation;
@@ -458,6 +472,7 @@ function forecast(input){
     if(evidence?.inside_one_survivor_supported&&c===1&&s>=h)weight*=1.14;
     if(evidence?.adjacent_follow_supported&&s===h+1&&c===1)weight*=1.10;
    }
+   if(venueAware)weight*=venueTactics.thirdMultiplier(h,s,c);
    return weight;
   }
   const x=move[byCourse[c-1]];
@@ -716,7 +731,7 @@ function forecast(input){
  })):[];
  const headOneTotal=headOneScores.reduce((n,x)=>n+x.weight,0);
  return {
-   model:postraceConditional?'four-factor-v1.3-conditional-scenarios-untrained':headCoverage?'four-factor-v1.2-head-coverage-untrained':openChasers?'four-factor-v1.1-untrained':fourFactor?'four-factor-v1.0-untrained':wakeIntegrated?'tactical-outside-start-wake-v0.9-untrained':
+   model:venueAware?'four-factor-v1.4-venue-aware-23-untrained':postraceConditional?'four-factor-v1.3-conditional-scenarios-untrained':headCoverage?'four-factor-v1.2-head-coverage-untrained':openChasers?'four-factor-v1.1-untrained':fourFactor?'four-factor-v1.0-untrained':wakeIntegrated?'tactical-outside-start-wake-v0.9-untrained':
       startTrial?'tactical-outside-start-gap-v0.7-untrained':
      coupledTrial?'tactical-six-boat-coupling-v0.6-untrained':
      outerStudyTrial?'tactical-outside-role-v0.5-untrained':
@@ -777,6 +792,22 @@ function forecast(input){
        proof_note:'Untrained relative model, not calibrated win probabilities. No blanket exterior picks.'
      }}:{}),
      ...(openChasers?{venue_surface_v1:venueSurface}:{}),
+     ...(venueAware?{venue_tactics_v2:({
+       version:venueTactics.version,venue:venueTactics.venue,
+       excluded:venueTactics.excluded,eligible:venueTactics.eligible,
+       applied:venueTactics.applied,role_scenarios_enabled:venueTactics.role_scenarios_enabled,
+       disabled:venueTactics.disabled,
+       historical_winning_method_share_pct:venueTactics.historical_winning_method_share_pct,
+       registered_tactical_focus:venueTactics.registered_tactical_focus,
+       source_url:venueTactics.source_url,source_cohort:venueTactics.source_cohort,
+       source_uncertainty:venueTactics.source_uncertainty,
+       pre_cutoff_only:venueTactics.pre_cutoff_only,
+       result_data_used:venueTactics.result_data_used,
+       head_course_multipliers:venueTactics.head_course_multipliers,
+       attack_evidence:venueTactics.attack_evidence,
+       method:'All 23 venue-specific method histories, actual course and pre-race ST & ability gates; bounded 1st/2nd/3rd conditional scenarios; no result features.',
+       calibrated:false
+     })}:{}),
      ...(postraceConditional?{postrace_v13:{
       version:'forward-conditional-scenarios-v1.3',pre_cutoff_only:true,
       result_data_used:false,calibrated:false,training_status:'untrained_hypothesis',
@@ -806,6 +837,7 @@ global.BoatTacticalModel={forecast,
  headCoveragePicks,
  forecastFourFactorCoverage:input=>forecast({...input,experimental_variant:'four-factor-v1.2'}),
  forecastFourFactorConditional:input=>forecast({...input,experimental_variant:'four-factor-v1.3'}),
+ forecastFourFactorVenueAware:input=>forecast({...input,experimental_variant:'four-factor-v1.4'}),
  forecastFourFactorOpen:input=>forecast({...input,experimental_variant:'four-factor-v1.1'}),
  forecastFourFactor:input=>forecast({...input,experimental_variant:'four-factor-v1.0'}),
  forecastRoleAware:input=>forecast({...input,experimental_variant:'role-consistency-v0.4'}),

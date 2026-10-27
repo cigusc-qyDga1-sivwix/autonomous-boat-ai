@@ -7,6 +7,7 @@ gaps explicit. Nothing here rewrites/feeds forecasts or the official ledger.
 from __future__ import annotations
 
 import argparse
+import copy
 from datetime import date, datetime, timezone, timedelta
 import hashlib
 import json
@@ -15,13 +16,14 @@ from zoneinfo import ZoneInfo
 
 JST=ZoneInfo("Asia/Tokyo")
 STUDY_DAY="2026-10-28"
-SCHEMA="boatlabs.turn_video_multivenue.v2"
+SCHEMA="boatlabs.turn_video_multivenue.v3"
+PREVIOUS_SCHEMA="boatlabs.turn_video_multivenue.v2"
 LEGACY_SCHEMA="boatlabs.turn_video_three_venues.v1"
 # Preserve the original three cases and their prior SHA-fixed research snapshots.
 # Today BOATRACE lists 11 venues. 江戸川 (03) remains out of this turn model
 # under the user's venue-tactics exclusion; it is still collected nationally.
 PLACES={
-    "morning":{"venue":"唐津","venue_code":"23","session":"morning","focus":"①の旋回軌道と内側に生じる差し場","primary":True},
+    "morning":{"venue":"唐津","venue_code":"23","session":"morning","focus":"①〜⑥の1M旋回精度・差し場・スタート後の伸び","primary":True},
     "morning_mikuni":{"venue":"三国","venue_code":"10","session":"morning","focus":"モーニングの旋回動作・差し場と唐津の比較","primary":False},
     "day":{"venue":"児島","venue_code":"16","session":"day","focus":"ターンの流れ・立ち上がり・2〜3着追走","primary":True},
     "day_amagasaki":{"venue":"尼崎","venue_code":"13","session":"day","focus":"SG戦でのターン位置関係とイン逃げ失敗","primary":False},
@@ -41,7 +43,33 @@ MISSING_VIDEO={
     "turn_exit_speed_ratio":None,
     "confirmed_boat_tracks":0,
     "inside_gap_observed":None,
-    "reason":"Official video machine-use permission and verified first-mark tracks are not established.",
+    "reason":"Actual source-video machine-vision evidence and verified first-mark/start tracks are not established.",
+    "common_turn_mark_reference":"SAME_FIRST_TURN_MARK_CENTER_FOR_ALL_SIX",
+    "common_start_reference":"SAME_START_LINE_CROSSING_POINT_AND_RACE_DIRECTION",
+    "video_motion_by_boat":[{
+        "boat_id":i,
+        "turn":{
+            "status":"UNMEASURED_NO_VERIFIED_VIDEO",
+            "reference":"SAME_FIRST_TURN_MARK",
+            "closest_mark_distance_m_approx":None,
+            "local_turn_radius_m_approx":None,
+            "turn_entry_speed_mps_approx":None,
+            "turn_exit_speed_mps_approx":None,
+            "exit_to_entry_speed_ratio":None,
+            "inside_gap_observed":None
+        },
+        "post_start_stretch":{
+            "status":"UNMEASURED_NO_VERIFIED_VIDEO",
+            "reference":"SAME_START_LINE_AND_FORWARD_AXIS",
+            "video_start_line_crossing_s":None,
+            "speed_0_to_5m_mps_approx":None,
+            "speed_5_to_15m_mps_approx":None,
+            "speed_15_to_30m_mps_approx":None,
+            "late_to_early_speed_ratio":None,
+            "official_st":None,
+            "not_a_substitute_for_start_timing":True,
+        }
+    } for i in range(1,7)],
 }
 RECORD_VERSION=2
 
@@ -145,7 +173,7 @@ def _blank(day,now):
                 "first_numeric_observation":None,
                 "earliest_observation_before_cutoff":"UNCONFIRMED",
                 "outcome":{"state":"RESULT_UNAVAILABLE","first_mark_cause":"UNOBSERVED"},
-                "video":dict(MISSING_VIDEO),
+                "video":copy.deepcopy(MISSING_VIDEO),
             })
     return {
         "schema":SCHEMA,"event_date":day,"created_at_utc":now.isoformat(),
@@ -156,7 +184,9 @@ def _blank(day,now):
         "excluded_from_turn_model":EXCLUDED_FROM_TURN_MODEL,
         "scheduled_venue_source":"https://www.boatrace.jp/owpc/pc/race/index?hd=20261028",
         "source":"BoatraceCSV exhibition archive, not a video stream",
-        "model_state":"UNTRAINED_TURN_VIDEO_RESEARCH_PILOT",
+        "model_state":"UNTRAINED_SIX_BOAT_TURN_MARK_AND_START_STRETCH_RESEARCH",
+        "analysis_priority":["all_six_turn_mark_geometry","all_six_post_start_stretch","inter_boat_first_turn_scenarios"],
+        "separate_official_st_from_video_post_start_stretch":True,
         "video_auto_ingestion":"DISABLED_NO_CONFIRMED_RIGHTS",
         "forecast_status":"UNMODIFIED",
         "official_settlement_status":"UNMODIFIED",
@@ -172,7 +202,7 @@ def build(day, archived, previous=None, *, now=None):
     if timestamp.tzinfo is None:
         raise ValueError("timezone_aware_now_required")
     ledger=_blank(day,timestamp)
-    if isinstance(previous,dict) and previous.get("schema") in (SCHEMA,LEGACY_SCHEMA) and previous.get("event_date")==day:
+    if isinstance(previous,dict) and previous.get("schema") in (SCHEMA,PREVIOUS_SCHEMA,LEGACY_SCHEMA) and previous.get("event_date")==day:
         old={x.get("race_key"):x for x in previous.get("targets",[]) if isinstance(x,dict)}
     else:
         old={}
@@ -224,7 +254,7 @@ def build(day, archived, previous=None, *, now=None):
         target["latest_numeric_source_observed_jst"]=row.get("source_observed_jst")
         target["outcome"]=outcome_label(row)
         # No archive fields are permitted to claim that a particular turn caused the outcome.
-        target["video"]=dict(MISSING_VIDEO)
+        target["video"]=copy.deepcopy(MISSING_VIDEO)
     counts={
         "target_races":len(ledger["targets"]),
         "study_venues":len(PLACES),
@@ -241,6 +271,9 @@ def build(day, archived, previous=None, *, now=None):
         "course_one_losses_unofficial":sum(t["outcome"].get("outcome")=="COURSE_ONE_LOST" for t in ledger["targets"]),
         "video_races_analyzed":0,
         "turn_mistakes_verified":0,
+        "video_boat_turn_metrics_measured":0,
+        "video_boat_post_start_stretch_measured":0,
+        "motion_slots_registered":len(ledger["targets"])*6,
     }
     ledger["summary"]=counts
     ledger["source_status"]=source_state
@@ -248,6 +281,8 @@ def build(day, archived, previous=None, *, now=None):
     ledger["evidence_policy"]=(
         "No licensed videos currently analyzed. Exhibition figures and unofficial results "
         "cannot prove that a turn was wide, a speed loss occurred, or an inside gap existed. "
+        "Each of six boats must be evaluated against the same first-turn mark and "
+        "separately on post-start 0-5m/5-15m/15-30m movement; ST alone does not measure stretching. "
         "Results are never inputs to a prestart forecast.")
     return ledger
 

@@ -71,8 +71,28 @@ function surfaceVenueTrial(input,move,byCourse,startSignals,primary){
   limitations:'場別基準1コース率は従来どおり。追加は公式確認4場で最大+4.5%の試験補正のみ。残り19場は観測根拠待ち。潮位・風向からの推測補正なし。確率未校正。',
   control_disabled:input.surface_trial_disabled===true};
 }
+// Trial ticket selection only. Scores, maneuvers and number of points stay fixed.
+function headCoveragePicks(candidates,count,shares){
+ const ranked=shares.map((share,i)=>({course:i+1,share})).sort((a,b)=>b.share-a.share||a.course-b.course);
+ const selected=[];let mass=0;
+ for(const row of ranked){
+  if(selected.length && (mass>=.80 || row.share<.10))break;
+  if((selected.length+1)*2>count)break;
+  selected.push(row.course);mass+=row.share;
+ }
+ const reserved=selected.flatMap(h=>candidates.filter(c=>c.headCourse===h).slice(0,2));
+ const keys=new Set(reserved.map(c=>c.combination));
+ const picks=[...reserved];
+ for(const c of candidates){if(picks.length>=count)break;if(!keys.has(c.combination)){picks.push(c);keys.add(c.combination);}}
+ picks.sort((a,b)=>b.pseudo-a.pseudo||a.combination.localeCompare(b.combination));
+ return {picks,policy:{version:'head-coverage-v1',calibrated:false,
+  target_relative_mass:.80,min_head_relative_share:.10,tickets_per_selected_head:2,
+  selected_head_courses:selected,selected_relative_mass:mass,point_count_unchanged:true,
+  head_scores_unchanged:true,scope:'2026-10-27 pending cohort only; not a win probability guarantee'}};
+}
 function forecast(input){
- const openChasers=input?.experimental_variant==='four-factor-v1.1';
+ const headCoverage=input?.experimental_variant==='four-factor-v1.2';
+ const openChasers=input?.experimental_variant==='four-factor-v1.1'||headCoverage;
  const fourFactor=input?.experimental_variant==='four-factor-v1.0'||openChasers;
  const wakeIntegrated=input?.experimental_variant==='outside-start-wake-v0.9'||fourFactor;
  const startTrial=input?.experimental_variant==='outside-start-gap-v0.7'||wakeIntegrated;
@@ -482,7 +502,8 @@ function forecast(input){
  }
  const dominant=Math.max(...shares),close=shares.filter(x=>x>=.12).length;
  const count=clamp(Math.round(6+5*close/4+4*(.58-dominant)),4,12);
- let picks=candidates.slice(0,count);
+ const coverage=headCoverage?headCoveragePicks(candidates,count,shares):null;
+ let picks=coverage?coverage.picks:candidates.slice(0,count);
  const roleChanges=[];
  if(!openChasers){
  if(roleAwareTrial){
@@ -633,7 +654,7 @@ function forecast(input){
  })):[];
  const headOneTotal=headOneScores.reduce((n,x)=>n+x.weight,0);
  return {
-   model:openChasers?'four-factor-v1.1-untrained':fourFactor?'four-factor-v1.0-untrained':wakeIntegrated?'tactical-outside-start-wake-v0.9-untrained':
+   model:headCoverage?'four-factor-v1.2-head-coverage-untrained':openChasers?'four-factor-v1.1-untrained':fourFactor?'four-factor-v1.0-untrained':wakeIntegrated?'tactical-outside-start-wake-v0.9-untrained':
       startTrial?'tactical-outside-start-gap-v0.7-untrained':
      coupledTrial?'tactical-six-boat-coupling-v0.6-untrained':
      outerStudyTrial?'tactical-outside-role-v0.5-untrained':
@@ -642,7 +663,7 @@ function forecast(input){
      outsideTrial?'tactical-outside-makuri-v0.2-untrained':'tactical-1m-conditional-v0.1-untrained',
    basis:'保存済み発走前選手情報と場別参考値のみ。結果・払戻・オッズ不使用。',
    venue:input.venue,head_course_shares:shares.map((s,i)=>({course:i+1,lane:v[byCourse[i]].lane,relative_share:+s.toFixed(4),tactic:openChasers?'攻め方未確定':nameTactic[i+1]})),
-   metadata:{...(fourFactor?{four_factor:{...factorModel,...(openChasers?{chaser_policy:{
+   metadata:{...(fourFactor?{four_factor:{...factorModel,...(coverage?{ticket_policy:coverage.policy}:{}),...(openChasers?{chaser_policy:{
         version:'ability-first-v1.1',fixed_neighbor_bonus:false,legacy_ticket_rescue:false,
         interaction_bounds:[.95,1.05],calibrated:false,
         second_by_head:[1,2,3,4,5,6].map(h=>{
@@ -714,6 +735,8 @@ function forecast(input){
  };
 }
 global.BoatTacticalModel={forecast,
+ headCoveragePicks,
+ forecastFourFactorCoverage:input=>forecast({...input,experimental_variant:'four-factor-v1.2'}),
  forecastFourFactorOpen:input=>forecast({...input,experimental_variant:'four-factor-v1.1'}),
  forecastFourFactor:input=>forecast({...input,experimental_variant:'four-factor-v1.0'}),
  forecastRoleAware:input=>forecast({...input,experimental_variant:'role-consistency-v0.4'}),

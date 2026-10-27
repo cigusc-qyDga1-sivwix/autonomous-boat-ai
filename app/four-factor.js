@@ -69,11 +69,13 @@ function panel(r){
  const keys=['athlete','motor','exhibition','weather'],labels=['選手','モーター','展示','気象'];
  const show=x=>typeof x==='number'&&Number.isFinite(x)&&x>0&&x<10?'×'+x.toFixed(3):'未取得';
  const esc=x=>String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const policy=meta.ticket_policy;
+ const policyHTML=policy?'<div class="notice"><strong>頭候補保持の試験修正</strong><p>頭の評価順に、相対評価の累計80%を目安として候補を残します（各10%以上・点数内）。候補ごとに上位2通りを確保し、残りを全体評価順で選びます。総点数と仮想5万円は維持。実際の的中確率80%を意味しません。以前の正式予想は変更しません。</p></div>':'';
  const chasers=meta.chaser_policy?.second_by_head;
  const chaserHTML=Array.isArray(chasers)&&chasers.length===6?
   '<h3>頭ごとの2着候補</h3><p>隣艇の自動加点は使わず、残り5艇を毎回評価。3着も残り4艇から評価します。選手別の2・3着実績率は未接続です。</p><table class="bets-table"><thead><tr><th>1着の条件</th><th>2着候補（評価順）</th></tr></thead><tbody>'+chasers.map(h=>'<tr><td>'+esc(h.head_course)+'コース</td><td>'+[...h.candidates].sort((a,b)=>b.relative_share-a.relative_share||a.lane-b.lane).map(x=>esc(x.lane)+'号艇').join(' → ')+'</td></tr>').join('')+'</tbody></table>':'';
  const rows=meta.rows.map(x=>'<tr><td>'+esc(x.lane)+'</td>'+keys.map(k=>'<td>'+show(x.factors?.[k]?.applied_multiplier)+'</td>').join('')+'<td>'+show(x.combined_multiplier)+'</td></tr>').join('');
- return '<section class="card card-pad four-factor-panel"><h3>4要素の基礎評価</h3><p>選手60・モーター25・展示10・気象5</p><div class="boat-entry-overflow"><table class="bets-table"><thead><tr><th>艇</th>'+labels.map(x=>'<th>'+x+'</th>').join('')+'<th>合成</th></tr></thead><tbody>'+rows+'</tbody></table></div><p class="help">表示は重み適用後の倍率。欠損は中立の×1とし、取得値を捏造しません。この基礎評価と実進入・艇間連動から買い目を作ります。比率は試験設定で、的中確率や金銭的期待値ではありません。</p>'+chaserHTML+'</section>';
+ return '<section class="card card-pad four-factor-panel"><h3>4要素の基礎評価</h3><p>選手60・モーター25・展示10・気象5</p><div class="boat-entry-overflow"><table class="bets-table"><thead><tr><th>艇</th>'+labels.map(x=>'<th>'+x+'</th>').join('')+'<th>合成</th></tr></thead><tbody>'+rows+'</tbody></table></div><p class="help">表示は重み適用後の倍率。欠損は中立の×1とし、取得値を捏造しません。この基礎評価と実進入・艇間連動から買い目を作ります。比率は試験設定で、的中確率や金銭的期待値ではありません。</p>'+policyHTML+chaserHTML+'</section>';
 }
 root.BoatFourFactor={evaluate,panel,WEIGHTS};
 if(typeof module!=='undefined')module.exports=root.BoatFourFactor;

@@ -237,7 +237,7 @@
       '<div class="tile-top"><span class="tile-r">'+escape(r.venue)+' '+r.race+'R</span>'+pill(r.classification)+'</div>'+
       '<div class="ticket-list-status '+(isFormalTicket(r)?'ticket-status-formal':'ticket-status-pending')+'">'+(isFormalTicket(r)?'✅ 正式買い目':'⏳ 暫定・購入判断保留')+'</div>'+
       '<div class="tile-time">締切予定 '+escape(r.cutoff_jst)+' · 固定 '+r.bets.length+'点 · '+(r.phase==='exhibition'?'展示反映':'展示前')+'</div>'+
-      '<div class="tile-bets">'+(r.model_role==='main'?'✅ '+(r.model_version==='four-factor-v1.1-untrained'?'四要素v1.1':r.model_version==='four-factor-v1.0-untrained'?'四要素v1.0':r.model_version?.includes('v0.9')?'v0.9':'v0.7')+'メイン固定：':'🔒 旧モデル固定：')+
+      '<div class="tile-bets">'+(r.model_role==='main'?'✅ '+(r.model_version==='four-factor-v1.2-head-coverage-untrained'?'四要素v1.2・頭候補保持':r.model_version==='four-factor-v1.1-untrained'?'四要素v1.1':r.model_version==='four-factor-v1.0-untrained'?'四要素v1.0':r.model_version?.includes('v0.9')?'v0.9':'v0.7')+'メイン固定：':'🔒 旧モデル固定：')+
       (isFormalTicket(r)?escape(r.bets.slice(0,2).map(b=>b.combination).join(' / ')):'正式買い目は未確定')+'</div>'+
       (r.legacy_control||trial?'<div class="tile-tactical">🔬 比較用モデルあり・正式買い目とは別</div>':'')+
       (r.entry_exhibition_gate?.entry_watch&&!r.entry_exhibition_gate.final_eligible?
@@ -588,7 +588,7 @@
     ${window.BoatHeadShareChart?.render(r)||''}
     ${ticketBlock}
     ${window.BoatStatisticalShadow?.placeholder(r)||''}
-    ${r.model_role==='main'?'<div class="notice"><strong>採用モデル '+(r.model_version==='four-factor-v1.1-untrained'?'四要素v1.1：選手60 × モーター25 × 展示10 × 気象5／2・3着は全艇評価':r.model_version==='four-factor-v1.0-untrained'?'四要素v1.0：選手60 × モーター25 × 展示10 × 気象5':r.model_version?.includes('v0.9')?'v0.9：ST差 × 6艇連動 × 1M・2M引き波評価':'v0.7：スタート差 × 6艇連動')+'</strong>。正式・暫定の区分は上の表示を確認してください。旧方式は比較用です。</div>':
+    ${r.model_role==='main'?'<div class="notice"><strong>採用モデル '+(r.model_version==='four-factor-v1.2-head-coverage-untrained'?'四要素v1.2：頭候補を保持／選手60 × モーター25 × 展示10 × 気象5':r.model_version==='four-factor-v1.1-untrained'?'四要素v1.1：選手60 × モーター25 × 展示10 × 気象5／2・3着は全艇評価':r.model_version==='four-factor-v1.0-untrained'?'四要素v1.0：選手60 × モーター25 × 展示10 × 気象5':r.model_version?.includes('v0.9')?'v0.9：ST差 × 6艇連動 × 1M・2M引き波評価':'v0.7：スタート差 × 6艇連動')+'</strong>。正式・暫定の区分は上の表示を確認してください。旧方式は比較用です。</div>':
       '<div class="notice warn">過去に固定した旧モデルの予想（当時の買い目・SHAを維持）。新モデルへ事後書き換えしません。</div>'}
     ${r.phase?`<div class="notice">${escape(r.evidence||'')} ・ 発走前保存 ${escape(r.frozen_at_utc||'未記録')} ・ SHA256 ${escape((r.sha256||'').slice(0,18))}…${r.weather_observed?`<br>場内風速 ${escape(r.weather_observed.wind_speed)}m/s ／ 波高 ${escape(r.weather_observed.wave_height)}cm（非公式・取得時点）`:''}<br>予想モデル：未学習・確率未校正。展示動画とオッズは未反映。</div>`:''}
     ${entryGateWarning(r)}

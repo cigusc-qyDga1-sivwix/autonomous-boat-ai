@@ -22,18 +22,20 @@ function run(input){
  if(!input||typeof input!=='object'||!Array.isArray(input.racers)||
     input.racers.length!==6)throw Error('Six complete pre-cutoff racers required');
  if(!input.venue||!Number.isFinite(Date.parse(input.frozen_at_utc)))throw Error('Pre-cutoff source identity required');
- const result=model.forecastFourFactorOpen({
+ const coverage=input.head_coverage_trial===true;
+ const forecast=coverage?model.forecastFourFactorCoverage:model.forecastFourFactorOpen;
+ const result=forecast({
   venue:input.venue,phase:input.phase,racers:input.racers,
   weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
   frozen_at_utc:input.frozen_at_utc,
   surface_trial_disabled:input.surface_trial_disabled===true
  });
- if(result.model!=='four-factor-v1.1-untrained'||!validBets(result.bets))
+ if(result.model!==(coverage?'four-factor-v1.2-head-coverage-untrained':'four-factor-v1.1-untrained')||!validBets(result.bets))
   throw Error('Four-factor model returned invalid prediction / allocation');
  const surface=result.metadata?.venue_surface_v1||null;
  if(!surface||surface.version!=='venue-surface-v1-ex-edogawa')
   throw Error('Missing prospective venue surface diagnostics');
- const surfaceControl=surface.applied?model.forecastFourFactorOpen({
+ const surfaceControl=surface.applied?forecast({
   venue:input.venue,phase:input.phase,racers:input.racers,
   weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
   frozen_at_utc:input.frozen_at_utc,surface_trial_disabled:true
@@ -47,10 +49,16 @@ function run(input){
   throw Error('Missing ST / head coverage diagnostics');
  return {
   model_version:result.model,
+  head_coverage_control:coverage?{
+   model_version:'four-factor-v1.1-untrained',
+   bets:model.forecastFourFactorOpen({...input}).bets,
+   frozen_at_utc:input.frozen_at_utc,generated_pre_cutoff:true,
+   scope:'same-input ticket selection control only; no additional formal stake'
+  }:null,
   four_factor:result.metadata.four_factor,
   venue_surface_v1:surface,
   venue_surface_ab:surfaceControl?{
-   control_model:'four-factor-v1.1-without-venue-surface',
+   control_model:coverage?'four-factor-v1.2-head-coverage-without-venue-surface':'four-factor-v1.1-without-venue-surface',
    control_bets:surfaceControl.bets,
    trial_bets:result.bets,
    generated_pre_cutoff:true,

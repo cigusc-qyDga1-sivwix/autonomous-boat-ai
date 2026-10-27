@@ -7,6 +7,7 @@
 'use strict';
 const fs=require('node:fs');
 require('../app/four-factor.js');
+require('../app/venue-tactics-v2.js');
 require('../app/tactical-1m.js');
 const model=globalThis.BoatTacticalModel;
 function validBets(bets){
@@ -22,17 +23,20 @@ function run(input){
  if(!input||typeof input!=='object'||!Array.isArray(input.racers)||
     input.racers.length!==6)throw Error('Six complete pre-cutoff racers required');
  if(!input.venue||!Number.isFinite(Date.parse(input.frozen_at_utc)))throw Error('Pre-cutoff source identity required');
- const conditional=input.postrace_conditional_trial===true;
- const coverage=!conditional&&input.head_coverage_trial===true;
- const forecast=conditional?model.forecastFourFactorConditional:
+ const venueAware=input.venue_tactics_trial===true;
+ const conditional=!venueAware&&input.postrace_conditional_trial===true;
+ const coverage=!conditional&&!venueAware&&input.head_coverage_trial===true;
+ const forecast=venueAware?model.forecastFourFactorVenueAware:
+   conditional?model.forecastFourFactorConditional:
    coverage?model.forecastFourFactorCoverage:model.forecastFourFactorOpen;
  const result=forecast({
   venue:input.venue,phase:input.phase,racers:input.racers,
   weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
   frozen_at_utc:input.frozen_at_utc,
-  surface_trial_disabled:input.surface_trial_disabled===true
+  surface_trial_disabled:input.surface_trial_disabled===true,
+  venue_tactics_disabled:input.venue_tactics_disabled===true
  });
- if(result.model!==(conditional?'four-factor-v1.3-conditional-scenarios-untrained':coverage?'four-factor-v1.2-head-coverage-untrained':'four-factor-v1.1-untrained')||!validBets(result.bets))
+ if(result.model!==(venueAware?'four-factor-v1.4-venue-aware-23-untrained':conditional?'four-factor-v1.3-conditional-scenarios-untrained':coverage?'four-factor-v1.2-head-coverage-untrained':'four-factor-v1.1-untrained')||!validBets(result.bets))
   throw Error('Four-factor model returned invalid prediction / allocation');
  const surface=result.metadata?.venue_surface_v1||null;
  if(!surface||surface.version!=='venue-surface-v1-ex-edogawa')
@@ -40,7 +44,8 @@ function run(input){
  const surfaceControl=surface.applied?forecast({
   venue:input.venue,phase:input.phase,racers:input.racers,
   weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
-  frozen_at_utc:input.frozen_at_utc,surface_trial_disabled:true
+  frozen_at_utc:input.frozen_at_utc,surface_trial_disabled:true,
+  venue_tactics_disabled:input.venue_tactics_disabled===true
  }):null;
  if(surfaceControl&&!validBets(surfaceControl.bets))
   throw Error('Invalid same-time surface control');
@@ -49,13 +54,32 @@ function run(input){
     result.metadata?.wake_v09?.pre_cutoff_only!==true||
     result.metadata?.wake_v09?.head_course_exposure?.length!==6)
   throw Error('Missing ST / head coverage diagnostics');
- if(conditional&&(!result.metadata?.postrace_v13?.pre_cutoff_only||
+ if((conditional||venueAware)&&(!result.metadata?.postrace_v13?.pre_cutoff_only||
     result.metadata.postrace_v13.result_data_used!==false))
   throw Error('Missing result-blind v1.3 provenance');
+ const venueMeta=venueAware?result.metadata?.venue_tactics_v2:null;
+ if(venueAware&&(!venueMeta||venueMeta.version!=='venue-tactics-v2-23venues-ex-edogawa'||
+    venueMeta.pre_cutoff_only!==true||venueMeta.result_data_used!==false))
+    throw Error('Missing venue v1.4 pre-cutoff provenance');
+ const venueControl=venueAware?model.forecastFourFactorVenueAware({
+   ...input,venue_tactics_disabled:true,
+   experimental_variant:'four-factor-v1.4'
+ }):null;
+ if(venueControl&&!validBets(venueControl.bets))throw Error('Invalid venue v1.4 ablation bets');
  return {
   model_version:result.model,
-  postrace_conditional_v13:conditional?result.metadata?.postrace_v13:null,
-  postrace_conditional_control:conditional?{
+  venue_tactics_v2:venueMeta,
+  venue_tactics_ab:venueAware?{
+   control_model:'four-factor-v1.4-without-venue-tactics',
+   control_bets:venueControl.bets,trial_bets:result.bets,
+   prior_model:'four-factor-v1.3-conditional-scenarios-untrained',
+   prior_bets:model.forecastFourFactorConditional({...input,experimental_variant:'four-factor-v1.3'}).bets,
+   frozen_at_utc:input.frozen_at_utc,generated_pre_cutoff:true,
+   point_count_unchanged:true,no_additional_stake:true,
+   same_inputs_except_venue_tactics:true
+  }:null,
+  postrace_conditional_v13:(conditional||venueAware)?result.metadata?.postrace_v13:null,
+  postrace_conditional_control:(conditional||venueAware)?{
    model_version:'four-factor-v1.2-head-coverage-untrained',
    bets:model.forecastFourFactorCoverage({...input,postrace_conditional_trial:false,head_coverage_trial:true}).bets,
    frozen_at_utc:input.frozen_at_utc,generated_pre_cutoff:true,
@@ -70,7 +94,7 @@ function run(input){
   four_factor:result.metadata.four_factor,
   venue_surface_v1:surface,
   venue_surface_ab:surfaceControl?{
-   control_model:coverage?'four-factor-v1.2-head-coverage-without-venue-surface':'four-factor-v1.1-without-venue-surface',
+   control_model:venueAware?'four-factor-v1.4-without-venue-surface':coverage?'four-factor-v1.2-head-coverage-without-venue-surface':'four-factor-v1.1-without-venue-surface',
    control_bets:surfaceControl.bets,
    trial_bets:result.bets,
    generated_pre_cutoff:true,

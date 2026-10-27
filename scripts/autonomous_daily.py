@@ -55,6 +55,9 @@ HEAD_COVERAGE_MODEL = 'four-factor-v1.2-head-coverage-untrained'
 POSTRACE_CONDITIONAL_MODEL = 'four-factor-v1.3-conditional-scenarios-untrained'
 # Activation is a forward-time gate, not an assertion that older forecasts used v1.3.
 POSTRACE_ACTIVATION_UTC = datetime.fromisoformat("2026-10-27T07:30:00+00:00")
+VENUE_TACTICS_MODEL = 'four-factor-v1.4-venue-aware-23-untrained'
+# Forward-only: 江戸川 excluded from venue tactics, prior snapshots immutable.
+VENUE_TACTICS_ACTIVATION_UTC = datetime.fromisoformat("2026-10-27T09:30:00+00:00")
 HEAD_COVERAGE_ROLLOUT = json.loads((Path(__file__).resolve().parents[1] / 'config/head-coverage-2026-10-27.json').read_text())
 FOUR_FACTOR_BRIDGE = Path(__file__).resolve().parent / 'main_four_factor_bridge.js'
 VIRTUAL_BUDGET_YEN = 50_000
@@ -418,7 +421,7 @@ def promoted_v07(venue: str, phase: str, racers: list[dict],
 def promoted_v09(venue: str, phase: str, racers: list[dict],
                  profile: dict | None, weather: dict | None,
                  frozen_at_utc: str, four_factor: bool = False, head_coverage: bool = False,
-                 postrace_conditional: bool = False) -> dict:
+                 postrace_conditional: bool = False, venue_tactics: bool = False) -> dict:
     """Invoke one explicit model identity; never fall back on bridge failure."""
     inputs = {
         "venue": venue, "phase": phase,
@@ -431,6 +434,7 @@ def promoted_v09(venue: str, phase: str, racers: list[dict],
         "frozen_at_utc": frozen_at_utc,
         "head_coverage_trial": head_coverage,
         "postrace_conditional_trial": postrace_conditional,
+        "venue_tactics_trial": venue_tactics,
     }
     try:
         job = subprocess.run(
@@ -442,7 +446,8 @@ def promoted_v09(venue: str, phase: str, racers: list[dict],
             subprocess.TimeoutExpired) as exc:
         raise RuntimeError("v0.9 bridge unavailable: fail closed, no fallback freeze") from exc
     bets = answer.get("bets")
-    expected = (POSTRACE_CONDITIONAL_MODEL if four_factor and postrace_conditional else
+    expected = (VENUE_TACTICS_MODEL if four_factor and venue_tactics else
+                 POSTRACE_CONDITIONAL_MODEL if four_factor and postrace_conditional else
                 HEAD_COVERAGE_MODEL if four_factor and head_coverage else
                 FOUR_FACTOR_MODEL if four_factor else MAIN_WAKE_MODEL)
     if answer.get("model_version") != expected or not isinstance(bets, list):
@@ -531,6 +536,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     profile = get_profile(venue_code) if venue_code else None
     four_factor = cutoff.date() >= FOUR_FACTOR_DATE
     postrace_active = four_factor and now.astimezone(UTC) >= POSTRACE_ACTIVATION_UTC
+    venue_active = postrace_active and venue != "江戸川" and now.astimezone(UTC) >= VENUE_TACTICS_ACTIVATION_UTC
     new_primary = cutoff.date() >= WAKE_PROMOTION_DATE
     if new_primary:
         same_time_old = (promoted_v09(venue, phase, racers, profile, selected_weather, frozen_at) if four_factor else
@@ -547,7 +553,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         legacy_control["sha256"] = stable_hash(legacy_control)
         promoted = promoted_v09(venue, phase, racers, profile, selected_weather, frozen_at, four_factor=four_factor,
                                 head_coverage=bool(race.get("_head_coverage_trial")) and not postrace_active,
-                                postrace_conditional=postrace_active)
+                                postrace_conditional=postrace_active and not venue_active,
+                                venue_tactics=venue_active)
         chosen_model = promoted["model_version"]
     else:
         promoted = promoted_v07(venue, phase, racers, profile, selected_weather, frozen_at)
@@ -572,12 +579,17 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
             reason += "／頭候補保持・点数維持の試験修正"
         if chosen_model == POSTRACE_CONDITIONAL_MODEL:
             reason += "／展示タイム突出・外枠追走・内残りの条件付き試験（確率未校正）"
+        if chosen_model == VENUE_TACTICS_MODEL:
+            reason += "／23場別の決まり手構成と実進入・合法STに基づく着順連動v1.4（未校正）"
     body = {
         "model_version": chosen_model,
         **({"head_coverage_control": promoted["head_coverage_control"]} if promoted.get("head_coverage_control") else {}),
+        **({"venue_tactics_v2": promoted["venue_tactics_v2"],
+            "venue_tactics_ab": promoted["venue_tactics_ab"]}
+           if chosen_model == VENUE_TACTICS_MODEL else {}),
         **({"postrace_conditional_v13": promoted["postrace_conditional_v13"],
             "postrace_conditional_control": promoted["postrace_conditional_control"]}
-           if chosen_model == POSTRACE_CONDITIONAL_MODEL else {}),
+           if chosen_model in (POSTRACE_CONDITIONAL_MODEL, VENUE_TACTICS_MODEL) else {}),
         **({"four_factor": promoted["four_factor"],
             "venue_surface_v1": promoted.get("venue_surface_v1"),
             "venue_surface_ab": promoted.get("venue_surface_ab")} if four_factor else {}),
@@ -586,7 +598,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         "start_v07": promoted["start_v07"],
         **({"wake_v09": promoted["wake_v09"],
             "primary_promotion_date_jst": (FOUR_FACTOR_DATE if four_factor else WAKE_PROMOTION_DATE).isoformat(),
-            "primary_model_ab": ("v1.3 forward trial vs v1.2 matched same-input control, with v0.9 legacy" if postrace_active else
+            "primary_model_ab": ("v1.4 venue-aware trial vs same-input v1.3 control and no-tactics ablation" if venue_active else
+                                  "v1.3 forward trial vs v1.2 matched same-input control, with v0.9 legacy" if postrace_active else
                                  "four-factor primary vs same-time frozen v0.9 control") if four_factor else "v0.9 primary vs same-time frozen v0.7 control"}
            if new_primary else {}),
         "coupled_v06": promoted["coupled_v06"],
@@ -704,9 +717,11 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                                                    runtime_now, cutoff.date()) for i in range(1, 7)
                 }}
             postrace_active = cutoff.date() >= FOUR_FACTOR_DATE and runtime_now.astimezone(UTC) >= POSTRACE_ACTIVATION_UTC
+            venue_active = postrace_active and VENUES[venue_code] != '江戸川' and runtime_now.astimezone(UTC) >= VENUE_TACTICS_ACTIVATION_UTC
             coverage_active = head_coverage_eligible(record, key, runtime_now, cutoff) and not postrace_active
             race = {**race, "_head_coverage_trial": coverage_active}
-            expected_main = (POSTRACE_CONDITIONAL_MODEL if postrace_active else
+            expected_main = (VENUE_TACTICS_MODEL if venue_active else
+                             POSTRACE_CONDITIONAL_MODEL if postrace_active else
                              HEAD_COVERAGE_MODEL if coverage_active else
                              FOUR_FACTOR_MODEL if cutoff.date() >= FOUR_FACTOR_DATE else MAIN_WAKE_MODEL)
             if runtime_now.astimezone(JST) < cutoff - timedelta(seconds=margin) and valid_entrants(race):
@@ -827,7 +842,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "venue_profile", "venue_adjustment", "venue_surface_v1", "venue_surface_ab", "model_role", "legacy_control",
                       "start_v07", "coupled_v06", "wake_v09", "four_factor", "racer_context_upgrade", "model_upgrade", "primary_model_ab", "head_course_shares",
                       "role_coverage", "role_changes", "head_coverage_control", "postrace_conditional_v13",
-                      "postrace_conditional_control", "relative_scores_uncalibrated"):
+                      "postrace_conditional_control", "venue_tactics_v2", "venue_tactics_ab",
+                      "relative_scores_uncalibrated"):
             if extra in current:
                 r[extra] = current[extra]
         r["version_count"] = len(versions)

@@ -22,15 +22,17 @@ function run(input){
  if(!input||typeof input!=='object'||!Array.isArray(input.racers)||
     input.racers.length!==6)throw Error('Six complete pre-cutoff racers required');
  if(!input.venue||!Number.isFinite(Date.parse(input.frozen_at_utc)))throw Error('Pre-cutoff source identity required');
- const coverage=input.head_coverage_trial===true;
- const forecast=coverage?model.forecastFourFactorCoverage:model.forecastFourFactorOpen;
+ const conditional=input.postrace_conditional_trial===true;
+ const coverage=!conditional&&input.head_coverage_trial===true;
+ const forecast=conditional?model.forecastFourFactorConditional:
+   coverage?model.forecastFourFactorCoverage:model.forecastFourFactorOpen;
  const result=forecast({
   venue:input.venue,phase:input.phase,racers:input.racers,
   weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
   frozen_at_utc:input.frozen_at_utc,
   surface_trial_disabled:input.surface_trial_disabled===true
  });
- if(result.model!==(coverage?'four-factor-v1.2-head-coverage-untrained':'four-factor-v1.1-untrained')||!validBets(result.bets))
+ if(result.model!==(conditional?'four-factor-v1.3-conditional-scenarios-untrained':coverage?'four-factor-v1.2-head-coverage-untrained':'four-factor-v1.1-untrained')||!validBets(result.bets))
   throw Error('Four-factor model returned invalid prediction / allocation');
  const surface=result.metadata?.venue_surface_v1||null;
  if(!surface||surface.version!=='venue-surface-v1-ex-edogawa')
@@ -47,8 +49,18 @@ function run(input){
     result.metadata?.wake_v09?.pre_cutoff_only!==true||
     result.metadata?.wake_v09?.head_course_exposure?.length!==6)
   throw Error('Missing ST / head coverage diagnostics');
+ if(conditional&&(!result.metadata?.postrace_v13?.pre_cutoff_only||
+    result.metadata.postrace_v13.result_data_used!==false))
+  throw Error('Missing result-blind v1.3 provenance');
  return {
   model_version:result.model,
+  postrace_conditional_v13:conditional?result.metadata?.postrace_v13:null,
+  postrace_conditional_control:conditional?{
+   model_version:'four-factor-v1.2-head-coverage-untrained',
+   bets:model.forecastFourFactorCoverage({...input,postrace_conditional_trial:false,head_coverage_trial:true}).bets,
+   frozen_at_utc:input.frozen_at_utc,generated_pre_cutoff:true,
+   scope:'same-input v1.2 head-coverage research control, no extra stake'
+  }:null,
   head_coverage_control:coverage?{
    model_version:'four-factor-v1.1-untrained',
    bets:model.forecastFourFactorOpen({...input}).bets,

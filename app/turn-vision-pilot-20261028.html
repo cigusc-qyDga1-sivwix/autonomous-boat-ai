@@ -22,7 +22,7 @@ th{background:#1b3b54;position:sticky;top:0}.meta{font-size:.85rem;color:#b5ccdd
 .tag{background:#35465d;border-radius:6px;padding:2px 6px}
 @media(max-width:700px){.cards{grid-template-columns:1fr}.grid{grid-template-columns:1fr 1fr}h1{font-size:1.35rem}}
 </style></head><body><main>
-<header><a href="./index.html">← BOAT LAB</a><a href="./exhibition-watch.html">🎥 展示を見る</a><a href="./exhibition.html?date=2026-10-28">展示データ</a></header>
+<header><a href="./index.html">← BOAT LAB</a><a href="./exhibition-watch.html">🎥 展示を見る</a><a href="./local-video-bridge.html?date=2026-10-28&venue=%E5%94%90%E6%B4%A5&race=1">📽 動画フレーム解析</a><a href="./exhibition.html?date=2026-10-28">展示データ</a></header>
 <h1>10月28日｜全6艇ターン・スタート伸び研究</h1>
 <p>開催11場から江戸川を除く10場・最大120R。元の唐津・児島・蒲郡を重点研究に残し、追加7場は拡張研究として別管理。①〜⑥の全選手を、共通1マークとスタートラインを基準に評価する研究。展示STとスタート後の伸びは別々に扱います。</p>
 <div class="note"><strong>映像解析の現状：公式映像は未解析</strong>
@@ -138,7 +138,8 @@ function show(data){
    return '<tr><td>'+esc(sessionLabels[r.session]||r.session)+'</td><td>'+esc(r.venue)+' '+esc(r.race)+'R ('+role+')</td><td>'+
       esc(r.cutoff_jst||"未取得")+'</td><td>'+esc(numeric)+'</td><td>'+esc(desc)+
       '</td><td>'+turnCount+'/6艇</td><td>'+stretchCount+'/6艇</td>'+
-      '<td><button type="button" data-race-key="'+esc(r.race_key)+'">確認</button></td>'+
+      '<td><button type="button" data-race-key="'+esc(r.race_key)+'">確認</button> '+
+      '<a href="./local-video-bridge.html?date=2026-10-28&venue='+encodeURIComponent(r.venue)+'&race='+r.race+'">映像取込</a></td>'+
       '<td><a target="_blank" rel="noopener noreferrer" href="'+sourceUrl(r)+'">直前情報</a></td></tr>';
  }).join("");
  const updated=data.updated_at_utc?

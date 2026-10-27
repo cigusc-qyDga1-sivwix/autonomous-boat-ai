@@ -1,0 +1,26 @@
+'use strict';
+// Regression tests for the read-only, SIX-boat research screen.
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const html=fs.readFileSync('app/turn-vision-pilot-20261028.html','utf8');
+const sw=fs.readFileSync('app/service-worker.js','utf8');
+const python=fs.readFileSync('scripts/turn_three_pilot.py','utf8');
+assert.match(html,/全6艇ターン・スタート伸び研究/);
+assert.match(html,/スタートライン通過後0〜5m、5〜15m、15〜30m/);
+assert.match(html,/艇の詳細|艇それぞれの評価|6艇それぞれの評価/);
+assert.match(html,/video_motion_by_boat/);
+assert.match(html,/boat-detail-rows/);
+assert.match(html,/turn\.closest_mark_distance_m_approx/);
+assert.match(html,/start\.speed_0_to_5m_mps_approx/);
+assert.match(html,/start\.speed_5_to_15m_mps_approx/);
+assert.match(html,/start\.speed_15_to_30m_mps_approx/);
+assert.match(html,/スタート後の伸び/);
+assert.match(html,/未測定/);
+assert.match(html,/boatlabs\.turn_video_multivenue\.v3/);
+assert.match(python,/for i in range\(1,7\)/);
+assert.match(python,/SAME_FIRST_TURN_MARK_CENTER_FOR_ALL_SIX/);
+assert.match(python,/SAME_START_LINE_CROSSING_POINT_AND_RACE_DIRECTION/);
+assert.match(python,/PREVIOUS_SCHEMA="boatlabs\.turn_video_multivenue\.v2"/);
+assert.match(sw,/turn-vision-pilot-20261028\.html/);
+assert.match(sw,/turn-video-pilot-/);
+console.log('Six-boat mark / after-start research read-only UI assertions passed');

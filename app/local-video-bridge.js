@@ -201,6 +201,7 @@ function mount(doc,win){
   });
  }
  async function captureLocal(){
+  await ready();
   const tlist=secondsFor(preview.duration,Number(start.value),Number(interval.value));
   if(!tlist.length)throw Error('no_sample_times');
   preview.pause();setupDimensions();resetFrames();
@@ -228,8 +229,18 @@ function mount(doc,win){
   if(!validFile(file)){notify('250MB以下のMP4/MOV/WEBMなどを選んでください',true);return;}
   mediaUrl=win.URL.createObjectURL(file);sourceType='user_local_file';
   preview.src=mediaUrl;preview.hidden=false;preview.muted=true;preview.load();
-  try{await ready();notify('動画を端末内で開きました。解析範囲を設定して「フレーム抽出」を押してください。');}
-  catch(err){notify('端末で再生できない動画形式です：'+err.message,true);endFile();}
+  // On iOS Safari decoded video frames can require tapping Play first.
+  // Do not discard a valid chosen file merely because autoplay is restricted.
+  notify('動画ファイルを選択しました。iPhoneでは必要なら再生ボタンを一度押してから抽出してください。');
+  disable();
+ });
+ preview.addEventListener('loadeddata',()=>{
+  if(sourceType==='user_local_file')notify('動画を端末内で読み込めました。フレーム抽出を実行できます。');
+  disable();
+ });
+ preview.addEventListener('canplay',disable);
+ preview.addEventListener('error',()=>{
+  if(sourceType==='user_local_file')notify('動画を再生できません。iPhoneではH.264 MP4形式でお試しください。',true);
   disable();
  });
  permission.addEventListener('change',()=>{

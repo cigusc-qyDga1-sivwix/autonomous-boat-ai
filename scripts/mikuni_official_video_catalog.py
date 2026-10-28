@@ -8,18 +8,24 @@ bypasses a protected stream, or assumes third-party download permission.
 from __future__ import annotations
 
 import argparse
+import os
 from datetime import datetime, timezone, timedelta
 import json
 from pathlib import Path
 import re
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlencode
 from urllib.request import Request, build_opener, HTTPSHandler, HTTPRedirectHandler
 from xml.etree import ElementTree
 
 CHANNEL_ID="UCu-yP6WJQ0zcx5nmWhxvJEg"
 CHANNEL_URL=f"https://www.youtube.com/channel/{CHANNEL_ID}"
 FEED_URL=f"https://www.youtube.com/feeds/videos.xml?channel_id={CHANNEL_ID}"
+FEED_ALTERNATES=(
+    f"https://youtube.com/feeds/videos.xml?channel_id={CHANNEL_ID}",
+)
+OFFICIAL_API_HOST="www.googleapis.com"
+OFFICIAL_API_KEY_ENV="MIKUNI_YOUTUBE_DATA_API_KEY"
 RULES_URL="https://www.boatrace-mikuni.jp/uploads/cdn/faq/files/20250401_race_eizo.pdf"
 SCHEMA="boatlabs.mikuni_official_youtube_video_catalog.v1"
 JST=timezone(timedelta(hours=9))
@@ -37,21 +43,129 @@ class RestrictedFeedRedirect(HTTPRedirectHandler):
 
 
 def request_feed():
-    """Query the public channel *metadata feed*, never a video endpoint."""
+    """Query official public channel Atom metadata, with a hostname fallback.
+
+    YouTube RSS 404 can be transient for a valid live channel. Avoid treating
+    one 404 as evidence the channel no longer exists. No video media fetched.
+    """
     opener=build_opener(HTTPSHandler(),RestrictedFeedRedirect())
-    request=Request(FEED_URL,headers={"User-Agent":"BOAT-LAB-official-video-metadata-research/1.0",
+    last_error=None
+    for url in (FEED_URL,)+FEED_ALTERNATES:
+        request=Request(url,headers={"User-Agent":"BOAT-LAB-official-video-metadata-research/1.0",
                                      "Accept":"application/atom+xml,application/xml,text/xml"})
+        try:
+            with opener.open(request,timeout=9) as response:
+                final=urlparse(response.geturl())
+                if final.scheme!="https" or final.hostname not in ("youtube.com","www.youtube.com"):
+                    raise ValueError("untrusted_feed_response_host")
+                content_type=response.headers.get("Content-Type","").lower()
+                if not any(t in content_type for t in ("xml","atom","text/plain")):
+                    raise ValueError("response_not_atom_feed")
+                data=response.read(MAX_BYTES+1)
+                if len(data)>MAX_BYTES:
+                    raise ValueError("rss_feed_exceeds_limit")
+                return data
+        except (HTTPError,URLError,TimeoutError) as error:
+            last_error=error
+    if last_error:
+        raise last_error
+    raise ValueError("youtube_rss_sources_unavailable")
+
+
+
+class GoogleAPIHostRedirect(HTTPRedirectHandler):
+    """YouTube official metadata API cannot redirect to another host."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        parsed=urlparse(newurl)
+        if parsed.scheme!="https" or parsed.hostname!=OFFICIAL_API_HOST:
+            raise ValueError("unapproved_youtube_api_redirect")
+        return super().redirect_request(req,fp,code,msg,headers,newurl)
+
+
+def _get_api_json(path,params,key):
+    """Only public metadata from Google's official Data API v3."""
+    if path not in ("channels","playlistItems"):
+        raise ValueError("unapproved_youtube_api_method")
+    if not isinstance(key,str) or not key or len(key)>512:
+        raise ValueError("youtube_api_key_missing")
+    query=urlencode({**params,"key":key})
+    url="https://www.googleapis.com/youtube/v3/"+path+"?"+query
+    request=Request(url,headers={"Accept":"application/json",
+                                "User-Agent":"BOAT-LAB-official-metadata-client/1.0"})
+    opener=build_opener(HTTPSHandler(),GoogleAPIHostRedirect())
     with opener.open(request,timeout=12) as response:
-        final=urlparse(response.geturl())
-        if final.scheme!="https" or final.hostname not in ("youtube.com","www.youtube.com"):
-            raise ValueError("untrusted_feed_response_host")
-        content_type=response.headers.get("Content-Type","").lower()
-        if not any(t in content_type for t in ("xml","atom","text/plain")):
-            raise ValueError("response_not_atom_feed")
+        target=urlparse(response.geturl())
+        if target.scheme!="https" or target.hostname!=OFFICIAL_API_HOST:
+            raise ValueError("unapproved_youtube_api_host")
+        if "json" not in response.headers.get("Content-Type","").lower():
+            raise ValueError("youtube_api_not_json")
         data=response.read(MAX_BYTES+1)
-        if len(data)>MAX_BYTES:
-            raise ValueError("rss_feed_exceeds_limit")
-    return data
+    if len(data)>MAX_BYTES:raise ValueError("youtube_api_response_too_large")
+    parsed=json.loads(data)
+    if not isinstance(parsed,dict) or not isinstance(parsed.get("items"),list):
+        raise ValueError("youtube_api_invalid_response")
+    return parsed
+
+
+def request_official_api(api_key):
+    """Official YouTube Data API key; channel and upload playlist metadata only.
+
+    2 low-cost list requests (1 quota unit each) if properly configured.
+    Data API has no supported method to download third-party YouTube videos.
+    """
+    channel=_get_api_json("channels",{
+        "part":"contentDetails",
+        "id":CHANNEL_ID,
+        "maxResults":"1",
+    },api_key)
+    items=channel["items"]
+    if len(items)!=1 or items[0].get("id")!=CHANNEL_ID:
+        raise ValueError("youtube_api_wrong_channel")
+    playlist=(items[0].get("contentDetails",{}).get("relatedPlaylists",{})
+              .get("uploads"))
+    if not isinstance(playlist,str) or not re.fullmatch(r"[A-Za-z0-9_-]{24,64}",playlist):
+        raise ValueError("youtube_uploads_playlist_missing")
+    uploads=_get_api_json("playlistItems",{
+        "part":"snippet,contentDetails",
+        "playlistId":playlist,
+        "maxResults":"50",
+    },api_key)
+    return uploads
+
+
+def parse_official_api(response,day):
+    """All candidate videos must belong to the venue's verified channel."""
+    datetime.strptime(day,"%Y-%m-%d")
+    if not isinstance(response,dict) or not isinstance(response.get("items"),list):
+        raise ValueError("youtube_api_invalid_response")
+    seen=set();candidates=[]
+    for row in response["items"][:50]:
+        if not isinstance(row,dict):continue
+        snippet=row.get("snippet") or {}
+        if not isinstance(snippet,dict):continue
+        ident=(snippet.get("resourceId") or {}).get("videoId")
+        owner=snippet.get("videoOwnerChannelId")
+        # Reject unknown owners rather than silently treating playlist
+        # memberships or another channel's clip as an official Mikuni upload.
+        if owner!=CHANNEL_ID or not isinstance(ident,str) or not re.fullmatch(r"[A-Za-z0-9_-]{11}",ident) or ident in seen:
+            continue
+        seen.add(ident)
+        title=snippet.get("title")
+        if not isinstance(title,str) or not title.strip():continue
+        published=_published((row.get("contentDetails") or {}).get("videoPublishedAt") or
+                             snippet.get("publishedAt"))
+        published_day=published.astimezone(JST).date().isoformat() if published else None
+        if not (_date_in_title(title,day) or (published_day==day and _racing_title(title))):
+            continue
+        candidates.append({
+            "video_id":ident,"title":title[:180],
+            "published_utc":published.astimezone(timezone.utc).isoformat() if published else None,
+            "channel_author":"「公式」ボートレース三国",
+            "official_watch_url":f"https://www.youtube.com/watch?v={ident}",
+            "classification":"CANDIDATE_ONLY_NOT_VERIFIED_RACE_OR_PLAYABLE_VIDEO",
+            "race_number":None,"video_frames_analyzed":0,
+        })
+    return {"entries_in_feed":len(response["items"]),"candidates":candidates[:20]}
 
 
 def _published(value):
@@ -64,7 +178,7 @@ def _published(value):
 
 
 def _racing_title(title):
-    return bool(re.search(r"(レース|競走|LIVE|ライブ|展示|三国|BOAT)",title,re.IGNORECASE))
+    return bool(re.search(r"(レース|競走|LIVE|ライブ|展示|三国|BOAT|最終日|初日|[2-6２-６]日目|杯|優勝戦|決勝)",title,re.IGNORECASE))
 
 
 def _date_in_title(title, day):
@@ -128,6 +242,10 @@ def _failure_reason(exc):
         return "YOUTUBE_RSS_NETWORK_UNAVAILABLE"
     if isinstance(exc,ValueError):
         if str(exc) in {"invalid_atom_xml","not_atom_feed","wrong_official_channel",
+                        "youtube_api_wrong_channel","youtube_uploads_playlist_missing",
+                        "youtube_api_invalid_response","youtube_api_response_too_large",
+                        "youtube_api_not_json","youtube_api_key_missing",
+                        "unapproved_youtube_api_host","unapproved_youtube_api_redirect",
                         "disallowed_xml_entity","invalid_feed_size","rss_feed_exceeds_limit",
                         "response_not_atom_feed","untrusted_feed_response_host",
                         "youtube_rss_redirect_to_untrusted_host"}:
@@ -136,7 +254,8 @@ def _failure_reason(exc):
     return "UNEXPECTED_CATALOG_ERROR"
 
 
-def build(day, previous=None, feed_fetcher=request_feed, now=None):
+def build(day, previous=None, feed_fetcher=request_feed, now=None,
+          api_key=None, api_fetcher=request_official_api):
     datetime.strptime(day,"%Y-%m-%d")
     timestamp=now or datetime.now(timezone.utc)
     if timestamp.tzinfo is None:
@@ -145,6 +264,8 @@ def build(day, previous=None, feed_fetcher=request_feed, now=None):
     # Keep previously independently observed entries if later RSS pages rotate.
     stored={c["video_id"]:c for c in (old or {}).get("candidates",[])
             if isinstance(c,dict) and re.fullmatch(r"[A-Za-z0-9_-]{11}",str(c.get("video_id","")))}
+    source_kind="OFFICIAL_YOUTUBE_RSS_METADATA_ONLY"
+    attempted_api=False
     try:
         outcome=parse_feed(feed_fetcher(),day)
         state="OFFICIAL_CHANNEL_RSS_METADATA_READ"
@@ -156,15 +277,32 @@ def build(day, previous=None, feed_fetcher=request_feed, now=None):
         state="RSS_UNAVAILABLE_OR_UNVERIFIED"
         reason=_failure_reason(exc)
         count=None
+        if api_key:
+            attempted_api=True
+            try:
+                outcome=parse_official_api(api_fetcher(api_key),day)
+                source_kind="OFFICIAL_YOUTUBE_DATA_API_METADATA_ONLY"
+                state="OFFICIAL_YOUTUBE_DATA_API_METADATA_READ"
+                count=outcome["entries_in_feed"]
+                for row in outcome["candidates"]:
+                    stored[row["video_id"]]=row
+            except (HTTPError,URLError,TimeoutError,OSError,ValueError,TypeError) as api_exc:
+                # No URL/key/token or upstream response body is ever exposed.
+                state="RSS_AND_API_UNAVAILABLE"
+                reason=reason+";API_METADATA_UNAVAILABLE"
+    
     return {
         "schema":SCHEMA,
         "event_date":day,
         "venue":"三国","venue_code":"10",
         "channel_url":CHANNEL_URL,
+        "official_live_landing_url":CHANNEL_URL+"/live",
         "channel_id":CHANNEL_ID,
         "source_url":FEED_URL,
         "official_2025_video_rules":RULES_URL,
-        "source_kind":"OFFICIAL_YOUTUBE_RSS_METADATA_ONLY",
+        "source_kind":source_kind,
+        "api_fallback_configured":bool(api_key),
+        "api_fallback_attempted":attempted_api,
         "source_status":state,
         "failure_reason":reason,
         "checked_at_utc":timestamp.astimezone(timezone.utc).isoformat(),
@@ -191,7 +329,8 @@ def main(argv=None):
         old=json.loads(out.read_text(encoding="utf-8"))
     except (OSError,ValueError):
         old=None
-    result=build(args.date,old)
+    api_key=os.environ.get(OFFICIAL_API_KEY_ENV,"").strip()
+    result=build(args.date,old,api_key=api_key)
     out.parent.mkdir(parents=True,exist_ok=True)
     tmp=out.with_suffix(".tmp")
     tmp.write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")

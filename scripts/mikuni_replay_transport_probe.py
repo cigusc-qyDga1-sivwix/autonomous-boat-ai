@@ -109,6 +109,19 @@ def safe_player_error_fields(payload):
     return result
 
 
+def probable_access_category(errors):
+    """Advisory interpretation of public Streaks errors; never authorization."""
+    for value in errors:
+        if not isinstance(value, dict):
+            continue
+        if value.get("code") == "REQUEST_FAILED" and value.get("status") == 403:
+            if value.get("id") == 124:
+                return "POSSIBLE_GEOGRAPHIC_RESTRICTION_UNCONFIRMED"
+            if value.get("id") == 126:
+                return "POSSIBLE_PROVIDER_CREDENTIAL_REJECTION_UNCONFIRMED"
+    return "CAUSE_UNDETERMINED"
+
+
 def safe_request_header_presence(header_names):
     """Return names-as-booleans; never expose authentication values or URLs."""
     names = {str(h).lower() for h in header_names}
@@ -164,6 +177,7 @@ def new_audit(day: str, race: int) -> dict:
         "normal_browser_get_responses": [],
         "normal_browser_get_request_header_flags": [],
         "normal_browser_get_error_codes": [],
+        "access_category_hypothesis": "CAUSE_UNDETERMINED",
         "raw_media_downloaded": False,
         "video_bytes_downloaded": 0,
         "frames_decoded": 0,
@@ -421,6 +435,8 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200, inspect_norma
         audit["normal_browser_get_error_codes"] = [
             json.loads(s) for s in sorted(player_error_codes)
         ]
+        audit["access_category_hypothesis"] = probable_access_category(
+            audit["normal_browser_get_error_codes"])
         audit["normal_browser_get_request_count"] = browser_get_requests[0]
         audit["normal_browser_get_responses"] = [
             {"http_status": status, "content_kind": kind, "count": n}

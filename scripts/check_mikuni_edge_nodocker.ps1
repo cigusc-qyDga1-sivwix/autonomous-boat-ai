@@ -134,7 +134,8 @@ $profile=Join-Path ([IO.Path]::GetTempPath()) ('boatlabs-edge-'+[guid]::NewGuid(
 $result=[ordered]@{
   schema='boatlabs.mikuni_edge_nodocker.v1';date=$Date;venue='三国';race=$Race
   access_decision='NOT_RUN';landing_http_status=$null
-  race_click_status='NOT_ATTEMPTED';playback_api_statuses=@()
+  race_click_status='NOT_ATTEMPTED';meeting_header_clicked=$false
+  day_header_clicked=$false;race_icon_matches=0;playback_api_statuses=@()
   playback_api_requests=0;media_requests_blocked=0;opaque_requests_blocked=0
   video_bytes_saved=0;video_frames_decoded=0;confirmed_six_boat_tracks=0
   formal_forecast_modified=$false
@@ -206,12 +207,16 @@ try {
    .filter(s=>new Date(s)<=new Date('$dateSlash')).sort();
  const meeting=ds.length?clickText(ds[ds.length-1]):false;
  await sleep(600);const day=clickText('$monthDay');await sleep(600);
- const icons=[...document.querySelectorAll('img[src*="$($Race)R.png"]')].filter(visible);
- if(!icons.length)return {meeting,day,click:false};
- icons[0].click();return {meeting,day,click:true};
+ const allIcons=[...document.querySelectorAll('img[src*="$($Race)R.png"]')];
+ const icons=allIcons.filter(visible);
+ if(!icons.length)return {meeting,day,click:false,iconTotal:allIcons.length};
+ icons[0].click();return {meeting,day,click:true,iconTotal:allIcons.length};
 })()
 "@
     $clicked=Eval-CDP $js
+    $result.meeting_header_clicked=[bool]$clicked.meeting
+    $result.day_header_clicked=[bool]$clicked.day
+    $result.race_icon_matches=[int]$clicked.iconTotal
     $result.race_click_status=if($clicked.click){'CLICKED_DATE_ASSOCIATION_UNVERIFIED'}else{'RACE_ICON_NOT_FOUND'}
     Pump-CDP 5500
     $result.landing_http_status=$script:landingStatus

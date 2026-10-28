@@ -147,7 +147,7 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
                         host = urlsplit(route.request.url).hostname
                         if host:
                             opaque_hosts.add(host.lower())
-                            if (host.lower() in {"front.player.boatrace-cdn.jp", "livebb.jlc.ne.jp"}
+                            if (host.lower() in {"front.player.boatrace-cdn.jp", "livebb.jlc.ne.jp", "playback.api.streaks.jp"}
                                     and route.request.method == "GET"
                                     and urlsplit(route.request.url).scheme == "https"):
                                 opaque_get_urls[host.lower()] = route.request.url
@@ -158,7 +158,7 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
                                                route.request.resource_type, suffix))
                         # Permit only public, HEAD-verified small metadata responses.
                         # The HEAD preflight never downloads a video body.
-                        if (host in {"front.player.boatrace-cdn.jp", "livebb.jlc.ne.jp"}
+                        if (host in {"front.player.boatrace-cdn.jp", "livebb.jlc.ne.jp", "playback.api.streaks.jp"}
                                 and route.request.method == "GET"):
                             try:
                                 head = route.fetch(method="HEAD", timeout=5000, max_redirects=0)

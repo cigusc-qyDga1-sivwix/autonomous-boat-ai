@@ -194,9 +194,11 @@ try {
  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  const visible=e=>!!e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden';
  const clickText=t=>{
-   const a=[...document.querySelectorAll('span,button,a,div,td')]
-     .filter(e=>visible(e)&&e.textContent.trim()===t);
-   a.sort((x,y)=>x.querySelectorAll('*').length-y.querySelectorAll('*').length);
+   const a=[...document.querySelectorAll('span,button,a,div,td,p,li')]
+     .filter(e=>visible(e)&&e.textContent&&e.textContent.trim().includes(t)
+       &&e.textContent.trim().length<140);
+   a.sort((x,y)=>(x.textContent.trim().length-y.textContent.trim().length)
+       ||(x.querySelectorAll('*').length-y.querySelectorAll('*').length));
    if(!a.length)return false;a[0].click();return true;
  };
  const text=document.body?.innerText||'';

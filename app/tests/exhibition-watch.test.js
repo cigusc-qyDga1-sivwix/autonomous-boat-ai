@@ -8,6 +8,21 @@ const research=fs.readFileSync('app/exhibition.html','utf8');
 const r=api.route('2026-10-27','大村',8);
 assert.equal(r.venueCode,'24');
 assert.equal(r.boatcast,'https://boatcast.jp/');
+assert.equal(r.raceIndex,'https://www.boatrace.jp/owpc/pc/race/index?hd=20261027');
+assert.equal(r.jlcExhibition,'https://livebb.jlc.ne.jp/bb_top/sp_bb/tvod_24.php');
+const mikuni=api.route('2026-10-28','三国',3);
+assert.equal(mikuni.jlcExhibition,'https://livebb.jlc.ne.jp/bb_top/sp_bb/tvod_10.php');
+assert.equal(mikuni.beforeinfo,'https://www.boatrace.jp/owpc/pc/race/beforeinfo?rno=3&jcd=10&hd=20261028');
+assert.equal(api.route('2026-10-28','唐津',1).jlcExhibition,'https://livebb.jlc.ne.jp/bb_top/sp_bb/tvod_23.php');
+assert.equal(api.route('2026-10-28','桐生',1).jlcExhibition,'https://livebb.jlc.ne.jp/bb_top/sp_bb/tvod_01.php');
+assert.equal(api.VENUES.length,24);
+for(let n=1;n<=24;n++){
+ const record=api.route('2026-10-28',String(n),1);
+ assert.ok(record);
+ assert.equal(record.jlcExhibition,'https://livebb.jlc.ne.jp/bb_top/sp_bb/tvod_'+String(n).padStart(2,'0')+'.php');
+ assert.equal(record.raceIndex,'https://www.boatrace.jp/owpc/pc/race/index?hd=20261028');
+}
+
 assert.equal(r.beforeinfo,'https://www.boatrace.jp/owpc/pc/race/beforeinfo?rno=8&jcd=24&hd=20261027');
 assert.equal(r.records,'./exhibition.html?date=2026-10-27');
 assert.equal(api.route('2026-10-27','24',8).venue,'大村');
@@ -22,6 +37,11 @@ assert.equal(api.jstDate(new Date('2026-10-27T15:02:00Z')),'2026-10-28');
 assert.match(html,/id="watch-player"/);
 assert.match(html,/id="watch-permission"/);
 assert.match(html,/展示リプレイ/);
+assert.match(html,/id="watch-jlc-exhibition"/);
+assert.match(html,/id="watch-national-index"/);
+assert.match(html,/動画ファイルの自動取得・解析を成功させたものではありません/);
+assert.equal(api.OFFICIAL_NATIONAL_RACE_INDEX,'https://www.boatrace.jp/owpc/pc/race/index');
+
 assert.match(index,/exhibition-watch\.html/);
 assert.match(research,/exhibition-watch\.html/);
 assert.doesNotMatch(html,/<iframe|<video[^>]*src="https:/i);

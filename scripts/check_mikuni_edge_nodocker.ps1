@@ -225,6 +225,8 @@ try {
   $result.access_decision='EDGE_DIAGNOSTIC_FAILED'
   $result['failure_category']='EDGE_CDP_OR_NETWORK_UNAVAILABLE'
   $result['failure_stage']=$script:phase
+  $result['failure_exception_type']=$_.Exception.GetType().Name
+  $result['failure_script_line']=[int]$_.InvocationInfo.ScriptLineNumber
 }finally{
   $result.media_requests_blocked=$script:blockedMedia
   $result.opaque_requests_blocked=$script:blockedOpaque

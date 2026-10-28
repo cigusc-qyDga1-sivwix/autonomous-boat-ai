@@ -135,7 +135,8 @@ $result=[ordered]@{
   schema='boatlabs.mikuni_edge_nodocker.v1';date=$Date;venue='三国';race=$Race
   access_decision='NOT_RUN';landing_http_status=$null
   race_click_status='NOT_ATTEMPTED';meeting_header_clicked=$false
-  day_header_clicked=$false;race_icon_matches=0;playback_api_statuses=@()
+  day_header_clicked=$false;race_icon_matches=0;browser_tabs_after_click=0
+  playback_api_statuses=@()
   playback_api_requests=0;media_requests_blocked=0;opaque_requests_blocked=0
   video_bytes_saved=0;video_frames_decoded=0;confirmed_six_boat_tracks=0
   formal_forecast_modified=$false
@@ -219,6 +220,8 @@ try {
     $result.race_icon_matches=[int]$clicked.iconTotal
     $result.race_click_status=if($clicked.click){'CLICKED_DATE_ASSOCIATION_UNVERIFIED'}else{'RACE_ICON_NOT_FOUND'}
     Pump-CDP 5500
+    $tabList=Invoke-RestMethod -Uri "http://127.0.0.1:$port/json/list" -TimeoutSec 5
+    $result.browser_tabs_after_click=@($tabList|Where-Object {$_.type -eq 'page'}).Count
     $result.landing_http_status=$script:landingStatus
     $result.playback_api_statuses=@($script:apiStatuses|Sort-Object -Unique)
     $result.playback_api_requests=$script:apiGets
@@ -226,6 +229,7 @@ try {
     elseif(@($script:apiStatuses|Where-Object {$_ -eq 200 -or $_ -eq 206}).Count){
       $result.access_decision='PLAYBACK_API_2XX_VIDEO_UNVERIFIED'
     }elseif($script:apiStatuses.Count){$result.access_decision='PLAYBACK_API_OTHER_HTTP_STATUS'}
+    elseif($result.browser_tabs_after_click -gt 1){$result.access_decision='RACE_OPENED_NEW_TAB_UNINSPECTED'}
     else{$result.access_decision='NO_PLAYBACK_API_RESPONSE'}
   }
 }catch{

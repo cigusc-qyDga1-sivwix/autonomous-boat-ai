@@ -1,0 +1,34 @@
+name: BOAT LAB Mikuni domestic access checker unit tests
+
+on:
+  push:
+    branches:
+      - feat/mikuni-domestic-onecommand-20261028
+    paths:
+      - scripts/mikuni_domestic_access_check.py
+      - scripts/mikuni_replay_transport_probe.py
+      - tests/test_mikuni_domestic_access_check.py
+      - docker/mikuni-domestic-check/Dockerfile
+      - scripts/check_mikuni_domestic.sh
+      - scripts/check_mikuni_domestic.ps1
+      - .github/workflows/mikuni-domestic-check-ci.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-unit-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Offline, fake-probe tests (no JLC streaming)
+        run: |
+          python -m unittest discover -s tests -p 'test_mikuni_domestic_access_check.py' -v
+          python -m unittest discover -s tests -p 'test_mikuni_replay_transport_probe.py' -v
+      - name: Check Bash script syntax, no Docker execution
+        run: bash -n scripts/check_mikuni_domestic.sh

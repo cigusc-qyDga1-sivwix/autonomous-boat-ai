@@ -68,3 +68,20 @@ Windowsでの利用：以前と同じGitHub URLから最新の単独`.ps1`ファ
 - JLC/BOATCASTの独自配信条件がある場合はそれを遵守。配信制限回避、VPN/IP偽装、DRM解除、認証トークン収集は実装しない。
 - 国内Windowsからのアクセスが成功した場合、次の独立工程で、許諾範囲の取得先を実証し、実際のFFmpegフレームデコード・取得時間・6艇追跡精度を計測する。
 - Microsoft Edgeは必ず実行PC上にインストールされている必要がある。企業管理PCでDevTools起動が禁止されている場合は無理に解除せず、手動の正規ブラウザ視聴チェックを代替にする。
+
+## 2026-10-28 22:14 JST 実機スクリーンショット追跡
+
+利用者の2回目の実測：
+- `landing_http_status:200`、開催節/日付true、レースアイコン選択あり
+- `browser_tabs_after_click:2`
+- `new_tab_domain:UNRECOGNIZED`, `new_tab_guard_status:UNRECOGNIZED`, `playback_api_requests:0`
+- **403が解消したと主張できず、動画バイト/解析フレーム/6艇IDは0**。
+
+改善版では **新タブが`about:blank`状態である場合だけ最大3.6秒ほどURLの変化を待ち**、その後に`new_tab_url_type`（`ABOUT_BLANK_OR_INTERNAL` / `HTTPS_HOST` など）と、HTTPSで安全なDNSホスト名の場合に限り`new_tab_domain`に**ホスト名のみ**表示する。URLのパス・クエリ・認証情報・タイトル等は記録しない。公式として設定済みの3ホスト以外へはブラウザ再読込も認証操作もしない。
+
+- `new_tab_url_type=ABOUT_BLANK_OR_INTERNAL`：新タブが空白や内部ページ。APIまで到達していない。
+- `new_tab_url_type=HTTPS_HOST`で`new_tab_domain`が既存許可リストと違う：ホスト名だけを根拠に新しい正規配信元かを**別途確認**。その場で未知のURLを自動追跡しない。
+- `POPUP_NOT_ALLOWLISTED_API_UNVERIFIED`：診断を安全のため止めたことを意味し、HTTP403でも動画取得成功でもない。
+- `new_tab_guard_status=GUARDED_RELOAD_COMPLETE`：許可済み公式ドメインへの安全な再読込を実施。動画保存の成功ではない。
+
+**実機から送ってほしいのは `new_tab_url_type`、`new_tab_domain`、`new_tab_guard_status`、`playback_api_statuses` の4項目だけ**。機密トークンやURL全体は送らない。ファイルは以前と同じmain GitHubリンクから最新版を1個だけ再ダウンロードし、前回と同じPowerShellコマンドで実行する。

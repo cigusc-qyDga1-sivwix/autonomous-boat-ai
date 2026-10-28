@@ -117,6 +117,36 @@ function Pump-CDP([int]$ms){
   }
 }
 
+function Get-Safe-Popup-Info([string]$pageUrl){
+  # Only expose an HTTPS hostname or a non-HTTPS category. NO URL path,
+  # query, tokens, cookies, IP address, or title is ever logged.
+  $info=@{category='INVALID';host='NOT_DISCLOSED'}
+  if([string]::IsNullOrWhiteSpace($pageUrl)){
+    $info.category='EMPTY';return $info
+  }
+  try {$parsed=[Uri]$pageUrl} catch {return $info}
+  if($parsed.Scheme -eq 'about'){
+    $info.category='ABOUT_BLANK_OR_INTERNAL';return $info
+  }
+  if($parsed.Scheme -in @('chrome','chrome-error')){
+    $info.category='BROWSER_INTERNAL';return $info
+  }
+  if($parsed.Scheme -in @('blob','data')){
+    $info.category='NON_HTTP_SCHEME';return $info
+  }
+  if($parsed.Scheme -ne 'https'){
+    $info.category='NOT_HTTPS';return $info
+  }
+  $domain=$parsed.DnsSafeHost.ToLowerInvariant()
+  if($domain.Length -gt 160 -or $domain -notmatch '^[a-z0-9][a-z0-9.-]*$' -or
+    $domain -match '\.\.' -or $domain -eq 'localhost' -or
+    $domain -match '^\d{1,3}(?:\.\d{1,3}){3}$'){
+    $info.category='HOST_NOT_DISCLOSED';return $info
+  }
+  $info.category='HTTPS_HOST';$info.host=$domain
+  return $info
+}
+
 function Inspect-Official-Playback-Tab($target){
   # Only a tab that our own click opened. Reject any other web origin.
   $targetPageUrl=[string]$target.url
@@ -171,7 +201,8 @@ $result=[ordered]@{
   access_decision='NOT_RUN';landing_http_status=$null
   race_click_status='NOT_ATTEMPTED';meeting_header_clicked=$false
   day_header_clicked=$false;race_icon_matches=0;browser_tabs_after_click=0
-  new_tab_domain='NOT_OBSERVED';new_tab_guard_status='NOT_NEEDED'
+  new_tab_domain='NOT_OBSERVED';new_tab_url_type='NOT_OBSERVED'
+  new_tab_guard_status='NOT_NEEDED'
   playback_api_statuses=@()
   playback_api_requests=0;media_requests_blocked=0;opaque_requests_blocked=0
   video_bytes_saved=0;video_frames_decoded=0;confirmed_six_boat_tracks=0
@@ -217,6 +248,13 @@ try {
   if($SelfTest){
     $script:phase='CDP_SELFTEST'
     if((Eval-CDP '6*7') -ne 42){throw 'Browser selftest failed.'}
+    $safe=Get-Safe-Popup-Info 'https://player.example.org/path?token=DO_NOT_DISCLOSE'
+    if($safe.category -ne 'HTTPS_HOST' -or $safe.host -ne 'player.example.org'){
+      throw 'Safe popup hostname test failed.'
+    }
+    $blank=Get-Safe-Popup-Info 'about:blank'
+    if($blank.category -ne 'ABOUT_BLANK_OR_INTERNAL' -or
+       $blank.host -ne 'NOT_DISCLOSED'){throw 'Blank popup test failed.'}
     $result.access_decision='EDGE_SELFTEST_PASSED_NO_NETWORK'
   }else{
     $script:phase='JLC_PAGE_DIAGNOSTIC'
@@ -269,19 +307,32 @@ try {
     $result.race_icon_matches=[int]$clicked.iconTotal
     $result.race_click_status=if($clicked.click){'CLICKED_DATE_ASSOCIATION_UNVERIFIED'}else{'RACE_ICON_NOT_FOUND'}
     Pump-CDP 5500
-    $tabList=Invoke-RestMethod -Uri "http://127.0.0.1:$port/json/list" -TimeoutSec 5
+    # about:blank is a temporary popup state, not a playback domain.
+    # Read only the local DevTools tab list, without URLs in diagnostic output.
+    $opened=@()
+    for($popupTry=0;$popupTry -lt 9;$popupTry++){
+      $tabList=Invoke-RestMethod -Uri "http://127.0.0.1:$port/json/list" -TimeoutSec 5
+      $opened=@($tabList|Where-Object {$_.type -eq 'page' -and $_.id -ne $page[0].id})
+      if($opened.Count -ne 1){break}
+      $popupInfo=Get-Safe-Popup-Info ([string]$opened[0].url)
+      if($popupInfo.category -notin @('ABOUT_BLANK_OR_INTERNAL','EMPTY')){break}
+      Start-Sleep -Milliseconds 400
+    }
     $result.browser_tabs_after_click=@($tabList|Where-Object {$_.type -eq 'page'}).Count
     if($result.browser_tabs_after_click -gt 1){
-      # Explicitly select the popup by a different DevTools target ID.
-      $opened=@($tabList|Where-Object {$_.type -eq 'page' -and $_.id -ne $page[0].id})
       if($opened.Count -eq 1){
         $popup=$opened[0]
-        try {$popupUri=[Uri][string]$popup.url; $popupHost=$popupUri.Host.ToLowerInvariant()}
-        catch {$popupHost='UNRECOGNIZED'}
-        $result.new_tab_domain=if($popupHost -in @('front.player.boatrace-cdn.jp',
-          'livebb.jlc.ne.jp','playback.api.streaks.jp')){$popupHost}else{'UNRECOGNIZED'}
-        $script:phase='POPUP_GUARDED_REPLAY_DIAGNOSTIC'
-        $result.new_tab_guard_status=Inspect-Official-Playback-Tab $popup
+        $popupInfo=Get-Safe-Popup-Info ([string]$popup.url)
+        $result.new_tab_url_type=[string]$popupInfo.category
+        $result.new_tab_domain=[string]$popupInfo.host
+        if($popupInfo.category -eq 'HTTPS_HOST' -and
+          $popupInfo.host -in @('front.player.boatrace-cdn.jp',
+            'livebb.jlc.ne.jp','playback.api.streaks.jp')){
+          $script:phase='POPUP_GUARDED_REPLAY_DIAGNOSTIC'
+          $result.new_tab_guard_status=Inspect-Official-Playback-Tab $popup
+        }else{
+          $result.new_tab_guard_status='NOT_ALLOWLISTED_NO_REPLAY'
+        }
       }else{
         $result.new_tab_guard_status='AMBIGUOUS_POPUP_COUNT_NO_REPLAY'
       }
@@ -293,7 +344,13 @@ try {
     elseif(@($script:apiStatuses|Where-Object {$_ -eq 200 -or $_ -eq 206}).Count){
       $result.access_decision='PLAYBACK_API_2XX_VIDEO_UNVERIFIED'
     }elseif($script:apiStatuses.Count){$result.access_decision='PLAYBACK_API_OTHER_HTTP_STATUS'}
-    elseif($result.browser_tabs_after_click -gt 1){$result.access_decision='POPUP_CHECKED_NO_PLAYBACK_API_RESPONSE'}
+    elseif($result.browser_tabs_after_click -gt 1){
+      if($result.new_tab_guard_status -eq 'GUARDED_RELOAD_COMPLETE'){
+        $result.access_decision='POPUP_CHECKED_NO_PLAYBACK_API_RESPONSE'
+      }else{
+        $result.access_decision='POPUP_NOT_ALLOWLISTED_API_UNVERIFIED'
+      }
+    }
     else{$result.access_decision='NO_PLAYBACK_API_RESPONSE'}
   }
 }catch{

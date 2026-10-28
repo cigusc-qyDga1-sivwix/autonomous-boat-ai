@@ -203,13 +203,26 @@ try {
        ||(x.querySelectorAll('*').length-y.querySelectorAll('*').length));
    if(!a.length)return false;a[0].click();return true;
  };
- const text=document.body?.innerText||'';
- const ds=[...new Set(text.match(/20[0-9]{2}\/[0-9]{1,2}\/[0-9]{1,2}/g)||[])]
-   .filter(s=>new Date(s)<=new Date('$dateSlash')).sort();
- const meeting=ds.length?clickText(ds[ds.length-1]):false;
- await sleep(600);const day=clickText('$monthDay');await sleep(600);
- const allIcons=[...document.querySelectorAll('img[src*="$($Race)R.png"]')];
- const icons=allIcons.filter(visible);
+ let meeting=false;
+ for(let tries=0;tries<8&&!meeting;tries++){
+   const text=document.body?.innerText||'';
+   const ds=[...new Set(text.match(/20[0-9]{2}\/[0-9]{1,2}\/[0-9]{1,2}/g)||[])]
+     .filter(s=>new Date(s)<=new Date('$dateSlash')).sort();
+   if(ds.length)meeting=clickText(ds[ds.length-1]);
+   if(!meeting)await sleep(350);
+ }
+ let day=false;
+ for(let tries=0;tries<8&&!day;tries++){
+   day=clickText('$monthDay');
+   if(!day)await sleep(350);
+ }
+ let allIcons=[],icons=[];
+ for(let tries=0;tries<8;tries++){
+   allIcons=[...document.querySelectorAll('img[src*="$($Race)R.png"]')];
+   icons=allIcons.filter(visible);
+   if(icons.length)break;
+   await sleep(350);
+ }
  if(!icons.length)return {meeting,day,click:false,iconTotal:allIcons.length};
  icons[0].click();return {meeting,day,click:true,iconTotal:allIcons.length};
 })()

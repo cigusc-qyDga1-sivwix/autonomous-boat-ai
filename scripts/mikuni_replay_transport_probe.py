@@ -118,7 +118,9 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
                 def guard(route):
                     # Critical: media and manifests are not fetched by this probe.
                     kind = transport_kind(route.request.url)
-                    if kind in VIDEO_TYPES:
+                    if kind in VIDEO_TYPES or route.request.resource_type in {"media", "xhr", "fetch"}:
+                        # Unknown XHR/fetch may carry opaque media bytes.
+                        # Block it too: this is discovery, not a downloader.
                         blocked[0] += 1
                         route.abort()
                     else:

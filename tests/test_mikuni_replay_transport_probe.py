@@ -1,7 +1,7 @@
 """Offline regression tests: never fetch or save third-party media."""
 import unittest
 
-from scripts.mikuni_replay_transport_probe import new_audit, transport_kind, validate, response_content_kind, run_browser_probe
+from scripts.mikuni_replay_transport_probe import new_audit, transport_kind, validate, response_content_kind, run_browser_probe, derive_probe_status
 
 
 class TransportClassifierTests(unittest.TestCase):
@@ -55,6 +55,28 @@ class TransportClassifierTests(unittest.TestCase):
         self.assertEqual(audit["normal_browser_get_responses"], [])
         self.assertEqual(audit["video_bytes_downloaded"], 0)
         self.assertEqual(audit["frames_decoded"], 0)
+
+    def test_status_reports_access_error_without_false_video_success(self):
+        self.assertEqual(
+            derive_probe_status({(403, "JSON_METADATA"): 1}, 1, {}),
+            "PLAYER_API_NORMAL_GET_HTTP_403",
+        )
+        self.assertEqual(
+            derive_probe_status({(401, "JSON_METADATA"): 1}, 1, {}),
+            "PLAYER_API_NORMAL_GET_HTTP_401",
+        )
+        self.assertEqual(
+            derive_probe_status({(200, "JSON_METADATA"): 1}, 1, {}),
+            "PLAYER_API_NORMAL_GET_RESPONDED_NO_MEDIA",
+        )
+        self.assertEqual(
+            derive_probe_status({}, 1, {}),
+            "PLAYER_API_NORMAL_GET_NO_RESPONSE",
+        )
+        self.assertEqual(
+            derive_probe_status({}, 0, {"HLS_MANIFEST": 1}),
+            "MEDIA_TRANSPORT_CANDIDATE_OBSERVED_NOT_DOWNLOADED",
+        )
 
     def test_no_success_claims_or_bets(self):
         audit = new_audit("2026-10-28", 6)

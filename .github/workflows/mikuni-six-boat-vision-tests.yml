@@ -5,14 +5,20 @@ on:
     branches: [main]
     paths:
       - 'scripts/mikuni_six_boat_tracker.py'
+      - 'scripts/mikuni_auto_vision.py'
+      - 'scripts/run_mikuni_vision_tests.py'
       - 'scripts/mikuni_video_ephemeral.py'
       - 'tests/test_mikuni_six_boat_tracker.py'
+      - 'tests/test_mikuni_auto_vision.py'
       - '.github/workflows/mikuni-six-boat-vision-tests.yml'
   pull_request:
     paths:
       - 'scripts/mikuni_six_boat_tracker.py'
+      - 'scripts/mikuni_auto_vision.py'
+      - 'scripts/run_mikuni_vision_tests.py'
       - 'scripts/mikuni_video_ephemeral.py'
       - 'tests/test_mikuni_six_boat_tracker.py'
+      - 'tests/test_mikuni_auto_vision.py'
       - '.github/workflows/mikuni-six-boat-vision-tests.yml'
   workflow_dispatch:
 
@@ -29,11 +35,15 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install actual CV decoder for synthetic tracking
-        run: python -m pip install --disable-pip-version-check numpy==1.26.4 opencv-python-headless==4.11.0.86
-      - name: Run six-boat camera motion regression
-        run: python -m unittest discover -s tests -p test_mikuni_six_boat_tracker.py -v
-      - name: Verify RAM video and pre-cutoff shadow regression
-        run: python -m unittest discover -s tests -p test_mikuni_video_motion_pipeline.py -v
+        run: |
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
+          python -m pip install --disable-pip-version-check numpy==1.26.4 opencv-python-headless==4.11.0.86
+      - name: Run mandatory unattended tracking and real decoder checks
+        run: python -m scripts.run_mikuni_vision_tests
       - name: Prove OpenCV synthetic tests were not skipped
         run: |
           python -c "import cv2,numpy;print('cv2',cv2.__version__,'numpy',numpy.__version__)"
+

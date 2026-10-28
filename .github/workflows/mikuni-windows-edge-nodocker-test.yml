@@ -44,6 +44,6 @@ jobs:
           $audit = ($jsonLines | Out-String) | ConvertFrom-Json
           if ($audit.schema -ne 'boatlabs.mikuni_edge_nodocker.v1') { exit 1 }
           if ($audit.video_bytes_saved -ne 0 -or $audit.video_frames_decoded -ne 0) { exit 1 }
-          $audit | Select-Object access_decision,landing_http_status,race_click_status,playback_api_statuses,media_requests_blocked,failure_stage,failure_exception_type,failure_script_line | ConvertTo-Json -Depth 5
+          $audit | Select-Object access_decision,landing_http_status,race_click_status,meeting_header_clicked,day_header_clicked,race_icon_matches,playback_api_statuses,media_requests_blocked,failure_stage,failure_exception_type,failure_script_line | ConvertTo-Json -Depth 5
           Write-Output ("diagnostic_exit=" + $nativeExit + " (0 is API metadata 2xx, 2 may mean blocked or unavailable)")
           exit 0

@@ -59,6 +59,21 @@ def transport_kind(url: str, content_type: str = "") -> str:
     return "NOT_MEDIA"
 
 
+def response_content_kind(url: str, content_type: str) -> str:
+    """Describe response without inspecting body, path, token, or secret values."""
+    mime = (content_type or "").split(";", 1)[0].lower().strip()
+    kind = transport_kind(url, mime)
+    if "json" in mime:
+        return "JSON_METADATA"
+    if kind in VIDEO_TYPES:
+        return kind
+    if mime.startswith("text/") or "xml" in mime:
+        return "TEXT_OR_XML"
+    if mime:
+        return "OTHER_CONTENT_TYPE"
+    return "MIME_UNKNOWN"
+
+
 def new_audit(day: str, race: int) -> dict:
     validate(day, race)
     return {
@@ -148,17 +163,8 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200, inspect_norma
                             and parts.hostname == "playback.api.streaks.jp"
                             and request.method == "GET"
                             and request.resource_type in {"xhr", "fetch"}):
-                        mime = response.headers.get("content-type", "").split(";", 1)[0].lower().strip()
-                        if "json" in mime:
-                            content_kind = "JSON_METADATA"
-                        elif kind in VIDEO_TYPES:
-                            content_kind = kind
-                        elif mime.startswith("text/") or "xml" in mime:
-                            content_kind = "TEXT_OR_XML"
-                        elif mime:
-                            content_kind = "OTHER_CONTENT_TYPE"
-                        else:
-                            content_kind = "MIME_UNKNOWN"
+                        content_kind = response_content_kind(
+                            response.url, response.headers.get("content-type", ""))
                         # Only the HTTP status and content-type CLASS are recorded.
                         # Never touch response.text()/body(), URL paths, cookies or tokens.
                         record_key = (response.status, content_kind)

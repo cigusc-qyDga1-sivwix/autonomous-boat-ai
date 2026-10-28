@@ -71,12 +71,16 @@ def new_audit(day: str, race: int) -> dict:
         "scope": "TRANSPORT_METADATA_ONLY_NO_VIDEO_DOWNLOAD",
         "landing_http_status": None,
         "requested_date_visible": False,
+        "requested_date_in_document": False,
+        "visible_date_markers": [],
+        "document_date_markers": [],
         "race_button_visible": False,
         "race_button_clicked": False,
         "video_play_attempted": False,
         "media_request_types": {},
         "media_response_types": {},
         "media_requests_blocked": 0,
+        "opaque_data_requests_blocked": 0,
         "raw_media_downloaded": False,
         "video_bytes_downloaded": 0,
         "frames_decoded": 0,
@@ -91,6 +95,7 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
     requests = Counter()
     responses = Counter()
     blocked = [0]
+    opaque_blocked = [0]
     # Import at runtime so pure, network-free unit tests require no Playwright.
     try:
         from playwright.sync_api import sync_playwright
@@ -118,10 +123,12 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
                 def guard(route):
                     # Critical: media and manifests are not fetched by this probe.
                     kind = transport_kind(route.request.url)
-                    if kind in VIDEO_TYPES or route.request.resource_type in {"media", "xhr", "fetch"}:
-                        # Unknown XHR/fetch may carry opaque media bytes.
-                        # Block it too: this is discovery, not a downloader.
+                    if kind in VIDEO_TYPES or route.request.resource_type == "media":
                         blocked[0] += 1
+                        route.abort()
+                    elif route.request.resource_type in {"xhr", "fetch"}:
+                        # May be an opaque media response; no body downloads.
+                        opaque_blocked[0] += 1
                         route.abort()
                     else:
                         route.continue_()
@@ -135,15 +142,20 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
                 if response is None or response.status >= 400:
                     audit["status"] = "PUBLIC_LANDING_NOT_ACCESSIBLE"
                     return audit
+                page.wait_for_timeout(1200)
                 body = page.locator("body").inner_text(timeout=7000)
+                markup = page.content()
                 monthday = f"{int(day[5:7])}/{int(day[8:10])}"
+                audit["visible_date_markers"] = sorted(set(re.findall(r"(?:20\\d{2}[/\\-])?\\d{1,2}[/\\-]\\d{1,2}", body)))[:12]
+                audit["document_date_markers"] = sorted(set(re.findall(r"(?:20\\d{2}[/\\-])?\\d{1,2}[/\\-]\\d{1,2}", markup)))[:12]
                 audit["requested_date_visible"] = monthday in body
+                audit["requested_date_in_document"] = monthday in markup
                 # Click a race icon only if the requested date is visible.
                 # We do not certify its event-day association from this action.
                 selector = f'img[src*="{race}R.png"]'
                 icon = page.locator(selector)
                 audit["race_button_visible"] = icon.count() > 0
-                if audit["requested_date_visible"] and audit["race_button_visible"]:
+                if (audit["requested_date_visible"] or audit["requested_date_in_document"]) and audit["race_button_visible"]:
                     try:
                         icon.first.click(timeout=6000)
                         audit["race_button_clicked"] = True
@@ -176,6 +188,7 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
         audit["media_request_types"] = dict(sorted(requests.items()))
         audit["media_response_types"] = dict(sorted(responses.items()))
         audit["media_requests_blocked"] = blocked[0]
+        audit["opaque_data_requests_blocked"] = opaque_blocked[0]
     return audit
 
 

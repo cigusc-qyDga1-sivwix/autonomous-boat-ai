@@ -6,12 +6,14 @@ import copy
 import hashlib
 import io
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timezone
 
 from scripts.mikuni_six_boat_tracker import (
     SCHEMA, SEED_SCHEMA, track_seeded_frames, validate_seeds,
 )
 from scripts.mikuni_video_shadow import build as build_shadow
+from scripts.mikuni_video_ephemeral import collect, select_seed_record
 
 
 SHA="c"*64
@@ -115,6 +117,98 @@ class SixBoatTrackerTests(unittest.TestCase):
         output=track_seeded_frames(img[:3]+[jpg.tobytes()]*3,seeds(),SHA)
         self.assertLess(output["candidate_fully_tracked_boats"],6)
         self.assertEqual(output["confirmed_boat_tracks"],0)
+
+    def test_seed_library_is_strictly_keyed_by_sha_date_venue_race(self):
+        pack={"schema":"boatlabs.mikuni_seed_library.v0.1","event_date":DAY,
+              "venue_code":"10","records":[seeds()]}
+        self.assertEqual(select_seed_record(pack,DAY,7,SHA),seeds())
+        self.assertIsNone(select_seed_record(pack,DAY,6,SHA))
+        self.assertIsNone(select_seed_record(pack,DAY,7,"a"*64))
+        self.assertIsNone(select_seed_record(pack,"2026-10-29",7,SHA))
+        pack["records"].append(seeds())
+        self.assertIsNone(select_seed_record(pack,DAY,7,SHA))
+
+    def test_real_collector_wires_seeded_six_track_candidate_without_promoting(self):
+        jpgs=synthetic_scene()
+        tagged=seeds()
+        tagged["sample_interval_s"]=.5
+        library={"schema":"boatlabs.mikuni_seed_library.v0.1","event_date":DAY,
+                 "venue_code":"10","records":[tagged]}
+        archive={"event_date":DAY,"records":[{
+            "race_code":"202610281007","venue_code":"10","race":7,
+            "boats":[{"lane":i} for i in range(1,7)]}]}
+        payload=b"RIFF"+b"\0"*4+b"AVI "+b"test"
+        called=[]
+        def receive(url,hosts):
+            called.append(url)
+            return payload,{"sha256":SHA,"file_size":len(payload),
+                            "content_type":"video/x-msvideo"}
+        args=(DAY,archive,None,
+              "https://approved.provider.example/video/{yyyymmdd}/{race2}.avi",
+              ["approved.provider.example"])
+        with patch("scripts.mikuni_video_ephemeral.decode_in_memory",return_value=jpgs) as decoder:
+            output=collect(*args,receiver=receive,seed_library=library,
+                           now=datetime(2026,10,28,0,30,tzinfo=timezone.utc))
+        self.assertEqual(len(called),1)
+        self.assertEqual(output["summary"]["video_races_observed"],1)
+        audit=output["races"]["7"]["video_observation"]
+        self.assertEqual(audit["seeded_tracking_status"],"UNVERIFIED_CANDIDATE_COMPUTED")
+        report=audit["six_boat_seeded_tracking_candidate"]
+        self.assertEqual(report["candidate_fully_tracked_boats"],6)
+        self.assertEqual(report["confirmed_boat_tracks"],0)
+        self.assertFalse(report["eligible_for_formal_or_shadow_forecast"])
+        self.assertNotIn("test",str(output))
+        self.assertNotIn("approved.provider.example",str(output))
+        self.assertEqual(output["summary"]["confirmed_boat_tracks"],0)
+
+    def test_seed_can_reprocess_same_sha_after_first_unseeded_observation(self):
+        jpgs=synthetic_scene()
+        tagged=seeds()
+        tagged["sample_interval_s"]=.5
+        library={"schema":"boatlabs.mikuni_seed_library.v0.1",
+                 "event_date":DAY,"venue_code":"10","records":[tagged]}
+        archive={"event_date":DAY,"records":[{
+            "race_code":"202610281007","venue_code":"10","race":7,
+            "boats":[{"lane":i} for i in range(1,7)]}]}
+        payload=b"RIFF"+b"\0"*4+b"AVI "+b"content"
+        calls=[]
+        def receive(url,hosts):
+            calls.append(1)
+            return payload,{"sha256":SHA,"file_size":len(payload),
+                            "content_type":"video/x-msvideo"}
+        args=(DAY,archive,None,
+              "https://approved.provider.example/video/{yyyymmdd}/{race2}.avi",
+              ["approved.provider.example"])
+        with patch("scripts.mikuni_video_ephemeral.decode_in_memory",return_value=jpgs):
+            original=collect(*args,receiver=receive,now=datetime(2026,10,28,0,30,tzinfo=timezone.utc))
+            self.assertEqual(original["races"]["7"]["video_observation"]["seeded_tracking_status"],
+                             "NO_SIX_BOAT_SEEDS")
+            updated=collect(DAY,archive,original,args[3],args[4],receiver=receive,
+                            seed_library=library,now=datetime(2026,10,28,0,31,tzinfo=timezone.utc))
+            self.assertEqual(updated["races"]["7"]["video_observation"]["seeded_tracking_status"],
+                             "UNVERIFIED_CANDIDATE_COMPUTED")
+            again=collect(DAY,archive,updated,args[3],args[4],receiver=receive,
+                          seed_library=library,now=datetime(2026,10,28,0,32,tzinfo=timezone.utc))
+        self.assertEqual(len(calls),2)
+        self.assertEqual(again["races"]["7"],updated["races"]["7"])
+
+    def test_annotation_sample_interval_mismatch_cannot_publish_pixel_tracks(self):
+        jpgs=synthetic_scene()
+        tagged=seeds()
+        # Human labels must match decoder's fixed interval (0.5 s).
+        library={"schema":"boatlabs.mikuni_seed_library.v0.1",
+                 "event_date":DAY,"venue_code":"10","records":[tagged]}
+        archive={"event_date":DAY,"records":[{
+            "race_code":"202610281007","venue_code":"10","race":7,
+            "boats":[{"lane":i} for i in range(1,7)]}]}
+        payload=b"RIFF"+b"\0"*4+b"AVI "+b"content"
+        with patch("scripts.mikuni_video_ephemeral.decode_in_memory",return_value=jpgs):
+            out=collect(DAY,archive,None,
+                        "https://approved.provider.example/video/{yyyymmdd}/{race2}.avi",
+                        ["approved.provider.example"],seed_library=library,
+                        receiver=lambda *_:(payload,{"sha256":SHA,"file_size":len(payload),"content_type":"video/x-msvideo"}))
+        self.assertEqual(out["summary"]["video_races_observed"],0)
+        self.assertEqual(out["races"]["7"]["status"],"SOURCE_OR_ANALYSIS_NOT_READY")
 
     def test_unverified_candidates_cannot_be_promoted_to_shadow_by_schema(self):
         candidate=track_seeded_frames(synthetic_scene(),seeds(),SHA)

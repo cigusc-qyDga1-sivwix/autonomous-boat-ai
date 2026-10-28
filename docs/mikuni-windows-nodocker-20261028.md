@@ -85,3 +85,15 @@ Windowsでの利用：以前と同じGitHub URLから最新の単独`.ps1`ファ
 - `new_tab_guard_status=GUARDED_RELOAD_COMPLETE`：許可済み公式ドメインへの安全な再読込を実施。動画保存の成功ではない。
 
 **実機から送ってほしいのは `new_tab_url_type`、`new_tab_domain`、`new_tab_guard_status`、`playback_api_statuses` の4項目だけ**。機密トークンやURL全体は送らない。ファイルは以前と同じmain GitHubリンクから最新版を1個だけ再ダウンロードし、前回と同じPowerShellコマンドで実行する。
+
+## 2026-10-28 23:01 国内Windowsの追加診断
+
+最新版を実行したユーザーのスクリーンショットでは `browser_tabs_after_click=2`, `new_tab_url_type=NOT_HTTPS`, `new_tab_domain=NOT_DISCLOSED`, `new_tab_guard_status=NOT_ALLOWLISTED_NO_REPLAY`, `playback_api_requests=0`。従って再生APIの200/403は**未確認**、動画取得・解析は0。
+
+今回の改良版では、`NOT_HTTPS`を次のように分類し、URL自体は保存しない：
+- `HTTP_HOST_NO_REPLAY`：新タブが通常のHTTP URL。DNSホスト名のみ`new_tab_domain`に記録。**HTTPページを自動再読込しない**。
+- `BROWSER_INTERNAL`、`ABOUT_BLANK_OR_INTERNAL`：ブラウザの内部画面や読込途中。
+- `LOCAL_FILE_NO_REPLAY`、`NON_HTTP_SCHEME`、`OTHER_SCHEME`：対象外。操作は止めたまま。
+- `HOST_NOT_DISCLOSED`：IPアドレス・localhost・不適切なホスト表記。原則的に表示させない。
+
+ユーザーはGitHubの既存スクリプトURLを`check_mikuni_edge_latest.ps1`として上書きダウンロードし、以前と同じコマンドを再実行できる。共有するのは`new_tab_url_type`・`new_tab_domain`・`access_decision`のみ。**資格情報、再生URL全体、画像付きでなくともURLのクエリ値は共有しない。**

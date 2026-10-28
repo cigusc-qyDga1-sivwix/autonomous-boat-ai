@@ -30,7 +30,11 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Inspect browser-native playback metadata GET status without saving video bytes
         run: |
+          echo '=== DESKTOP JLC SMARTPHONE PAGE ==='
           python scripts/mikuni_replay_transport_probe.py --date 2026-10-28 --race 1 --inspect-normal-get --out /tmp/boatlabs-mikuni-transport-audit.json
+          echo '=== MOBILE JLC SMARTPHONE PAGE ==='
+          python scripts/mikuni_replay_transport_probe.py --date 2026-10-28 --race 1 --inspect-normal-get --mobile-context --out /tmp/boatlabs-mikuni-mobile-transport-audit.json
+          python -m json.tool /tmp/boatlabs-mikuni-mobile-transport-audit.json >/dev/null
           python -m json.tool /tmp/boatlabs-mikuni-transport-audit.json >/dev/null
           # An exit code of 0 here only means the safe probe ran.
           # A discovered manifest URL is NOT a decoded race video.

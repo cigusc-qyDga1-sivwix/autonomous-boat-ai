@@ -129,6 +129,7 @@ $script:messageBuffer=New-Object IO.MemoryStream
 $script:blockedMedia=0;$script:blockedOpaque=0;$script:apiGets=0
 $script:apiStatuses=@();$script:landingStatus=$null;$script:ws=$null
 $process=$null
+$script:phase='START'
 $profile=Join-Path ([IO.Path]::GetTempPath()) ('boatlabs-edge-'+[guid]::NewGuid().ToString('N'))
 $result=[ordered]@{
   schema='boatlabs.mikuni_edge_nodocker.v1';date=$Date;venue='三国';race=$Race
@@ -144,18 +145,22 @@ try {
   if(-not [datetime]::TryParseExact($Date,'yyyy-MM-dd',
     [Globalization.CultureInfo]::InvariantCulture,
     [Globalization.DateTimeStyles]::None,[ref]$d)){throw 'Invalid calendar date.'}
+  $script:phase='FIND_EDGE'
   $edge=Find-Edge
   New-Item -ItemType Directory -Path $profile -Force|Out-Null
   $arguments=@('--headless=new','--disable-gpu','--no-first-run',
     '--no-default-browser-check','--remote-debugging-port=0',
     ('--user-data-dir="'+$profile+'"'),'about:blank')
+  $script:phase='START_EDGE'
   $process=Start-Process -FilePath $edge -ArgumentList $arguments -PassThru
   $portFile=Join-Path $profile 'DevToolsActivePort'
   $until=(Get-Date).AddSeconds(20)
   while(-not (Test-Path -LiteralPath $portFile) -and (Get-Date) -lt $until){Start-Sleep -Milliseconds 150}
   if(-not (Test-Path -LiteralPath $portFile)){throw 'Isolated Edge could not start.'}
+  $script:phase='READ_DEBUGGING_PORT'
   $port=[int]((Get-Content -LiteralPath $portFile -TotalCount 1).Trim())
   if($port -lt 1024 -or $port -gt 65535){throw 'Invalid local port.'}
+  $script:phase='LIST_BROWSER_TABS'
   $pages=Invoke-RestMethod -Uri "http://127.0.0.1:$port/json/list" -TimeoutSec 5
   $page=@($pages|Where-Object {$_.type -eq 'page'}|Select-Object -First 1)
   if($page.Count -ne 1){throw 'No diagnostic browser tab.'}
@@ -164,15 +169,19 @@ try {
     throw 'Nonlocal debugging socket rejected.'
   }
   $script:ws=New-Object Net.WebSockets.ClientWebSocket
+  $script:phase='CONNECT_CDP_SOCKET'
   $script:ws.ConnectAsync($wsUrl,[Threading.CancellationToken]::None).GetAwaiter().GetResult()
+  $script:phase='CDP_SETUP'
   foreach($cmd in @('Page.enable','Runtime.enable','Network.enable')){
     $id=Send-CDP $cmd
     $null=Await-CDP $id
   }
   if($SelfTest){
+    $script:phase='CDP_SELFTEST'
     if((Eval-CDP '6*7') -ne 42){throw 'Browser selftest failed.'}
     $result.access_decision='EDGE_SELFTEST_PASSED_NO_NETWORK'
   }else{
+    $script:phase='JLC_PAGE_DIAGNOSTIC'
     $id=Send-CDP 'Fetch.enable' @{patterns=@(@{urlPattern='*';requestStage='Request'})}
     $null=Await-CDP $id
     $id=Send-CDP 'Page.navigate' @{url='https://livebb.jlc.ne.jp/bb_top/sp_bb/tvod_10.php'}
@@ -215,6 +224,7 @@ try {
 }catch{
   $result.access_decision='EDGE_DIAGNOSTIC_FAILED'
   $result['failure_category']='EDGE_CDP_OR_NETWORK_UNAVAILABLE'
+  $result['failure_stage']=$script:phase
 }finally{
   $result.media_requests_blocked=$script:blockedMedia
   $result.opaque_requests_blocked=$script:blockedOpaque

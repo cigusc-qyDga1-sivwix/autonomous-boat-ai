@@ -8,6 +8,8 @@
 const VENUES=['桐生','戸田','江戸川','平和島','多摩川','浜名湖','蒲郡','常滑','津','三国','びわこ','住之江','尼崎','鳴門','丸亀','児島','宮島','徳山','下関','若松','芦屋','福岡','唐津','大村'];
 const MAX_BYTES=250*1024*1024;
 const BOATCAST='https://boatcast.jp/';
+const OFFICIAL_NATIONAL_RACE_INDEX='https://www.boatrace.jp/owpc/pc/race/index';
+const JLC_OFFICIAL_REPLAY_BASE='https://livebb.jlc.ne.jp/bb_top/sp_bb/';
 function validDay(day){
  if(typeof day!=='string'||!/^20\d{2}-\d{2}-\d{2}$/.test(day))return false;
  const d=new Date(day+'T00:00:00Z');
@@ -23,6 +25,8 @@ function route(day,venue,race){
   day,venue:VENUES[idx],venueCode:code,race:n,
   heading:day+'｜'+VENUES[idx]+' '+n+'R',
   boatcast:BOATCAST,
+  raceIndex:OFFICIAL_NATIONAL_RACE_INDEX+'?hd='+encoded,
+  jlcExhibition:JLC_OFFICIAL_REPLAY_BASE+'tvod_'+code+'.php',
   beforeinfo:'https://www.boatrace.jp/owpc/pc/race/beforeinfo?rno='+n+'&jcd='+code+'&hd='+encoded,
   racelist:'https://www.boatrace.jp/owpc/pc/race/racelist?rno='+n+'&jcd='+code+'&hd='+encoded,
   records:'./exhibition.html?date='+encoded.slice(0,4)+'-'+encoded.slice(4,6)+'-'+encoded.slice(6,8)
@@ -44,7 +48,8 @@ function mount(doc,loc,api){
  const el=id=>doc.getElementById(id);
  const day=el('watch-date'),venue=el('watch-venue'),race=el('watch-race');
  const selected=el('selected-race'),link=el('watch-boatcast'),before=el('watch-beforeinfo'),
-   list=el('watch-racelist'),records=el('watch-records'),bridge=el('watch-local-bridge');
+   list=el('watch-racelist'),records=el('watch-records'),bridge=el('watch-local-bridge'),
+   exhibitionReplay=el('watch-jlc-exhibition'),nationalIndex=el('watch-national-index');
  const permission=el('watch-permission'),file=el('watch-file'),player=el('watch-player'),status=el('watch-status');
  if(!day||!venue||!race||!permission||!file||!player)return false;
  const init=initial(loc.search);
@@ -57,6 +62,8 @@ function mount(doc,loc,api){
   selected.textContent=state?state.heading:'有効な開催日・場・Rを選んでください';
   if(!state)return;
   link.href=state.boatcast;before.href=state.beforeinfo;list.href=state.racelist;records.href=state.records;
+  if(exhibitionReplay)exhibitionReplay.href=state.jlcExhibition;
+  if(nationalIndex)nationalIndex.href=state.raceIndex;
   if(bridge)bridge.href='./local-video-bridge.html?date='+encodeURIComponent(state.day)+'&venue='+encodeURIComponent(state.venue)+'&race='+state.race;
  };
  for(const elem of [day,venue,race])elem.addEventListener('change',refresh);
@@ -96,7 +103,7 @@ function mount(doc,loc,api){
  root.addEventListener?.('pagehide',release);
  return true;
 }
-const exported={VENUES,BOATCAST,MAX_BYTES,validDay,route,initial,jstDate,mount};
+const exported={VENUES,BOATCAST,OFFICIAL_NATIONAL_RACE_INDEX,JLC_OFFICIAL_REPLAY_BASE,MAX_BYTES,validDay,route,initial,jstDate,mount};
 root.BoatExhibitionWatch=exported;
 if(typeof module==='object'&&module.exports)module.exports=exported;
 if(root.document)mount(root.document,root.location||{search:''},root.URL);

@@ -21,7 +21,7 @@ function Send-CDP([string]$method,[object]$params=@{}){
   $body=@{id=$script:nextId;method=$method;params=$params}|ConvertTo-Json -Compress -Depth 25
   $bytes=[Text.Encoding]::UTF8.GetBytes($body)
   $seg=New-Object 'System.ArraySegment[byte]' -ArgumentList @(,$bytes)
-  $script:ws.SendAsync($seg,[Net.WebSockets.WebSocketMessageType]::Text,
+  [void]$script:ws.SendAsync($seg,[Net.WebSockets.WebSocketMessageType]::Text,
     $true,[Threading.CancellationToken]::None).GetAwaiter().GetResult()
   return $script:nextId
 }

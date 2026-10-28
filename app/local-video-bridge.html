@@ -64,7 +64,7 @@ video{display:block;width:100%;background:#071728;max-height:57vh;aspect-ratio:1
 </section>
 <section class="card">
 <h2>3. 1マークと①〜⑥の位置を確認</h2>
-<p class="muted">抽出したフレームをタップして表示し、ラベルを選んで画像をタップすると、マーク中心や艇位置を<strong>人の確認した座標候補</strong>として記録できます。別フレームも同様に記録可能。</p>
+<p class="muted">抽出したフレームをタップして表示し、ラベルを選んで画像をタップすると、マーク中心や艇位置、岸の固定目標6点を<strong>人の確認した座標候補</strong>として記録できます。別フレームも同様に記録可能。</p>
 <div id="bridge-frame-list" aria-label="抽出フレーム一覧"></div>
 <p id="bridge-frame-title" class="muted">まだフレームを取得していません。</p>
 <label>タップする対象
@@ -75,11 +75,20 @@ video{display:block;width:100%;background:#071728;max-height:57vh;aspect-ratio:1
 <section class="card">
 <h2>4. 結果を研究データとして保存</h2>
 <button id="bridge-export" type="button" disabled>研究JSONを端末に保存</button>
+<div class="notice" style="margin:14px 0">
+<strong>🌅 三国：6艇の追跡用「初期位置」を作る（試験機能）</strong>
+<p>三国の許可済み動画ファイルを0.5秒間隔で読み取り、最初のフレームで①〜⑥それぞれの中心と、岸などカメラと一緒に動いて見える固定目標6点を選択してください。6点の固定目標は画面全体に広く配置するとカメラ補正が安定します。</p>
+<p class="muted">初期位置は人の手によるラベルです。艇番が映像で確認できない場合は推測して登録しないでください。映像やフレーム画像は書き出しません。</p>
+<label>動画ファイルの SHA-256（入力が空欄なら120MB以下のファイルは端末内で計算）
+<input id="bridge-source-sha" type="text" pattern="[a-fA-F0-9]{64}" maxlength="64" placeholder="動画本体のSHA256（64文字）" autocomplete="off" style="display:block;width:100%;max-width:580px"></label>
+<button id="bridge-seed-export" type="button" disabled>三国の6艇・岸6点の追跡用JSONを書き出す</button>
+<p class="muted"><small>保存したJSONは、同じ動画SHA・日付・レースの三国専用研究システムへの入力候補です。正式な艇の識別・水面座標（m）・予想は未確定。取得元の動画が未接続の場合、自動追跡は開始されません。</small></p>
+</div>
 <p class="muted"><small>保存するのはフレームの時間・色領域候補・任意の手動位置だけ。元動画やフレーム画像は書き出しません。予想・BUY・買い目・公式結果・収支は変更しません。</small></p>
 <pre id="bridge-json"></pre>
 </section>
 <div class="notice"><strong>次の研究段階</strong>
 <p>動画が端末で読み取れたら、固定カメラ・実際の艇番・1マーク・スタートラインを検証し、全6艇のターン軌道とスタート後の加速を研究モデルに接続していく。</p></div>
 </main>
-<script src="./local-video-bridge.js?v=20261028-bridge01" defer></script>
+<script src="./local-video-bridge.js?v=20261028-bridge02" defer></script>
 </body></html>

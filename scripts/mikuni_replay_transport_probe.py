@@ -75,6 +75,8 @@ def new_audit(day: str, race: int) -> dict:
         "visible_date_markers": [],
         "document_date_markers": [],
         "race_button_visible": False,
+        "meeting_header_clicked": False,
+        "day_header_clicked": False,
         "race_icon_matches": 0,
         "race_icon_visible_matches": 0,
         "race_icon_parent_tag": None,
@@ -160,8 +162,32 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
                 audit["document_date_markers"] = sorted(set(re.findall(r"(?:20\d{2}[/\\-])?\d{1,2}[/\\-]\d{1,2}", markup)))[:12]
                 audit["requested_date_visible"] = monthday in body
                 audit["requested_date_in_document"] = monthday in markup
-                # Click a race icon only if the requested date is visible.
-                # We do not certify its event-day association from this action.
+                # The public replay list uses collapsed meeting/day accordion sections.
+                # Expand only the newest meeting that started on/before the target day.
+                # Clicking does not fetch any media: route guard blocks video and opaque XHR.
+                def open_visible_text(token):
+                    for loc in page.get_by_text(token, exact=False).all()[:8]:
+                        try:
+                            if loc.is_visible():
+                                loc.click(timeout=1600)
+                                return True
+                        except Exception:
+                            continue
+                    return False
+
+                meet_candidates = sorted(set(re.findall(
+                    r"20\d{2}/\d{1,2}/\d{1,2}", body
+                )))
+                target_slash = day.replace("-", "/")
+                matching_meets = [d for d in meet_candidates if d <= target_slash]
+                if matching_meets:
+                    audit["meeting_header_clicked"] = open_visible_text(matching_meets[-1])
+                    page.wait_for_timeout(300)
+                if (audit["requested_date_visible"] or audit["requested_date_in_document"]):
+                    audit["day_header_clicked"] = open_visible_text(monthday)
+                    page.wait_for_timeout(300)
+
+                # We do not independently verify date/race linkage on visual click.
                 selector = f'img[src*="{race}R.png"]'
                 icon = page.locator(selector)
                 visible_icon = page.locator(selector + ":visible")

@@ -182,9 +182,11 @@ async function loadMikuniVideoShadow(){
      data.schema!=="boatlabs.mikuni_video_motion_shadow_v0.1"||
      video.event_date!==DAY||data.event_date!==DAY)throw Error("記録形式・日付が不一致");
   const count=Number(video.summary?.video_races_observed||0);
+  const tracked=Number(video.summary?.seeded_motion_candidate_races||0);
+  const allSix=Number(video.summary?.full_six_seeded_candidate_races||0);
   const tracks=Number(video.summary?.confirmed_boat_tracks||0);
   const mode=video.storage==="MEMORY_ONLY_INPUT_NO_VIDEO_FRAMES_PERSISTED"?"メモリ内解析":"旧型の一時保存経路";
-  motion.textContent="映像取得 "+count+"/12R｜検証済み6艇軌跡 "+tracks+"艇｜"+mode;
+  motion.textContent="映像取得 "+count+"/12R｜カメラ補正つき6艇候補 "+tracked+"R（全6艇継続 "+allSix+"R）｜検証済み "+tracks+"艇｜"+mode;
   const n=Number(data.summary?.video_shadow_frozen_races||0);
   revision.textContent=n>0?"発走前に固定した試験予想 "+n+"R｜正式v1.5とは別管理":
     "実映像に基づく試験買い目 0R｜6艇軌跡の検証と発走前の固定がまだ必要。正式買い目は変更なし。";

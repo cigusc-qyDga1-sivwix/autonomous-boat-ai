@@ -128,22 +128,29 @@ function Get-Safe-Popup-Info([string]$pageUrl){
   if($parsed.Scheme -eq 'about'){
     $info.category='ABOUT_BLANK_OR_INTERNAL';return $info
   }
-  if($parsed.Scheme -in @('chrome','chrome-error')){
+  if($parsed.Scheme -in @('chrome','chrome-error','chrome-untrusted','edge','ms-edge')){
     $info.category='BROWSER_INTERNAL';return $info
   }
-  if($parsed.Scheme -in @('blob','data')){
+  if($parsed.Scheme -eq 'file'){
+    $info.category='LOCAL_FILE_NO_REPLAY';return $info
+  }
+  if($parsed.Scheme -in @('blob','data','javascript')){
     $info.category='NON_HTTP_SCHEME';return $info
   }
-  if($parsed.Scheme -ne 'https'){
-    $info.category='NOT_HTTPS';return $info
+  if($parsed.Scheme -notin @('http','https')){
+    $info.category='OTHER_SCHEME';return $info
   }
   $domain=$parsed.DnsSafeHost.ToLowerInvariant()
   if($domain.Length -gt 160 -or $domain -notmatch '^[a-z0-9][a-z0-9.-]*$' -or
     $domain -match '\.\.' -or $domain -eq 'localhost' -or
+    $domain -match '(^|\.)local$' -or
     $domain -match '^\d{1,3}(?:\.\d{1,3}){3}$'){
     $info.category='HOST_NOT_DISCLOSED';return $info
   }
-  $info.category='HTTPS_HOST';$info.host=$domain
+  # HTTP hostname is disclosed for identification only. Never navigate/reload
+  # its URL, even if hostname matches a known official playback provider.
+  $info.category=if($parsed.Scheme -eq 'https'){'HTTPS_HOST'}else{'HTTP_HOST_NO_REPLAY'}
+  $info.host=$domain
   return $info
 }
 
@@ -255,6 +262,14 @@ try {
     $blank=Get-Safe-Popup-Info 'about:blank'
     if($blank.category -ne 'ABOUT_BLANK_OR_INTERNAL' -or
        $blank.host -ne 'NOT_DISCLOSED'){throw 'Blank popup test failed.'}
+    $plain=Get-Safe-Popup-Info 'http://public-replay.example.org/path?token=DO_NOT_DISCLOSE'
+    if($plain.category -ne 'HTTP_HOST_NO_REPLAY' -or
+       $plain.host -ne 'public-replay.example.org'){throw 'HTTP popup categorization failed.'}
+    $local=Get-Safe-Popup-Info 'http://127.0.0.1:5555/private'
+    if($local.category -ne 'HOST_NOT_DISCLOSED' -or
+       $local.host -ne 'NOT_DISCLOSED'){throw 'Localhost redaction failed.'}
+    $internal=Get-Safe-Popup-Info 'edge://newtab/'
+    if($internal.category -ne 'BROWSER_INTERNAL'){throw 'Edge internal page failed.'}
     $result.access_decision='EDGE_SELFTEST_PASSED_NO_NETWORK'
   }else{
     $script:phase='JLC_PAGE_DIAGNOSTIC'

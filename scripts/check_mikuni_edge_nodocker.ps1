@@ -155,6 +155,24 @@ function Get-Safe-Popup-Info([string]$pageUrl){
   return $info
 }
 
+function Get-Safe-Internal-Popup-Kind([string]$pageUrl){
+  # Classify browser internals WITHOUT exposing arbitrary internal paths or URLs.
+  if([string]::IsNullOrWhiteSpace($pageUrl)){return 'EMPTY'}
+  try {$u=[Uri]$pageUrl}catch{return 'MALFORMED'}
+  if($u.Scheme -eq 'chrome-error'){return 'BROWSER_ERROR_PAGE'}
+  if($u.Scheme -eq 'about'){return 'ABOUT_BLANK_OR_INTERNAL'}
+  if($u.Scheme -eq 'edge'){
+    if($u.DnsSafeHost -eq 'newtab'){return 'EDGE_NEW_TAB'}
+    return 'EDGE_OTHER_INTERNAL'
+  }
+  if($u.Scheme -eq 'chrome'){
+    if($u.DnsSafeHost -eq 'newtab'){return 'CHROMIUM_NEW_TAB'}
+    return 'CHROMIUM_OTHER_INTERNAL'
+  }
+  if($u.Scheme -eq 'chrome-untrusted'){return 'CHROMIUM_UNTRUSTED_INTERNAL'}
+  return 'NOT_BROWSER_INTERNAL'
+}
+
 function Inspect-Official-Playback-Tab($target){
   # Only a tab that our own click opened. Reject any other web origin.
   $targetPageUrl=[string]$target.url
@@ -190,6 +208,22 @@ function Inspect-Official-Playback-Tab($target){
   return 'GUARDED_RELOAD_COMPLETE'
 }
 
+function Invoke-Trusted-PointClick([int]$x,[int]$y){
+  # DevTools Input events model an actual pointing-device click. DOM el.click()
+  # lacks user activation and may open a browser-internal fallback tab.
+  if($x -lt 0 -or $y -lt 0 -or $x -gt 4000 -or $y -gt 3000){
+    throw 'Target click coordinate outside bounded browser viewport.'
+  }
+  foreach($data in @(
+    @{type='mouseMoved';x=$x;y=$y;button='none';buttons=0},
+    @{type='mousePressed';x=$x;y=$y;button='left';buttons=1;clickCount=1},
+    @{type='mouseReleased';x=$x;y=$y;button='left';buttons=0;clickCount=1}
+  )){
+    $id=Send-CDP 'Input.dispatchMouseEvent' $data
+    $null=Await-CDP $id 12000
+  }
+}
+
 function Eval-CDP([string]$js){
   $id=Send-CDP 'Runtime.evaluate' @{expression=$js;returnByValue=$true;awaitPromise=$true;userGesture=$true}
   $r=Await-CDP $id 15000
@@ -211,7 +245,10 @@ $result=[ordered]@{
   day_header_clicked=$false;race_icon_matches=0;race_icon_visible_exact=0
   race_icon_target_day_matches=0;browser_tabs_after_click=0
   new_tab_domain='NOT_OBSERVED';new_tab_url_type='NOT_OBSERVED'
-  new_tab_guard_status='NOT_NEEDED';layout_hints=@()
+  new_tab_guard_status='NOT_NEEDED';new_tab_internal_kind='NOT_OBSERVED'
+  race_link_kind='NOT_INSPECTED';race_link_host='NOT_DISCLOSED'
+  race_link_target='NOT_INSPECTED';race_link_has_inline_handler=$false
+  layout_hints=@()
   playback_api_statuses=@()
   playback_api_requests=0;media_requests_blocked=0;opaque_requests_blocked=0
   video_bytes_saved=0;video_frames_decoded=0;confirmed_six_boat_tracks=0
@@ -257,6 +294,11 @@ try {
   if($SelfTest){
     $script:phase='CDP_SELFTEST'
     if((Eval-CDP '6*7') -ne 42){throw 'Browser selftest failed.'}
+    $null=Eval-CDP "(function(){const b=document.createElement('button');b.style.cssText='position:fixed;left:20px;top:20px;width:90px;height:45px;z-index:2147483647';b.textContent='Test';document.body.appendChild(b);window.__boatlabs_click_trusted=false;b.addEventListener('click',e=>{window.__boatlabs_click_trusted=e.isTrusted;});return true;})()"
+    Invoke-Trusted-PointClick 55 43
+    if((Eval-CDP 'window.__boatlabs_click_trusted===true') -ne $true){
+      throw 'Input dispatch did not deliver a trusted browser click.'
+    }
     $strict=Eval-CDP "'/static/1R.png'.match(new RegExp('(?:^|/)1R[.]png(?:[?#]|$)'))!==null&&'/static/11R.png'.match(new RegExp('(?:^|/)1R[.]png(?:[?#]|$)'))===null"
     if($strict -ne $true){throw '1R versus 11R selector is ambiguous.'}
     $safe=Get-Safe-Popup-Info 'https://player.example.org/path?token=DO_NOT_DISCLOSE'
@@ -274,6 +316,11 @@ try {
        $local.host -ne 'NOT_DISCLOSED'){throw 'Localhost redaction failed.'}
     $internal=Get-Safe-Popup-Info 'edge://newtab/'
     if($internal.category -ne 'BROWSER_INTERNAL'){throw 'Edge internal page failed.'}
+    if((Get-Safe-Internal-Popup-Kind 'edge://newtab/') -ne 'EDGE_NEW_TAB' -or
+       (Get-Safe-Internal-Popup-Kind 'chrome-error://chromewebdata/') -ne 'BROWSER_ERROR_PAGE' -or
+       (Get-Safe-Internal-Popup-Kind 'https://front.player.boatrace-cdn.jp/path?secret=1') -ne 'NOT_BROWSER_INTERNAL'){
+      throw 'Privacy-safe browser internal classification failed.'
+    }
     $result.access_decision='EDGE_SELFTEST_PASSED_NO_NETWORK'
   }else{
     $script:phase='JLC_PAGE_DIAGNOSTIC'
@@ -346,12 +393,43 @@ try {
    return {i,visible:visible(e),ancestry};
  };
  const hints=allIcons.slice(0,7).map(describe);
+ const chosenLink=dayIcons.length===1?dayIcons[0].closest('a'):null;
+ const describeLink=a=>{
+   if(!a)return {kind:'NO_UNIQUE_LINK',host:'NOT_DISCLOSED',target:'NONE',inline:false};
+   const href=a.getAttribute('href')||'';
+   let kind='MISSING',host='NOT_DISCLOSED';
+   if(href.startsWith('#'))kind='FRAGMENT';
+   else if(/^javascript:/i.test(href))kind='JAVASCRIPT';
+   else if(href){
+     try{
+       const u=new URL(href,document.baseURI);
+       if(u.protocol==='https:'){
+         kind='HTTPS_LINK';
+         if(['livebb.jlc.ne.jp','front.player.boatrace-cdn.jp',
+           'playback.api.streaks.jp'].includes(u.hostname.toLowerCase())){
+           host=u.hostname.toLowerCase();
+         }
+       }else if(u.protocol==='http:')kind='HTTP_LINK';
+       else kind='OTHER_SCHEME';
+     }catch(e){kind='UNPARSEABLE';}
+   }
+   const t=(a.getAttribute('target')||'').toLowerCase();
+   const target=t==='_blank'?'BLANK':t==='_self'?'SELF':t?'NAMED':'NONE';
+   return {kind,host,target,inline:!!a.getAttribute('onclick')};
+ };
+ const linkInfo=describeLink(chosenLink);
  const metrics={meeting,day,click:false,iconTotal:allIcons.length,
-   visibleExactCount:icons.length,dayIconCount:dayIcons.length,hints:[]};
+   visibleExactCount:icons.length,dayIconCount:dayIcons.length,
+   linkInfo,point:null,hints:[]};
  if($layoutFlag){metrics.hints=hints;return metrics;}
- if(!meeting||!day||dayIcons.length!==1)return metrics;
- dayIcons[0].closest('a')?.click();
- metrics.click=true;
+ if(!meeting||!day||dayIcons.length!==1||!chosenLink)return metrics;
+ chosenLink.scrollIntoView({block:'center',inline:'center'});
+ await sleep(90);
+ const rect=chosenLink.getBoundingClientRect();
+ const x=Math.round(rect.left+rect.width/2);
+ const y=Math.round(rect.top+rect.height/2);
+ if(rect.width>4&&rect.height>4&&x>0&&y>0&&
+   x<innerWidth&&y<innerHeight){metrics.point={x,y};}
  return metrics;
 })()
 "@
@@ -362,7 +440,22 @@ try {
     $result.race_icon_matches=[int]$clicked.iconTotal
     $result.race_icon_visible_exact=[int]$clicked.visibleExactCount
     $result.race_icon_target_day_matches=[int]$clicked.dayIconCount
-    $result.race_click_status=if($LayoutAudit){'LAYOUT_ONLY_NO_CLICK'}elseif($clicked.click){'CLICKED_EXACT_RACE_VERIFIED_DAY_CONTAINER'}elseif($clicked.dayIconCount -gt 1){'AMBIGUOUS_DATE_RACE_MATCH_NO_CLICK'}else{'EXACT_DAY_RACE_NOT_FOUND_NO_CLICK'}
+    $result.race_link_kind=[string]$clicked.linkInfo.kind
+    $result.race_link_host=[string]$clicked.linkInfo.host
+    $result.race_link_target=[string]$clicked.linkInfo.target
+    $result.race_link_has_inline_handler=[bool]$clicked.linkInfo.inline
+    if(-not $LayoutAudit -and $clicked.point -and
+      $clicked.dayIconCount -eq 1 -and $clicked.meeting -and $clicked.day){
+      $script:phase='TRUSTED_POINTING_DEVICE_CLICK'
+      Invoke-Trusted-PointClick ([int]$clicked.point.x) ([int]$clicked.point.y)
+      $result.race_click_status='TRUSTED_MOUSE_CLICK_EXACT_DAY_AND_RACE'
+    }elseif($LayoutAudit){
+      $result.race_click_status='LAYOUT_ONLY_NO_CLICK'
+    }elseif($clicked.dayIconCount -gt 1){
+      $result.race_click_status='AMBIGUOUS_DATE_RACE_MATCH_NO_CLICK'
+    }else{
+      $result.race_click_status='EXACT_DAY_RACE_NOT_FOUND_OR_OFFSCREEN_NO_CLICK'
+    }
     Pump-CDP 5500
     # about:blank is a temporary popup state, not a playback domain.
     # Read only the local DevTools tab list, without URLs in diagnostic output.
@@ -382,6 +475,9 @@ try {
         $popupInfo=Get-Safe-Popup-Info ([string]$popup.url)
         $result.new_tab_url_type=[string]$popupInfo.category
         $result.new_tab_domain=[string]$popupInfo.host
+        if($popupInfo.category -in @('BROWSER_INTERNAL','ABOUT_BLANK_OR_INTERNAL')){
+          $result.new_tab_internal_kind=Get-Safe-Internal-Popup-Kind ([string]$popup.url)
+        }
         if($popupInfo.category -eq 'HTTPS_HOST' -and
           $popupInfo.host -in @('front.player.boatrace-cdn.jp',
             'livebb.jlc.ne.jp','playback.api.streaks.jp')){

@@ -8,6 +8,7 @@ on:
       - fix/mikuni-edge-popup-host-audit-20261028
       - fix/mikuni-edge-popup-http-scheme-20261028
       - fix/mikuni-day-scoped-autoclick-20261028
+      - fix/mikuni-edge-replay-popup-origin-20261028
     paths:
       - scripts/check_mikuni_edge_nodocker.ps1
       - .github/workflows/mikuni-windows-edge-nodocker-test.yml
@@ -48,10 +49,10 @@ jobs:
           $audit = ($jsonLines | Out-String) | ConvertFrom-Json
           if ($audit.schema -ne 'boatlabs.mikuni_edge_nodocker.v1') { exit 1 }
           if ($audit.video_bytes_saved -ne 0 -or $audit.video_frames_decoded -ne 0) { exit 1 }
-          if ($audit.race_click_status -eq 'CLICKED_EXACT_RACE_VERIFIED_DAY_CONTAINER') {
+          if ($audit.race_click_status -eq 'TRUSTED_MOUSE_CLICK_EXACT_DAY_AND_RACE') {
             if ($audit.race_icon_target_day_matches -ne 1) { exit 1 }
           }
-          $audit | Select-Object access_decision,landing_http_status,race_click_status,race_icon_matches,race_icon_visible_exact,race_icon_target_day_matches,meeting_header_clicked,day_header_clicked,browser_tabs_after_click,new_tab_domain,new_tab_url_type,new_tab_guard_status,playback_api_statuses,media_requests_blocked,failure_stage,failure_exception_type,failure_script_line | ConvertTo-Json -Depth 5
+          $audit | Select-Object access_decision,landing_http_status,race_click_status,race_icon_matches,race_icon_visible_exact,race_icon_target_day_matches,meeting_header_clicked,day_header_clicked,browser_tabs_after_click,new_tab_domain,new_tab_url_type,new_tab_internal_kind,new_tab_guard_status,race_link_kind,race_link_host,race_link_target,race_link_has_inline_handler,playback_api_statuses,media_requests_blocked,failure_stage,failure_exception_type,failure_script_line | ConvertTo-Json -Depth 5
           Write-Output ("diagnostic_exit=" + $nativeExit + " (0 is API metadata 2xx, 2 may mean blocked or unavailable)")
           exit 0
       - name: Inspect public JLC race icon ancestors, no replay click or media
@@ -60,5 +61,5 @@ jobs:
           $lines = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/check_mikuni_edge_nodocker.ps1 -Date 2026-10-28 -Race 1 -LayoutAudit
           $audit = ($lines | Out-String) | ConvertFrom-Json
           if ($audit.video_bytes_saved -ne 0) { exit 1 }
-          $audit | Select-Object access_decision,landing_http_status,race_click_status,meeting_header_clicked,day_header_clicked,race_icon_matches,layout_hints | ConvertTo-Json -Depth 14
+          $audit | Select-Object access_decision,landing_http_status,race_click_status,meeting_header_clicked,day_header_clicked,race_icon_matches,race_link_kind,race_link_host,race_link_target,race_link_has_inline_handler,layout_hints | ConvertTo-Json -Depth 14
           exit 0

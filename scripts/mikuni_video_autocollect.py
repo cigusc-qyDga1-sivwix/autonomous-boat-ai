@@ -86,9 +86,12 @@ def media_url(template,day,race,allowed_hosts):
         raise ValueError("media_url_template_missing")
     # Do not construct from JLC/BOATCAST player internals. Only a direct
     # source which the owner explicitly provided to this collector.
-    url=template.format(date=day,yyyymmdd=day.replace("-",""),
-                        venue="mikuni",jcd=VENUE_CODE,race=race,
-                        race2=f"{race:02d}")
+    try:
+        url=template.format(date=day,yyyymmdd=day.replace("-",""),
+                            venue="mikuni",jcd=VENUE_CODE,race=race,
+                            race2=f"{race:02d}")
+    except (KeyError,IndexError,ValueError) as exc:
+        raise ValueError("media_url_template_invalid") from exc
     _check_url(url,allowed_hosts)
     return url
 
@@ -214,7 +217,7 @@ def _reason(exc):
             "video_too_large","not_direct_video_media","not_recognized_direct_video_container",
             "video_decode_failed","video_timing_unavailable","video_no_decodable_frames",
             "unapproved_media_host_or_transport","invalid_media_path",
-            "media_url_template_missing","opencv_not_available",
+            "media_url_template_missing","media_url_template_invalid","opencv_not_available",
             "invalid_date","invalid_race"} else "VIDEO_VALIDATION_FAILED"
     return "COLLECTOR_FAILED_REDACTED"
 

@@ -110,9 +110,9 @@ class EphemeralFramePipelineTests(unittest.TestCase):
             # Verify the byte source is an anonymous RAM fd, not a disk file.
             self.assertTrue(any("/proc/self/fd/" in arg for arg in args))
             fd=kwargs["pass_fds"][0]
-            self.assertEqual(os.read(fd,4),b"\\0\\0\\0\\x18")
-            return SimpleNamespace(returncode=0,stdout=b"\\xff\\xd8ok\\xff\\xd9",stderr=b"")
-        source=b"\\0\\0\\0\\x18ftypisom\\0\\0\\0\\0"
+            self.assertEqual(os.read(fd,4),b"\0\0\0\x18")
+            return SimpleNamespace(returncode=0,stdout=b"\xff\xd8ok\xff\xd9",stderr=b"")
+        source=b"\0\0\0\x18ftypisom\0\0\0\0"
         frames=decode_in_memory(source,runner=ffmpeg)
         self.assertEqual(len(frames),1)
         self.assertEqual(len(calls),2)

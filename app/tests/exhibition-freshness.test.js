@@ -17,7 +17,7 @@ assert.match(index,/app\.js\?v=20261027-venue-v14/);
 assert.match(index,/tactical-1m\.js\?v=20261027-venue-v14/);
 assert.match(index,/venue-tactics-v2\.js\?v=20261027-venue23/);
 assert.match(venue,/four-factor-v1\.3-conditional-scenarios-untrained/);
-assert.match(sw,/boat-lab-static-v55/);
+assert.match(sw,/boat-lab-static-v56/);
 const listeners={};
 const fetchCalls=[],cacheCalls=[];
 const self={

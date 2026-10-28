@@ -89,6 +89,7 @@ def new_audit(day: str, race: int) -> dict:
         "media_requests_blocked": 0,
         "opaque_data_requests_blocked": 0,
         "opaque_hosts": [],
+        "opaque_request_shapes": [],
         "raw_media_downloaded": False,
         "video_bytes_downloaded": 0,
         "frames_decoded": 0,
@@ -105,6 +106,7 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
     blocked = [0]
     opaque_blocked = [0]
     opaque_hosts = set()
+    opaque_shapes = set()
     # Import at runtime so pure, network-free unit tests require no Playwright.
     try:
         from playwright.sync_api import sync_playwright
@@ -141,6 +143,11 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
                         host = urlsplit(route.request.url).hostname
                         if host:
                             opaque_hosts.add(host.lower())
+                            suffix = Path(urlsplit(route.request.url).path).suffix.lower()
+                            if not re.fullmatch(r"\\.[a-z0-9]{1,6}", suffix):
+                                suffix = "(none)"
+                            opaque_shapes.add((host.lower(), route.request.method,
+                                               route.request.resource_type, suffix))
                         route.abort()
                     else:
                         route.continue_()
@@ -239,6 +246,10 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
         audit["media_requests_blocked"] = blocked[0]
         audit["opaque_data_requests_blocked"] = opaque_blocked[0]
         audit["opaque_hosts"] = sorted(opaque_hosts)[:12]
+        audit["opaque_request_shapes"] = [
+            {"host": h, "method": m, "resource_type": t, "path_suffix": s}
+            for h, m, t, s in sorted(opaque_shapes)[:20]
+        ]
     return audit
 
 

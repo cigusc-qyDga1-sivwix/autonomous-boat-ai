@@ -3,7 +3,8 @@
 param(
   [ValidatePattern('^\d{4}-\d{2}-\d{2}$')][string]$Date=(Get-Date).ToString('yyyy-MM-dd'),
   [ValidateRange(1,12)][int]$Race=1,
-  [switch]$SelfTest
+  [switch]$SelfTest,
+  [switch]$LayoutAudit
 )
 $ErrorActionPreference='Stop'
 
@@ -207,9 +208,10 @@ $result=[ordered]@{
   schema='boatlabs.mikuni_edge_nodocker.v1';date=$Date;venue='三国';race=$Race
   access_decision='NOT_RUN';landing_http_status=$null
   race_click_status='NOT_ATTEMPTED';meeting_header_clicked=$false
-  day_header_clicked=$false;race_icon_matches=0;browser_tabs_after_click=0
+  day_header_clicked=$false;race_icon_matches=0;race_icon_visible_exact=0
+  race_icon_target_day_matches=0;browser_tabs_after_click=0
   new_tab_domain='NOT_OBSERVED';new_tab_url_type='NOT_OBSERVED'
-  new_tab_guard_status='NOT_NEEDED'
+  new_tab_guard_status='NOT_NEEDED';layout_hints=@()
   playback_api_statuses=@()
   playback_api_requests=0;media_requests_blocked=0;opaque_requests_blocked=0
   video_bytes_saved=0;video_frames_decoded=0;confirmed_six_boat_tracks=0
@@ -255,6 +257,8 @@ try {
   if($SelfTest){
     $script:phase='CDP_SELFTEST'
     if((Eval-CDP '6*7') -ne 42){throw 'Browser selftest failed.'}
+    $strict=Eval-CDP "'/static/1R.png'.match(new RegExp('(?:^|/)1R[.]png(?:[?#]|$)'))!==null&&'/static/11R.png'.match(new RegExp('(?:^|/)1R[.]png(?:[?#]|$)'))===null"
+    if($strict -ne $true){throw '1R versus 11R selector is ambiguous.'}
     $safe=Get-Safe-Popup-Info 'https://player.example.org/path?token=DO_NOT_DISCLOSE'
     if($safe.category -ne 'HTTPS_HOST' -or $safe.host -ne 'player.example.org'){
       throw 'Safe popup hostname test failed.'
@@ -280,6 +284,7 @@ try {
     Pump-CDP 2200
     $monthDay='{0}/{1}' -f [int]$d.Month,[int]$d.Day
     $dateSlash=$d.ToString('yyyy/MM/dd')
+    $layoutFlag=if($LayoutAudit){'true'}else{'false'}
     $js=@"
 (async()=>{
  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -305,22 +310,59 @@ try {
    day=clickText('$monthDay');
    if(!day)await sleep(350);
  }
- let allIcons=[],icons=[];
+ const exactFile=new RegExp('(?:^|/)$($Race)R[.]png(?:[?#]|$)','i');
+ let allIcons=[],icons=[],dayIcons=[];
+ const owningDay=e=>{
+   // JLC HTML: img > a.stream_a > td > tr > tbody > table
+   // > center > li > ul > li (single day) > ul > li (meeting).
+   const dayLi=e.closest('li')?.parentElement?.closest('li');
+   if(!dayLi)return false;
+   const dates=[...new Set((dayLi.textContent||'').match(/(?:20[0-9]{2}\/)?[0-9]{1,2}\/[0-9]{1,2}/g)||[])];
+   return dates.length===1&&dates[0]==='$monthDay';
+ };
  for(let tries=0;tries<8;tries++){
-   allIcons=[...document.querySelectorAll('img[src*="$($Race)R.png"]')];
+   allIcons=[...document.querySelectorAll('img')].filter(e=>exactFile.test(e.getAttribute('src')||''));
    icons=allIcons.filter(visible);
-   if(icons.length)break;
+   dayIcons=icons.filter(owningDay);
+   if(dayIcons.length===1)break;
    await sleep(350);
  }
- if(!icons.length)return {meeting,day,click:false,iconTotal:allIcons.length};
- icons[0].click();return {meeting,day,click:true,iconTotal:allIcons.length};
+ const describe=(e,i)=>{
+   let n=e;const ancestry=[];
+   for(let k=0;k<13&&n;k++,n=n.parentElement){
+     let own='';
+     for(const child of n.childNodes){
+       if(child.nodeType===3)own+=child.nodeValue||'';
+     }
+     const dates=[...new Set((own.match(/(?:20[0-9]{2}\/)?[0-9]{1,2}\/[0-9]{1,2}/g)||[]))].slice(0,2);
+     const descDates=[...new Set(((n.textContent||'').match(/(?:20[0-9]{2}\/)?[0-9]{1,2}\/[0-9]{1,2}/g)||[]))].slice(0,5);
+     ancestry.push({
+       tag:n.tagName.toLowerCase(),
+       id:(n.id||'').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,35),
+       classes:[...(n.classList||[])].slice(0,3).map(s=>s.replace(/[^a-zA-Z0-9_-]/g,'').slice(0,35)),
+       dates,descDates
+     });
+   }
+   return {i,visible:visible(e),ancestry};
+ };
+ const hints=allIcons.slice(0,7).map(describe);
+ const metrics={meeting,day,click:false,iconTotal:allIcons.length,
+   visibleExactCount:icons.length,dayIconCount:dayIcons.length,hints:[]};
+ if($layoutFlag){metrics.hints=hints;return metrics;}
+ if(!meeting||!day||dayIcons.length!==1)return metrics;
+ dayIcons[0].closest('a')?.click();
+ metrics.click=true;
+ return metrics;
 })()
 "@
     $clicked=Eval-CDP $js
+    if($LayoutAudit){$result.layout_hints=@($clicked.hints)}
     $result.meeting_header_clicked=[bool]$clicked.meeting
     $result.day_header_clicked=[bool]$clicked.day
     $result.race_icon_matches=[int]$clicked.iconTotal
-    $result.race_click_status=if($clicked.click){'CLICKED_DATE_ASSOCIATION_UNVERIFIED'}else{'RACE_ICON_NOT_FOUND'}
+    $result.race_icon_visible_exact=[int]$clicked.visibleExactCount
+    $result.race_icon_target_day_matches=[int]$clicked.dayIconCount
+    $result.race_click_status=if($LayoutAudit){'LAYOUT_ONLY_NO_CLICK'}elseif($clicked.click){'CLICKED_EXACT_RACE_VERIFIED_DAY_CONTAINER'}elseif($clicked.dayIconCount -gt 1){'AMBIGUOUS_DATE_RACE_MATCH_NO_CLICK'}else{'EXACT_DAY_RACE_NOT_FOUND_NO_CLICK'}
     Pump-CDP 5500
     # about:blank is a temporary popup state, not a playback domain.
     # Read only the local DevTools tab list, without URLs in diagnostic output.

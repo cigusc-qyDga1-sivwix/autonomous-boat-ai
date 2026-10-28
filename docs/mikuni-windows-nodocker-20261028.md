@@ -97,3 +97,19 @@ Windowsでの利用：以前と同じGitHub URLから最新の単独`.ps1`ファ
 - `HOST_NOT_DISCLOSED`：IPアドレス・localhost・不適切なホスト表記。原則的に表示させない。
 
 ユーザーはGitHubの既存スクリプトURLを`check_mikuni_edge_latest.ps1`として上書きダウンロードし、以前と同じコマンドを再実行できる。共有するのは`new_tab_url_type`・`new_tab_domain`・`access_decision`のみ。**資格情報、再生URL全体、画像付きでなくともURLのクエリ値は共有しない。**
+
+## 2026-10-28 23時以降｜通常のEdgeで公式展示リプレイ再生成功（利用者実測）
+
+ユーザーが**普段のEdgeで三国の2026-10-28 1Rを手動再生できた**と報告。国内回線で通常視聴可能なことを示すが、既存の一時・headless Edgeでの再生、映像ファイル取得、6艇解析を証明するものではない。
+
+WindowsのJLC実DOM構造をCIで監査した結果、従来の `img[src*="1R.png"]` は `11R.png` まで一致し、全22件（11日×2つの1R/11R）を誤認。しかも、先頭2件は10/28の1Rと11Rの両方で表示状態だったため、**不正確なレースを開く危険**があった。
+
+修正版：
+- `(?:^|/)1R[.]png(?:[?#]|$)` でファイル名の正確な1Rのみ一致。
+- `img > a.stream_a > td > tr > tbody > table > center > li > ul > li` の**日付ごとのli**まで遡って、日付文字列が10/28のみであることを厳格確認。
+- `race_icon_matches` は厳密なレース番号一致のみ、`race_icon_visible_exact` は表示状態、`race_icon_target_day_matches` は選択日とレース番号の両方が一致する数。
+- 対象が**ちょうど1件**で、開催節と日付の選択も成功した場合のみ、元の `a.stream_a` をクリック。曖昧・欠損ならクリックしない。
+- 正しくクリックした場合 `CLICKED_EXACT_RACE_VERIFIED_DAY_CONTAINER` と記録。ただし動画の再生API取得成功は別途検証。
+- `-LayoutAudit` は安全なHTML構造調査のみでクリック・動画受信せず。主に自動テスト用。
+
+正式予想・収支と元の映像データを変更せず、動画取得と6艇識別の数は実測まで0のまま。

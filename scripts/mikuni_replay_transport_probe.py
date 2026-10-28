@@ -59,6 +59,37 @@ def transport_kind(url: str, content_type: str = "") -> str:
     return "NOT_MEDIA"
 
 
+def response_content_kind(url: str, content_type: str) -> str:
+    """Describe response without inspecting body, path, token, or secret values."""
+    mime = (content_type or "").split(";", 1)[0].lower().strip()
+    kind = transport_kind(url, mime)
+    if "json" in mime:
+        return "JSON_METADATA"
+    if kind in VIDEO_TYPES:
+        return kind
+    if mime.startswith("text/") or "xml" in mime:
+        return "TEXT_OR_XML"
+    if mime:
+        return "OTHER_CONTENT_TYPE"
+    return "MIME_UNKNOWN"
+
+
+def derive_probe_status(get_responses, get_requests, media_request_types):
+    """Separate HTTP access diagnostics from verified media acquisition."""
+    statuses = {int(s) for (s, _kind) in get_responses}
+    if 403 in statuses:
+        return "PLAYER_API_NORMAL_GET_HTTP_403"
+    if 401 in statuses:
+        return "PLAYER_API_NORMAL_GET_HTTP_401"
+    if media_request_types:
+        return "MEDIA_TRANSPORT_CANDIDATE_OBSERVED_NOT_DOWNLOADED"
+    if get_requests and statuses:
+        return "PLAYER_API_NORMAL_GET_RESPONDED_NO_MEDIA"
+    if get_requests:
+        return "PLAYER_API_NORMAL_GET_NO_RESPONSE"
+    return "PUBLIC_PAGE_LOADED_NO_MEDIA_REQUEST_OBSERVED"
+
+
 def new_audit(day: str, race: int) -> dict:
     validate(day, race)
     return {
@@ -93,6 +124,10 @@ def new_audit(day: str, race: int) -> dict:
         "opaque_hosts": [],
         "opaque_request_shapes": [],
         "read_only_head_results": [],
+        "normal_browser_get_opt_in": False,
+        "browser_context_profile": "DESKTOP_CHROMIUM",
+        "normal_browser_get_request_count": 0,
+        "normal_browser_get_responses": [],
         "raw_media_downloaded": False,
         "video_bytes_downloaded": 0,
         "frames_decoded": 0,
@@ -102,7 +137,7 @@ def new_audit(day: str, race: int) -> dict:
     }
 
 
-def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
+def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200, inspect_normal_get: bool = False, mobile_context: bool = False) -> dict:
     audit = new_audit(day, race)
     requests = Counter()
     responses = Counter()
@@ -113,6 +148,10 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
     opaque_hosts = set()
     opaque_shapes = set()
     opaque_get_urls = {}
+    browser_get_requests = [0]
+    browser_get_responses = {}
+    audit["normal_browser_get_opt_in"] = bool(inspect_normal_get)
+    audit["browser_context_profile"] = "MOBILE_CHROMIUM_PIXEL7" if mobile_context else "DESKTOP_CHROMIUM"
     # Import at runtime so pure, network-free unit tests require no Playwright.
     try:
         from playwright.sync_api import sync_playwright
@@ -124,7 +163,10 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=True, args=["--disable-dev-shm-usage"])
             try:
-                context = browser.new_context(ignore_https_errors=False)
+                context = browser.new_context(
+                    **(pw.devices["Pixel 7"] if mobile_context else {}),
+                    ignore_https_errors=False,
+                )
                 context.set_default_timeout(6000)
 
                 def observe_request(request):
@@ -136,6 +178,18 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
                     kind = transport_kind(response.url, response.headers.get("content-type", ""))
                     if kind in VIDEO_TYPES:
                         responses[kind] += 1
+                    request = response.request
+                    parts = urlsplit(response.url)
+                    if (inspect_normal_get and parts.scheme == "https"
+                            and parts.hostname == "playback.api.streaks.jp"
+                            and request.method == "GET"
+                            and request.resource_type in {"xhr", "fetch"}):
+                        content_kind = response_content_kind(
+                            response.url, response.headers.get("content-type", ""))
+                        # Only the HTTP status and content-type CLASS are recorded.
+                        # Never touch response.text()/body(), URL paths, cookies or tokens.
+                        record_key = (response.status, content_kind)
+                        browser_get_responses[record_key] = browser_get_responses.get(record_key, 0) + 1
 
                 def guard(route):
                     # Critical: media and manifests are not fetched by this probe.
@@ -144,7 +198,17 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
                         blocked[0] += 1
                         route.abort()
                     elif route.request.resource_type in {"xhr", "fetch"}:
-                        host = urlsplit(route.request.url).hostname
+                        parts = urlsplit(route.request.url)
+                        host = parts.hostname
+                        if (inspect_normal_get and parts.scheme == "https"
+                                and host == "playback.api.streaks.jp"
+                                and route.request.method == "GET"
+                                and browser_get_requests[0] < 5):
+                            # Observe the exact browser's ordinary GET with its natural
+                            # session. No manual tokens, guessed URLs or authentication bypass.
+                            browser_get_requests[0] += 1
+                            route.continue_()
+                            return
                         if host:
                             opaque_hosts.add(host.lower())
                             if (host.lower() in {"front.player.boatrace-cdn.jp", "livebb.jlc.ne.jp", "playback.api.streaks.jp"}
@@ -284,10 +348,8 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
                     except Exception:
                         record["head_http_status"] = "HEAD_NOT_AVAILABLE"
                     audit["read_only_head_results"].append(record)
-                audit["status"] = (
-                    "MEDIA_TRANSPORT_CANDIDATE_OBSERVED_NOT_DOWNLOADED"
-                    if requests else
-                    "PUBLIC_PAGE_LOADED_NO_MEDIA_REQUEST_OBSERVED"
+                audit["status"] = derive_probe_status(
+                    browser_get_responses, browser_get_requests[0], requests
                 )
             finally:
                 browser.close()
@@ -299,6 +361,11 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
         audit["media_response_types"] = dict(sorted(responses.items()))
         audit["media_requests_blocked"] = blocked[0]
         audit["opaque_data_requests_blocked"] = opaque_blocked[0]
+        audit["normal_browser_get_request_count"] = browser_get_requests[0]
+        audit["normal_browser_get_responses"] = [
+            {"http_status": status, "content_kind": kind, "count": n}
+            for (status, kind), n in sorted(browser_get_responses.items())
+        ]
         audit["safe_metadata_bootstraps_allowed"] = allowed_metadata[0]
         audit["safe_metadata_bootstraps_rejected"] = rejected_metadata[0]
         audit["opaque_hosts"] = sorted(opaque_hosts)[:12]
@@ -313,9 +380,17 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Mikuni public replay transport: metadata only")
     parser.add_argument("--date", required=True)
     parser.add_argument("--race", type=int, default=1)
+    parser.add_argument("--mobile-context", action="store_true",
+                        help="Use standard Pixel 7 mobile browser settings for the JLC smartphone page")
+    parser.add_argument(
+        "--inspect-normal-get", action="store_true",
+        help="Allow only browser-initiated playback.api.streaks.jp GET and audit status/MIME, no media file download",
+    )
     parser.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
-    result = run_browser_probe(args.date, args.race)
+    result = run_browser_probe(args.date, args.race,
+                               inspect_normal_get=args.inspect_normal_get,
+                               mobile_context=args.mobile_context)
     data = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)

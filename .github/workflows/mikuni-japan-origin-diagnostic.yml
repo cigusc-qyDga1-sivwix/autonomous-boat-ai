@@ -36,14 +36,15 @@ jobs:
         run: |
           set -euo pipefail
           python3 -c 'import playwright; from playwright.sync_api import sync_playwright'
-      - name: Compare legitimate playback access, no video capture
+      - name: Compare normal desktop/mobile playback responses, no video capture
         env:
           DAY: ${{ inputs.event_date }}
           RACE: ${{ inputs.race }}
         run: |
           set -euo pipefail
-          python3 scripts/mikuni_replay_transport_probe.py \
-            --date "$DAY" --race "$RACE" --inspect-normal-get \
-            --mobile-context --out "$RUNNER_TEMP/mikuni-japan-origin-audit.json"
+          python3 -m scripts.mikuni_domestic_access_check \
+            --date "$DAY" --race "$RACE" \
+            --out "$RUNNER_TEMP/mikuni-japan-origin-audit.json"
           python3 -m json.tool "$RUNNER_TEMP/mikuni-japan-origin-audit.json" >/dev/null
-          # Only safe audit counts/status. Never upload HAR/cookies/media.
+          # A 403 returns code 2 and marks this diagnosis as blocked. 2xx still does NOT prove video ingestion.
+          # Never upload HAR/cookies/media or auth details.

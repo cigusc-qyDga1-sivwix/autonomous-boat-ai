@@ -109,6 +109,7 @@ def new_audit(day: str, race: int) -> dict:
         "opaque_request_shapes": [],
         "read_only_head_results": [],
         "normal_browser_get_opt_in": False,
+        "browser_context_profile": "DESKTOP_CHROMIUM",
         "normal_browser_get_request_count": 0,
         "normal_browser_get_responses": [],
         "raw_media_downloaded": False,
@@ -120,7 +121,7 @@ def new_audit(day: str, race: int) -> dict:
     }
 
 
-def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200, inspect_normal_get: bool = False) -> dict:
+def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200, inspect_normal_get: bool = False, mobile_context: bool = False) -> dict:
     audit = new_audit(day, race)
     requests = Counter()
     responses = Counter()
@@ -134,6 +135,7 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200, inspect_norma
     browser_get_requests = [0]
     browser_get_responses = {}
     audit["normal_browser_get_opt_in"] = bool(inspect_normal_get)
+    audit["browser_context_profile"] = "MOBILE_CHROMIUM_PIXEL7" if mobile_context else "DESKTOP_CHROMIUM"
     # Import at runtime so pure, network-free unit tests require no Playwright.
     try:
         from playwright.sync_api import sync_playwright
@@ -145,7 +147,10 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200, inspect_norma
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=True, args=["--disable-dev-shm-usage"])
             try:
-                context = browser.new_context(ignore_https_errors=False)
+                context = browser.new_context(
+                    **(pw.devices["Pixel 7"] if mobile_context else {}),
+                    ignore_https_errors=False,
+                )
                 context.set_default_timeout(6000)
 
                 def observe_request(request):
@@ -361,13 +366,17 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Mikuni public replay transport: metadata only")
     parser.add_argument("--date", required=True)
     parser.add_argument("--race", type=int, default=1)
+    parser.add_argument("--mobile-context", action="store_true",
+                        help="Use standard Pixel 7 mobile browser settings for the JLC smartphone page")
     parser.add_argument(
         "--inspect-normal-get", action="store_true",
         help="Allow only browser-initiated playback.api.streaks.jp GET and audit status/MIME, no media file download",
     )
     parser.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
-    result = run_browser_probe(args.date, args.race, inspect_normal_get=args.inspect_normal_get)
+    result = run_browser_probe(args.date, args.race,
+                               inspect_normal_get=args.inspect_normal_get,
+                               mobile_context=args.mobile_context)
     data = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)

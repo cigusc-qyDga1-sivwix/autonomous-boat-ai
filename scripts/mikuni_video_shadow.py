@@ -43,7 +43,7 @@ def valid_bets(bets):
     for b in bets:
         if not isinstance(b,dict):return False
         comb=b.get("combination")
-        if not isinstance(comb,str) or len(comb)!=5 or comb[1::2]!="-":
+        if not isinstance(comb,str) or len(comb)!=5 or comb[1::2]!="--":
             return False
         lanes=comb[::2]
         if len(lanes)!=3 or len(set(lanes))!=3 or any(v not in "123456" for v in lanes):

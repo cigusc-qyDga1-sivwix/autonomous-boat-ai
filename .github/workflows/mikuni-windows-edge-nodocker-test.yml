@@ -1,0 +1,38 @@
+name: BOAT LAB Windows Edge no-Docker probe tests
+
+on:
+  push:
+    branches:
+      - feat/mikuni-windows-edge-no-docker-20261028
+    paths:
+      - scripts/check_mikuni_edge_nodocker.ps1
+      - .github/workflows/mikuni-windows-edge-nodocker-test.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-windows-check:
+    runs-on: windows-2022
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse native Windows PowerShell script
+        shell: powershell
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/check_mikuni_edge_nodocker.ps1').Path,
+            [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+          Write-Output 'Windows PowerShell 5.1 syntax passed'
+      - name: Headless Microsoft Edge local CDP smoke test (no network)
+        shell: powershell
+        run: |
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/check_mikuni_edge_nodocker.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { exit 1 }

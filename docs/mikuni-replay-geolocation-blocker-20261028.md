@@ -9,6 +9,7 @@
 - `playback.api.streaks.jp`: HEAD 401、通常ブラウザ GET 403、JSON `{"code":"REQUEST_FAILED","id":124,"status":403}`（機密情報を含むエラー文は記録しない）。
 - リクエスト上の認証系ヘッダーは名前のみ監査。Origin/Refererの有無を確認し、ヘッダー値やCookie等を残さない。
 - 公開ソフトウェアのStreaksクライアントは id=124 を geographic restriction、id=126 を API-key/credential-related refusal と**区別**しているが、本サービスの管理者による公式な理由の説明ではない。参考: https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/extractor/streaks.py
+- 公式BOATCAST展示リプレイページ `https://race.boatcast.jp/replay?jo=10&md=T&race=1&ymd=20261028` もブラウザでHTTP200、埋め込み先は `front.player.boatrace-cdn.jp`。JLCと同じプレイヤー入口を使う。BOATCASTの再生APIレスポンスまでは未確認。動画バイト0R。
 - **実映像バイト 0、実映像デコード0R、6艇ID確認0R。** 合成テスト成功や公開ページ閲覧とは別集計。
 
 ## 結論と残る不確実性

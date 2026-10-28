@@ -52,6 +52,11 @@ class OfficialChannelCatalogTests(unittest.TestCase):
         result=parse_feed(fake_feed(video_id="https://not-a-video.example"),DAY)
         self.assertEqual(result["candidates"],[])
 
+    def test_realistic_cup_final_stream_title_is_not_dropped(self):
+        title="スポーツクラブ新田塚アーク杯　最終日　８：００～"
+        result=parse_feed(fake_feed(title=title,published="2026-10-28T00:15:00Z"),DAY)
+        self.assertEqual(len(result["candidates"]),1)
+
     def test_require_titled_racing_or_exact_date(self):
         out=parse_feed(fake_feed(title="別の日のレース 2026/10/10",published="2026-10-10T01:00:00Z"),DAY)
         self.assertFalse(out["candidates"])

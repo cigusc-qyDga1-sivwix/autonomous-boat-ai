@@ -281,7 +281,10 @@ def collect(day,archive,previous,template,hosts,*,now=None,
             races[r]={"status":"AWAITING_EXHIBITION_NUMERIC_RESEARCH_ROW"}
             continue
         if not template or not hosts:
-            races[r]={"status":"AUTHORIZED_SOURCE_CONFIGURATION_MISSING"}
+            if old_record and old_record.get("status")=="MEDIA_OBSERVED_PIXEL_RESEARCH_ONLY":
+                races[r]={**old_record,"seed_reprocess_status":"AUTHORIZED_SOURCE_NOT_CONFIGURED"}
+            else:
+                races[r]={"status":"AUTHORIZED_SOURCE_CONFIGURATION_MISSING"}
             continue
         try:
             address=media_url(template,day,race,hosts)

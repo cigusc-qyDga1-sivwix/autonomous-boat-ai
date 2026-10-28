@@ -1,0 +1,45 @@
+# 三国｜個人研究の許可を前提にした動画自動収集 v0.1
+
+**2026-10-28**: BOAT LAB利用者が「三国には個人利用・動画の自動保存・AI解析について確認し、問題ないとの回答を得た。動画は無断転載しない」と申告。**書面や提供元の直接動画URLは未取得**であり、ここにある記録は「使用者の申告」であって許諾書の代わりではない。
+
+## 技術面の結論
+
+三国の公式ページ：<https://www.boatrace-mikuni.jp/>、展示リプレイ案内：<https://livebb.jlc.ne.jp/bb_top/sp_bb/tvod_10.php>。
+
+上記は再生**ページ**であり、MP4/WebM/AVIの直接動画ソースではない。JLC/BOATCASTを経由する場合には、配信システムの利用条件も別途適用される。公開ページを見られることだけでは、Pythonから動画本体を取得できる証明にはならない。
+
+取得元が**直接のHTTPS動画ファイルURL**を提供したとき、手入力不要で毎レースの保存・フレーム研究を自動実行するための安全な収集器を配置：
+
+- `scripts/mikuni_video_autocollect.py`：三国（jcd=10）専用。数値展示の6艇レース行があるRだけ、自動でURLを構築する。後日収集の場合も発走前予想SHAと混同しない。
+- `.github/workflows/mikuni-authorized-video.yml`：三国モーニング時間帯に**10分間隔のベストエフォート実行**（GitHub Actionsは遅延や中止があり得る）。GitHubの別ジョブ、既存予想生成/結果照合処理は変更しない。
+- `app/turn-vision-pilot-20261028.html`：**展示数値の取得R数／フレーム研究として動画取得できたR数／①〜⑥の真の艇識別・ターン計測数**を明確に分けて表示。
+- 動画ファイルの生データはGitHubへ書き込まず、Actionsランナー上に一時保存し、フレーム色領域の候補カウント、内容ハッシュ、記録時刻のみ研究記録として保存する。許諾済み動画を他者に公開しない。
+- 取得済みSHAと競走日・Rを用いて重複取得を避ける。取得失敗・HTTPエラーは状態のみ記録し、プライベートな直接動画URLやトークンをログや研究JSONに出さない。
+- SSRF/不正なソースの遮断：HTTPSと管理者が明示したホスト名のみ許容し、異なるホストへリダイレクトされた場合は拒否。ウェブページ、HLSマニフェスト、暗号化された動画の不正取得やDRM解除は行わない。
+
+### 有効化のための設定
+
+GitHubリポジトリ `cigusc-qyDga1-sivwix/autonomous-boat-ai` の **Settings → Secrets and variables → Actions** に以下を設定する。
+
+| 種別 | 名前 | 設定値 |
+|---|---|---|
+| Repository secret | `MIKUNI_VIDEO_SOURCE_TEMPLATE` | 供給元が承認した **動画ファイルのHTTPS URLテンプレート**。`{yyyymmdd}`, `{race2}`, `{race}`, `{jcd}`, `{date}`, `{venue}` が利用可能。URLの認証情報は外部に出さずsecretだけに置く。 |
+| Repository variable | `MIKUNI_VIDEO_ALLOWED_HOSTS` | URLと全リダイレクト先の公式・承認済みホスト名（カンマ区切り）。**JLCやBOATCAST等は利用条件が確認できない限り追加しない**。 |
+
+例として`https://videos.provider.example/mikuni/{yyyymmdd}/{race2}.mp4` という**架空URL**を示すが、実在のURLではなくこれを設定しても動画は取得できない。
+
+上記２つが未設定の場合は、研究台帳に`AUTHORIZED_SOURCE_CONFIGURATION_MISSING`を記録して停止。**「自動収集成功」や「動画解析済み」としてカウントしない。** 動画ソースを勝手に推測して外部配信から収集しない。
+
+### 現段階での解析能力
+
+取得できた動画について、最大40フレーム・色領域候補をOpenCVで抽出する。`video_races_observed` は「動画が取得・フレームデコードできたレース数」であり**全6艇のターン測定成功数ではない**。
+
+①〜⑥の真の艇識別、ターンマーク座標、カメラの俯瞰/透視補正、スタートライン0〜5/5〜15/15〜30m速度は引き続き未検証。既存の動画試作`boat-ai-pro/boat_ai/six_boat_motion.py`と接続するためには検証済み軌跡・水面座標が必要。正式予想や買い目、実際の投票、結果を一切自動変更しない。
+
+### テスト
+
+```bash
+python3 -m unittest discover -s tests -p test_mikuni_video_autocollect.py
+```
+
+`cv2` が入っている環境では合成動画で色領域の簡易試験も実行される。GitHub Actionsでは、許可済みソースを設定した際だけ`opencv-python-headless`を導入する。元動画をダウンロードできない環境では、レースの動画解析結果を捏造しない。

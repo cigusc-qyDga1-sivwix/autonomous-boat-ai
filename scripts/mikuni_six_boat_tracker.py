@@ -1,7 +1,7 @@
 """Research-only seeded six-boat motion tracker with static-scene stabilization.
 
 Input: decoded JPEG frames from a *separately approved* video and user-provided
-initial pixel seeds for boats 1..6 + >=6 static, visible world landmarks.
+initial pixel seeds for boats 1..6 + >=6 static shoreline image landmarks.
 Uses LK forward/back optical flow and per-frame RANSAC homography of the fixed
 shore points to subtract camera pan/zoom. Handles occlusions by dropping track
 points rather than inventing positions or reassigning numbers.

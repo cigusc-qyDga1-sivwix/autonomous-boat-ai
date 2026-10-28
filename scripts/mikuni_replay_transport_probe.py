@@ -74,6 +74,22 @@ def response_content_kind(url: str, content_type: str) -> str:
     return "MIME_UNKNOWN"
 
 
+def derive_probe_status(get_responses, get_requests, media_request_types):
+    """Separate HTTP access diagnostics from verified media acquisition."""
+    statuses = {int(s) for (s, _kind) in get_responses}
+    if 403 in statuses:
+        return "PLAYER_API_NORMAL_GET_HTTP_403"
+    if 401 in statuses:
+        return "PLAYER_API_NORMAL_GET_HTTP_401"
+    if media_request_types:
+        return "MEDIA_TRANSPORT_CANDIDATE_OBSERVED_NOT_DOWNLOADED"
+    if get_requests and statuses:
+        return "PLAYER_API_NORMAL_GET_RESPONDED_NO_MEDIA"
+    if get_requests:
+        return "PLAYER_API_NORMAL_GET_NO_RESPONSE"
+    return "PUBLIC_PAGE_LOADED_NO_MEDIA_REQUEST_OBSERVED"
+
+
 def new_audit(day: str, race: int) -> dict:
     validate(day, race)
     return {
@@ -332,10 +348,8 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200, inspect_norma
                     except Exception:
                         record["head_http_status"] = "HEAD_NOT_AVAILABLE"
                     audit["read_only_head_results"].append(record)
-                audit["status"] = (
-                    "MEDIA_TRANSPORT_CANDIDATE_OBSERVED_NOT_DOWNLOADED"
-                    if requests else
-                    "PUBLIC_PAGE_LOADED_NO_MEDIA_REQUEST_OBSERVED"
+                audit["status"] = derive_probe_status(
+                    browser_get_responses, browser_get_requests[0], requests
                 )
             finally:
                 browser.close()

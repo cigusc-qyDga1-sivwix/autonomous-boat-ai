@@ -57,20 +57,20 @@ function Process-Event($event){
       $type=[string]$q.resourceType
       $method=[string]$q.request.method
       $allowed=$true
-      $host=''
+      $requestHost=''
       try {
-        $u=[Uri]$url; $host=$u.Host.ToLowerInvariant()
+        $u=[Uri]$url; $requestHost=$u.Host.ToLowerInvariant()
         if($u.Scheme -notin @('https','http')){$allowed=$false}
       }catch{$allowed=$false}
       if((Is-Media $url) -or $type -eq 'Media'){
         $allowed=$false;$script:blockedMedia++
       }elseif($type -in @('XHR','Fetch')){
-        if($method -ne 'GET' -or $host -notin @(
+        if($method -ne 'GET' -or $requestHost -notin @(
           'livebb.jlc.ne.jp','front.player.boatrace-cdn.jp','playback.api.streaks.jp'
         )){
           $allowed=$false;$script:blockedOpaque++
         }
-        if($host -eq 'playback.api.streaks.jp'){
+        if($requestHost -eq 'playback.api.streaks.jp'){
           $script:apiGets++
           if($script:apiGets -gt 5){$allowed=$false}
         }

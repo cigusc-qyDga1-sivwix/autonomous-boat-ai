@@ -88,6 +88,8 @@ def new_audit(day: str, race: int) -> dict:
         "media_response_types": {},
         "media_requests_blocked": 0,
         "opaque_data_requests_blocked": 0,
+        "safe_metadata_bootstraps_allowed": 0,
+        "safe_metadata_bootstraps_rejected": 0,
         "opaque_hosts": [],
         "opaque_request_shapes": [],
         "read_only_head_results": [],
@@ -106,6 +108,8 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
     responses = Counter()
     blocked = [0]
     opaque_blocked = [0]
+    allowed_metadata = [0]
+    rejected_metadata = [0]
     opaque_hosts = set()
     opaque_shapes = set()
     opaque_get_urls = {}
@@ -140,8 +144,6 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
                         blocked[0] += 1
                         route.abort()
                     elif route.request.resource_type in {"xhr", "fetch"}:
-                        # May be an opaque media response; no body downloads.
-                        opaque_blocked[0] += 1
                         host = urlsplit(route.request.url).hostname
                         if host:
                             opaque_hosts.add(host.lower())
@@ -150,10 +152,31 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
                                     and urlsplit(route.request.url).scheme == "https"):
                                 opaque_get_urls[host.lower()] = route.request.url
                             suffix = Path(urlsplit(route.request.url).path).suffix.lower()
-                            if not re.fullmatch(r"\\.[a-z0-9]{1,6}", suffix):
+                            if not re.fullmatch(r"\.[a-z0-9]{1,6}", suffix):
                                 suffix = "(none)"
                             opaque_shapes.add((host.lower(), route.request.method,
                                                route.request.resource_type, suffix))
+                        # Permit only public, HEAD-verified small metadata responses.
+                        # The HEAD preflight never downloads a video body.
+                        if (host in {"front.player.boatrace-cdn.jp", "livebb.jlc.ne.jp"}
+                                and route.request.method == "GET"):
+                            try:
+                                head = route.fetch(method="HEAD", timeout=5000, max_redirects=0)
+                                mime = head.headers.get("content-type", "").split(";", 1)[0].lower()
+                                length = head.headers.get("content-length", "")
+                                permitted_type = ("json" in mime or mime in {
+                                    "text/html", "text/plain", "text/xml",
+                                    "application/xml", "application/javascript",
+                                })
+                                safe_size = not length.isdigit() or int(length) <= 1048576
+                                if head.status == 200 and permitted_type and safe_size:
+                                    allowed_metadata[0] += 1
+                                    route.continue_()
+                                    return
+                            except Exception:
+                                pass
+                            rejected_metadata[0] += 1
+                        opaque_blocked[0] += 1
                         route.abort()
                     else:
                         route.continue_()
@@ -276,6 +299,8 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
         audit["media_response_types"] = dict(sorted(responses.items()))
         audit["media_requests_blocked"] = blocked[0]
         audit["opaque_data_requests_blocked"] = opaque_blocked[0]
+        audit["safe_metadata_bootstraps_allowed"] = allowed_metadata[0]
+        audit["safe_metadata_bootstraps_rejected"] = rejected_metadata[0]
         audit["opaque_hosts"] = sorted(opaque_hosts)[:12]
         audit["opaque_request_shapes"] = [
             {"host": h, "method": m, "resource_type": t, "path_suffix": s}

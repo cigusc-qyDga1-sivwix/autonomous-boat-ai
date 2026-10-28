@@ -75,12 +75,18 @@ def new_audit(day: str, race: int) -> dict:
         "visible_date_markers": [],
         "document_date_markers": [],
         "race_button_visible": False,
+        "race_icon_matches": 0,
+        "race_icon_visible_matches": 0,
+        "race_icon_parent_tag": None,
+        "race_icon_parent_has_link": False,
+        "race_click_status": "NOT_ATTEMPTED",
         "race_button_clicked": False,
         "video_play_attempted": False,
         "media_request_types": {},
         "media_response_types": {},
         "media_requests_blocked": 0,
         "opaque_data_requests_blocked": 0,
+        "opaque_hosts": [],
         "raw_media_downloaded": False,
         "video_bytes_downloaded": 0,
         "frames_decoded": 0,
@@ -96,6 +102,7 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
     responses = Counter()
     blocked = [0]
     opaque_blocked = [0]
+    opaque_hosts = set()
     # Import at runtime so pure, network-free unit tests require no Playwright.
     try:
         from playwright.sync_api import sync_playwright
@@ -129,6 +136,9 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
                     elif route.request.resource_type in {"xhr", "fetch"}:
                         # May be an opaque media response; no body downloads.
                         opaque_blocked[0] += 1
+                        host = urlsplit(route.request.url).hostname
+                        if host:
+                            opaque_hosts.add(host.lower())
                         route.abort()
                     else:
                         route.continue_()
@@ -146,21 +156,34 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
                 body = page.locator("body").inner_text(timeout=7000)
                 markup = page.content()
                 monthday = f"{int(day[5:7])}/{int(day[8:10])}"
-                audit["visible_date_markers"] = sorted(set(re.findall(r"(?:20\\d{2}[/\\-])?\\d{1,2}[/\\-]\\d{1,2}", body)))[:12]
-                audit["document_date_markers"] = sorted(set(re.findall(r"(?:20\\d{2}[/\\-])?\\d{1,2}[/\\-]\\d{1,2}", markup)))[:12]
+                audit["visible_date_markers"] = sorted(set(re.findall(r"(?:20\d{2}[/\\-])?\d{1,2}[/\\-]\d{1,2}", body)))[:12]
+                audit["document_date_markers"] = sorted(set(re.findall(r"(?:20\d{2}[/\\-])?\d{1,2}[/\\-]\d{1,2}", markup)))[:12]
                 audit["requested_date_visible"] = monthday in body
                 audit["requested_date_in_document"] = monthday in markup
                 # Click a race icon only if the requested date is visible.
                 # We do not certify its event-day association from this action.
                 selector = f'img[src*="{race}R.png"]'
                 icon = page.locator(selector)
-                audit["race_button_visible"] = icon.count() > 0
-                if (audit["requested_date_visible"] or audit["requested_date_in_document"]) and audit["race_button_visible"]:
+                visible_icon = page.locator(selector + ":visible")
+                audit["race_icon_matches"] = icon.count()
+                audit["race_icon_visible_matches"] = visible_icon.count()
+                audit["race_button_visible"] = visible_icon.count() > 0
+                if icon.count():
+                    audit["race_icon_parent_tag"] = icon.first.evaluate(
+                        "(el) => el.parentElement?.tagName?.toLowerCase() || null")
+                    audit["race_icon_parent_has_link"] = icon.first.evaluate(
+                        "(el) => Boolean(el.closest('a'))")
+                if not (audit["requested_date_visible"] or audit["requested_date_in_document"]):
+                    audit["race_click_status"] = "REQUESTED_DATE_NOT_IN_PAGE"
+                elif not audit["race_button_visible"]:
+                    audit["race_click_status"] = "RACE_BUTTON_NOT_VISIBLE"
+                else:
                     try:
-                        icon.first.click(timeout=6000)
+                        visible_icon.first.click(timeout=4500)
                         audit["race_button_clicked"] = True
+                        audit["race_click_status"] = "CLICKED_UNVERIFIED_DAY_ASSOCIATION"
                     except Exception:
-                        pass
+                        audit["race_click_status"] = "CLICK_FAILED_NO_UNVERIFIED_PLAYBACK"
                 for tab in context.pages:
                     try:
                         video = tab.locator("video").first
@@ -189,6 +212,7 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
         audit["media_response_types"] = dict(sorted(responses.items()))
         audit["media_requests_blocked"] = blocked[0]
         audit["opaque_data_requests_blocked"] = opaque_blocked[0]
+        audit["opaque_hosts"] = sorted(opaque_hosts)[:12]
     return audit
 
 

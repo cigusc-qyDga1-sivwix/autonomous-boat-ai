@@ -1,0 +1,37 @@
+name: BOAT LAB Mikuni replay transport metadata probe
+
+on:
+  push:
+    branches:
+      - feat/mikuni-browser-transport-probe-20261028
+    paths:
+      - scripts/mikuni_replay_transport_probe.py
+      - tests/test_mikuni_replay_transport_probe.py
+      - .github/workflows/mikuni-replay-transport-probe.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test transport classification and non-ingestion guarantees
+        run: python -m unittest discover -s tests -p 'test_mikuni_replay_transport_probe.py' -v
+      - name: Install ephemeral browser runtime
+        run: |
+          python -m pip install --disable-pip-version-check playwright==1.55.0
+          python -m playwright install --with-deps chromium
+      - name: Inspect official Mikuni replay page without media downloads
+        run: |
+          python scripts/mikuni_replay_transport_probe.py --date 2026-10-28 --race 1 --out /tmp/boatlabs-mikuni-transport-audit.json
+          python -m json.tool /tmp/boatlabs-mikuni-transport-audit.json >/dev/null
+          # An exit code of 0 here only means the safe probe ran.
+          # A discovered manifest URL is NOT a decoded race video.
+          # Never print request URLs, query tokens, cookies, stream bodies or video frames.

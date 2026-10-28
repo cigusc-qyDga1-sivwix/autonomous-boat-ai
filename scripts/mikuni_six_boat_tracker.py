@@ -79,6 +79,10 @@ def validate_seeds(annotations, *, sha256, actual_size):
     if (isinstance(interval,bool) or not isinstance(interval,(float,int))
         or not math.isfinite(interval) or not .1<=interval<=3.0):
         raise ValueError("seed_sample_interval_invalid")
+    offset=annotations.get("clip_start_seconds",0)
+    if (isinstance(offset,bool) or not isinstance(offset,(int,float)) or
+        not math.isfinite(offset) or not 0<=offset<=300):
+        raise ValueError("seed_clip_start_invalid")
     if annotations.get("reference_frame_index")!=0:
         raise ValueError("seed_reference_not_first_frame")
     boats=annotations.get("boats")
@@ -126,6 +130,7 @@ def validate_seeds(annotations, *, sha256, actual_size):
         "venue_code":SOURCE_VENUE_CODE,"race":race,"event_date":annotations["event_date"],
         "source_sha256":sha256,"width":width,"height":height,
         "interval_s":float(interval),
+        "clip_start_seconds":float(offset),
         "boats":[coords[i] for i in range(1,7)],
         "landmarks":px,
     }
@@ -292,6 +297,7 @@ def track_seeded_frames(jpeg_frames,annotations,source_sha256, *, times=None):
         "source_sha256":source_sha256,
         "event_date":seeds["event_date"],"venue_code":"10","race":seeds["race"],
         "frames_seen":total,"camera_stabilized_frames":stabilized,
+        "clip_start_seconds":seeds["clip_start_seconds"],
         "seed_annotated_boats":6,
         "candidate_fully_tracked_boats":full,
         "unverified_tracks":summary,

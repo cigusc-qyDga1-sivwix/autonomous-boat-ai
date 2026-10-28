@@ -20,7 +20,7 @@ permissions:
 jobs:
   offline-unit-tests:
     runs-on: ubuntu-24.04
-    timeout-minutes: 4
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -32,3 +32,8 @@ jobs:
           python -m unittest discover -s tests -p 'test_mikuni_replay_transport_probe.py' -v
       - name: Check Bash script syntax, no Docker execution
         run: bash -n scripts/check_mikuni_domestic.sh
+      - name: Build non-root portable Docker image and smoke-test Chromium offline
+        run: |
+          docker build -f docker/mikuni-domestic-check/Dockerfile -t boatlab-mikuni-domestic-check .
+          docker run --rm --read-only --tmpfs /tmp:rw,nosuid,size=512m --tmpfs /home/pwuser:rw,nosuid,size=256m --shm-size=512m --memory=1536m --cpus=2 --cap-drop=ALL --security-opt=no-new-privileges --pids-limit=256 \
+            --entrypoint python boatlab-mikuni-domestic-check -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); b=p.chromium.launch(headless=True); print(b.version); b.close(); p.stop()"

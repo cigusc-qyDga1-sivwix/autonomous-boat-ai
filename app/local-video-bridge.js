@@ -92,7 +92,7 @@ function buildMikuniSeedLibrary(audit,source_sha256){
  // human-labelled first-frame seeds; not proof of racer ID or water calibration.
  if(!audit||audit.schema!=='boatlabs.local_video_frame_bridge.v0.1'||
     audit.venue!=='三国'||audit.source_type!=='user_local_file'||
-    !/^20\\d{2}-\\d{2}-\\d{2}$/.test(audit.date||'')||
+    !/^20\d{2}-\d{2}-\d{2}$/.test(audit.date||'')||
     !Number.isInteger(audit.race)||audit.race<1||audit.race>12)
    throw Error('mikuni_authorized_file_and_race_required');
  const sha=String(source_sha256||'').trim().toLowerCase();

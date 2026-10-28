@@ -127,3 +127,15 @@ WindowsのJLC実DOM構造をCIで監査した結果、従来の `img[src*="1R.pn
 国内Windowsでの通常操作の成功と、隔離したヘッドレスEdgeでのAPIアクセス成功とは**別**。映像のバイト・フレーム・6艇識別の検証は依然0件。自動でログイン情報を読み出さず、制限回避もしない。
 
 ユーザーは従来の `check_mikuni_edge_latest.ps1` をmainから更新して実行し、`race_click_status`, `new_tab_internal_kind`, `new_tab_url_type`, `playback_api_statuses` の4項目のみ共有。恒久的なPC設定変更やDockerは不要。
+
+## 2026-10-28 追加診断：通常表示Edgeとの比較（未実機検証）
+
+既存のヘッドレス診断で新タブが`BROWSER_INTERNAL`となる一方、利用者の通常Edgeでは同レースを手動再生できた。ブラウザ表示モードによる違いを切り分けるため、オプション`-VisibleEdge`を追加。**通常操作に使っているEdgeに接続せず、毎回一時プロフィールの別Edgeウィンドウを起動**する。Cookieや保存ログイン情報は引き継がない。動画・フレームは保存しない。
+
+同じGitHubの最新`.ps1`をダウンロードし、ダウンロードフォルダで次を実行する：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\check_mikuni_edge_nodocker.ps1 -Date 2026-10-28 -Race 1 -VisibleEdge
+```
+
+比較指標は`edge_start_mode`（`VISIBLE_ISOLATED` / `HEADLESS_ISOLATED`）、`race_click_status`、`new_tab_url_type`、`new_tab_internal_kind`、`playback_api_statuses`。新タブへの接続条件が同じになるかを確かめるための**試験機能**で、Windows実機での成功はまだ確認していない。通常ブラウザのCookieを抜き出したり、配信制限を回避したりしない。共有する際は動画のURL全文・クエリ・Cookie・トークンを貼らない。

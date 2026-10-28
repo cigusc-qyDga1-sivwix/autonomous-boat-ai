@@ -2,6 +2,18 @@
 
 **2026-10-28**: BOAT LAB利用者が「三国には個人利用・動画の自動保存・AI解析について確認し、問題ないとの回答を得た。動画は無断転載しない」と申告。**書面や提供元の直接動画URLは未取得**であり、ここにある記録は「使用者の申告」であって許諾書の代わりではない。
 
+## 2026-10-28：YouTubeチャンネルの404診断と公式APIフォールバック
+
+三国公式ページの「YouTube LIVE」は、運営が指定するチャンネルの **`https://www.youtube.com/channel/UCu-yP6WJQ0zcx5nmWhxvJEg/live`** にリンクする。チャンネル自体は有効で、2026年10月28日には「スポーツクラブ新田塚アーク杯 最終日 8:00〜」のライブ配信予定がBOATCASTにも確認された。
+
+しかし、GitHub Actionsからチャンネル公開Atom `feeds/videos.xml?channel_id=...` の取得は HTTP 404 が発生した。YouTubeのRSSで一時的な404問題が過去にも報告されており、**404だけでチャンネル不存在と断定しない**。新しい自動発見は (1) `www.youtube.com` RSS、(2) `youtube.com` RSS、(3) 任意の**公式YouTube Data API v3**という順序。配信タイトルが「レース」「LIVE」ではなく大会名と「最終日」だけの場合もレース候補として認識する。
+
+**APIバックアップを有効にするには**、GitHub `Settings → Secrets and variables → Actions` に Repository secret `MIKUNI_YOUTUBE_DATA_API_KEY` を設定する。Google Cloudで有効化した YouTube Data API v3 のキーが必要で、利用者の手動登録が必要。`channels.list(part=contentDetails,id=<公式ID>)`から公式アップロードプレイリストを特定し、`playlistItems.list`で公開**メタデータ**を読む。これらは低クォータの正規APIメソッドで、取得できるのは動画ID・公開日時・タイトル等のみ（動画本体の配布APIではない）。キー未設定でもRSSチェック・既存の展示収集は継続。
+
+**動画データ取得の別の障害**：三国から個人研究利用の許可があっても、YouTubeや配信会社の利用条件と動画ファイル提供方法は別である。YouTube動画を非公認のダウンロードツールで収集する処理は実装していない。機械解析の実動画データが必要なら、権利者が直接交付するMP4ファイルや承認済みHTTPS提供URLを `MIKUNI_VIDEO_SOURCE_TEMPLATE` に設定する。書き込む生動画はCIの一時領域のみ、元動画公開・配布なし。
+
+**もう一つの参考経路**：<https://boatrace-replay.jp/> にはログイン式の「動画共有システム」が存在する。ただし三国に利用権限があるシステムだと確認できたわけではないため、無断ログイン・認証突破・推測リクエストはしない。提供元の協力が得られたときだけ検討する。
+
 ## 追加検証：2025年4月1日改定の三国公式規程と正規の公開経路
 
 公式の新しい規程 `https://www.boatrace-mikuni.jp/uploads/cdn/faq/files/20250401_race_eizo.pdf` により、**映像使用が認められる公開元は三国の公式YouTubeチャンネル**と指定されていることを確認した：

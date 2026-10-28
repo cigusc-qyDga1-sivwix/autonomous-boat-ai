@@ -332,6 +332,12 @@ def collect(day,archive,previous,template,hosts,*,now=None,
         "summary":{
             "exhibition_rows_seen":len(known),
             "video_races_observed":sum(v.get("status")=="MEDIA_OBSERVED_PIXEL_RESEARCH_ONLY" for v in races.values()),
+            "seeded_motion_candidate_races":sum(
+                (v.get("video_observation") or {}).get("seeded_tracking_status")=="UNVERIFIED_CANDIDATE_COMPUTED"
+                for v in races.values()),
+            "full_six_seeded_candidate_races":sum(
+                ((v.get("video_observation") or {}).get("six_boat_seeded_tracking_candidate") or {})
+                  .get("candidate_fully_tracked_boats")==6 for v in races.values()),
             "confirmed_boat_tracks":0,
             "measured_turns":0,
             "measured_post_start_stretches":0,

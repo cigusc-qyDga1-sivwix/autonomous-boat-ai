@@ -12,6 +12,13 @@ assert.match(html,/配信元の条件/);
 assert.match(html,/MEDIA_OBSERVED_PIXEL_RESEARCH_ONLY/);
 assert.match(html,/boatlabs\.mikuni_authorized_video_ingestion\.v1/);
 assert.match(html,/全6艇/);
+assert.match(html,/mikuni-video-shadow-/);
+assert.match(html,/mikuni-motion-stage/);
+assert.match(html,/mikuni-shadow-stage/);
+assert.match(html,/loadMikuniVideoShadow/);
+assert.match(html,/boatlabs\.mikuni_video_motion_shadow_v0\.1/);
+assert.match(html,/正式買い目は変更なし/);
+
 assert.match(html,/mikuni-video-catalog-/);
 assert.match(html,/mikuni-official-catalog-status/);
 assert.match(html,/loadMikuniOfficial/);

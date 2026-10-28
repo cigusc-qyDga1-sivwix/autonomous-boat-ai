@@ -172,7 +172,7 @@ async function loadMikuniOfficial(){
   const data=await res.json();
   if(data.schema!=="boatlabs.mikuni_official_youtube_video_catalog.v1" ||
      data.event_date!==DAY || data.channel_id!=="UCu-yP6WJQ0zcx5nmWhxvJEg")throw Error("データ形式が不一致");
-  const ok=data.source_status==="OFFICIAL_CHANNEL_RSS_METADATA_READ";
+  const ok=["OFFICIAL_CHANNEL_RSS_METADATA_READ","OFFICIAL_YOUTUBE_DATA_API_METADATA_READ"].includes(data.source_status);
   status.textContent=(ok?"公式チャンネル公開情報を確認":"公開情報の取得に失敗・未確認")+
     "｜該当候補 "+Number(data.candidate_count||0)+"件｜動画本体の取得 0件｜艇軌道解析 0艇";
   listings.textContent="";

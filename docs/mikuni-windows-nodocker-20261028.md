@@ -113,3 +113,17 @@ WindowsのJLC実DOM構造をCIで監査した結果、従来の `img[src*="1R.pn
 - `-LayoutAudit` は安全なHTML構造調査のみでクリック・動画受信せず。主に自動テスト用。
 
 正式予想・収支と元の映像データを変更せず、動画取得と6艇識別の数は実測まで0のまま。
+
+## 2026-10-28 夜｜国内Windowsの新タブがEdge内部画面になる問題
+
+ユーザー実測：JLC公開ページ200、10/28・1Rの厳密一致1件、`race_click_status=CLICKED_EXACT_RACE_VERIFIED_DAY_CONTAINER`、新規タブ2件、`new_tab_url_type=BROWSER_INTERNAL`、再生API GET0、映像取得・解析0。ユーザーの**通常Edgeで同じ公式展示リプレイは手動再生できる**。
+
+原因を切り分けるため、公式HTMLの当該 `a.stream_a` が`href`属性を持たず、インライン`onclick`属性もないことをGitHub Windows Edgeの公開DOM診断で確認。イベントリスナーによる動的挙動などが考えられるが、原因はまだ未確定。
+
+修正版は、これまでの `element.click()`（信頼されたユーザー操作として扱われない場合がある）ではなく、Chromium DevTools Protocol `Input.dispatchMouseEvent` で、**対象日/1Rの唯一のボタンに対するマウス移動→押下→離す操作**を実行。座標は対象要素から直接計算し、範囲を検証。特定日/指定Rの一致が1件でない場合はクリックしない。セルフテストでブラウザ側のクリックイベント `isTrusted === true` を確認。
+
+また、新タブが `BROWSER_INTERNAL` の場合に `new_tab_internal_kind` を追加し、Edgeの新規タブ・Chromiumエラー画面等を区別する。閲覧URL/パス/クエリや認証ヘッダー、Cookie、映像等は保存しない。JLCレースリンクの `race_link_kind`、`race_link_target`、`race_link_has_inline_handler` のような安全なクラス情報のみ表示する。
+
+国内Windowsでの通常操作の成功と、隔離したヘッドレスEdgeでのAPIアクセス成功とは**別**。映像のバイト・フレーム・6艇識別の検証は依然0件。自動でログイン情報を読み出さず、制限回避もしない。
+
+ユーザーは従来の `check_mikuni_edge_latest.ps1` をmainから更新して実行し、`race_click_status`, `new_tab_internal_kind`, `new_tab_url_type`, `playback_api_statuses` の4項目のみ共有。恒久的なPC設定変更やDockerは不要。

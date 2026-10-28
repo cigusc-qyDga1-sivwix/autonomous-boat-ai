@@ -14,6 +14,11 @@ assert.match(html,/boatlabs\.mikuni_authorized_video_ingestion\.v1/);
 assert.match(html,/全6艇/);
 assert.match(html,/mikuni-video-shadow-/);
 assert.match(html,/mikuni-motion-stage/);
+assert.match(html,/seeded_motion_candidate_races/);
+assert.match(html,/full_six_seeded_candidate_races/);
+assert.match(html,/カメラ補正つき6艇候補/);
+assert.match(html,/三国1R｜許可済み動画から6艇/);
+
 assert.match(html,/mikuni-shadow-stage/);
 assert.match(html,/loadMikuniVideoShadow/);
 assert.match(html,/boatlabs\.mikuni_video_motion_shadow_v0\.1/);

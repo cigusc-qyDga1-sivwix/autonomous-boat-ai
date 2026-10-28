@@ -7,7 +7,9 @@
 'use strict';
 const LIMIT_BYTES=250*1024*1024, MAX_FRAMES=24, PIXEL_WIDTH=640;
 const COLORS=['white_candidate','black_candidate','red_candidate','blue_candidate','yellow_candidate','green_candidate'];
-const ID_NAMES=['マーク中心','①艇（人手確認）','②艇（人手確認）','③艇（人手確認）','④艇（人手確認）','⑤艇（人手確認）','⑥艇（人手確認）'];
+const ID_NAMES=['マーク中心','①艇（人手確認）','②艇（人手確認）','③艇（人手確認）','④艇（人手確認）','⑤艇（人手確認）','⑥艇（人手確認）',
+ '岸の固定目標 1','岸の固定目標 2','岸の固定目標 3','岸の固定目標 4','岸の固定目標 5','岸の固定目標 6'];
+const MODE_KEYS=['mark','1','2','3','4','5','6','shore1','shore2','shore3','shore4','shore5','shore6'];
 function validFile(file){
  if(!file||typeof file.size!=='number'||file.size<1||file.size>LIMIT_BYTES)return false;
  return /\.(mp4|mov|m4v|webm|avi)$/i.test(file.name||'');
@@ -85,6 +87,53 @@ function buildAudit(frames,{date,venue,race,source_type}={}){
   note:'Color candidates are NOT boat IDs. Frame observations are local, unverified and pixel-only; no first-mark clearance in meters.',
  };
 }
+function buildMikuniSeedLibrary(audit,source_sha256){
+ // Source is an explicitly authorized local video. This JSON carries only
+ // human-labelled first-frame seeds; not proof of racer ID or water calibration.
+ if(!audit||audit.schema!=='boatlabs.local_video_frame_bridge.v0.1'||
+    audit.venue!=='三国'||audit.source_type!=='user_local_file'||
+    !/^20\d{2}-\d{2}-\d{2}$/.test(audit.date||'')||
+    !Number.isInteger(audit.race)||audit.race<1||audit.race>12)
+   throw Error('mikuni_authorized_file_and_race_required');
+ const sha=String(source_sha256||'').trim().toLowerCase();
+ if(!/^[0-9a-f]{64}$/.test(sha))throw Error('source_sha256_required');
+ const frames=audit.frames;
+ if(!Array.isArray(frames)||frames.length<2)throw Error('at_least_two_frames_required');
+ const a=frames[0],b=frames[1];
+ if(!Number.isInteger(a.width)||!Number.isInteger(a.height)||
+    a.width<120||a.height<80||!Number.isFinite(a.t_seconds)||
+    !Number.isFinite(b.t_seconds)||
+    Math.abs((b.t_seconds-a.t_seconds)-.5)>.001)
+   throw Error('source_frame_size_or_half_second_interval_invalid');
+ if(a.t_seconds<0||a.t_seconds>300)throw Error('clip_start_out_of_range');
+ const marks=a.manual_marks||{};
+ const checked=(key)=>{
+   const point=marks[key];
+   if(!Array.isArray(point)||point.length!==2||!point.every(Number.isFinite)||
+      point[0]<8||point[0]>=a.width-8||point[1]<8||point[1]>=a.height-8)
+      throw Error('missing_or_outside_seed_'+key);
+   return point.map(x=>Math.round(x*100)/100);
+ };
+ const boats=Array.from({length:6},(_,i)=>({lane:i+1,center_px:checked(String(i+1))}));
+ const static_landmarks=Array.from({length:6},(_,i)=>({id:'shore_'+(i+1),
+                                      center_px:checked('shore'+(i+1))}));
+ const record={
+   schema:'boatlabs.mikuni_video_seed_annotations.v0.1',
+   event_date:audit.date,venue_code:'10',race:audit.race,
+   source_sha256:sha,reference_frame_index:0,
+   clip_start_seconds:a.t_seconds,sample_interval_s:.5,
+   frame_size:{width:a.width,height:a.height},
+   boats,static_landmarks,
+   annotations_provenance:'USER_SEEDED_PIXEL_ONLY_ID_AND_METRE_CALIBRATION_NOT_VERIFIED',
+ };
+ return {
+   schema:'boatlabs.mikuni_seed_library.v0.1',
+   event_date:audit.date,venue_code:'10',records:[record],
+   video_content_included:false,
+   verified_boat_id_count:0,
+   note:'Six manual boat seed positions and six static image landmarks only; not racer ID proof, not speed in metres, not a final forecast.',
+ };
+}
 function secondsFor(duration,start,interval,maxFrames=MAX_FRAMES){
  if(!Number.isFinite(duration)||duration<=0)throw Error('video_duration_unavailable');
  if(!Number.isFinite(start)||start<0||start>=duration)throw Error('start_out_of_range');
@@ -110,14 +159,19 @@ function mount(doc,win){
   start=e('bridge-start'),interval=e('bridge-interval'),
   status=e('bridge-status'),frameList=e('bridge-frame-list'),
   frameCanvas=e('bridge-frame-canvas'),frameTitle=e('bridge-frame-title'),
-  mode=e('bridge-annotation-mode'),download=e('bridge-export'),json=e('bridge-json');
+  mode=e('bridge-annotation-mode'),download=e('bridge-export'),json=e('bridge-json'),
+  seedExport=e('bridge-seed-export'),videoSha=e('bridge-source-sha');
  if(!local||!preview||!screen||!frameCanvas||!permission)return false;
  const ctx=frameCanvas.getContext('2d',{willReadFrequently:true});
  let mediaUrl=null,stream=null,frameData=[],selected=0,capturing=false,sourceType=null;
  const sampleCanvas=doc.createElement('canvas');
  const sampleCtx=sampleCanvas.getContext('2d',{willReadFrequently:true});
  function notify(msg,error=false){status.textContent=msg;status.classList.toggle('error',error);}
- function disable(){extract.disabled=!(permission.checked&&preview.readyState>=2&&!capturing);download.disabled=!frameData.length;}
+ function disable(){
+  extract.disabled=!(permission.checked&&preview.readyState>=2&&!capturing);
+  download.disabled=!frameData.length;
+  if(seedExport)seedExport.disabled=!frameData.length||!permission.checked;
+ }
  function endStream(){
   if(stream){for(const t of stream.getTracks())t.stop();stream=null;}
   stop.disabled=true;
@@ -299,17 +353,45 @@ function mount(doc,win){
   setTimeout(()=>win.URL.revokeObjectURL(u),1000);
   notify('フレーム画像を含まない研究JSONを、この端末へ書き出しました。');
  });
+ if(seedExport){
+  seedExport.addEventListener('click',async()=>{
+   if(!permission.checked||sourceType!=='user_local_file'||
+      !frameData.length){notify('三国の許可済みローカル動画が必要です。',true);return;}
+   const file=local.files?.[0];
+   let sha=videoSha?.value?.trim()?.toLowerCase()||'';
+   try{
+    if(!sha){
+     if(!file||file.size>120*1024*1024||!win.crypto?.subtle?.digest)
+      throw Error('SHA256を入力してください。120MB以下の動画なら端末内で計算できます。');
+     notify('動画のSHA256を端末内で計算中。ファイルはアップロードしません。');
+     const hashed=await win.crypto.subtle.digest('SHA-256',await file.arrayBuffer());
+     sha=Array.from(new Uint8Array(hashed),b=>b.toString(16).padStart(2,'0')).join('');
+     if(videoSha)videoSha.value=sha;
+    }
+    const audit=buildAudit(frameData,{...raceParams(win.location),source_type:'user_local_file'});
+    const seeds=buildMikuniSeedLibrary(audit,sha);
+    const blob=new win.Blob([JSON.stringify(seeds,null,2)],{type:'application/json'});
+    const u=win.URL.createObjectURL(blob);
+    const a=doc.createElement('a');a.href=u;
+    a.download='mikuni-6boat-seeds-'+audit.date+'.json';
+    doc.body.append(a);a.click();a.remove();
+    setTimeout(()=>win.URL.revokeObjectURL(u),1000);
+    notify('艇6点・岸6点の未検証の初期位置をJSONとして端末に保存。動画は送信・保存しません。');
+   }catch(err){notify('6艇の初期位置データが未完成：'+(err?.message||'確認不足'),true);}
+  });
+ }
  win.addEventListener?.('pagehide',()=>{endStream();endFile();});
  local.disabled=true;screen.disabled=true;extract.disabled=true;download.disabled=true;stop.disabled=true;
  ID_NAMES.forEach((name,i)=>{
-  const o=doc.createElement('option');o.value=i?' '+i:'mark';o.value=i?String(i):'mark';o.textContent=name;mode.append(o);
+  const o=doc.createElement('option');o.value=MODE_KEYS[i];o.textContent=name;mode.append(o);
  });
  const race=raceParams(win.location);
  if(race.venue&&race.race)notify((race.date||'対象日未設定')+' '+race.venue+' '+race.race+'R：動画を選ぶと解析できます。');
  else notify('端末内ファイル、または画面共有から解析を開始できます。');
  return true;
 }
-const api={COLORS,LIMIT_BYTES,MAX_FRAMES,validFile,classify,summarizePixels,summaryFromSamples,buildAudit,secondsFor,raceParams,mount};
+const api={COLORS,ID_NAMES,MODE_KEYS,LIMIT_BYTES,MAX_FRAMES,validFile,classify,summarizePixels,summaryFromSamples,
+ buildAudit,buildMikuniSeedLibrary,secondsFor,raceParams,mount};
 root.BoatLocalVideoBridge=api;
 if(typeof module==='object'&&module.exports)module.exports=api;
 if(root.document)mount(root.document,root);

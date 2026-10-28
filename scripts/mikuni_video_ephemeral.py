@@ -31,8 +31,8 @@ from scripts.mikuni_video_autocollect import (
 FRAME_LIMIT=48
 FFMPEG_TIMEOUT_S=35
 JPEG_OUTPUT_LIMIT=16*1024*1024
-SAMPLE_GAP_SECONDS=1.5
-RESEARCH_MODEL="mikuni-ephemeral-color-candidate-v0.1"
+SAMPLE_GAP_SECONDS=0.5
+RESEARCH_MODEL="mikuni-ephemeral-color-and-seeded-klt-v0.2"
 COLORS={
     "red_candidate":[((0,90,70),(10,255,255)),((170,90,70),(179,255,255))],
     "blue_candidate":[((95,90,60),(130,255,255))],
@@ -90,7 +90,7 @@ def _split_jpegs(jpeg_stream):
     return images
 
 
-def decode_in_memory(blob, *, runner=subprocess.run):
+def decode_in_memory(blob, *, runner=subprocess.run, start_seconds=0):
     """FFmpeg reads from stdin; scaled JPEG frames from stdout, never a file.
 
     FFmpeg executable must be installed on the runner. Results are capped.
@@ -98,10 +98,14 @@ def decode_in_memory(blob, *, runner=subprocess.run):
     """
     if not isinstance(blob,bytes) or not blob or len(blob)>MAX_VIDEO_BYTES or not _media_magic(blob[:32]):
         raise ValueError("not_recognized_direct_video_container")
+    if (isinstance(start_seconds,bool) or not isinstance(start_seconds,(int,float))
+        or not math.isfinite(start_seconds) or not 0<=start_seconds<=300):
+        raise ValueError("clip_start_seconds_invalid")
     args=["ffmpeg","-hide_banner","-loglevel","error",
           "-nostdin","-i","pipe:0",
           "-an","-sn","-dn",
-          "-vf","fps=2/3,scale='min(640,iw)':-2",
+          "-ss",f"{start_seconds:.3f}",
+          "-vf","fps=2,scale='min(640,iw)':-2",
           "-frames:v",str(FRAME_LIMIT),
           "-f","image2pipe","-vcodec","mjpeg","pipe:1"]
     try:
@@ -206,13 +210,52 @@ def numerical_motion_candidates(jpeg_images):
     }
 
 
-def analyze_bytes(blob):
-    # Explicitly drop JPEG bytes when the function returns.
-    return numerical_motion_candidates(decode_in_memory(blob))
+def analyze_bytes(blob, *, seed_record=None, source_sha256=None):
+    """Sample once; optionally add seeded candidate tracking after pixel audit.
+
+    Initial boat labels are supplied, NOT automatically verified racer IDs.
+    Invalid seeds become a safe research warning, never official motion data.
+    """
+    clip_start=0
+    if seed_record is not None:
+        clip_start=seed_record.get("clip_start_seconds",0) if isinstance(seed_record,dict) else 0
+        interval=seed_record.get("sample_interval_s") if isinstance(seed_record,dict) else None
+        if (isinstance(interval,bool) or not isinstance(interval,(int,float)) or
+            abs(interval-SAMPLE_GAP_SECONDS)>.0001):
+            raise ValueError("annotation_sample_interval_does_not_match_decoder")
+    images=decode_in_memory(blob,start_seconds=clip_start)
+    audit=numerical_motion_candidates(images)
+    if seed_record is not None:
+        try:
+            from scripts.mikuni_six_boat_tracker import track_seeded_frames
+            candidate=track_seeded_frames(images,seed_record,source_sha256)
+            audit["six_boat_seeded_tracking_candidate"]=candidate
+            audit["seeded_tracking_status"]="UNVERIFIED_CANDIDATE_COMPUTED"
+        except (ValueError,RuntimeError,TypeError,KeyError) as exc:
+            audit["seeded_tracking_status"]="SEED_INVALID_OR_TRACKING_UNAVAILABLE"
+            audit["seeded_tracking_error_class"]=type(exc).__name__
+    else:
+        audit["seeded_tracking_status"]="NO_SIX_BOAT_SEEDS"
+    return audit
+
+
+def select_seed_record(seed_library,day,race,video_sha):
+    """Never apply a seed set to another venue/date/race/video digest."""
+    if (not isinstance(seed_library,dict)
+        or seed_library.get("schema")!="boatlabs.mikuni_seed_library.v0.1"
+        or seed_library.get("event_date")!=day
+        or seed_library.get("venue_code")!="10"):
+        return None
+    matches=[r for r in seed_library.get("records",[]) if
+             isinstance(r,dict) and r.get("race")==race and
+             r.get("event_date")==day and r.get("venue_code")=="10"
+             and r.get("source_sha256")==video_sha]
+    return matches[0] if len(matches)==1 else None
 
 
 def collect(day,archive,previous,template,hosts,*,now=None,
-            receiver=receive_approved_video,analyzer=analyze_bytes):
+            receiver=receive_approved_video,analyzer=analyze_bytes,
+            seed_library=None):
     """Incremental observation without retaining raw video, tracks or money."""
     datetime.strptime(day,"%Y-%m-%d")
     now=now or datetime.now(timezone.utc)
@@ -225,21 +268,40 @@ def collect(day,archive,previous,template,hosts,*,now=None,
     races={}
     for race in range(1,13):
         r=str(race)
-        if isinstance(old.get(r),dict) and old[r].get("status")=="MEDIA_OBSERVED_PIXEL_RESEARCH_ONLY":
-            races[r]=old[r]
+        old_record=old.get(r) if isinstance(old.get(r),dict) else None
+        eligible_reprocess=(old_record and
+            old_record.get("status")=="MEDIA_OBSERVED_PIXEL_RESEARCH_ONLY"
+            and isinstance(old_record.get("source_sha256"),str)
+            and select_seed_record(seed_library,day,race,old_record["source_sha256"]) is not None
+            and (old_record.get("video_observation") or {}).get("seeded_tracking_status")!="UNVERIFIED_CANDIDATE_COMPUTED")
+        if old_record and old_record.get("status")=="MEDIA_OBSERVED_PIXEL_RESEARCH_ONLY" and not eligible_reprocess:
+            races[r]=old_record
             continue
         if race not in known:
             races[r]={"status":"AWAITING_EXHIBITION_NUMERIC_RESEARCH_ROW"}
             continue
         if not template or not hosts:
-            races[r]={"status":"AUTHORIZED_SOURCE_CONFIGURATION_MISSING"}
+            if old_record and old_record.get("status")=="MEDIA_OBSERVED_PIXEL_RESEARCH_ONLY":
+                races[r]={**old_record,"seed_reprocess_status":"AUTHORIZED_SOURCE_NOT_CONFIGURED"}
+            else:
+                races[r]={"status":"AUTHORIZED_SOURCE_CONFIGURATION_MISSING"}
             continue
         try:
             address=media_url(template,day,race,hosts)
             blob,metadata=receiver(address,hosts)
             if not isinstance(blob,bytes) or not _media_magic(blob[:32]):
                 raise ValueError("not_recognized_direct_video_container")
-            stats=analyzer(blob)
+            if eligible_reprocess and metadata["sha256"]!=old_record["source_sha256"]:
+                races[r]={**old_record,"seed_reprocess_status":"VIDEO_SOURCE_SHA_CHANGED_NO_REPROCESS"}
+                continue
+            seed=select_seed_record(seed_library,day,race,metadata["sha256"])
+            if seed is None:
+                stats=analyzer(blob)
+            elif analyzer is analyze_bytes:
+                stats=analyzer(blob,seed_record=seed,source_sha256=metadata["sha256"])
+            else:
+                # Test replacements cannot claim to produce validated tracks.
+                stats=analyzer(blob)
             # Never write binary source or decoded frames to Git or log URL.
             del blob
             races[r]={
@@ -253,6 +315,9 @@ def collect(day,archive,previous,template,hosts,*,now=None,
                 "not_formal_frozen_forecast":True,
             }
         except (HTTPError,URLError,ValueError,RuntimeError,OSError,TimeoutError,KeyError,TypeError) as exc:
+            if eligible_reprocess:
+                races[r]={**old_record,"seed_reprocess_status":"REPROCESS_UNAVAILABLE_OR_ERROR"}
+                continue
             error=_reason(exc)
             if error=="COLLECTOR_FAILED_REDACTED" or error=="VIDEO_VALIDATION_FAILED":
                 error="VIDEO_SOURCE_OR_DECODE_UNAVAILABLE"
@@ -270,6 +335,12 @@ def collect(day,archive,previous,template,hosts,*,now=None,
         "summary":{
             "exhibition_rows_seen":len(known),
             "video_races_observed":sum(v.get("status")=="MEDIA_OBSERVED_PIXEL_RESEARCH_ONLY" for v in races.values()),
+            "seeded_motion_candidate_races":sum(
+                (v.get("video_observation") or {}).get("seeded_tracking_status")=="UNVERIFIED_CANDIDATE_COMPUTED"
+                for v in races.values()),
+            "full_six_seeded_candidate_races":sum(
+                ((v.get("video_observation") or {}).get("six_boat_seeded_tracking_candidate") or {})
+                  .get("candidate_fully_tracked_boats")==6 for v in races.values()),
             "confirmed_boat_tracks":0,
             "measured_turns":0,
             "measured_post_start_stretches":0,
@@ -293,7 +364,10 @@ def main(argv=None):
     except (OSError,ValueError):previous=None
     template=os.environ.get("MIKUNI_VIDEO_SOURCE_TEMPLATE","").strip()
     hosts=os.environ.get("MIKUNI_VIDEO_ALLOWED_HOSTS","").split(",")
-    result=collect(args.date,archive,previous,template,hosts)
+    annotations=Path(f"app/data/experiments/mikuni-6boat-seeds-{args.date}.json")
+    try:seed_library=json.loads(annotations.read_text(encoding="utf-8"))
+    except (OSError,ValueError):seed_library=None
+    result=collect(args.date,archive,previous,template,hosts,seed_library=seed_library)
     dest.parent.mkdir(parents=True,exist_ok=True)
     if not dest.exists() or dest.read_text(encoding="utf-8")!=json.dumps(result,ensure_ascii=False,indent=2)+"\n":
         output=dest.with_suffix(".tmp")

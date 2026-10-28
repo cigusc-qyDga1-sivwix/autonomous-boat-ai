@@ -7,10 +7,12 @@ on:
     paths:
       - 'scripts/mikuni_video_autocollect.py'
       - 'scripts/mikuni_video_ephemeral.py'
+      - 'scripts/mikuni_six_boat_tracker.py'
       - 'scripts/mikuni_video_shadow.py'
       - 'scripts/mikuni_official_video_catalog.py'
       - 'tests/test_mikuni_video_autocollect.py'
       - 'tests/test_mikuni_video_motion_pipeline.py'
+      - 'tests/test_mikuni_six_boat_tracker.py'
       - 'tests/test_mikuni_official_video_catalog.py'
       - '.github/workflows/mikuni-authorized-video.yml'
   schedule:
@@ -49,6 +51,7 @@ jobs:
           python -m compileall -q scripts/mikuni_video_autocollect.py
           python -m unittest discover -s tests -p test_mikuni_video_autocollect.py
           python -m unittest discover -s tests -p test_mikuni_video_motion_pipeline.py
+          python -m unittest discover -s tests -p test_mikuni_six_boat_tracker.py
           python -m unittest discover -s tests -p test_mikuni_official_video_catalog.py
       - name: Discover Mikuni venue-specified official YouTube channel metadata
         run: |

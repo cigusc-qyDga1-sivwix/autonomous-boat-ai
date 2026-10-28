@@ -209,7 +209,7 @@ class SixBoatTrackerTests(unittest.TestCase):
         self.assertEqual(found["races"]["7"]["source_sha256"],SHA)
         self.assertEqual(found["races"]["7"]["seed_reprocess_status"],"AUTHORIZED_SOURCE_NOT_CONFIGURED")
 
-    def test_annotation_sample_interval_mismatch_cannot_publish_pixel_tracks(self):
+    def test_bad_optional_annotation_does_not_block_unattended_analysis(self):
         jpgs=synthetic_scene()
         tagged=seeds()
         # Human labels must match decoder's fixed interval (0.5 s).
@@ -224,8 +224,11 @@ class SixBoatTrackerTests(unittest.TestCase):
                         "https://approved.provider.example/video/{yyyymmdd}/{race2}.avi",
                         ["approved.provider.example"],seed_library=library,
                         receiver=lambda *_:(payload,{"sha256":SHA,"file_size":len(payload),"content_type":"video/x-msvideo"}))
-        self.assertEqual(out["summary"]["video_races_observed"],0)
-        self.assertEqual(out["races"]["7"]["status"],"SOURCE_OR_ANALYSIS_NOT_READY")
+        self.assertEqual(out["summary"]["video_races_observed"],1)
+        audit=out["races"]["7"]["video_observation"]
+        self.assertEqual(audit["automatic_tracking_status"],"AUTOMATIC_CANDIDATES_COMPUTED")
+        self.assertEqual(audit["seeded_tracking_status"],"SEED_INVALID_OR_TRACKING_UNAVAILABLE")
+        self.assertEqual(out["summary"]["confirmed_boat_tracks"],0)
 
     def test_unverified_candidates_cannot_be_promoted_to_shadow_by_schema(self):
         candidate=track_seeded_frames(synthetic_scene(),seeds(),SHA)
@@ -249,3 +252,4 @@ class SixBoatTrackerTests(unittest.TestCase):
 
 if __name__=="__main__":
     unittest.main()
+

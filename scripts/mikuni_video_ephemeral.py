@@ -219,21 +219,11 @@ def numerical_motion_candidates(jpeg_images):
 def analyze_bytes(blob, *, seed_record=None, source_sha256=None):
     """Automatically sample, detect and track; optional historical seed baseline.
 
-    Initial boat labels are supplied, NOT automatically verified racer IDs.
-    Invalid seeds become a safe research warning, never official motion data.
+    Optional historical labels only affect the separate seeded comparison.
+    Invalid historical seeds never block the unattended analysis path.
     """
-    clip_start=0
-    if seed_record is not None:
-        clip_start=seed_record.get("clip_start_seconds",0) if isinstance(seed_record,dict) else 0
-        interval=seed_record.get("sample_interval_s") if isinstance(seed_record,dict) else None
-        if (isinstance(interval,bool) or not isinstance(interval,(int,float)) or
-            abs(interval-SAMPLE_GAP_SECONDS)>.0001):
-            raise ValueError("annotation_sample_interval_does_not_match_decoder")
-    if seed_record is None:
-        preview=decode_in_memory(blob,sample_interval_s=5)
-        starts=propose_clip_starts(preview)
-    else:
-        starts=[clip_start]
+    preview=decode_in_memory(blob,sample_interval_s=5)
+    starts=propose_clip_starts(preview)
     best=None
     for start in starts:
         images=decode_in_memory(blob,start_seconds=start)
@@ -252,8 +242,14 @@ def analyze_bytes(blob, *, seed_record=None, source_sha256=None):
     audit["manual_inputs_required"]=0
     if seed_record is not None:
         try:
+            seed_start=seed_record.get("clip_start_seconds",0) if isinstance(seed_record,dict) else 0
+            interval=seed_record.get("sample_interval_s") if isinstance(seed_record,dict) else None
+            if (isinstance(interval,bool) or not isinstance(interval,(int,float)) or
+                not math.isfinite(interval) or abs(interval-SAMPLE_GAP_SECONDS)>.0001):
+                raise ValueError("annotation_sample_interval_does_not_match_decoder")
             from scripts.mikuni_six_boat_tracker import track_seeded_frames
-            candidate=track_seeded_frames(images,seed_record,source_sha256)
+            seed_images=decode_in_memory(blob,start_seconds=seed_start)
+            candidate=track_seeded_frames(seed_images,seed_record,source_sha256)
             audit["six_boat_seeded_tracking_candidate"]=candidate
             audit["seeded_tracking_status"]="UNVERIFIED_CANDIDATE_COMPUTED"
         except (ValueError,RuntimeError,TypeError,KeyError) as exc:

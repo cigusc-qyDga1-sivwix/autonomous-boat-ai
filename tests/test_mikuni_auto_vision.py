@@ -7,8 +7,11 @@ import subprocess
 import unittest
 from unittest.mock import patch
 
-import cv2
-import numpy as np
+try:
+    import cv2
+    import numpy as np
+except ImportError:
+    cv2 = np = None
 
 from scripts.mikuni_auto_vision import MODEL, analyze_automatic_frames, propose_clip_starts
 from scripts.mikuni_video_ephemeral import analyze_bytes, collect, decode_in_memory
@@ -63,6 +66,7 @@ def receiver(payload):
     return receive
 
 
+@unittest.skipIf(cv2 is None, "CV integration is required by the dedicated vision workflow")
 class AutomaticVisionTests(unittest.TestCase):
     def test_scene_is_selected_after_an_uninformative_intro_without_manual_start(self):
         ok, blank = cv2.imencode(".jpg", np.full((H, W, 3), 75, np.uint8))

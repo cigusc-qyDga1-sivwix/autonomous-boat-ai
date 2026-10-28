@@ -118,6 +118,31 @@ class EphemeralFramePipelineTests(unittest.TestCase):
         self.assertEqual(len(calls),2)
         self.assertNotIn("input",calls[1][1])
 
+    def test_real_ffmpeg_decodes_small_synthetic_avi_in_memory(self):
+        import shutil
+        import subprocess
+        if shutil.which("ffmpeg") is None:
+            self.skipTest("ffmpeg unavailable")
+        result=subprocess.run([
+            "ffmpeg","-hide_banner","-loglevel","error",
+            "-f","lavfi","-i","testsrc=size=160x90:rate=5",
+            "-frames:v","20","-c:v","mjpeg","-f","avi","pipe:1",
+        ],capture_output=True,timeout=12,check=False)
+        if result.returncode!=0:
+            self.skipTest("test MJPEG encoding unavailable")
+        self.assertEqual(result.stdout[:4],b"RIFF")
+        images=decode_in_memory(result.stdout)
+        self.assertGreaterEqual(len(images),2)
+        self.assertLessEqual(len(images),FRAME_LIMIT)
+        try:
+            import cv2
+        except ImportError:
+            return
+        metrics=numerical_motion_candidates(images)
+        self.assertGreater(metrics["sampled_frames"],0)
+        self.assertEqual(metrics["confirmed_boat_tracks"],0)
+        self.assertFalse(metrics["calibrated_water_plane"])
+
     def test_no_source_means_no_download_or_faked_six_boats(self):
         result=collect(DAY,archive(),None,None,[],now=NOW)
         self.assertEqual(result["summary"]["video_races_observed"],0)

@@ -98,6 +98,26 @@ class EphemeralFramePipelineTests(unittest.TestCase):
         self.assertEqual(kw["input"][4:8],b"ftyp")
         self.assertFalse(any(x.endswith(".mp4") for x in cmd))
 
+    def test_mp4_seekable_ram_fd_fallback_does_not_create_disk_video(self):
+        import os
+        if not hasattr(os,"memfd_create"):
+            self.skipTest("Linux anonymous RAM fd unavailable")
+        calls=[]
+        def ffmpeg(args,**kwargs):
+            calls.append((args,kwargs))
+            if len(calls)==1:
+                return SimpleNamespace(returncode=1,stdout=b"",stderr=b"requires seek")
+            # Verify the byte source is an anonymous RAM fd, not a disk file.
+            self.assertTrue(any("/proc/self/fd/" in arg for arg in args))
+            fd=kwargs["pass_fds"][0]
+            self.assertEqual(os.read(fd,4),b"\\0\\0\\0\\x18")
+            return SimpleNamespace(returncode=0,stdout=b"\\xff\\xd8ok\\xff\\xd9",stderr=b"")
+        source=b"\\0\\0\\0\\x18ftypisom\\0\\0\\0\\0"
+        frames=decode_in_memory(source,runner=ffmpeg)
+        self.assertEqual(len(frames),1)
+        self.assertEqual(len(calls),2)
+        self.assertNotIn("input",calls[1][1])
+
     def test_no_source_means_no_download_or_faked_six_boats(self):
         result=collect(DAY,archive(),None,None,[],now=NOW)
         self.assertEqual(result["summary"]["video_races_observed"],0)

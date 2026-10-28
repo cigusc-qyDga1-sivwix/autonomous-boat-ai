@@ -2,6 +2,18 @@
 
 **2026-10-28**: BOAT LAB利用者が「三国には個人利用・動画の自動保存・AI解析について確認し、問題ないとの回答を得た。動画は無断転載しない」と申告。**書面や提供元の直接動画URLは未取得**であり、ここにある記録は「使用者の申告」であって許諾書の代わりではない。
 
+## 追加検証：2025年4月1日改定の三国公式規程と正規の公開経路
+
+公式の新しい規程 `https://www.boatrace-mikuni.jp/uploads/cdn/faq/files/20250401_race_eizo.pdf` により、**映像使用が認められる公開元は三国の公式YouTubeチャンネル**と指定されていることを確認した：
+`https://www.youtube.com/channel/UCu-yP6WJQ0zcx5nmWhxvJEg`
+
+ユーザーは三国場から「個人研究の自動保存・AI解析に問題なし」と説明されたと申告している。ただし、その口頭説明だけでは **YouTube利用規約に基づくYouTubeからの動画ダウンロード権限**や、JLCの配信サーバーに対する自動取得権限を証明できない。現時点で、適法な動画**ファイル**取得・解析成功は0件。
+
+- 公式YouTube公開情報（Atom/RSS）だけは`scripts/mikuni_official_video_catalog.py`で定期確認。動画名・動画ID・公開日・公式再生URL候補を記録し、**動画や動画フレームは一切取得しない**。
+- `app/data/experiments/mikuni-video-catalog-YYYY-MM-DD.json`に監査を保存する。`source_status=OFFICIAL_CHANNEL_RSS_METADATA_READ`は公開**メタデータ**の取得成功であり映像ファイル取得成功と同義ではない。
+- `MIKUNI_VIDEO_SOURCE_TEMPLATE`は、YouTubeの再生URLやJLCリプレイのURLを入れる欄ではない。**公開元・配信事業者が実際に許可した直接動画ファイルのHTTPS提供先があるときだけ**設定する。公式規程で許される媒体に限定し、別提供元の例外利用が認められる場合はその明示的な確認が必要。
+- 正式な実映像解析への最短ルートは三国が保有する動画の**直接提供**または明示的に承認した動画ファイル取得API。動画のIDをYouTubeの公式チャンネルから発見できても、映像バイトを取得するAPIとは異なる。
+
 ## 技術面の結論
 
 三国の公式ページ：<https://www.boatrace-mikuni.jp/>、展示リプレイ案内：<https://livebb.jlc.ne.jp/bb_top/sp_bb/tvod_10.php>。

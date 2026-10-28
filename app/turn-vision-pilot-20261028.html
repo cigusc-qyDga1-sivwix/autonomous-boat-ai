@@ -29,6 +29,12 @@ th{background:#1b3b54;position:sticky;top:0}.meta{font-size:.85rem;color:#b5ccdd
 <p>実映像の自動取得・機械解析の条件と、正しい6艇識別・水面校正がそろっていないため、今は全艇のターンとスタート後の伸びを未測定とする。公式ST、展示タイム、着順から旋回軌道や加速を捏造しない。結果を正式予想に混入させない。</p></div>
 <section class="card" aria-label="三国の動画自動収集" id="mikuni-auto-section">
 <h2>🌅 三国｜自動動画研究の収集状況</h2>
+<div class="note" style="margin:12px 0">
+<strong>三国公式YouTubeの動画公開情報</strong>
+<p id="mikuni-official-catalog-status" class="meta">公式チャンネルの公開情報を確認中…</p>
+<div id="mikuni-official-catalog-entries" class="meta"></div>
+<p class="meta"><a href="https://www.youtube.com/channel/UCu-yP6WJQ0zcx5nmWhxvJEg" target="_blank" rel="noopener noreferrer">三国の公式YouTubeチャンネル</a>｜これは公開動画の発見であり、動画の自動保存・艇の識別成功を意味しません。</p>
+</div>
 <p class="meta">ユーザーから三国での個人研究・動画自動保存・AI解析の利用許可を得たと報告あり。BOATCAST・JLCなど別の配信元から動画を取得する場合は、その配信元の条件も必要。</p>
 <p id="mikuni-auto-status" role="status">三国の専用収集記録を確認中…</p>
 <div id="mikuni-auto-races" class="meta"></div>
@@ -86,6 +92,7 @@ let lastData=null;
 let selectedRaceKey=null;
 const path="./data/experiments/turn-video-pilot-"+DAY+".json";
 const mikuniPath="./data/experiments/mikuni-video-auto-"+DAY+".json";
+const mikuniOfficialCatalogPath="./data/experiments/mikuni-video-catalog-"+DAY+".json";
 const el=id=>document.getElementById(id);
 const esc=value=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const sourceUrl=r=>"https://www.boatrace.jp/owpc/pc/race/beforeinfo?rno="+Number(r.race)+"&jcd="+encodeURIComponent(r.venue_code)+"&hd=20261028";
@@ -155,6 +162,34 @@ function show(data){
  el("status").textContent="研究記録の最終更新："+updated+" JST｜"+esc(data.source_status||"状態未確認");
  if(selectedRaceKey && (data.targets||[]).some(r=>r.race_key===selectedRaceKey))detailFor(selectedRaceKey);
 }
+async function loadMikuniOfficial(){
+ const status=el("mikuni-official-catalog-status");
+ const listings=el("mikuni-official-catalog-entries");
+ try{
+  const res=await fetch(mikuniOfficialCatalogPath+"?v="+Date.now(),{cache:"no-store"});
+  if(res.status===404){status.textContent="公式動画の公開情報は未収集。映像本体は未取得。";listings.textContent="";return;}
+  if(!res.ok)throw Error("HTTP "+res.status);
+  const data=await res.json();
+  if(data.schema!=="boatlabs.mikuni_official_youtube_video_catalog.v1" ||
+     data.event_date!==DAY || data.channel_id!=="UCu-yP6WJQ0zcx5nmWhxvJEg")throw Error("データ形式が不一致");
+  const ok=data.source_status==="OFFICIAL_CHANNEL_RSS_METADATA_READ";
+  status.textContent=(ok?"公式チャンネル公開情報を確認":"公開情報の取得に失敗・未確認")+
+    "｜該当候補 "+Number(data.candidate_count||0)+"件｜動画本体の取得 0件｜艇軌道解析 0艇";
+  listings.textContent="";
+  for(const item of (data.candidates||[]).slice(0,6)){
+   if(typeof item.video_id!=="string"||!/^[A-Za-z0-9_-]{11}$/.test(item.video_id))continue;
+   const p=document.createElement("p");
+   const a=document.createElement("a");
+   a.href="https://www.youtube.com/watch?v="+item.video_id;
+   a.target="_blank";a.rel="noopener noreferrer";
+   a.textContent=String(item.title||"公式動画候補").slice(0,180);
+   p.append(a); listings.append(p);
+  }
+ }catch(err){
+  status.textContent="公式動画公開情報の照合に失敗："+err.message;
+  listings.textContent="";
+ }
+}
 async function loadMikuni(){
  const section=el("mikuni-auto-status"), races=el("mikuni-auto-races");
  try{
@@ -179,7 +214,7 @@ async function load(){
   const data=await res.json();
   if(data.schema!=="boatlabs.turn_video_multivenue.v3"||data.event_date!==DAY)throw Error("研究データの形式または日付が不一致");
   show(data);
-  await loadMikuni();
+  await Promise.all([loadMikuni(),loadMikuniOfficial()]);
  }catch(err){el("status").textContent="公開研究記録が未生成、または取得失敗："+err.message;}
 }
 el("reload").addEventListener("click",load);

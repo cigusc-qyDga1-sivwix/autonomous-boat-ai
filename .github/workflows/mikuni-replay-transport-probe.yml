@@ -6,6 +6,8 @@ on:
       - feat/mikuni-streaks-403-diagnostics-20261028
     paths:
       - scripts/mikuni_replay_transport_probe.py
+      - scripts/mikuni_boatcast_public_probe.py
+      - tests/test_mikuni_boatcast_public_probe.py
       - tests/test_mikuni_replay_transport_probe.py
       - .github/workflows/mikuni-replay-transport-probe.yml
   workflow_dispatch:
@@ -24,6 +26,7 @@ jobs:
           python-version: '3.11'
       - name: Test transport classification and non-ingestion guarantees
         run: python -m unittest discover -s tests -p 'test_mikuni_replay_transport_probe.py' -v
+          python -m unittest discover -s tests -p 'test_mikuni_boatcast_public_probe.py' -v
       - name: Install ephemeral browser runtime
         run: |
           python -m pip install --disable-pip-version-check playwright==1.55.0
@@ -35,6 +38,8 @@ jobs:
           echo '=== MOBILE JLC SMARTPHONE PAGE ==='
           python scripts/mikuni_replay_transport_probe.py --date 2026-10-28 --race 1 --inspect-normal-get --mobile-context --out /tmp/boatlabs-mikuni-mobile-transport-audit.json
           python -m json.tool /tmp/boatlabs-mikuni-mobile-transport-audit.json >/dev/null
+          echo '=== BOATCAST ALTERNATIVE OFFICIAL PAGE (NO MEDIA FETCH) ==='
+          python -m scripts.mikuni_boatcast_public_probe --date 2026-10-28 --race 1
           python -m json.tool /tmp/boatlabs-mikuni-transport-audit.json >/dev/null
           # An exit code of 0 here only means the safe probe ran.
           # A discovered manifest URL is NOT a decoded race video.

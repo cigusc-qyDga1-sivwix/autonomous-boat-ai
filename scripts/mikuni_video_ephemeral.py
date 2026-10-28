@@ -90,7 +90,7 @@ def _split_jpegs(jpeg_stream):
     return images
 
 
-def decode_in_memory(blob, *, runner=subprocess.run):
+def decode_in_memory(blob, *, runner=subprocess.run, start_seconds=0):
     """FFmpeg reads from stdin; scaled JPEG frames from stdout, never a file.
 
     FFmpeg executable must be installed on the runner. Results are capped.
@@ -98,9 +98,13 @@ def decode_in_memory(blob, *, runner=subprocess.run):
     """
     if not isinstance(blob,bytes) or not blob or len(blob)>MAX_VIDEO_BYTES or not _media_magic(blob[:32]):
         raise ValueError("not_recognized_direct_video_container")
+    if (isinstance(start_seconds,bool) or not isinstance(start_seconds,(int,float))
+        or not math.isfinite(start_seconds) or not 0<=start_seconds<=300):
+        raise ValueError("clip_start_seconds_invalid")
     args=["ffmpeg","-hide_banner","-loglevel","error",
           "-nostdin","-i","pipe:0",
           "-an","-sn","-dn",
+          "-ss",f"{start_seconds:.3f}",
           "-vf","fps=2,scale='min(640,iw)':-2",
           "-frames:v",str(FRAME_LIMIT),
           "-f","image2pipe","-vcodec","mjpeg","pipe:1"]
@@ -212,7 +216,14 @@ def analyze_bytes(blob, *, seed_record=None, source_sha256=None):
     Initial boat labels are supplied, NOT automatically verified racer IDs.
     Invalid seeds become a safe research warning, never official motion data.
     """
-    images=decode_in_memory(blob)
+    clip_start=0
+    if seed_record is not None:
+        clip_start=seed_record.get("clip_start_seconds",0) if isinstance(seed_record,dict) else 0
+        interval=seed_record.get("sample_interval_s") if isinstance(seed_record,dict) else None
+        if (isinstance(interval,bool) or not isinstance(interval,(int,float)) or
+            abs(interval-SAMPLE_GAP_SECONDS)>.0001):
+            raise ValueError("annotation_sample_interval_does_not_match_decoder")
+    images=decode_in_memory(blob,start_seconds=clip_start)
     audit=numerical_motion_candidates(images)
     if seed_record is not None:
         try:

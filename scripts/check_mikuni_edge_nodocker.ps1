@@ -316,17 +316,18 @@ try {
  }
  const describe=(e,i)=>{
    let n=e;const ancestry=[];
-   for(let k=0;k<8&&n;k++,n=n.parentElement){
+   for(let k=0;k<13&&n;k++,n=n.parentElement){
      let own='';
      for(const child of n.childNodes){
        if(child.nodeType===3)own+=child.nodeValue||'';
      }
      const dates=[...new Set((own.match(/(?:20[0-9]{2}\/)?[0-9]{1,2}\/[0-9]{1,2}/g)||[]))].slice(0,2);
+     const descDates=[...new Set(((n.textContent||'').match(/(?:20[0-9]{2}\/)?[0-9]{1,2}\/[0-9]{1,2}/g)||[]))].slice(0,5);
      ancestry.push({
        tag:n.tagName.toLowerCase(),
        id:(n.id||'').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,35),
        classes:[...(n.classList||[])].slice(0,3).map(s=>s.replace(/[^a-zA-Z0-9_-]/g,'').slice(0,35)),
-       dates
+       dates,descDates
      });
    }
    return {i,visible:visible(e),ancestry};

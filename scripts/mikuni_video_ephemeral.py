@@ -22,7 +22,6 @@ from pathlib import Path
 import subprocess
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, build_opener, HTTPSHandler
-import numpy as np
 
 from scripts.mikuni_video_autocollect import (
     SCHEMA, VENUE_CODE, MAX_VIDEO_BYTES, ACCEPTED_TYPES, StrictRedirect,
@@ -124,6 +123,7 @@ def numerical_motion_candidates(jpeg_images):
     Therefore delta px/s is NOT speed and colours are NOT boat IDs.
     """
     import cv2
+    import numpy as np
     points={name:[] for name in COLORS}
     valid_frames=0
     for i,jpg in enumerate(jpeg_images[:FRAME_LIMIT]):

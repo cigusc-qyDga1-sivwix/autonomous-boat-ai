@@ -1,7 +1,7 @@
 """Offline regression tests: never fetch or save third-party media."""
 import unittest
 
-from scripts.mikuni_replay_transport_probe import new_audit, transport_kind, validate, response_content_kind, run_browser_probe, derive_probe_status, safe_player_error_fields, safe_request_header_presence
+from scripts.mikuni_replay_transport_probe import new_audit, transport_kind, validate, response_content_kind, run_browser_probe, derive_probe_status, safe_player_error_fields, safe_request_header_presence, probable_access_category
 
 
 class TransportClassifierTests(unittest.TestCase):
@@ -100,6 +100,17 @@ class TransportClassifierTests(unittest.TestCase):
         })
         self.assertTrue(all(isinstance(v, bool) for v in flags.values()))
         self.assertFalse(safe_request_header_presence([])["has_api_key_header"])
+
+    def test_probable_geo_category_only_for_exact_403_124(self):
+        self.assertEqual(
+            probable_access_category([{"code": "REQUEST_FAILED", "id": 124, "status": 403}]),
+            "POSSIBLE_GEOGRAPHIC_RESTRICTION_UNCONFIRMED"
+        )
+        self.assertEqual(
+            probable_access_category([{"code": "REQUEST_FAILED", "id": 126, "status": 403}]),
+            "POSSIBLE_PROVIDER_CREDENTIAL_REJECTION_UNCONFIRMED"
+        )
+        self.assertEqual(probable_access_category([]), "CAUSE_UNDETERMINED")
 
     def test_no_success_claims_or_bets(self):
         audit = new_audit("2026-10-28", 6)

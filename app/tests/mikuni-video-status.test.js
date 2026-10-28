@@ -1,0 +1,17 @@
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const html=fs.readFileSync('app/turn-vision-pilot-20261028.html','utf8');
+const page=fs.readFileSync('app/service-worker.js','utf8');
+assert.match(html,/mikuni-video-auto-/);
+assert.match(html,/mikuni-auto-status/);
+assert.match(html,/mikuni-auto-races/);
+assert.match(html,/SOURCE/iu); // Video source separation is explicit in rendered status.
+assert.match(html,/動画取得先の設定待ち/);
+assert.match(html,/配信元の条件/);
+assert.match(html,/MEDIA_OBSERVED_PIXEL_RESEARCH_ONLY/);
+assert.match(html,/boatlabs\.mikuni_authorized_video_ingestion\.v1/);
+assert.match(html,/全6艇/);
+assert.match(html,/映像取込/);
+assert.match(page,/boat-lab-static-v/);
+console.log('Mikuni licensed video source status UI tests PASS');

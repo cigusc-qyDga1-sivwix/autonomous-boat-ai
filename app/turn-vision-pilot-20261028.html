@@ -27,6 +27,13 @@ th{background:#1b3b54;position:sticky;top:0}.meta{font-size:.85rem;color:#b5ccdd
 <p>開催11場から江戸川を除く10場・最大120R。元の唐津・児島・蒲郡を重点研究に残し、追加7場は拡張研究として別管理。①〜⑥の全選手を、共通1マークとスタートラインを基準に評価する研究。展示STとスタート後の伸びは別々に扱います。</p>
 <div class="note"><strong>映像解析の現状：公式映像は未解析</strong>
 <p>実映像の自動取得・機械解析の条件と、正しい6艇識別・水面校正がそろっていないため、今は全艇のターンとスタート後の伸びを未測定とする。公式ST、展示タイム、着順から旋回軌道や加速を捏造しない。結果を正式予想に混入させない。</p></div>
+<section class="card" aria-label="三国の動画自動収集" id="mikuni-auto-section">
+<h2>🌅 三国｜自動動画研究の収集状況</h2>
+<p class="meta">ユーザーから三国での個人研究・動画自動保存・AI解析の利用許可を得たと報告あり。BOATCAST・JLCなど別の配信元から動画を取得する場合は、その配信元の条件も必要。</p>
+<p id="mikuni-auto-status" role="status">三国の専用収集記録を確認中…</p>
+<div id="mikuni-auto-races" class="meta"></div>
+<p class="meta">媒体を公開しない三国専用収集。収集成功数と全6艇の正確な認識数は別集計で、正式予想には接続しない。</p>
+</section>
 <section class="card" aria-label="6艇共通基準の評価設計">
 <h2>解析の二本柱（全艇同じ基準）</h2>
 <div class="cards" style="margin:8px 0 0">
@@ -70,7 +77,7 @@ th{background:#1b3b54;position:sticky;top:0}.meta{font-size:.85rem;color:#b5ccdd
 <div class="table"><table><thead><tr><th>艇</th><th>選手（取得済みの場合）</th><th>ターンマーク基準</th><th>ターン出口</th><th>スタート後0〜5m</th><th>5〜15m</th><th>15〜30m</th><th>伸び比</th></tr></thead><tbody id="boat-detail-rows"></tbody></table></div>
 </section>
 <p class="meta">展示数値・結果はBoatraceCSVを用いた研究用参考データ。公式確定結果の照合とは別。発走前取得を証明できない記録は「事前確認済み」と扱いません。</p>
-<p class="meta">映像視聴は <a href="https://boatcast.jp/" target="_blank" rel="noopener noreferrer">BOATCAST（公式サイト）</a> で行います。無断コピー、埋め込み、自動録画は行いません。</p>
+<p class="meta">映像視聴は <a href="https://boatcast.jp/" target="_blank" rel="noopener noreferrer">BOATCAST（公式サイト）</a> で行います。他会場の自動録画や無断転載は行いません。三国の個人研究用取得については、別の配信元条件と承認済みの取得先に限定します。</p>
 <script>
 (function(){
 "use strict";
@@ -78,6 +85,7 @@ const DAY="2026-10-28";
 let lastData=null;
 let selectedRaceKey=null;
 const path="./data/experiments/turn-video-pilot-"+DAY+".json";
+const mikuniPath="./data/experiments/mikuni-video-auto-"+DAY+".json";
 const el=id=>document.getElementById(id);
 const esc=value=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const sourceUrl=r=>"https://www.boatrace.jp/owpc/pc/race/beforeinfo?rno="+Number(r.race)+"&jcd="+encodeURIComponent(r.venue_code)+"&hd=20261028";
@@ -147,6 +155,23 @@ function show(data){
  el("status").textContent="研究記録の最終更新："+updated+" JST｜"+esc(data.source_status||"状態未確認");
  if(selectedRaceKey && (data.targets||[]).some(r=>r.race_key===selectedRaceKey))detailFor(selectedRaceKey);
 }
+async function loadMikuni(){
+ const section=el("mikuni-auto-status"), races=el("mikuni-auto-races");
+ try{
+  const response=await fetch(mikuniPath+"?v="+Date.now(),{cache:"no-store"});
+  if(response.status===404){section.textContent="自動収集の記録はまだありません。動画取得成功は未確認。";races.textContent="";return;}
+  if(!response.ok)throw Error("HTTP "+response.status);
+  const record=await response.json();
+  if(record.schema!=="boatlabs.mikuni_authorized_video_ingestion.v1"||record.event_date!==DAY||record.venue_code!=="10")throw Error("データ形式が不一致");
+  const n=record.summary?.video_races_observed??0,rows=record.summary?.exhibition_rows_seen??0;
+  const source=record.source_configured?"動画取得先設定あり":"動画取得先の設定待ち";
+  section.textContent="展示数値 "+rows+"/12R｜動画フレーム研究 "+n+"/12R｜"+source;
+  const visible=Object.entries(record.races||{}).filter(([_,info])=>info.status==="MEDIA_OBSERVED_PIXEL_RESEARCH_ONLY");
+  races.textContent=visible.length?
+    "取得済み（色領域候補のみ・艇の識別未確定）："+visible.map(([r])=>r+"R").join("、"):
+    "動画から①〜⑥のターン／スタート後の伸びを実測したレースはありません。";
+ }catch(err){section.textContent="動画自動収集の監査状態を取得できません："+err.message;races.textContent="";}
+}
 async function load(){
  try{
   const res=await fetch(path+"?v="+Date.now(),{cache:"no-store"});
@@ -154,6 +179,7 @@ async function load(){
   const data=await res.json();
   if(data.schema!=="boatlabs.turn_video_multivenue.v3"||data.event_date!==DAY)throw Error("研究データの形式または日付が不一致");
   show(data);
+  await loadMikuni();
  }catch(err){el("status").textContent="公開研究記録が未生成、または取得失敗："+err.message;}
 }
 el("reload").addEventListener("click",load);

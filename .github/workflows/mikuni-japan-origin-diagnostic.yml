@@ -1,0 +1,49 @@
+name: BOAT LAB Mikuni Japan-origin replay access diagnostic
+
+# Inactive unless intentionally dispatched after an authorized, Japan-based
+# self-hosted Linux runner has been registered with label jp-licensed-research.
+# This job NEVER runs on PRs, schedules or ordinary main pushes.
+on:
+  workflow_dispatch:
+    inputs:
+      event_date:
+        description: "Mikuni event date, YYYY-MM-DD"
+        type: string
+        required: true
+        default: "2026-10-28"
+      race:
+        description: "Race number, 1-12"
+        type: number
+        required: true
+        default: 1
+
+permissions:
+  contents: read
+
+jobs:
+  in-country-access-comparison:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, jp-licensed-research]
+    timeout-minutes: 9
+    concurrency:
+      group: mikuni-japan-origin-diagnostic
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify local runtime (operator-provisioned)
+        run: |
+          set -euo pipefail
+          python3 -c 'import playwright; from playwright.sync_api import sync_playwright'
+      - name: Compare legitimate playback access, no video capture
+        env:
+          DAY: ${{ inputs.event_date }}
+          RACE: ${{ inputs.race }}
+        run: |
+          set -euo pipefail
+          python3 scripts/mikuni_replay_transport_probe.py \
+            --date "$DAY" --race "$RACE" --inspect-normal-get \
+            --mobile-context --out "$RUNNER_TEMP/mikuni-japan-origin-audit.json"
+          python3 -m json.tool "$RUNNER_TEMP/mikuni-japan-origin-audit.json" >/dev/null
+          # Only safe audit counts/status. Never upload HAR/cookies/media.

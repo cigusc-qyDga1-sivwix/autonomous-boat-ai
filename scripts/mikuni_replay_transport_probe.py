@@ -90,6 +90,53 @@ def derive_probe_status(get_responses, get_requests, media_request_types):
     return "PUBLIC_PAGE_LOADED_NO_MEDIA_REQUEST_OBSERVED"
 
 
+def safe_player_error_fields(payload):
+    """Extract a tiny allowlisted error taxonomy; never retain arbitrary text."""
+    if not isinstance(payload, dict):
+        return {}
+    result = {}
+    for key in ("code", "id", "status"):
+        value = payload.get(key)
+        if isinstance(value, int) and not isinstance(value, bool) and 0 <= value < 1000000:
+            result[key] = value
+        elif (isinstance(value, str) and len(value) <= 50
+              and re.fullmatch(r"[A-Z][A-Z0-9_-]{0,49}", value)):
+            result[key] = value
+    if isinstance(payload.get("error"), dict):
+        nested = safe_player_error_fields(payload["error"])
+        if nested:
+            result["error"] = nested
+    return result
+
+
+def probable_access_category(errors):
+    """Advisory interpretation of public Streaks errors; never authorization."""
+    for value in errors:
+        if not isinstance(value, dict):
+            continue
+        if value.get("code") == "REQUEST_FAILED" and value.get("status") == 403:
+            if value.get("id") == 124:
+                return "POSSIBLE_GEOGRAPHIC_RESTRICTION_UNCONFIRMED"
+            if value.get("id") == 126:
+                return "POSSIBLE_PROVIDER_CREDENTIAL_REJECTION_UNCONFIRMED"
+    return "CAUSE_UNDETERMINED"
+
+
+def safe_request_header_presence(header_names):
+    """Return names-as-booleans; never expose authentication values or URLs."""
+    names = {str(h).lower() for h in header_names}
+    return {
+        "has_origin": "origin" in names,
+        "has_referer": "referer" in names,
+        "has_authorization": "authorization" in names,
+        "has_cookie": "cookie" in names,
+        "has_api_key_header": any(
+            ("api" in name and "key" in name)
+            for name in names
+        ),
+    }
+
+
 def new_audit(day: str, race: int) -> dict:
     validate(day, race)
     return {
@@ -128,6 +175,9 @@ def new_audit(day: str, race: int) -> dict:
         "browser_context_profile": "DESKTOP_CHROMIUM",
         "normal_browser_get_request_count": 0,
         "normal_browser_get_responses": [],
+        "normal_browser_get_request_header_flags": [],
+        "normal_browser_get_error_codes": [],
+        "access_category_hypothesis": "CAUSE_UNDETERMINED",
         "raw_media_downloaded": False,
         "video_bytes_downloaded": 0,
         "frames_decoded": 0,
@@ -150,6 +200,8 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200, inspect_norma
     opaque_get_urls = {}
     browser_get_requests = [0]
     browser_get_responses = {}
+    player_header_flags = set()
+    player_error_codes = set()
     audit["normal_browser_get_opt_in"] = bool(inspect_normal_get)
     audit["browser_context_profile"] = "MOBILE_CHROMIUM_PIXEL7" if mobile_context else "DESKTOP_CHROMIUM"
     # Import at runtime so pure, network-free unit tests require no Playwright.
@@ -190,6 +242,17 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200, inspect_norma
                         # Never touch response.text()/body(), URL paths, cookies or tokens.
                         record_key = (response.status, content_kind)
                         browser_get_responses[record_key] = browser_get_responses.get(record_key, 0) + 1
+                        if response.status in {400, 401, 403, 404} and content_kind == "JSON_METADATA":
+                            # Only inspect a proven tiny JSON error. Larger/unknown
+                            # bodies are never read, and raw error text is never saved.
+                            length = response.headers.get("content-length", "")
+                            if length.isdigit() and 0 < int(length) <= 4096:
+                                try:
+                                    safe = safe_player_error_fields(response.json())
+                                    if safe:
+                                        player_error_codes.add(json.dumps(safe, sort_keys=True))
+                                except Exception:
+                                    pass
 
                 def guard(route):
                     # Critical: media and manifests are not fetched by this probe.
@@ -207,6 +270,11 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200, inspect_norma
                             # Observe the exact browser's ordinary GET with its natural
                             # session. No manual tokens, guessed URLs or authentication bypass.
                             browser_get_requests[0] += 1
+                            try:
+                                flags = safe_request_header_presence(route.request.headers.keys())
+                                player_header_flags.add(json.dumps(flags, sort_keys=True))
+                            except Exception:
+                                pass
                             route.continue_()
                             return
                         if host:
@@ -361,6 +429,14 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200, inspect_norma
         audit["media_response_types"] = dict(sorted(responses.items()))
         audit["media_requests_blocked"] = blocked[0]
         audit["opaque_data_requests_blocked"] = opaque_blocked[0]
+        audit["normal_browser_get_request_header_flags"] = [
+            json.loads(s) for s in sorted(player_header_flags)
+        ]
+        audit["normal_browser_get_error_codes"] = [
+            json.loads(s) for s in sorted(player_error_codes)
+        ]
+        audit["access_category_hypothesis"] = probable_access_category(
+            audit["normal_browser_get_error_codes"])
         audit["normal_browser_get_request_count"] = browser_get_requests[0]
         audit["normal_browser_get_responses"] = [
             {"http_status": status, "content_kind": kind, "count": n}

@@ -1,7 +1,7 @@
 """Offline regression tests: never fetch or save third-party media."""
 import unittest
 
-from scripts.mikuni_replay_transport_probe import new_audit, transport_kind, validate, response_content_kind, run_browser_probe, derive_probe_status
+from scripts.mikuni_replay_transport_probe import new_audit, transport_kind, validate, response_content_kind, run_browser_probe, derive_probe_status, safe_player_error_fields, safe_request_header_presence, probable_access_category
 
 
 class TransportClassifierTests(unittest.TestCase):
@@ -77,6 +77,40 @@ class TransportClassifierTests(unittest.TestCase):
             derive_probe_status({}, 0, {"HLS_MANIFEST": 1}),
             "MEDIA_TRANSPORT_CANDIDATE_OBSERVED_NOT_DOWNLOADED",
         )
+
+    def test_allowlisted_error_fields_never_save_raw_errors(self):
+        payload = {
+            "code": "REQUEST_FAILED", "id": 126, "status": 403,
+            "message": "SECRET_TOKEN PRIVATE_URL",
+            "extra": {"access_token": "SHOULD_NOT_PERSIST"},
+        }
+        out = safe_player_error_fields(payload)
+        self.assertEqual(out, {"code": "REQUEST_FAILED", "id": 126, "status": 403})
+        self.assertNotIn("SECRET_TOKEN", repr(out))
+        self.assertNotIn("SHOULD_NOT_PERSIST", repr(out))
+        self.assertEqual(safe_player_error_fields({"code": "token=abc"}), {})
+
+    def test_auth_header_presence_is_boolean_only(self):
+        headers = ["origin", "referer", "x-api-key", "cookie", "authorization"]
+        flags = safe_request_header_presence(headers)
+        self.assertEqual(flags, {
+            "has_origin": True, "has_referer": True,
+            "has_authorization": True, "has_cookie": True,
+            "has_api_key_header": True
+        })
+        self.assertTrue(all(isinstance(v, bool) for v in flags.values()))
+        self.assertFalse(safe_request_header_presence([])["has_api_key_header"])
+
+    def test_probable_geo_category_only_for_exact_403_124(self):
+        self.assertEqual(
+            probable_access_category([{"code": "REQUEST_FAILED", "id": 124, "status": 403}]),
+            "POSSIBLE_GEOGRAPHIC_RESTRICTION_UNCONFIRMED"
+        )
+        self.assertEqual(
+            probable_access_category([{"code": "REQUEST_FAILED", "id": 126, "status": 403}]),
+            "POSSIBLE_PROVIDER_CREDENTIAL_REJECTION_UNCONFIRMED"
+        )
+        self.assertEqual(probable_access_category([]), "CAUSE_UNDETERMINED")
 
     def test_no_success_claims_or_bets(self):
         audit = new_audit("2026-10-28", 6)

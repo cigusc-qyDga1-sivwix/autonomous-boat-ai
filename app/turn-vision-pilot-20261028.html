@@ -38,6 +38,12 @@ th{background:#1b3b54;position:sticky;top:0}.meta{font-size:.85rem;color:#b5ccdd
 <p class="meta">ユーザーから三国での個人研究・動画自動保存・AI解析の利用許可を得たと報告あり。BOATCAST・JLCなど別の配信元から動画を取得する場合は、その配信元の条件も必要。</p>
 <p id="mikuni-auto-status" role="status">三国の専用収集記録を確認中…</p>
 <div id="mikuni-auto-races" class="meta"></div>
+<div class="note" style="margin:10px 0">
+<strong>🎯 三国｜映像解析から試験予想まで</strong>
+<p class="meta">許可された直接映像 → メモリ内フレーム抽出 → 色領域候補 → 6艇の検証済み軌跡 → 発走前の試験買い目（正式予想には未採用）</p>
+<p id="mikuni-motion-stage" role="status" class="meta">6艇の映像検証状況を確認中…</p>
+<p id="mikuni-shadow-stage" class="meta">試験モデルの予想固定状況を確認中…</p>
+</div>
 <p class="meta">媒体を公開しない三国専用収集。収集成功数と全6艇の正確な認識数は別集計で、正式予想には接続しない。</p>
 </section>
 <section class="card" aria-label="6艇共通基準の評価設計">
@@ -92,6 +98,7 @@ let lastData=null;
 let selectedRaceKey=null;
 const path="./data/experiments/turn-video-pilot-"+DAY+".json";
 const mikuniPath="./data/experiments/mikuni-video-auto-"+DAY+".json";
+const mikuniShadowPath="./data/experiments/mikuni-video-shadow-"+DAY+".json";
 const mikuniOfficialCatalogPath="./data/experiments/mikuni-video-catalog-"+DAY+".json";
 const el=id=>document.getElementById(id);
 const esc=value=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -162,6 +169,30 @@ function show(data){
  el("status").textContent="研究記録の最終更新："+updated+" JST｜"+esc(data.source_status||"状態未確認");
  if(selectedRaceKey && (data.targets||[]).some(r=>r.race_key===selectedRaceKey))detailFor(selectedRaceKey);
 }
+async function loadMikuniVideoShadow(){
+ const motion=el("mikuni-motion-stage"),revision=el("mikuni-shadow-stage");
+ try{
+  const [mediaResponse,shadowResponse]=await Promise.all([
+   fetch(mikuniPath+"?v="+Date.now(),{cache:"no-store"}),
+   fetch(mikuniShadowPath+"?v="+Date.now(),{cache:"no-store"})
+  ]);
+  if(!mediaResponse.ok||!shadowResponse.ok)throw Error("研究記録が未生成");
+  const video=await mediaResponse.json(),data=await shadowResponse.json();
+  if(video.schema!=="boatlabs.mikuni_authorized_video_ingestion.v1"||
+     data.schema!=="boatlabs.mikuni_video_motion_shadow_v0.1"||
+     video.event_date!==DAY||data.event_date!==DAY)throw Error("記録形式・日付が不一致");
+  const count=Number(video.summary?.video_races_observed||0);
+  const tracks=Number(video.summary?.confirmed_boat_tracks||0);
+  const mode=video.storage==="MEMORY_ONLY_INPUT_NO_VIDEO_FRAMES_PERSISTED"?"メモリ内解析":"旧型の一時保存経路";
+  motion.textContent="映像取得 "+count+"/12R｜検証済み6艇軌跡 "+tracks+"艇｜"+mode;
+  const n=Number(data.summary?.video_shadow_frozen_races||0);
+  revision.textContent=n>0?"発走前に固定した試験予想 "+n+"R｜正式v1.5とは別管理":
+    "実映像に基づく試験買い目 0R｜6艇軌跡の検証と発走前の固定がまだ必要。正式買い目は変更なし。";
+ }catch(err){
+  motion.textContent="三国の動画実測はまだ確認できません："+err.message;
+  revision.textContent="試験予想の映像補正は未確認。正式予想と混同しません。";
+ }
+}
 async function loadMikuniOfficial(){
  const status=el("mikuni-official-catalog-status");
  const listings=el("mikuni-official-catalog-entries");
@@ -214,7 +245,7 @@ async function load(){
   const data=await res.json();
   if(data.schema!=="boatlabs.turn_video_multivenue.v3"||data.event_date!==DAY)throw Error("研究データの形式または日付が不一致");
   show(data);
-  await Promise.all([loadMikuni(),loadMikuniOfficial()]);
+  await Promise.all([loadMikuni(),loadMikuniOfficial(),loadMikuniVideoShadow()]);
  }catch(err){el("status").textContent="公開研究記録が未生成、または取得失敗："+err.message;}
 }
 el("reload").addEventListener("click",load);

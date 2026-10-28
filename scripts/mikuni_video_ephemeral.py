@@ -112,7 +112,29 @@ def decode_in_memory(blob, *, runner=subprocess.run):
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError("ffmpeg_timed_out") from exc
     if result.returncode!=0:
-        raise ValueError("video_decode_failed")
+        # Some MP4 moov indices need seeking, which regular stdin cannot do.
+        # Linux anonymous memfd is seekable RAM (not a persistent video file).
+        # Never write video to /tmp or the repository.
+        if not hasattr(os,"memfd_create"):
+            raise ValueError("video_decode_failed")
+        fd=os.memfd_create("boatlabs-ephemeral-video",flags=0)
+        try:
+            offset=0
+            while offset<len(blob):
+                written=os.write(fd,blob[offset:offset+1048576])
+                if written<=0:raise ValueError("in_memory_video_write_failed")
+                offset+=written
+            os.lseek(fd,0,os.SEEK_SET)
+            fd_args=[a if a!="pipe:0" else f"/proc/self/fd/{fd}" for a in args]
+            try:
+                result=runner(fd_args,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                              timeout=FFMPEG_TIMEOUT_S,check=False,pass_fds=(fd,))
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError("ffmpeg_timed_out") from exc
+            if result.returncode!=0:
+                raise ValueError("video_decode_failed")
+        finally:
+            os.close(fd)
     return _split_jpegs(result.stdout)
 
 

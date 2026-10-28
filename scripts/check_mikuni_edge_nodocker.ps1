@@ -117,6 +117,41 @@ function Pump-CDP([int]$ms){
   }
 }
 
+function Inspect-Official-Playback-Tab($target){
+  # Only a tab that our own click opened. Reject any other web origin.
+  $targetPageUrl=[string]$target.url
+  try {$targetUri=[Uri]$targetPageUrl} catch {return 'UNRECOGNIZED'}
+  $recognized=@('front.player.boatrace-cdn.jp','livebb.jlc.ne.jp','playback.api.streaks.jp')
+  if($targetUri.Scheme -ne 'https' -or $targetUri.Host.ToLowerInvariant() -notin $recognized){
+    return 'UNRECOGNIZED'
+  }
+  if($targetPageUrl -match '(?i)(\.m3u8|\.mpd|\.mp4|\.webm)(\?|$)'){return 'MEDIA_TARGET_NOT_OPENED'}
+  $targetWsUrl=[Uri][string]$target.webSocketDebuggerUrl
+  if($targetWsUrl.Scheme -ne 'ws' -or $targetWsUrl.Host -notin @('127.0.0.1','localhost')){
+    return 'NONLOCAL_SOCKET_REJECTED'
+  }
+  # Switch to the new isolated tab, never connect to the user's default browser.
+  if($script:ws){$script:ws.Dispose()}
+  $script:pendingRead=$null
+  $script:messageBuffer.Dispose()
+  $script:messageBuffer=New-Object IO.MemoryStream
+  $script:ws=New-Object Net.WebSockets.ClientWebSocket
+  [void]$script:ws.ConnectAsync($targetWsUrl,
+    [Threading.CancellationToken]::None).GetAwaiter().GetResult()
+  foreach($cmd in @('Page.enable','Runtime.enable','Network.enable')){
+    $id=Send-CDP $cmd
+    $null=Await-CDP $id
+  }
+  # A tab created before monitoring may have fetched its initial metadata.
+  # Install the same media/XHR blocks FIRST, then run one normal browser reload.
+  $id=Send-CDP 'Fetch.enable' @{patterns=@(@{urlPattern='*';requestStage='Request'})}
+  $null=Await-CDP $id
+  $id=Send-CDP 'Page.reload' @{ignoreCache=$true}
+  $null=Await-CDP $id
+  Pump-CDP 6000
+  return 'GUARDED_RELOAD_COMPLETE'
+}
+
 function Eval-CDP([string]$js){
   $id=Send-CDP 'Runtime.evaluate' @{expression=$js;returnByValue=$true;awaitPromise=$true;userGesture=$true}
   $r=Await-CDP $id 15000
@@ -136,6 +171,7 @@ $result=[ordered]@{
   access_decision='NOT_RUN';landing_http_status=$null
   race_click_status='NOT_ATTEMPTED';meeting_header_clicked=$false
   day_header_clicked=$false;race_icon_matches=0;browser_tabs_after_click=0
+  new_tab_domain='NOT_OBSERVED';new_tab_guard_status='NOT_NEEDED'
   playback_api_statuses=@()
   playback_api_requests=0;media_requests_blocked=0;opaque_requests_blocked=0
   video_bytes_saved=0;video_frames_decoded=0;confirmed_six_boat_tracks=0
@@ -235,6 +271,21 @@ try {
     Pump-CDP 5500
     $tabList=Invoke-RestMethod -Uri "http://127.0.0.1:$port/json/list" -TimeoutSec 5
     $result.browser_tabs_after_click=@($tabList|Where-Object {$_.type -eq 'page'}).Count
+    if($result.browser_tabs_after_click -gt 1){
+      # Explicitly select the popup by a different DevTools target ID.
+      $opened=@($tabList|Where-Object {$_.type -eq 'page' -and $_.id -ne $page[0].id})
+      if($opened.Count -eq 1){
+        $popup=$opened[0]
+        try {$popupUri=[Uri][string]$popup.url; $popupHost=$popupUri.Host.ToLowerInvariant()}
+        catch {$popupHost='UNRECOGNIZED'}
+        $result.new_tab_domain=if($popupHost -in @('front.player.boatrace-cdn.jp',
+          'livebb.jlc.ne.jp','playback.api.streaks.jp')){$popupHost}else{'UNRECOGNIZED'}
+        $script:phase='POPUP_GUARDED_REPLAY_DIAGNOSTIC'
+        $result.new_tab_guard_status=Inspect-Official-Playback-Tab $popup
+      }else{
+        $result.new_tab_guard_status='AMBIGUOUS_POPUP_COUNT_NO_REPLAY'
+      }
+    }
     $result.landing_http_status=$script:landingStatus
     $result.playback_api_statuses=@($script:apiStatuses|Sort-Object -Unique)
     $result.playback_api_requests=$script:apiGets
@@ -242,7 +293,7 @@ try {
     elseif(@($script:apiStatuses|Where-Object {$_ -eq 200 -or $_ -eq 206}).Count){
       $result.access_decision='PLAYBACK_API_2XX_VIDEO_UNVERIFIED'
     }elseif($script:apiStatuses.Count){$result.access_decision='PLAYBACK_API_OTHER_HTTP_STATUS'}
-    elseif($result.browser_tabs_after_click -gt 1){$result.access_decision='RACE_OPENED_NEW_TAB_UNINSPECTED'}
+    elseif($result.browser_tabs_after_click -gt 1){$result.access_decision='POPUP_CHECKED_NO_PLAYBACK_API_RESPONSE'}
     else{$result.access_decision='NO_PLAYBACK_API_RESPONSE'}
   }
 }catch{

@@ -208,6 +208,22 @@ function Inspect-Official-Playback-Tab($target){
   return 'GUARDED_RELOAD_COMPLETE'
 }
 
+function Invoke-Trusted-PointClick([int]$x,[int]$y){
+  # DevTools Input events model an actual pointing-device click. DOM el.click()
+  # lacks user activation and may open a browser-internal fallback tab.
+  if($x -lt 0 -or $y -lt 0 -or $x -gt 4000 -or $y -gt 3000){
+    throw 'Target click coordinate outside bounded browser viewport.'
+  }
+  foreach($data in @(
+    @{type='mouseMoved';x=$x;y=$y;button='none';buttons=0},
+    @{type='mousePressed';x=$x;y=$y;button='left';buttons=1;clickCount=1},
+    @{type='mouseReleased';x=$x;y=$y;button='left';buttons=0;clickCount=1}
+  )){
+    $id=Send-CDP 'Input.dispatchMouseEvent' $data
+    $null=Await-CDP $id 12000
+  }
+}
+
 function Eval-CDP([string]$js){
   $id=Send-CDP 'Runtime.evaluate' @{expression=$js;returnByValue=$true;awaitPromise=$true;userGesture=$true}
   $r=Await-CDP $id 15000
@@ -278,6 +294,11 @@ try {
   if($SelfTest){
     $script:phase='CDP_SELFTEST'
     if((Eval-CDP '6*7') -ne 42){throw 'Browser selftest failed.'}
+    $null=Eval-CDP "(function(){const b=document.createElement('button');b.style.cssText='position:fixed;left:20px;top:20px;width:90px;height:45px;z-index:2147483647';b.textContent='Test';document.body.appendChild(b);window.__boatlabs_click_trusted=false;b.addEventListener('click',e=>{window.__boatlabs_click_trusted=e.isTrusted;});return true;})()"
+    Invoke-Trusted-PointClick 55 43
+    if((Eval-CDP 'window.__boatlabs_click_trusted===true') -ne $true){
+      throw 'Input dispatch did not deliver a trusted browser click.'
+    }
     $strict=Eval-CDP "'/static/1R.png'.match(new RegExp('(?:^|/)1R[.]png(?:[?#]|$)'))!==null&&'/static/11R.png'.match(new RegExp('(?:^|/)1R[.]png(?:[?#]|$)'))===null"
     if($strict -ne $true){throw '1R versus 11R selector is ambiguous.'}
     $safe=Get-Safe-Popup-Info 'https://player.example.org/path?token=DO_NOT_DISCLOSE'
@@ -399,11 +420,16 @@ try {
  const linkInfo=describeLink(chosenLink);
  const metrics={meeting,day,click:false,iconTotal:allIcons.length,
    visibleExactCount:icons.length,dayIconCount:dayIcons.length,
-   linkInfo,hints:[]};
+   linkInfo,point:null,hints:[]};
  if($layoutFlag){metrics.hints=hints;return metrics;}
  if(!meeting||!day||dayIcons.length!==1||!chosenLink)return metrics;
- chosenLink.click();
- metrics.click=true;
+ chosenLink.scrollIntoView({block:'center',inline:'center'});
+ await sleep(90);
+ const rect=chosenLink.getBoundingClientRect();
+ const x=Math.round(rect.left+rect.width/2);
+ const y=Math.round(rect.top+rect.height/2);
+ if(rect.width>4&&rect.height>4&&x>0&&y>0&&
+   x<innerWidth&&y<innerHeight){metrics.point={x,y};}
  return metrics;
 })()
 "@
@@ -418,7 +444,18 @@ try {
     $result.race_link_host=[string]$clicked.linkInfo.host
     $result.race_link_target=[string]$clicked.linkInfo.target
     $result.race_link_has_inline_handler=[bool]$clicked.linkInfo.inline
-    $result.race_click_status=if($LayoutAudit){'LAYOUT_ONLY_NO_CLICK'}elseif($clicked.click){'CLICKED_EXACT_RACE_VERIFIED_DAY_CONTAINER'}elseif($clicked.dayIconCount -gt 1){'AMBIGUOUS_DATE_RACE_MATCH_NO_CLICK'}else{'EXACT_DAY_RACE_NOT_FOUND_NO_CLICK'}
+    if(-not $LayoutAudit -and $clicked.point -and
+      $clicked.dayIconCount -eq 1 -and $clicked.meeting -and $clicked.day){
+      $script:phase='TRUSTED_POINTING_DEVICE_CLICK'
+      Invoke-Trusted-PointClick ([int]$clicked.point.x) ([int]$clicked.point.y)
+      $result.race_click_status='TRUSTED_MOUSE_CLICK_EXACT_DAY_AND_RACE'
+    }elseif($LayoutAudit){
+      $result.race_click_status='LAYOUT_ONLY_NO_CLICK'
+    }elseif($clicked.dayIconCount -gt 1){
+      $result.race_click_status='AMBIGUOUS_DATE_RACE_MATCH_NO_CLICK'
+    }else{
+      $result.race_click_status='EXACT_DAY_RACE_NOT_FOUND_OR_OFFSCREEN_NO_CLICK'
+    }
     Pump-CDP 5500
     # about:blank is a temporary popup state, not a playback domain.
     # Read only the local DevTools tab list, without URLs in diagnostic output.

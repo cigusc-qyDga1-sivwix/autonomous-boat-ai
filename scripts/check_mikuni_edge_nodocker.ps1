@@ -4,7 +4,8 @@ param(
   [ValidatePattern('^\d{4}-\d{2}-\d{2}$')][string]$Date=(Get-Date).ToString('yyyy-MM-dd'),
   [ValidateRange(1,12)][int]$Race=1,
   [switch]$SelfTest,
-  [switch]$LayoutAudit
+  [switch]$LayoutAudit,
+  [switch]$VisibleEdge
 )
 $ErrorActionPreference='Stop'
 
@@ -241,6 +242,7 @@ $profile=Join-Path ([IO.Path]::GetTempPath()) ('boatlabs-edge-'+[guid]::NewGuid(
 $result=[ordered]@{
   schema='boatlabs.mikuni_edge_nodocker.v1';date=$Date;venue='三国';race=$Race
   access_decision='NOT_RUN';landing_http_status=$null
+  edge_start_mode=if($VisibleEdge){'VISIBLE_ISOLATED'}else{'HEADLESS_ISOLATED'}
   race_click_status='NOT_ATTEMPTED';meeting_header_clicked=$false
   day_header_clicked=$false;race_icon_matches=0;race_icon_visible_exact=0
   race_icon_target_day_matches=0;browser_tabs_after_click=0
@@ -263,9 +265,16 @@ try {
   $script:phase='FIND_EDGE'
   $edge=Find-Edge
   New-Item -ItemType Directory -Path $profile -Force|Out-Null
-  $arguments=@('--headless=new','--disable-gpu','--no-first-run',
-    '--no-default-browser-check','--remote-debugging-port=0',
-    ('--user-data-dir="'+$profile+'"'),'about:blank')
+  # Use a fresh, isolated profile in both modes; never attach to the user's
+  # existing Edge session. Visible mode tests ordinary window rendering, not
+  # authentication or media download, and is opt-in only.
+  $arguments=@('--no-first-run','--no-default-browser-check',
+    '--remote-debugging-port=0',('--user-data-dir="'+$profile+'"'),'about:blank')
+  if($VisibleEdge){
+    $arguments=@('--window-size=1280,900')+$arguments
+  }else{
+    $arguments=@('--headless=new','--disable-gpu')+$arguments
+  }
   $script:phase='START_EDGE'
   $process=Start-Process -FilePath $edge -ArgumentList $arguments -PassThru
   $portFile=Join-Path $profile 'DevToolsActivePort'

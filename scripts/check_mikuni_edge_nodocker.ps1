@@ -170,7 +170,7 @@ try {
   }
   $script:ws=New-Object Net.WebSockets.ClientWebSocket
   $script:phase='CONNECT_CDP_SOCKET'
-  $script:ws.ConnectAsync($wsUrl,[Threading.CancellationToken]::None).GetAwaiter().GetResult()
+  [void]$script:ws.ConnectAsync($wsUrl,[Threading.CancellationToken]::None).GetAwaiter().GetResult()
   $script:phase='CDP_SETUP'
   foreach($cmd in @('Page.enable','Runtime.enable','Network.enable')){
     $id=Send-CDP $cmd

@@ -58,6 +58,41 @@ assert.match(html,/id="bridge-share"/);
 assert.match(html,/id="bridge-extract"/);
 assert.match(html,/id="bridge-frame-canvas"/);
 assert.match(html,/id="bridge-export"/);
+assert.match(html,/id="bridge-seed-export"/);
+assert.match(html,/id="bridge-source-sha"/);
+assert.match(html,/岸の固定目標6点/);
+assert.equal(lib.MODE_KEYS.length,13);
+assert.equal(lib.MODE_KEYS[7],'shore1');
+assert.equal(lib.MODE_KEYS[12],'shore6');
+const seedMarks=Object.fromEntries([
+ ...Array.from({length:6},(_,i)=>[String(i+1),[55+38*i,113+(i%2)*17]]),
+ ...Array.from({length:6},(_,i)=>['shore'+(i+1),[[30,35],[220,28],[420,42],[35,275],[225,282],[425,270]][i]]),
+]);
+const seededFrames=[
+ {t:12,width:480,height:320,pixel_audit:metrics,manual_marks:seedMarks},
+ {t:12.5,width:480,height:320,pixel_audit:metrics,manual_marks:{}},
+ {t:13,width:480,height:320,pixel_audit:metrics,manual_marks:{}},
+];
+const localAudit=lib.buildAudit(seededFrames,{date:'2026-10-28',venue:'三国',race:7,source_type:'user_local_file'});
+const seedPackage=lib.buildMikuniSeedLibrary(localAudit,'b'.repeat(64));
+assert.equal(seedPackage.schema,'boatlabs.mikuni_seed_library.v0.1');
+assert.equal(seedPackage.records.length,1);
+assert.equal(seedPackage.records[0].boats.length,6);
+assert.equal(seedPackage.records[0].static_landmarks.length,6);
+assert.equal(seedPackage.records[0].clip_start_seconds,12);
+assert.equal(seedPackage.records[0].sample_interval_s,.5);
+assert.equal(seedPackage.verified_boat_id_count,0);
+assert.equal(seedPackage.video_content_included,false);
+assert.equal(seedPackage.records[0].source_sha256,'b'.repeat(64));
+assert.throws(()=>lib.buildMikuniSeedLibrary(localAudit,''),/sha256/);
+assert.throws(()=>lib.buildMikuniSeedLibrary({...localAudit,venue:'唐津'},'b'.repeat(64)),/mikuni/);
+assert.throws(()=>lib.buildMikuniSeedLibrary({...localAudit,source_type:'stopped_screen_share'},'b'.repeat(64)),/mikuni/);
+const wrongInterval={...localAudit,frames:localAudit.frames.map((f,i)=>({...f,t_seconds:12+i*.7}))};
+assert.throws(()=>lib.buildMikuniSeedLibrary(wrongInterval,'b'.repeat(64)),/interval/);
+const absentBoat={...localAudit,frames:[{...localAudit.frames[0],
+ manual_marks:Object.fromEntries(Object.entries(seedMarks).filter(([k])=>k!=='6'))},...localAudit.frames.slice(1)]};
+assert.throws(()=>lib.buildMikuniSeedLibrary(absentBoat,'b'.repeat(64)),/missing_or_outside_seed_6/);
+
 assert.doesNotMatch(html,/<iframe/i);
 assert.doesNotMatch(fs.readFileSync('app/local-video-bridge.js','utf8'),/\bfetch\s*\(/);
 assert.doesNotMatch(fs.readFileSync('app/local-video-bridge.js','utf8'),/\bXMLHttpRequest\b/);

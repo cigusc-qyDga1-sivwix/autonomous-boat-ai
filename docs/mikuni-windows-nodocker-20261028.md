@@ -34,7 +34,8 @@ WindowsにあるEdgeを、普段のCookieやログイン情報を含まない**�
 - `EDGE_SELFTEST_PASSED_NO_NETWORK` — `-SelfTest` 指定時にEdge制御の動作確認成功。接続自体は未検証。
 - `PLAYBACK_API_HTTP_403` — Windowsからの通常API GETでも403。地域/接続条件の仮説を再評価する。
 - `PLAYBACK_API_2XX_VIDEO_UNVERIFIED` — 通常GETの応答が200または206。**動画の自動取得・6艇の識別ができたという意味ではない**。
-- `RACE_OPENED_NEW_TAB_UNINSPECTED` — 再生ボタンが別のタブを開いた。現在の軽量版は新タブの通信をまだ監視していない。403の有無は**未確認**。
+- `RACE_OPENED_NEW_TAB_UNINSPECTED` — 旧版で別タブの通信を監視できていない状態。
+- `POPUP_CHECKED_NO_PLAYBACK_API_RESPONSE` — 新版で安全な新タブ診断まで終えたがAPI応答がない。
 - `NO_PLAYBACK_API_RESPONSE` — ページ構造、開催日、再生処理など別原因を調べる。
 - `EDGE_DIAGNOSTIC_FAILED` — Edgeの起動やDevTools接続に失敗。failure_stageで失敗段階を分離。
 
@@ -45,6 +46,19 @@ WindowsにあるEdgeを、普段のCookieやログイン情報を含まない**�
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\check_mikuni_edge_nodocker.ps1 -SelfTest
 ```
+
+
+## 2026-10-28 22時台の国内Windows初回診断と追加対応
+
+利用者が送ったPowerShell画面では、`landing_http_status=200`、`meeting_header_clicked=true`、`day_header_clicked=true`、`browser_tabs_after_click=2`、`access_decision=RACE_OPENED_NEW_TAB_UNINSPECTED`。**403解消や動画取得成功ではない**。ブラウザの別タブでプレイヤーが開き、元タブだけの監視では応答が見えなかった。
+
+改良版は、別タブが正規の `front.player.boatrace-cdn.jp` / `livebb.jlc.ne.jp` / `playback.api.streaks.jp` のいずれかである場合のみ、独立DevToolsセッションを開き、メディア拡張子/Mediaタイプ/不明なXHRをブロックした**あと**再読込を一回実施する。接続状態を `new_tab_guard_status` と `playback_api_statuses` で監査。別タブが未知ホストなら絶対に自動再読込しない。
+
+- `new_tab_guard_status=GUARDED_RELOAD_COMPLETE`：新タブの安全なブラウザ再読込診断が完了。**取得成功の意味ではない**。
+- `new_tab_guard_status=UNRECOGNIZED`：予期しない配信先のため自動再読込せず中止。
+- `POPUP_CHECKED_NO_PLAYBACK_API_RESPONSE`：再読込後も再生APIの応答を確認できない。**200/403いずれとも判定しない**。
+
+Windowsでの利用：以前と同じGitHub URLから最新の単独`.ps1`ファイルを**再ダウンロードして置き換え**、前回の同じコマンドを実行。PowerShellを管理者として起動する必要はない。実際の映像や認証トークンは保存せず、`video_bytes_saved=0` を維持する。
 
 ## 技術的制約と未達項目
 

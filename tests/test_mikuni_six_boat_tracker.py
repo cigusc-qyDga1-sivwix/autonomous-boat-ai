@@ -192,6 +192,23 @@ class SixBoatTrackerTests(unittest.TestCase):
         self.assertEqual(len(calls),2)
         self.assertEqual(again["races"]["7"],updated["races"]["7"])
 
+    def test_reanalysis_preserves_old_video_when_approved_source_removed(self):
+        tagged=seeds()
+        tagged["sample_interval_s"]=.5
+        library={"schema":"boatlabs.mikuni_seed_library.v0.1","event_date":DAY,
+                 "venue_code":"10","records":[tagged]}
+        archive={"event_date":DAY,"records":[{
+            "race_code":"202610281007","venue_code":"10","race":7,
+            "boats":[{"lane":i} for i in range(1,7)]}]}
+        old={"schema":"boatlabs.mikuni_authorized_video_ingestion.v1",
+             "event_date":DAY,"races":{"7":{
+                "status":"MEDIA_OBSERVED_PIXEL_RESEARCH_ONLY",
+                "source_sha256":SHA,"video_observation":{"seeded_tracking_status":"NO_SIX_BOAT_SEEDS"}}}}
+        found=collect(DAY,archive,old,None,[],seed_library=library)
+        self.assertEqual(found["races"]["7"]["status"],"MEDIA_OBSERVED_PIXEL_RESEARCH_ONLY")
+        self.assertEqual(found["races"]["7"]["source_sha256"],SHA)
+        self.assertEqual(found["races"]["7"]["seed_reprocess_status"],"AUTHORIZED_SOURCE_NOT_CONFIGURED")
+
     def test_annotation_sample_interval_mismatch_cannot_publish_pixel_tracks(self):
         jpgs=synthetic_scene()
         tagged=seeds()

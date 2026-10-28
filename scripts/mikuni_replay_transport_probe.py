@@ -90,6 +90,7 @@ def new_audit(day: str, race: int) -> dict:
         "opaque_data_requests_blocked": 0,
         "opaque_hosts": [],
         "opaque_request_shapes": [],
+        "read_only_head_results": [],
         "raw_media_downloaded": False,
         "video_bytes_downloaded": 0,
         "frames_decoded": 0,
@@ -107,6 +108,7 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
     opaque_blocked = [0]
     opaque_hosts = set()
     opaque_shapes = set()
+    opaque_get_urls = {}
     # Import at runtime so pure, network-free unit tests require no Playwright.
     try:
         from playwright.sync_api import sync_playwright
@@ -143,6 +145,10 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
                         host = urlsplit(route.request.url).hostname
                         if host:
                             opaque_hosts.add(host.lower())
+                            if (host.lower() in {"front.player.boatrace-cdn.jp", "livebb.jlc.ne.jp"}
+                                    and route.request.method == "GET"
+                                    and urlsplit(route.request.url).scheme == "https"):
+                                opaque_get_urls[host.lower()] = route.request.url
                             suffix = Path(urlsplit(route.request.url).path).suffix.lower()
                             if not re.fullmatch(r"\\.[a-z0-9]{1,6}", suffix):
                                 suffix = "(none)"
@@ -230,6 +236,31 @@ def run_browser_probe(day: str, race: int, *, wait_ms: int = 4200) -> dict:
                     except Exception:
                         continue
                 page.wait_for_timeout(max(0, min(int(wait_ms), 8000)))
+                # HEAD request sends no response-body download. URLs remain local
+                # in memory and are not saved, printed, or exposed to users.
+                for host, url in sorted(opaque_get_urls.items()):
+                    record = {"host": host, "head_http_status": None,
+                              "content_kind": "UNKNOWN", "content_length_band": "UNKNOWN"}
+                    try:
+                        head = context.request.head(url, timeout=5500, max_redirects=0)
+                        record["head_http_status"] = head.status
+                        mime = head.headers.get("content-type", "").split(";", 1)[0].lower()
+                        kind = transport_kind(url, mime)
+                        if kind in VIDEO_TYPES:
+                            record["content_kind"] = kind
+                        elif "json" in mime:
+                            record["content_kind"] = "JSON_METADATA"
+                        elif mime.startswith("text/") or "xml" in mime:
+                            record["content_kind"] = "TEXT_OR_XML_METADATA"
+                        elif mime:
+                            record["content_kind"] = "OTHER_CONTENT_TYPE"
+                        size = head.headers.get("content-length", "")
+                        if size.isdigit():
+                            record["content_length_band"] = (
+                                "UNDER_1MB" if int(size) < 1048576 else "AT_LEAST_1MB")
+                    except Exception:
+                        record["head_http_status"] = "HEAD_NOT_AVAILABLE"
+                    audit["read_only_head_results"].append(record)
                 audit["status"] = (
                     "MEDIA_TRANSPORT_CANDIDATE_OBSERVED_NOT_DOWNLOADED"
                     if requests else

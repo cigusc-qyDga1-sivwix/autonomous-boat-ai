@@ -47,8 +47,10 @@ class TransportClassifierTests(unittest.TestCase):
         import inspect
         sig = inspect.signature(run_browser_probe)
         self.assertEqual(sig.parameters["inspect_normal_get"].default, False)
+        self.assertEqual(sig.parameters["mobile_context"].default, False)
         audit = new_audit("2026-10-28", 1)
         self.assertFalse(audit["normal_browser_get_opt_in"])
+        self.assertEqual(audit["browser_context_profile"], "DESKTOP_CHROMIUM")
         self.assertEqual(audit["normal_browser_get_request_count"], 0)
         self.assertEqual(audit["normal_browser_get_responses"], [])
         self.assertEqual(audit["video_bytes_downloaded"], 0)

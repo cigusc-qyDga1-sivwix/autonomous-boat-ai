@@ -178,7 +178,7 @@ def _published(value):
 
 
 def _racing_title(title):
-    return bool(re.search(r"(レース|競走|LIVE|ライブ|展示|三国|BOAT)",title,re.IGNORECASE))
+    return bool(re.search(r"(レース|競走|LIVE|ライブ|展示|三国|BOAT|最終日|初日|[2-6２-６]日目|杯|優勝戦|決勝)",title,re.IGNORECASE))
 
 
 def _date_in_title(title, day):

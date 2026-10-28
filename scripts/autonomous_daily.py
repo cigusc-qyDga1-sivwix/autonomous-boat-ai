@@ -455,7 +455,8 @@ def promoted_v09(venue: str, phase: str, racers: list[dict],
                 FOUR_FACTOR_MODEL if four_factor else MAIN_WAKE_MODEL)
     if answer.get("model_version") != expected or not isinstance(bets, list):
         raise ValueError("Wrong new main bridge model identity")
-    min_points, max_points, unit = (1, 120, 100) if expected == POINT_FREE_MODEL else (MIN_POINTS, MAX_POINTS, STAKE_UNIT_YEN)
+    bounded_max = 20 if four_factor and datetime.fromisoformat(frozen_at_utc).astimezone(JST).date() >= date(2026, 10, 29) else MAX_POINTS
+    min_points, max_points, unit = (1, 120, 100) if expected == POINT_FREE_MODEL else (MIN_POINTS, bounded_max, STAKE_UNIT_YEN)
     if not min_points <= len(bets) <= max_points or len({
         b.get("combination") for b in bets
     }) != len(bets) or any(

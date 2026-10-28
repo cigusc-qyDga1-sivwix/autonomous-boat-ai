@@ -109,6 +109,11 @@ function pointFreePicks(candidates){
     selected:c.pseudo+reference*1e-12>=reference,
     reason:c.pseudo+reference*1e-12>=reference?'平均相対評価以上':'平均相対評価未満'}))}};
 }
+// Preserve historical selection; user-approved upper bound starts 29 Oct JST.
+function ticketMaxPoints(input){
+ const stamp=Date.parse(input?.frozen_at_utc);
+ return Number.isFinite(stamp)&&stamp>=Date.parse('2026-10-29T00:00:00+09:00')?20:12;
+}
 function forecast(input){
  const pointFree=input?.experimental_variant==='four-factor-v1.5';
  const venueAware=input?.experimental_variant==='four-factor-v1.4'||(pointFree&&input.venue!=='江戸川');
@@ -574,7 +579,7 @@ function forecast(input){
   roleShares.third[c]+=candidate.pseudo;
  }
  const dominant=Math.max(...shares),close=shares.filter(x=>x>=.12).length;
- const count=pointFree?null:clamp(Math.round(6+5*close/4+4*(.58-dominant)),4,12);
+ const count=pointFree?null:clamp(Math.round(6+5*close/4+4*(.58-dominant)),4,fourFactor?ticketMaxPoints(input):12);
  const coverage=pointFree?pointFreePicks(candidates):(headCoverage||postraceConditional)?headCoveragePicks(candidates,count,shares):null;
  let picks=coverage?coverage.picks:candidates.slice(0,count);
  const roleChanges=[];
@@ -761,7 +766,7 @@ function forecast(input){
      outsideTrial?'tactical-outside-makuri-v0.2-untrained':'tactical-1m-conditional-v0.1-untrained',
    basis:'保存済み発走前選手情報と場別参考値のみ。結果・払戻・オッズ不使用。',
    venue:input.venue,head_course_shares:shares.map((s,i)=>({course:i+1,lane:v[byCourse[i]].lane,relative_share:+s.toFixed(4),tactic:openChasers?'攻め方未確定':nameTactic[i+1]})),
-   metadata:{...(fourFactor?{four_factor:{...factorModel,...(coverage?{ticket_policy:coverage.policy}:{}),...(openChasers?{chaser_policy:{
+   metadata:{...(fourFactor?{four_factor:{...factorModel,...(!pointFree&&ticketMaxPoints(input)===20?{ticket_bounds:{min:4,max:20,effective_from_jst:'2026-10-29'}}:{}),...(coverage?{ticket_policy:coverage.policy}:{}),...(openChasers?{chaser_policy:{
         version:'ability-first-v1.1',fixed_neighbor_bonus:false,legacy_ticket_rescue:false,
         interaction_bounds:[.95,1.05],calibrated:false,
         second_by_head:[1,2,3,4,5,6].map(h=>{
@@ -855,7 +860,7 @@ function forecast(input){
  };
 }
 global.BoatTacticalModel={forecast,
- headCoveragePicks,pointFreePicks,
+ headCoveragePicks,pointFreePicks,ticketMaxPoints,
  forecastFourFactorPointFree:input=>forecast({...input,experimental_variant:'four-factor-v1.5'}),
  forecastFourFactorCoverage:input=>forecast({...input,experimental_variant:'four-factor-v1.2'}),
  forecastFourFactorConditional:input=>forecast({...input,experimental_variant:'four-factor-v1.3'}),

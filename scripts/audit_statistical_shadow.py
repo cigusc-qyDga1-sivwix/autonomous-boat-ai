@@ -29,7 +29,7 @@ def audit(data_dir=Path('app/data/live'),shadow_dir=Path('app/data/experiments')
                        and valid_snapshot(original,day) and shadow['trained_through']<day
                        and shadow['cutoff_jst']==original['cutoff_jst']
                        and datetime.fromisoformat(original['frozen_at_utc'])<=frozen<=cutoff-timedelta(seconds=120)
-                       and (1<=len(bets)<=120 if point_free else 4<=len(bets)<=12)
+                       and (1<=len(bets)<=120 if point_free else 4<=len(bets)<=(20 if day >= '2026-10-29' and original.get('model_version', '').startswith('four-factor-') else 12))
                        and len(bets)==len(original['bets']) and len({b['combination'] for b in bets})==len(bets)
                        and all(len(b['combination'])==5 and len(set(b['combination'].split('-')))==3
                                and all(len(c)==1 and c in '123456' for c in b['combination'].split('-'))

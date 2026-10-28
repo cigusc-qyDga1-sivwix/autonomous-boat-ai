@@ -96,8 +96,8 @@ def distributions(snapshot, model):
     return sorted(all_rows,key=lambda x:(-x['score'],x['combination']))
 
 
-def allocate(ranked,count,*,point_free=False):
-    if isinstance(count,bool) or not isinstance(count,int) or not (1<=count<=120 if point_free else 4<=count<=12):raise ValueError('Invalid point count')
+def allocate(ranked,count,*,point_free=False,max_points=12):
+    if isinstance(count,bool) or not isinstance(count,int) or not (1<=count<=120 if point_free else 4<=count<=max_points):raise ValueError('Invalid point count')
     budget_units=500 if point_free else 50;stake_unit=100 if point_free else 1000
     selected=ranked[:count];total=sum(x['score'] for x in selected)
     target=[(budget_units-count)*x['score']/total for x in selected]

@@ -31,7 +31,7 @@ def freeze(latest,model,previous,now):
         if any((v['source_sha256'],v['model_sha256'])==identity for v in versions):continue
         ranked=distributions(source,model)
         point_free=source.get('model_version')=='four-factor-v1.5-point-free-untrained'
-        bets=allocate(ranked,len(source['bets']),point_free=point_free)
+        bets=allocate(ranked,len(source['bets']),point_free=point_free,max_points=20 if day >= '2026-10-29' and source.get('model_version', '').startswith('four-factor-') else 12)
         body={'model_version':SCHEMA,'model_role':'research_shadow','classification':'WATCH','event_date':day,
               'venue':source['venue'],'race':source['race'],'phase':source['phase'],'frozen_at_utc':now.astimezone(timezone.utc).isoformat(),
               'cutoff_jst':source['cutoff_jst'],'source_sha256':source['sha256'],'model_sha256':model['model_sha256'],

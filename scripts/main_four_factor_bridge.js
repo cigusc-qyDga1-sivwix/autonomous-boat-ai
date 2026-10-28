@@ -10,8 +10,8 @@ require('../app/four-factor.js');
 require('../app/venue-tactics-v2.js');
 require('../app/tactical-1m.js');
 const model=globalThis.BoatTacticalModel;
-function validBets(bets){
- return Array.isArray(bets)&&bets.length>=4&&bets.length<=12&&
+function validBets(bets,maxPoints=12){
+ return Array.isArray(bets)&&bets.length>=4&&bets.length<=maxPoints&&
   new Set(bets.map(x=>x.combination)).size===bets.length&&
   bets.every(x=>/^[1-6]-[1-6]-[1-6]$/.test(x.combination)&&
     new Set(x.combination.split('-')).size===3&&
@@ -36,7 +36,7 @@ function run(input){
   surface_trial_disabled:input.surface_trial_disabled===true,
   venue_tactics_disabled:input.venue_tactics_disabled===true
  });
- if(result.model!==(venueAware?'four-factor-v1.4-venue-aware-23-untrained':conditional?'four-factor-v1.3-conditional-scenarios-untrained':coverage?'four-factor-v1.2-head-coverage-untrained':'four-factor-v1.1-untrained')||!validBets(result.bets))
+ if(result.model!==(venueAware?'four-factor-v1.4-venue-aware-23-untrained':conditional?'four-factor-v1.3-conditional-scenarios-untrained':coverage?'four-factor-v1.2-head-coverage-untrained':'four-factor-v1.1-untrained')||!validBets(result.bets,model.ticketMaxPoints(input)))
   throw Error('Four-factor model returned invalid prediction / allocation');
  const surface=result.metadata?.venue_surface_v1||null;
  if(!surface||surface.version!=='venue-surface-v1-ex-edogawa')
@@ -47,7 +47,7 @@ function run(input){
   frozen_at_utc:input.frozen_at_utc,surface_trial_disabled:true,
   venue_tactics_disabled:input.venue_tactics_disabled===true
  }):null;
- if(surfaceControl&&!validBets(surfaceControl.bets))
+ if(surfaceControl&&!validBets(surfaceControl.bets,model.ticketMaxPoints(input)))
   throw Error('Invalid same-time surface control');
  if(!Array.isArray(result.head_course_shares)||result.head_course_shares.length!==6||
     result.metadata?.start_v07?.slit_signals?.length!==6||
@@ -65,7 +65,7 @@ function run(input){
    ...input,venue_tactics_disabled:true,
    experimental_variant:'four-factor-v1.4'
  }):null;
- if(venueControl&&!validBets(venueControl.bets))throw Error('Invalid venue v1.4 ablation bets');
+ if(venueControl&&!validBets(venueControl.bets,model.ticketMaxPoints(input)))throw Error('Invalid venue v1.4 ablation bets');
  return {
   model_version:result.model,
   venue_tactics_v2:venueMeta,

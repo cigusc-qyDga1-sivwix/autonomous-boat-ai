@@ -64,7 +64,7 @@ jobs:
         run: |
           set -euo pipefail
           DAY=$(TZ=Asia/Tokyo date +%F)
-          python scripts/mikuni_video_ephemeral.py --date "$DAY"
+          python -m scripts.mikuni_video_ephemeral --date "$DAY"
           python -m json.tool "app/data/experiments/mikuni-video-auto-${DAY}.json" >/dev/null
           # Raw media and frames are never written to disk; only numeric JSON.
       - name: Freeze independent verified six-boat motion shadow before cutoff only
@@ -101,7 +101,7 @@ jobs:
             git reset --hard origin/main
             # No forecasts are modified here, no previously accepted source SHA is overwritten.
             python scripts/mikuni_official_video_catalog.py --date "$DAY"
-            python scripts/mikuni_video_ephemeral.py --date "$DAY"
+            python -m scripts.mikuni_video_ephemeral --date "$DAY"
             python scripts/mikuni_video_shadow.py --date "$DAY"
             git add "$FILE" "$CATALOG" "$SHADOW"
             if git diff --cached --quiet; then

@@ -227,6 +227,7 @@ try {
   $result['failure_stage']=$script:phase
   $result['failure_exception_type']=$_.Exception.GetType().Name
   $result['failure_script_line']=[int]$_.InvocationInfo.ScriptLineNumber
+  if($SelfTest){$result['selftest_failure_detail']=[string]$_.Exception.Message}
 }finally{
   $result.media_requests_blocked=$script:blockedMedia
   $result.opaque_requests_blocked=$script:blockedOpaque

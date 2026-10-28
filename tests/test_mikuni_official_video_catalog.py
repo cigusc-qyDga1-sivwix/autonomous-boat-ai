@@ -6,7 +6,7 @@ import unittest
 
 from scripts.mikuni_official_video_catalog import (
     CHANNEL_ID, CHANNEL_URL, FEED_URL, SCHEMA, build, parse_feed,
-    RestrictedFeedRedirect, _failure_reason
+    RestrictedFeedRedirect, GoogleAPIHostRedirect, parse_official_api, _failure_reason
 )
 
 DAY="2026-10-28"
@@ -91,6 +91,64 @@ class OfficialChannelCatalogTests(unittest.TestCase):
             guard.redirect_request(req,None,302,"Moved",{},"http://youtube.com/path")
         with self.assertRaises(ValueError):
             guard.redirect_request(req,None,302,"Moved",{},"https://evil.example.org/a")
+
+    def test_official_api_metadata_fallback_recovers_from_rss_404(self):
+        api={
+            "items":[{
+                "snippet":{
+                    "resourceId":{"kind":"youtube#video","videoId":"bQpDFGkH123"},
+                    "videoOwnerChannelId":CHANNEL_ID,
+                    "title":"スポーツクラブ新田塚アーク杯　最終日　８：００～",
+                    "publishedAt":"2026-10-28T00:02:00Z"
+                },
+                "contentDetails":{"videoPublishedAt":"2026-10-27T22:40:00Z"}
+            }]
+        }
+        def fail_feed():
+            raise HTTPError(FEED_URL,404,"not found",None,None)
+        result=build(DAY,feed_fetcher=fail_feed,now=NOW,
+                     api_key="test-fake-key-not-real",
+                     api_fetcher=lambda key:api)
+        self.assertEqual(result["source_status"],"OFFICIAL_YOUTUBE_DATA_API_METADATA_READ")
+        self.assertEqual(result["source_kind"],"OFFICIAL_YOUTUBE_DATA_API_METADATA_ONLY")
+        self.assertEqual(result["failure_reason"],"YOUTUBE_RSS_HTTP_404")
+        self.assertEqual(result["candidate_count"],1)
+        self.assertEqual(result["candidates"][0]["video_id"],"bQpDFGkH123")
+        self.assertEqual(result["candidates"][0]["video_frames_analyzed"],0)
+        self.assertEqual(result["video_bytes_downloaded"],0)
+        self.assertFalse(result["may_download_youtube_content"])
+        self.assertNotIn("test-fake-key-not-real",str(result))
+
+    def test_api_rejects_another_channel_and_fake_winning_motion(self):
+        candidates=parse_official_api({"items":[
+           {"snippet":{"resourceId":{"videoId":"abc123DEF45"},
+                       "videoOwnerChannelId":"UCwrongchannel12345678900",
+                       "title":"三国レース","publishedAt":"2026-10-28T00:31:00Z"}},
+           {"snippet":{"resourceId":{"videoId":"abc123DEF46"},
+                       "videoOwnerChannelId":CHANNEL_ID,
+                       "title":"三国レース 10/28","publishedAt":"2026-10-28T00:31:00Z"}},
+        ]},DAY)
+        self.assertEqual(len(candidates["candidates"]),1)
+        self.assertEqual(candidates["candidates"][0]["video_id"],"abc123DEF46")
+        self.assertIsNone(candidates["candidates"][0]["race_number"])
+        self.assertEqual(candidates["candidates"][0]["video_frames_analyzed"],0)
+
+    def test_api_failure_does_not_expose_key_in_audit(self):
+        def fail_feed():raise HTTPError(FEED_URL,404,"not found",None,None)
+        def fail_api(_):raise URLError("https://www.googleapis.com/secret-key-not-for-logging")
+        result=build(DAY,feed_fetcher=fail_feed,now=NOW,api_key="secret-key-not-for-logging",api_fetcher=fail_api)
+        self.assertEqual(result["source_status"],"RSS_AND_API_UNAVAILABLE")
+        self.assertEqual(result["candidate_count"],0)
+        self.assertTrue(result["api_fallback_attempted"])
+        self.assertNotIn("secret-key-not-for-logging",str(result))
+
+    def test_api_https_redirect_checks(self):
+        guard=GoogleAPIHostRedirect()
+        req=type("Req",(),{"full_url":"https://www.googleapis.com/youtube/v3/channels"})()
+        with self.assertRaises(ValueError):
+            guard.redirect_request(req,None,302,"redirect",{},"https://evil.example/steal")
+        with self.assertRaises(ValueError):
+            guard.redirect_request(req,None,302,"redirect",{},"http://www.googleapis.com/youtube/v3/")
 
     def test_feed_unavailable_without_network_never_becomes_video_success(self):
         def denied():

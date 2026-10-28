@@ -174,7 +174,7 @@ class EphemeralFramePipelineTests(unittest.TestCase):
         self.assertEqual(result["summary"]["measured_turns"],0)
         replay=collect(DAY,archive(),result,
             "https://approved.provider.example/video/{yyyymmdd}/{race2}.mp4",
-            ["approved.provider.example"],receiver=lambda *_:self.fail("re-downloaded"),now=NOW)
+            ["approved.provider.example"],receiver=lambda *_:self.fail("re-downloaded"),analyzer=analyze,now=NOW)
         self.assertEqual(replay["races"]["6"],result["races"]["6"])
 
     def test_colour_image_is_unverified_even_if_bright_and_visible(self):
@@ -260,3 +260,4 @@ class VerifiedMotionShadowTests(unittest.TestCase):
 
 if __name__=="__main__":
     unittest.main()
+

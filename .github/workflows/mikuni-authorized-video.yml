@@ -8,11 +8,14 @@ on:
       - 'scripts/mikuni_video_autocollect.py'
       - 'scripts/mikuni_video_ephemeral.py'
       - 'scripts/mikuni_six_boat_tracker.py'
+      - 'scripts/mikuni_auto_vision.py'
+      - 'scripts/run_mikuni_vision_tests.py'
       - 'scripts/mikuni_video_shadow.py'
       - 'scripts/mikuni_official_video_catalog.py'
       - 'tests/test_mikuni_video_autocollect.py'
       - 'tests/test_mikuni_video_motion_pipeline.py'
       - 'tests/test_mikuni_six_boat_tracker.py'
+      - 'tests/test_mikuni_auto_vision.py'
       - 'tests/test_mikuni_official_video_catalog.py'
       - '.github/workflows/mikuni-authorized-video.yml'
   schedule:
@@ -46,13 +49,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Install mandatory unattended video runtime
+        run: |
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
+          python -m pip install --disable-pip-version-check numpy==1.26.4 opencv-python-headless==4.11.0.86
       - name: Verify Mikuni source guard and idempotence
         run: |
-          python -m compileall -q scripts/mikuni_video_autocollect.py
-          python -m unittest discover -s tests -p test_mikuni_video_autocollect.py
-          python -m unittest discover -s tests -p test_mikuni_video_motion_pipeline.py
-          python -m unittest discover -s tests -p test_mikuni_six_boat_tracker.py
-          python -m unittest discover -s tests -p test_mikuni_official_video_catalog.py
+          python -m scripts.run_mikuni_vision_tests
       - name: Discover Mikuni venue-specified official YouTube channel metadata
         run: |
           set -euo pipefail
@@ -60,9 +66,6 @@ jobs:
           python scripts/mikuni_official_video_catalog.py --date "$DAY"
           python -m json.tool "app/data/experiments/mikuni-video-catalog-${DAY}.json" >/dev/null
           # Only channel/entry metadata; does NOT download YouTube videos.
-      - name: Install research video decoder only when source is configured
-        if: env.MIKUNI_VIDEO_SOURCE_TEMPLATE != '' && env.MIKUNI_VIDEO_ALLOWED_HOSTS != ''
-        run: python -m pip install --disable-pip-version-check opencv-python-headless==4.11.0.86
       - name: Research only - receive and decode authorized Mikuni media in memory
         run: |
           set -euo pipefail
@@ -112,3 +115,4 @@ jobs:
             fi
             git commit -m 'data: retry Mikuni authorized video research status'
           done
+

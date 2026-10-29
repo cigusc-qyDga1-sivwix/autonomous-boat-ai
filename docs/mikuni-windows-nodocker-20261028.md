@@ -271,3 +271,14 @@ Windows実機で外部iframeへの接続成功（1/1検査）、HTMLVideoElement
 オプトイン `-PcSite -VisibleEdge -PcLiveWatch` を追加。隔離Edgeで手動再生開始→すぐPowerShellでY→Enterとすると、外部HTTPS iframeの同一CDPセッション内でHTMLVideoElementを約5秒にわたり8回サンプリング。各要素のcurrentTimeが連続して進んだかだけをその場で比較して集計。currentTimeの値そのもの、動画URL、画像、音声、Cookie、データ片は出力・保存しない。
 
 結果の`pc_external_iframe_advancing_elements`が1以上なら、プログラムで映像の再生時間進行を検出。`pc_external_iframe_paused_elements`・`pc_external_iframe_ended_elements`により一時停止／終了の可能性を分ける。`pc_live_watch_mode`で単発検査と連続監視を区別。正式予想・結果・収支は変更なし。自動再生ボタン・映像フレーム取得・6艇識別は未達成。
+
+
+## 2026-10-30｜動画の自動再生成功を基礎に、保存しない画素変化実験
+
+Windows実機で`pc_autostart_status=PLAY_PROMISE_RESOLVED`、`pc_external_iframe_playing_elements=1`、`pc_external_iframe_advancing_elements=1`。再生ボタンを押さずに、ユーザーが確認した映像をHTMLVideoElement.play()で起動し再生位置が進んだ。対象の開催日・1Rはプログラム未検証、`USER_CONFIRMED_ONLY`のまま。
+
+新たなオプトイン`-PcSite -VisibleEdge -PcAutoStart -PcFrameProbe -Date 2026-10-28 -Race 1`。起動済みの唯一の外部HTTPS iframeで、play()が受理され8回観測で再生時間の進行まで確認できた場合にのみ、ブラウザの同一iframe内で48×27画素の一時canvasを5サンプル作成し、**フレーム間の正規化画素差と平均輝度という数値だけ**を計算。生画素・フレーム・動画URL・画像・Cookie・音声はCDP経由で返さず、保存もせず、canvasを破棄。
+
+新ログ`pc_frame_probe_status`（PIXELS_READABLE_DYNAMIC、PIXELS_READABLE_STATIC、PIXELS_NEAR_BLACK、PIXEL_ACCESS_DENIED、VIDEO_NOT_READYなど）、`pc_frame_probe_samples`、`pc_frame_change_score`（0～1000）、`pc_frame_brightness_score`（0～1000）。0以外の差分は映像が変化した証拠になり得るが、**まだ6艇の識別・速度推定ではない**。ブラウザのクロスオリジン/DRM制限によりcanvas読み出しが拒否されても回避しない。
+
+競艇AIの正式予想・結果・収支・手動選択仕様は不変更。新フラグ無しの運用には影響しない。

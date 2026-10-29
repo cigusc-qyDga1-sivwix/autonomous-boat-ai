@@ -10,7 +10,8 @@ param(
   [switch]$AutoPlay,
   [switch]$PcSite,
   [switch]$PcLiveWatch,
-  [switch]$PcAutoStart
+  [switch]$PcAutoStart,
+  [switch]$PcFrameProbe
 )
 $ErrorActionPreference='Stop'
 
@@ -398,7 +399,7 @@ function Get-Pc-Frame-Topology {
   return $summary
 }
 
-function Get-Pc-External-Iframe-Video-Metrics([switch]$Watch,[switch]$AttemptPlay) {
+function Get-Pc-External-Iframe-Video-Metrics([switch]$Watch,[switch]$AttemptPlay,[switch]$FrameProbe) {
   # Read-only video ELEMENT counts in already-loaded external HTTPS iframe
   # targets. Uses flat CDP session attachment on this temporary isolated
   # user's Edge only. No stream URLs, tokens, images, screenshots, audio,
@@ -417,6 +418,10 @@ function Get-Pc-External-Iframe-Video-Metrics([switch]$Watch,[switch]$AttemptPla
     ready_elements_last_sample=0
     auto_start_status='NOT_REQUESTED'
     auto_start_attempted=$false
+    frame_probe_status='NOT_REQUESTED'
+    frame_probe_samples=0
+    frame_change_score=0
+    frame_brightness_score=0
     sample_count=0
     canvas_elements=0
   }
@@ -543,6 +548,77 @@ function Get-Pc-External-Iframe-Video-Metrics([switch]$Watch,[switch]$AttemptPla
       $out.ready_elements_last_sample += [int]$reply.result.value.ready_elements_last_sample
       $out.sample_count=[Math]::Max($out.sample_count,[int]$reply.result.value.sample_count)
       $out.canvas_elements += [int]$reply.result.value.canvas_elements
+      if($FrameProbe){
+        if($out.auto_start_status -ne 'PLAY_PROMISE_RESOLVED' -or
+           [int]$reply.result.value.time_advancing_elements -lt 1){
+          $out.frame_probe_status='AUTOSTART_NOT_VERIFIED_NO_PIXELS_READ'
+        }else{
+          # Never send images or pixel arrays to PowerShell/CDP. Draw the user's
+          # already playing video into a tiny in-memory canvas in its OWN frame,
+          # compute scalar liveness metrics there, and discard all pixel data.
+          # Standard browser CORS/DRM rules apply; denied reads stay denied.
+          $frameJs=@'
+(async()=>{
+ const vs=[...document.querySelectorAll('video')];
+ if(vs.length!==1)return {status:'VIDEO_NOT_UNIQUE',samples:0,change:0,brightness:0};
+ const v=vs[0];
+ if(v.paused||v.ended||v.readyState<2||!v.videoWidth||!v.videoHeight){
+   return {status:'VIDEO_NOT_READY',samples:0,change:0,brightness:0};
+ }
+ const W=48,H=27;
+ const c=document.createElement('canvas');c.width=W;c.height=H;
+ const ctx=c.getContext('2d',{willReadFrequently:true});
+ if(!ctx)return {status:'CANVAS_UNAVAILABLE',samples:0,change:0,brightness:0};
+ let prev=null,n=0,pairs=0,totalDelta=0,totalLuma=0;
+ try{
+   for(let k=0;k<5;k++){
+     if(v.paused||v.ended||v.readyState<2)break;
+     ctx.drawImage(v,0,0,W,H);
+     const a=ctx.getImageData(0,0,W,H).data;
+     const sample=new Uint8Array(W*H*3);
+     for(let p=0,j=0;p<a.length;p+=4){
+       sample[j++]=a[p];sample[j++]=a[p+1];sample[j++]=a[p+2];
+       totalLuma+=a[p]+a[p+1]+a[p+2];
+     }
+     if(prev){
+       for(let j=0;j<sample.length;j++)totalDelta+=Math.abs(sample[j]-prev[j]);
+       pairs++;
+     }
+     prev=sample;n++;
+     if(k<4)await new Promise(resolve=>setTimeout(resolve,400));
+   }
+ }catch(e){
+   return {status:e&&e.name==='SecurityError'?
+       'PIXEL_ACCESS_DENIED':'CANVAS_READ_FAILED',samples:0,change:0,brightness:0};
+ }finally{
+   c.width=0;c.height=0;ctx.clearRect(0,0,0,0);
+ }
+ if(!n)return {status:'NO_FRAME_SAMPLE',samples:0,change:0,brightness:0};
+ const brightness=Math.round(totalLuma/(n*W*H*3*255)*1000);
+ const change=pairs?Math.round(totalDelta/(pairs*W*H*3*255)*1000):0;
+ const status=brightness<10?'PIXELS_NEAR_BLACK':
+   change===0?'PIXELS_READABLE_STATIC':'PIXELS_READABLE_DYNAMIC';
+ return {status,samples:n,change,brightness};
+})()
+'@
+          try{
+            $id=Send-CDP 'Runtime.evaluate' @{
+              expression=$frameJs;returnByValue=$true;awaitPromise=$true
+            } $sid
+            $sample=Await-CDP $id 15000
+            if($sample.exceptionDetails -or $null -eq $sample.result.value){
+              $out.frame_probe_status='FRAME_PROBE_UNAVAILABLE'
+            }else{
+              $out.frame_probe_status=[string]$sample.result.value.status
+              $out.frame_probe_samples=[int]$sample.result.value.samples
+              $out.frame_change_score=[int]$sample.result.value.change
+              $out.frame_brightness_score=[int]$sample.result.value.brightness
+            }
+          }catch{
+            $out.frame_probe_status='FRAME_PROBE_UNAVAILABLE'
+          }
+        }
+      }
     }catch{
       $out.failures++
     }finally{
@@ -683,6 +759,11 @@ $result=[ordered]@{
   pc_autostart_requested=[bool]$PcAutoStart
   pc_autostart_status='NOT_REQUESTED'
   pc_selection_verified='NOT_VERIFIED'
+  pc_frame_probe_requested=[bool]$PcFrameProbe
+  pc_frame_probe_status='NOT_REQUESTED'
+  pc_frame_probe_samples=0
+  pc_frame_change_score=0
+  pc_frame_brightness_score=0
   note='API response status alone is not a verified video download.'
 }
 try {
@@ -694,6 +775,9 @@ try {
   if($PcSite -and -not $VisibleEdge){throw 'PcSite requires -VisibleEdge.'}
   if($PcLiveWatch -and -not $PcSite){throw 'PcLiveWatch requires -PcSite.'}
   if($PcAutoStart -and -not $PcSite){throw 'PcAutoStart requires -PcSite.'}
+  if($PcFrameProbe -and -not ($PcSite -and $PcAutoStart)){
+    throw 'PcFrameProbe requires -PcSite and -PcAutoStart.'
+  }
   if($PcSite -and ($AutoPlay -or $LayoutAudit -or $SelfTest)){
     throw 'PcSite is a separate, manual UI diagnostic mode; omit AutoPlay/LayoutAudit/SelfTest.'
   }
@@ -773,6 +857,11 @@ try {
     if($startSelfTest.auto_start_status -ne 'REQUIRES_SINGLE_IFRAME' -or
        $startSelfTest.auto_start_attempted){
       throw 'Auto-start must reject blank iframe self-test.'
+    }
+    $framePixelSelfTest=Get-Pc-External-Iframe-Video-Metrics -AttemptPlay -FrameProbe
+    if($framePixelSelfTest.auto_start_attempted -or
+       $framePixelSelfTest.candidates -ne 0){
+      throw 'Frame probe must never attempt playback on empty test target.'
     }
     $pcTest=Get-Pc-Page-Metrics
     if($pcTest.accessible_frame_count -lt 1 -or
@@ -875,8 +964,14 @@ try {
           try{
             $item.metrics=Get-Pc-Page-Metrics
             $item.frame_topology=Get-Pc-Frame-Topology
-            $item.external_iframe_video_probe=Get-Pc-External-Iframe-Video-Metrics -Watch:$PcLiveWatch -AttemptPlay:$PcAutoStart
+            $item.external_iframe_video_probe=Get-Pc-External-Iframe-Video-Metrics -Watch:$PcLiveWatch -AttemptPlay:$PcAutoStart -FrameProbe:$PcFrameProbe
             if($PcAutoStart){$result.pc_autostart_status=[string]$item.external_iframe_video_probe.auto_start_status}
+            if($PcFrameProbe){
+              $result.pc_frame_probe_status=[string]$item.external_iframe_video_probe.frame_probe_status
+              $result.pc_frame_probe_samples=[int]$item.external_iframe_video_probe.frame_probe_samples
+              $result.pc_frame_change_score=[int]$item.external_iframe_video_probe.frame_change_score
+              $result.pc_frame_brightness_score=[int]$item.external_iframe_video_probe.frame_brightness_score
+            }
             $result.pc_external_iframe_video_elements += [int]$item.external_iframe_video_probe.video_elements
             $result.pc_external_iframe_playing_elements += [int]$item.external_iframe_video_probe.playing_video_elements
             $result.pc_external_iframe_advancing_elements += [int]$item.external_iframe_video_probe.time_advancing_elements

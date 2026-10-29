@@ -424,7 +424,8 @@ def promoted_v07(venue: str, phase: str, racers: list[dict],
 def promoted_v09(venue: str, phase: str, racers: list[dict],
                  profile: dict | None, weather: dict | None,
                  frozen_at_utc: str, four_factor: bool = False, head_coverage: bool = False,
-                 postrace_conditional: bool = False, venue_tactics: bool = False, point_free: bool = False) -> dict:
+                 postrace_conditional: bool = False, venue_tactics: bool = False, point_free: bool = False,
+                 role_skill_trial: bool = False) -> dict:
     """Invoke one explicit model identity; never fall back on bridge failure."""
     inputs = {
         "venue": venue, "phase": phase,
@@ -438,6 +439,7 @@ def promoted_v09(venue: str, phase: str, racers: list[dict],
         "head_coverage_trial": head_coverage,
         "postrace_conditional_trial": postrace_conditional,
         "venue_tactics_trial": venue_tactics,
+        "role_skill_shadow_trial": bool(role_skill_trial and four_factor),
     }
     try:
         job = subprocess.run(
@@ -543,6 +545,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     postrace_active = four_factor and now.astimezone(UTC) >= POSTRACE_ACTIVATION_UTC
     venue_active = postrace_active and venue != "江戸川" and now.astimezone(UTC) >= VENUE_TACTICS_ACTIVATION_UTC
     point_free_active = cutoff.date() == POINT_FREE_DATE and now.astimezone(JST).date() == POINT_FREE_DATE
+    role_skill_active = four_factor and cutoff.date() >= date(2026, 10, 31) and now.astimezone(JST).date() >= date(2026, 10, 31)
     new_primary = cutoff.date() >= WAKE_PROMOTION_DATE
     if new_primary:
         same_time_old = (promoted_v09(venue, phase, racers, profile, selected_weather, frozen_at) if four_factor else
@@ -560,7 +563,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         promoted = promoted_v09(venue, phase, racers, profile, selected_weather, frozen_at, four_factor=four_factor,
                                 head_coverage=bool(race.get("_head_coverage_trial")) and not postrace_active,
                                 postrace_conditional=postrace_active and not venue_active,
-                                venue_tactics=venue_active, point_free=point_free_active)
+                                venue_tactics=venue_active, point_free=point_free_active,
+                                role_skill_trial=role_skill_active)
         chosen_model = promoted["model_version"]
     else:
         promoted = promoted_v07(venue, phase, racers, profile, selected_weather, frozen_at)
@@ -591,6 +595,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
             reason += "／23場別の決まり手構成と実進入・合法STに基づく着順連動v1.4（未校正）"
     body = {
         "model_version": chosen_model,
+        **({"role_skill_shadow": promoted["role_skill_shadow"]} if promoted.get("role_skill_shadow") else {}),
         **({"point_free_control": promoted["point_free_control"],
             "point_free_provenance": promoted["point_free_provenance"]} if point_free_active else {}),
         **({"head_coverage_control": promoted["head_coverage_control"]} if promoted.get("head_coverage_control") else {}),
@@ -854,6 +859,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "start_v07", "coupled_v06", "wake_v09", "four_factor", "racer_context_upgrade", "model_upgrade", "primary_model_ab", "head_course_shares",
                       "role_coverage", "role_changes", "head_coverage_control", "postrace_conditional_v13",
                       "postrace_conditional_control", "venue_tactics_v2", "venue_tactics_ab", "point_free_control", "point_free_provenance",
+                      "role_skill_shadow",
                       "relative_scores_uncalibrated"):
             if extra in current:
                 r[extra] = current[extra]
@@ -1058,6 +1064,41 @@ def integrate_official(ledger: dict, view: dict, pay: dict,
                     "source": "same_pre_cutoff_shadow_only",
                     "legacy_sha256": old_control.get("sha256"),
                 }
+        role_comparison = None
+        shadow = snap.get("role_skill_shadow")
+        if (isinstance(shadow, dict)
+                and shadow.get("status") == "ready"
+                and shadow.get("model_role") == "shadow_validation"
+                and shadow.get("generated_pre_cutoff") is True
+                and shadow.get("result_data_used") is False
+                and shadow.get("frozen_at_utc") == snap.get("frozen_at_utc")):
+            alternative = shadow.get("bets")
+            if (isinstance(alternative, list)
+                    and len(alternative) == len(snap["bets"])
+                    and len({b.get("combination") for b in alternative
+                             if isinstance(b, dict)}) == len(alternative)
+                    and all(isinstance(b, dict)
+                            and isinstance(b.get("combination"), str)
+                            and len(b["combination"].split("-")) == 3
+                            and len(set(b["combination"].split("-"))) == 3
+                            and all(i in "123456" for i in b["combination"].split("-"))
+                            and isinstance(b.get("virtual_yen"), int)
+                            and b["virtual_yen"] > 0 for b in alternative)
+                    and sorted(b["virtual_yen"] for b in alternative)
+                        == sorted(b["virtual_yen"] for b in snap["bets"])
+                    and sum(b["virtual_yen"] for b in alternative) == VIRTUAL_BUDGET_YEN):
+                test_bet = next((b for b in alternative if b["combination"] == p["finish"]), None)
+                test_paid = (test_bet["virtual_yen"] * p["payout_per_100"] // 100
+                             if test_bet else 0)
+                role_comparison = {
+                    "main_hit": bool(winning_bet), "shadow_hit": bool(test_bet),
+                    "main_payout": paid, "shadow_payout": test_paid,
+                    "shadow_minus_main_yen": test_paid - paid,
+                    "same_frozen_input": True, "same_point_count": True,
+                    "same_stake_distribution": True, "no_extra_formal_stake": True,
+                    "model_version": shadow.get("version"),
+                    "source": "same_pre_cutoff_role_skill_shadow_only",
+                }
         results[key] = {
             **p, "hit": bool(winning_bet), "virtual_stake": stake,
             "virtual_payout": paid, "virtual_profit": paid - stake,
@@ -1066,6 +1107,21 @@ def integrate_official(ledger: dict, view: dict, pay: dict,
             "snapshot_phase": snap["phase"], "snapshot_sha256": snap["sha256"],
             "weather_comparison": weather_comparison,
             "legacy_comparison": old_comparison,
+            **({"role_skill_comparison": role_comparison} if role_comparison else {}),
+        }
+
+    role_trials = [r["role_skill_comparison"] for r in results.values()
+                   if r.get("role_skill_comparison")]
+    if role_trials:
+        view["role_skill_backtest"] = {
+            "races": len(role_trials),
+            "main_hits": sum(r["main_hit"] for r in role_trials),
+            "shadow_hits": sum(r["shadow_hit"] for r in role_trials),
+            "main_payout": sum(r["main_payout"] for r in role_trials),
+            "shadow_payout": sum(r["shadow_payout"] for r in role_trials),
+            "shadow_minus_main_yen": sum(r["shadow_minus_main_yen"] for r in role_trials),
+            "virtual_stake_per_model": len(role_trials) * VIRTUAL_BUDGET_YEN,
+            "scope": "発走前同一入力の試験比較。正式予想・収支に試験買い目を合算しない",
         }
 
     comparable = [

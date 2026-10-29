@@ -75,7 +75,17 @@ function panel(r){
  const chaserHTML=Array.isArray(chasers)&&chasers.length===6?
   '<h3>頭ごとの2着候補</h3><p>隣艇の自動加点は使わず、残り5艇を毎回評価。3着も残り4艇から評価します。選手別の2・3着実績率は未接続です。</p><table class="bets-table"><thead><tr><th>1着の条件</th><th>2着候補（評価順）</th></tr></thead><tbody>'+chasers.map(h=>'<tr><td>'+esc(h.head_course)+'コース</td><td>'+[...h.candidates].sort((a,b)=>b.relative_share-a.relative_share||a.lane-b.lane).map(x=>esc(x.lane)+'号艇').join(' → ')+'</td></tr>').join('')+'</tbody></table>':'';
  const rows=meta.rows.map(x=>'<tr><td>'+esc(x.lane)+'</td>'+keys.map(k=>'<td>'+show(x.factors?.[k]?.applied_multiplier)+'</td>').join('')+'<td>'+show(x.combined_multiplier)+'</td></tr>').join('');
- return '<section class="card card-pad four-factor-panel"><h3>4要素の基礎評価</h3><p>選手60・モーター25・展示10・気象5</p><div class="boat-entry-overflow"><table class="bets-table"><thead><tr><th>艇</th>'+labels.map(x=>'<th>'+x+'</th>').join('')+'<th>合成</th></tr></thead><tbody>'+rows+'</tbody></table></div><p class="help">表示は重み適用後の倍率。欠損は中立の×1とし、取得値を捏造しません。この基礎評価と実進入・艇間連動から買い目を作ります。比率は試験設定で、的中確率や金銭的期待値ではありません。</p>'+policyHTML+chaserHTML+'</section>';
+ const role=r?.role_skill_shadow;
+ const roleHTML=role?.status==='ready'&&Array.isArray(role.roles)&&Array.isArray(role.bets)?
+  '<section class="card card-pad role-skill-shadow"><h3>選手の2・3着適性（試験・正式買い目とは別）</h3>'+
+  '<p class="help">全国勝率に対する全国3連対率の相対差と枠番別スタート順を限定的に利用。実際の2着率・3着率や戦法成功率ではなく、未学習・未校正の仮説です。</p>'+
+  '<table class="bets-table"><thead><tr><th>艇</th><th>2着補正</th><th>3着補正</th></tr></thead><tbody>'+
+  role.roles.map(x=>'<tr><td>'+esc(x.lane)+'</td><td>×'+esc(Number(x.second_proxy).toFixed(3))+'</td><td>×'+esc(Number(x.third_proxy).toFixed(3))+'</td></tr>').join('')+'</tbody></table>'+
+  '<details><summary>同一締切前条件の試験買い目（'+role.bets.length+'点・仮想5万円）</summary><table class="bets-table"><thead><tr><th>3連単</th><th>試験配分</th></tr></thead><tbody>'+
+  role.bets.map(b=>'<tr><td>'+esc(b.combination)+'</td><td>'+esc(Number(b.virtual_yen).toLocaleString('ja-JP'))+'円</td></tr>').join('')+'</tbody></table></details>'+
+  '<p class="help"><strong>正式予想・正式収支には加算しません。</strong> 公式結果確定後に別枠でA/B比較します。</p></section>':
+  role?.status==='unavailable'?'<section class="card card-pad"><p class="help">選手着順適性の試験は未生成。正式予想は変更していません。</p></section>':'';
+ return '<section class="card card-pad four-factor-panel"><h3>4要素の基礎評価</h3><p>選手60・モーター25・展示10・気象5</p><div class="boat-entry-overflow"><table class="bets-table"><thead><tr><th>艇</th>'+labels.map(x=>'<th>'+x+'</th>').join('')+'<th>合成</th></tr></thead><tbody>'+rows+'</tbody></table></div><p class="help">表示は重み適用後の倍率。欠損は中立の×1とし、取得値を捏造しません。この基礎評価と実進入・艇間連動から買い目を作ります。比率は試験設定で、的中確率や金銭的期待値ではありません。</p>'+policyHTML+chaserHTML+'</section>'+roleHTML;
 }
 root.BoatFourFactor={evaluate,panel,WEIGHTS};
 if(typeof module!=='undefined')module.exports=root.BoatFourFactor;

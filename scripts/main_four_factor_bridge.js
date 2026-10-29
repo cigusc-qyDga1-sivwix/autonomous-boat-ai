@@ -9,6 +9,7 @@ const fs=require('node:fs');
 require('../app/four-factor.js');
 require('../app/venue-tactics-v2.js');
 require('../app/tactical-1m.js');
+require('../app/role-skill-shadow.js');
 const model=globalThis.BoatTacticalModel;
 function validBets(bets,maxPoints=12){
  return Array.isArray(bets)&&bets.length>=4&&bets.length<=maxPoints&&
@@ -66,8 +67,17 @@ function run(input){
    experimental_variant:'four-factor-v1.4'
  }):null;
  if(venueControl&&!validBets(venueControl.bets,model.ticketMaxPoints(input)))throw Error('Invalid venue v1.4 ablation bets');
+ // Isolated research calculation. Failure must never suppress a formal forecast.
+ let roleSkillShadow=null;
+ if(input.role_skill_shadow_trial===true){
+  try{roleSkillShadow=globalThis.BoatRoleSkillShadow.run(input,result.bets);}
+  catch(_){roleSkillShadow={version:'racer-role-suitability-shadow-v0.1',
+    status:'unavailable',reason:'isolated_shadow_computation_failed',
+    model_role:'shadow_validation',no_additional_stake:true};}
+ }
  return {
   model_version:result.model,
+  ...(roleSkillShadow?{role_skill_shadow:roleSkillShadow}:{}),
   venue_tactics_v2:venueMeta,
   venue_tactics_ab:venueAware?{
    control_model:'four-factor-v1.4-without-venue-tactics',

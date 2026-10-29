@@ -1,0 +1,35 @@
+name: BOAT LAB role-skill shadow isolated CI
+on:
+  pull_request:
+    paths:
+      - 'app/role-skill-shadow.js'
+      - 'app/tests/role-skill-shadow.test.js'
+      - 'scripts/main_four_factor_bridge.js'
+      - 'scripts/autonomous_daily.py'
+      - 'tests/test_role_skill_shadow.py'
+      - '.github/workflows/role-skill-shadow-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-shadow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: JS syntax
+        run: |
+          node --check app/role-skill-shadow.js
+          node --check scripts/main_four_factor_bridge.js
+          node --check app/tests/role-skill-shadow.test.js
+      - name: Python syntax
+        run: python -m py_compile scripts/autonomous_daily.py tests/test_role_skill_shadow.py
+      - name: Standalone conditional-role shadow tests
+        run: node app/tests/role-skill-shadow.test.js
+      - name: Python-to-Node forecast bridge parity
+        run: python -m unittest discover -s tests -p 'test_role_skill_shadow.py' -v

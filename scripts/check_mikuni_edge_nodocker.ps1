@@ -21,9 +21,11 @@ function Find-Edge {
   throw 'Microsoft Edge executable not found.'
 }
 
-function Send-CDP([string]$method,[object]$params=@{}){
+function Send-CDP([string]$method,[object]$params=@{},[string]$sessionId=''){
   $script:nextId++
-  $body=@{id=$script:nextId;method=$method;params=$params}|ConvertTo-Json -Compress -Depth 25
+  $command=@{id=$script:nextId;method=$method;params=$params}
+  if(-not [string]::IsNullOrWhiteSpace($sessionId)){$command.sessionId=$sessionId}
+  $body=$command|ConvertTo-Json -Compress -Depth 25
   $bytes=[Text.Encoding]::UTF8.GetBytes($body)
   $seg=New-Object 'System.ArraySegment[byte]' -ArgumentList @(,$bytes)
   [void]$script:ws.SendAsync($seg,[Net.WebSockets.WebSocketMessageType]::Text,
@@ -394,6 +396,92 @@ function Get-Pc-Frame-Topology {
   return $summary
 }
 
+function Get-Pc-External-Iframe-Video-Metrics {
+  # Read-only video ELEMENT counts in already-loaded external HTTPS iframe
+  # targets. Uses flat CDP session attachment on this temporary isolated
+  # user's Edge only. No stream URLs, tokens, images, screenshots, audio,
+  # binary payloads or media bytes are ever read or persisted.
+  $out=[ordered]@{
+    status='NO_EXTERNAL_IFRAME_TARGET'
+    candidates=0
+    attached=0
+    inspected=0
+    failures=0
+    video_elements=0
+    playing_video_elements=0
+    canvas_elements=0
+  }
+  $targetInfos=@()
+  try{
+    $id=Send-CDP 'Target.getTargets'
+    $found=Await-CDP $id 5000
+    $targetInfos=@($found.targetInfos)
+  }catch{
+    $out.status='TARGET_DISCOVERY_UNAVAILABLE'
+    return $out
+  }
+  foreach($target in $targetInfos){
+    if($null -eq $target -or [string]$target.type -ne 'iframe'){continue}
+    $safe=Get-Safe-Popup-Info ([string]$target.url)
+    # Probe external HTTPS child targets, not arbitrary browser tabs or
+    # internal/chrome pages. Do not disclose their hostnames.
+    if($safe.category -ne 'HTTPS_HOST' -or
+       $safe.host -eq 'livebb.jlc.ne.jp'){continue}
+    $out.candidates++
+    if($out.candidates -gt 4){continue}
+    $sid=''
+    try{
+      $id=Send-CDP 'Target.attachToTarget' @{
+        targetId=[string]$target.targetId;flatten=$true
+      }
+      $attached=Await-CDP $id 7000
+      $sid=[string]$attached.sessionId
+      if([string]::IsNullOrWhiteSpace($sid)){
+        throw 'No iframe session returned'
+      }
+      $out.attached++
+      $id=Send-CDP 'Runtime.enable' @{} $sid
+      $null=Await-CDP $id 7000
+      $expr=@'
+(()=>{
+ const videos=[...document.querySelectorAll('video')];
+ return {
+   video_elements:videos.length,
+   playing_video_elements:videos.filter(v=>!v.paused&&!v.ended&&v.readyState>=2).length,
+   canvas_elements:document.querySelectorAll('canvas').length
+ };
+})()
+'@
+      $id=Send-CDP 'Runtime.evaluate' @{
+        expression=$expr;returnByValue=$true;awaitPromise=$false
+      } $sid
+      $reply=Await-CDP $id 7000
+      if($reply.exceptionDetails -or $null -eq $reply.result.value){
+        throw 'Video element inventory not available'
+      }
+      $out.inspected++
+      $out.video_elements += [int]$reply.result.value.video_elements
+      $out.playing_video_elements += [int]$reply.result.value.playing_video_elements
+      $out.canvas_elements += [int]$reply.result.value.canvas_elements
+    }catch{
+      $out.failures++
+    }finally{
+      if(-not [string]::IsNullOrWhiteSpace($sid)){
+        try{
+          $id=Send-CDP 'Target.detachFromTarget' @{sessionId=$sid}
+          $null=Await-CDP $id 4000
+        }catch{}
+      }
+    }
+  }
+  if($out.inspected -gt 0){
+    $out.status='IFRAME_DOM_INSPECTED'
+  }elseif($out.candidates -gt 0){
+    $out.status='EXTERNAL_IFRAME_NOT_ATTACHED_OR_UNAVAILABLE'
+  }
+  return $out
+}
+
 function Get-Pc-Page-Metrics {
   # Count only generic, non-identifying player/controls metadata. No URLs,
   # page text, video frames, tokens, cookies or media requests are recorded.
@@ -507,6 +595,8 @@ $result=[ordered]@{
   pc_embedded_players_observed=0;pc_video_surface_diagnosis='NOT_OBSERVED'
   pc_frame_topology_status='NOT_OBSERVED';pc_cross_origin_frames_total=0
   pc_oopif_target_count=0
+  pc_external_iframe_probe_status='NOT_OBSERVED'
+  pc_external_iframe_video_elements=0;pc_external_iframe_playing_elements=0
   note='API response status alone is not a verified video download.'
 }
 try {
@@ -580,6 +670,11 @@ try {
     if($frameTest.frame_tree_status -ne 'AVAILABLE' -or
        $frameTest.frame_total -lt 1){
       throw 'PC CDP frame-tree inspection self-test failed.'
+    }
+    $childTest=Get-Pc-External-Iframe-Video-Metrics
+    if($childTest.candidates -ne 0 -or
+       $childTest.status -ne 'NO_EXTERNAL_IFRAME_TARGET'){
+      throw 'Unexpected external iframe in isolated blank self-test.'
     }
     $pcTest=Get-Pc-Page-Metrics
     if($pcTest.accessible_frame_count -lt 1 -or
@@ -667,6 +762,10 @@ try {
           try{
             $item.metrics=Get-Pc-Page-Metrics
             $item.frame_topology=Get-Pc-Frame-Topology
+            $item.external_iframe_video_probe=Get-Pc-External-Iframe-Video-Metrics
+            $result.pc_external_iframe_video_elements += [int]$item.external_iframe_video_probe.video_elements
+            $result.pc_external_iframe_playing_elements += [int]$item.external_iframe_video_probe.playing_video_elements
+            $result.pc_external_iframe_probe_status=[string]$item.external_iframe_video_probe.status
             $result.pc_cross_origin_frames_total += [int]$item.frame_topology.frame_cross_origin
             $result.pc_oopif_target_count += [int]$item.frame_topology.iframe_target_total
             if($item.frame_topology.frame_tree_status -eq 'AVAILABLE'){
@@ -686,7 +785,8 @@ try {
       $records+= $item
     }
     $result.pc_observed_targets=$records
-    if($result.pc_playing_video_elements -gt 0){
+    if($result.pc_playing_video_elements -gt 0 -or
+       $result.pc_external_iframe_playing_elements -gt 0){
       $result.pc_video_surface_diagnosis='HTML_VIDEO_PLAYING'
       $result.access_decision='PC_MANUAL_VIDEO_ELEMENT_PLAYING_VERIFIED'
     }elseif($result.pc_inaccessible_frames_observed -gt 0){

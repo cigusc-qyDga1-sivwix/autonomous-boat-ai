@@ -6,16 +6,32 @@ on:
       - 'app/**'
       - '.github/workflows/boat-lab-pages.yml'
   workflow_dispatch:
+  workflow_run:
+    # Bot data commits do not fire push workflows. Publish after their writers finish.
+    workflows:
+      - BOAT LAB nationwide auto forecasts
+      - BOAT LAB fast official result updates
+      - BOAT LAB official result backlog reconciliation
+      - BOAT LAB nationwide intelligence research
+      - BOAT LAB Mikuni authorized video research
+      - BOAT LAB statistical training and temporal audit
+      - BOAT LAB one-off retrospective exhibition replay
+    types: [completed]
 permissions:
   contents: read
   pages: write
   id-token: write
 concurrency:
   group: boat-lab-pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   deploy:
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name != 'workflow_run' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -23,6 +39,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Resolve main when this serialized job starts, never the triggering old SHA.
+          ref: main
+      - name: Record published repository revision
+        run: git rev-parse HEAD
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
         with:

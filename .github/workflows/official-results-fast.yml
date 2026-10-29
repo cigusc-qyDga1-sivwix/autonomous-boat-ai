@@ -83,17 +83,7 @@ jobs:
             sleep 2
           done
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
-      - uses: actions/configure-pages@v5
-        if: steps.refresh.outputs.changed == 'true'
-      - uses: actions/upload-pages-artifact@v3
-        if: steps.refresh.outputs.changed == 'true'
-        with:
-          name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
-          path: './app'
-      - uses: actions/deploy-pages@v4
-        if: steps.refresh.outputs.changed == 'true'
-        with:
-          artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
+      # Successful completion wakes the single Pages publisher with fresh main.
       - name: Keep result updater diagnostics
         if: always()
         uses: actions/upload-artifact@v4

@@ -9,7 +9,8 @@ param(
   [switch]$HoldOpen,
   [switch]$AutoPlay,
   [switch]$PcSite,
-  [switch]$PcLiveWatch
+  [switch]$PcLiveWatch,
+  [switch]$PcAutoStart
 )
 $ErrorActionPreference='Stop'
 
@@ -397,7 +398,7 @@ function Get-Pc-Frame-Topology {
   return $summary
 }
 
-function Get-Pc-External-Iframe-Video-Metrics([switch]$Watch) {
+function Get-Pc-External-Iframe-Video-Metrics([switch]$Watch,[switch]$AttemptPlay) {
   # Read-only video ELEMENT counts in already-loaded external HTTPS iframe
   # targets. Uses flat CDP session attachment on this temporary isolated
   # user's Edge only. No stream URLs, tokens, images, screenshots, audio,
@@ -414,6 +415,8 @@ function Get-Pc-External-Iframe-Video-Metrics([switch]$Watch) {
     paused_elements_last_sample=0
     ended_elements_last_sample=0
     ready_elements_last_sample=0
+    auto_start_status='NOT_REQUESTED'
+    auto_start_attempted=$false
     sample_count=0
     canvas_elements=0
   }
@@ -426,15 +429,24 @@ function Get-Pc-External-Iframe-Video-Metrics([switch]$Watch) {
     $out.status='TARGET_DISCOVERY_UNAVAILABLE'
     return $out
   }
+  # Autonomous start is opt-in and only for a single already-opened external
+  # iframe. A different venue/race might be in a generic iframe: the person
+  # must explicitly confirm the selected replay; do not assert machine proof.
+  $eligible=@()
   foreach($target in $targetInfos){
     if($null -eq $target -or [string]$target.type -ne 'iframe'){continue}
     $safe=Get-Safe-Popup-Info ([string]$target.url)
-    # Probe external HTTPS child targets, not arbitrary browser tabs or
-    # internal/chrome pages. Do not disclose their hostnames.
-    if($safe.category -ne 'HTTPS_HOST' -or
-       $safe.host -eq 'livebb.jlc.ne.jp'){continue}
-    $out.candidates++
-    if($out.candidates -gt 4){continue}
+    if($safe.category -eq 'HTTPS_HOST' -and
+       $safe.host -ne 'livebb.jlc.ne.jp'){$eligible+= $target}
+  }
+  $out.candidates=$eligible.Count
+  if($AttemptPlay -and $eligible.Count -ne 1){
+    $out.auto_start_status='REQUIRES_SINGLE_IFRAME'
+    $out.status='AUTOSTART_NO_UNIQUE_IFRAME'
+    return $out
+  }
+  foreach($target in $eligible){
+    if($out.attached -ge 4){break}
     $sid=''
     try{
       $id=Send-CDP 'Target.attachToTarget' @{
@@ -448,9 +460,38 @@ function Get-Pc-External-Iframe-Video-Metrics([switch]$Watch) {
       $out.attached++
       $id=Send-CDP 'Runtime.enable' @{} $sid
       $null=Await-CDP $id 7000
+      if($AttemptPlay){
+        # User confirmed the actual replay by its visible race/date on page.
+        # Do not bypass autoplay restrictions, DRM, or access controls.
+        $playExpr=@'
+(async()=>{
+ const videos=[...document.querySelectorAll('video')];
+ if(videos.length!==1)return {status:'VIDEO_NOT_UNIQUE',attempted:false};
+ const v=videos[0];
+ if(!v.paused&&!v.ended)return {status:'ALREADY_PLAYING',attempted:false};
+ try{
+   await v.play();
+   return {status:'PLAY_PROMISE_RESOLVED',attempted:true};
+ }catch(e){
+   return {status:e&&e.name==='NotAllowedError'?
+      'BROWSER_AUTOPLAY_NOT_ALLOWED':'PLAY_REJECTED',attempted:true};
+ }
+})()
+'@
+        $id=Send-CDP 'Runtime.evaluate' @{
+          expression=$playExpr;returnByValue=$true;awaitPromise=$true
+        } $sid
+        $playReply=Await-CDP $id 10000
+        if($playReply.exceptionDetails -or $null -eq $playReply.result.value){
+          $out.auto_start_status='PLAYER_EXECUTION_UNAVAILABLE'
+        }else{
+          $out.auto_start_status=[string]$playReply.result.value.status
+          $out.auto_start_attempted=[bool]$playReply.result.value.attempted
+        }
+      }
       # In opt-in Watch mode, sample the video element's playback clock
       # across a short interval. Never emit currentTime or media URLs.
-      $samples=if($Watch){8}else{1}
+      $samples=if($Watch -or $AttemptPlay){8}else{1}
       $expr=@'
 (async()=>{
  const sampleCount=__SAMPLE_COUNT__;
@@ -638,7 +679,10 @@ $result=[ordered]@{
   pc_external_iframe_video_elements=0;pc_external_iframe_playing_elements=0
   pc_external_iframe_advancing_elements=0
   pc_external_iframe_paused_elements=0;pc_external_iframe_ended_elements=0
-  pc_live_watch_mode=if($PcLiveWatch){'OPT_IN_8_SAMPLES'}else{'SINGLE_SNAPSHOT'}
+  pc_live_watch_mode=if($PcLiveWatch -or $PcAutoStart){'OPT_IN_8_SAMPLES'}else{'SINGLE_SNAPSHOT'}
+  pc_autostart_requested=[bool]$PcAutoStart
+  pc_autostart_status='NOT_REQUESTED'
+  pc_selection_verified='NOT_VERIFIED'
   note='API response status alone is not a verified video download.'
 }
 try {
@@ -649,6 +693,7 @@ try {
   if($AutoPlay -and -not $VisibleEdge){throw 'AutoPlay requires -VisibleEdge.'}
   if($PcSite -and -not $VisibleEdge){throw 'PcSite requires -VisibleEdge.'}
   if($PcLiveWatch -and -not $PcSite){throw 'PcLiveWatch requires -PcSite.'}
+  if($PcAutoStart -and -not $PcSite){throw 'PcAutoStart requires -PcSite.'}
   if($PcSite -and ($AutoPlay -or $LayoutAudit -or $SelfTest)){
     throw 'PcSite is a separate, manual UI diagnostic mode; omit AutoPlay/LayoutAudit/SelfTest.'
   }
@@ -724,6 +769,11 @@ try {
        $watchSelfTest.status -ne 'NO_EXTERNAL_IFRAME_TARGET'){
       throw 'PC playback-watch mode must have no targets on blank self-test.'
     }
+    $startSelfTest=Get-Pc-External-Iframe-Video-Metrics -AttemptPlay
+    if($startSelfTest.auto_start_status -ne 'REQUIRES_SINGLE_IFRAME' -or
+       $startSelfTest.auto_start_attempted){
+      throw 'Auto-start must reject blank iframe self-test.'
+    }
     $pcTest=Get-Pc-Page-Metrics
     if($pcTest.accessible_frame_count -lt 1 -or
        $null -eq $pcTest.inaccessible_frame_count -or
@@ -783,14 +833,24 @@ try {
     Pump-CDP 2500
     $result.pc_initial=Get-Pc-Page-Metrics
     $result.pc_venue_url_verified=$true
-    Write-Host 'BOAT LAB PC probe: in this isolated Edge window, open Mikuni exhibition replay and play it manually.'
-    Write-Host 'Use the isolated Edge opened by this script, NOT your usual Edge.'
-    Write-Host 'After starting the replay, return promptly and type Y while it is playing.'
-    if($PcLiveWatch){
-      Write-Host 'The next probe samples iframe video state 8 times without recording video.'
+    Write-Host 'BOAT LAB: use ONLY the isolated Edge opened by this script.'
+    if($PcAutoStart){
+      Write-Host ('Select Mikuni {0}, race {1} exhibition replay manually, but do NOT press Play.' -f $Date,$Race)
+      Write-Host 'Check the date, venue and race on the screen before continuing.'
+      $confirmed=Read-Host 'Type START to request playback of the visibly selected replay (anything else cancels)'
+      if($confirmed -cne 'START'){
+        throw 'PC auto-start canceled: target replay not user-confirmed.'
+      }
+      $result.pc_selection_verified='USER_CONFIRMED_ONLY'
+    }else{
+      Write-Host 'Open Mikuni exhibition replay and play it manually.'
+      Write-Host 'After starting replay, type Y while video is playing, otherwise ENTER.'
+      if($PcLiveWatch){
+        Write-Host 'The next probe samples iframe video state 8 times without recording media.'
+      }
+      $manualAnswer=Read-Host 'Video visibly played in this Edge? (Y/Enter)'
+      $result.pc_manual_playback_reported=([string]$manualAnswer -match '^[yY]$')
     }
-    $manualAnswer=Read-Host 'Video visibly played in this Edge? (Y/Enter)'
-    $result.pc_manual_playback_reported=([string]$manualAnswer -match '^[yY]$')
     $script:phase='PC_OBSERVE_ATTACHED_TABS'
     # The isolated CDP port belongs only to this diagnostic Edge profile.
     $tabs=Invoke-RestMethod -Uri "http://127.0.0.1:$port/json/list" -TimeoutSec 5
@@ -813,7 +873,8 @@ try {
           try{
             $item.metrics=Get-Pc-Page-Metrics
             $item.frame_topology=Get-Pc-Frame-Topology
-            $item.external_iframe_video_probe=Get-Pc-External-Iframe-Video-Metrics -Watch:$PcLiveWatch
+            $item.external_iframe_video_probe=Get-Pc-External-Iframe-Video-Metrics -Watch:$PcLiveWatch -AttemptPlay:$PcAutoStart
+            if($PcAutoStart){$result.pc_autostart_status=[string]$item.external_iframe_video_probe.auto_start_status}
             $result.pc_external_iframe_video_elements += [int]$item.external_iframe_video_probe.video_elements
             $result.pc_external_iframe_playing_elements += [int]$item.external_iframe_video_probe.playing_video_elements
             $result.pc_external_iframe_advancing_elements += [int]$item.external_iframe_video_probe.time_advancing_elements
@@ -841,7 +902,14 @@ try {
     $result.pc_observed_targets=$records
     if($result.pc_external_iframe_advancing_elements -gt 0){
       $result.pc_video_surface_diagnosis='EXTERNAL_VIDEO_CLOCK_ADVANCING'
-      $result.access_decision='PC_VIDEO_PLAYBACK_PROGRESS_VERIFIED'
+      # Clock advancement alone does not prove that THIS probe started
+      # playback: video may already have been playing when inspected.
+      $result.access_decision=if($PcAutoStart -and
+          $result.pc_autostart_status -eq 'PLAY_PROMISE_RESOLVED'){
+        'PC_AUTOSTART_VIDEO_CLOCK_ADVANCING'
+      }else{
+        'PC_VIDEO_PLAYBACK_PROGRESS_VERIFIED'
+      }
     }elseif($result.pc_playing_video_elements -gt 0 -or
        $result.pc_external_iframe_playing_elements -gt 0){
       $result.pc_video_surface_diagnosis='HTML_VIDEO_PLAYING_STATE_OBSERVED'
@@ -1200,5 +1268,5 @@ try {
   try{Remove-Item -LiteralPath $profile -Recurse -Force -ErrorAction SilentlyContinue}catch{}
 }
 $result|ConvertTo-Json -Depth 12
-if($result.access_decision -in @('EDGE_SELFTEST_PASSED_NO_NETWORK','PLAYBACK_API_2XX_VIDEO_UNVERIFIED','PC_MANUAL_VIDEO_ELEMENT_PLAYING_VERIFIED','PC_VIDEO_PLAYBACK_PROGRESS_VERIFIED','PC_EXTERNAL_VIDEO_PAUSED_OR_ENDED_NOT_PLAYING','PC_VIDEO_IN_INACCESSIBLE_FRAME_POSSIBLE_NOT_VERIFIED','PC_EMBEDDED_PLAYER_UNVERIFIED','PC_VIDEO_ELEMENT_PLAYBACK_NOT_VERIFIED')){exit 0}
+if($result.access_decision -in @('EDGE_SELFTEST_PASSED_NO_NETWORK','PLAYBACK_API_2XX_VIDEO_UNVERIFIED','PC_MANUAL_VIDEO_ELEMENT_PLAYING_VERIFIED','PC_VIDEO_PLAYBACK_PROGRESS_VERIFIED','PC_AUTOSTART_VIDEO_CLOCK_ADVANCING','PC_EXTERNAL_VIDEO_PAUSED_OR_ENDED_NOT_PLAYING','PC_VIDEO_IN_INACCESSIBLE_FRAME_POSSIBLE_NOT_VERIFIED','PC_EMBEDDED_PLAYER_UNVERIFIED','PC_VIDEO_ELEMENT_PLAYBACK_NOT_VERIFIED')){exit 0}
 exit 2

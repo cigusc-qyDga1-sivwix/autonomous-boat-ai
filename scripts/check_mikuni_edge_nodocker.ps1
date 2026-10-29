@@ -322,7 +322,7 @@ function Try-Official-Play($target,[string]$date,[int]$race){
 function Get-Pc-Page-Metrics {
   # Count only generic, non-identifying player/controls metadata. No URLs,
   # page text, video frames, tokens, cookies or media requests are recorded.
-  return (Eval-CDP @'
+  $pcJs=@'
 (()=>{
   const tally={dom_status:document.readyState,iframe_count:0,
     accessible_frame_count:0,video_elements:0,playing_video_elements:0,
@@ -355,7 +355,8 @@ function Get-Pc-Page-Metrics {
   scan(document);
   return tally;
 })()
-'@)
+'@
+  return (Eval-CDP $pcJs)
 }
 
 function Invoke-Trusted-PointClick([int]$x,[int]$y){

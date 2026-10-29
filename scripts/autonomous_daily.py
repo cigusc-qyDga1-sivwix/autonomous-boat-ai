@@ -424,7 +424,8 @@ def promoted_v07(venue: str, phase: str, racers: list[dict],
 def promoted_v09(venue: str, phase: str, racers: list[dict],
                  profile: dict | None, weather: dict | None,
                  frozen_at_utc: str, four_factor: bool = False, head_coverage: bool = False,
-                 postrace_conditional: bool = False, venue_tactics: bool = False, point_free: bool = False) -> dict:
+                 postrace_conditional: bool = False, venue_tactics: bool = False, point_free: bool = False,
+                 role_skill_trial: bool = False) -> dict:
     """Invoke one explicit model identity; never fall back on bridge failure."""
     inputs = {
         "venue": venue, "phase": phase,
@@ -438,6 +439,7 @@ def promoted_v09(venue: str, phase: str, racers: list[dict],
         "head_coverage_trial": head_coverage,
         "postrace_conditional_trial": postrace_conditional,
         "venue_tactics_trial": venue_tactics,
+        "role_skill_shadow_trial": bool(role_skill_trial and four_factor),
     }
     try:
         job = subprocess.run(
@@ -543,6 +545,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     postrace_active = four_factor and now.astimezone(UTC) >= POSTRACE_ACTIVATION_UTC
     venue_active = postrace_active and venue != "江戸川" and now.astimezone(UTC) >= VENUE_TACTICS_ACTIVATION_UTC
     point_free_active = cutoff.date() == POINT_FREE_DATE and now.astimezone(JST).date() == POINT_FREE_DATE
+    role_skill_active = four_factor and cutoff.date() >= date(2026, 10, 31) and now.astimezone(JST).date() >= date(2026, 10, 31)
     new_primary = cutoff.date() >= WAKE_PROMOTION_DATE
     if new_primary:
         same_time_old = (promoted_v09(venue, phase, racers, profile, selected_weather, frozen_at) if four_factor else
@@ -560,7 +563,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         promoted = promoted_v09(venue, phase, racers, profile, selected_weather, frozen_at, four_factor=four_factor,
                                 head_coverage=bool(race.get("_head_coverage_trial")) and not postrace_active,
                                 postrace_conditional=postrace_active and not venue_active,
-                                venue_tactics=venue_active, point_free=point_free_active)
+                                venue_tactics=venue_active, point_free=point_free_active,
+                                role_skill_trial=role_skill_active)
         chosen_model = promoted["model_version"]
     else:
         promoted = promoted_v07(venue, phase, racers, profile, selected_weather, frozen_at)
@@ -591,6 +595,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
             reason += "／23場別の決まり手構成と実進入・合法STに基づく着順連動v1.4（未校正）"
     body = {
         "model_version": chosen_model,
+        **({"role_skill_shadow": promoted["role_skill_shadow"]} if promoted.get("role_skill_shadow") else {}),
         **({"point_free_control": promoted["point_free_control"],
             "point_free_provenance": promoted["point_free_provenance"]} if point_free_active else {}),
         **({"head_coverage_control": promoted["head_coverage_control"]} if promoted.get("head_coverage_control") else {}),
@@ -854,6 +859,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "start_v07", "coupled_v06", "wake_v09", "four_factor", "racer_context_upgrade", "model_upgrade", "primary_model_ab", "head_course_shares",
                       "role_coverage", "role_changes", "head_coverage_control", "postrace_conditional_v13",
                       "postrace_conditional_control", "venue_tactics_v2", "venue_tactics_ab", "point_free_control", "point_free_provenance",
+                      "role_skill_shadow",
                       "relative_scores_uncalibrated"):
             if extra in current:
                 r[extra] = current[extra]

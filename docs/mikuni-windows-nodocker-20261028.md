@@ -168,3 +168,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\check_mikuni_edge_nodocker
 診断機能に `Page.windowOpen` イベント監視を追加した。イベントのURLは保存・出力せず、`window_open_events` 件数と、公式JLCプレイヤーで `date/jo/race` が厳密一致したかを `window_open_kind` として記録。 `OFFICIAL_PLAYER_MATCHED` なら、JavaScriptが公式プレイヤーのウィンドウを開く要求を発したことは確認できるが、別プロセスの実在・自動操作・再生成功までは示さない。
 
 `NO_WINDOW_OPEN_EVENT` の場合はフォーム送信、別プロトコル、プレイヤー側イベント経路などを調べる。既定の診断や `-VisibleEdge -AutoPlay` に追加リスクはなく、再生の強行・URL推測・認証回避・映像保存はしない。Windows実機の次回観測待ち。
+
+
+## 2026-10-29｜CDPポップアップイベント0件／通信遮断との切り分け
+
+実機で`window_open_events=0`、`PLAYER_TARGET_NOT_ATTACHED_NO_CLICK`、`opaque_requests_blocked=1` が確認された。これは1RにCDPのマウス操作を送信したことを示すが、クリックが本当に対象リンクに到達したかは未確認。また診断用のXHR遮断が公式サイトの正常な画面遷移に影響した可能性がある。根本原因はまだ断定しない。
+
+変更：
+- 再生を明示した`-VisibleEdge -AutoPlay`のみに限り、日付とRを厳密に確認してから、公式ページのリンクをクリックする**直前**に`Fetch.disable`を行う。一般的な診断・CIは従来の通信遮断を維持する。ブラウザの通常視聴通信を許可するだけで、映像ファイル/フレーム/認証データはプログラムへ保存しない。
+- `document.elementFromPoint`でクリック座標に本物のリンクまたは子要素があることを検証。曖昧な場合はクリックしない。
+- `race_click_hit_verified`（座標検証）、`race_click_event_observed`（ページ側のクリック発火）、`fetch_mode_at_race_click`（通信モード）、`opaque_requests_blocked_before_click`（事前遮断数）を追加。
+- URLの組み立て・直アクセスを再導入しない。メディア取得成功・6艇識別は未確認のまま。正式予想/照合/収支は変更しない。

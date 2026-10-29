@@ -325,13 +325,16 @@ function Get-Pc-Page-Metrics {
   $pcJs=@'
 (()=>{
   const tally={dom_status:document.readyState,iframe_count:0,
-    accessible_frame_count:0,video_elements:0,playing_video_elements:0,
+    accessible_frame_count:0,inaccessible_frame_count:0,video_elements:0,playing_video_elements:0,object_elements:0,embed_elements:0,canvas_elements:0,
     replay_menu_candidates:0,exhibition_menu_candidates:0,
     race_one_candidates:0};
   const scanned=new Set();
   const scan=doc=>{
     if(!doc || scanned.has(doc))return;
     scanned.add(doc); tally.accessible_frame_count++;
+    tally.object_elements+=doc.querySelectorAll('object').length;
+    tally.embed_elements+=doc.querySelectorAll('embed').length;
+    tally.canvas_elements+=doc.querySelectorAll('canvas').length;
     for(const v of doc.querySelectorAll('video')){
       tally.video_elements++;
       if(!v.paused && !v.ended && v.readyState>=2 && v.currentTime>0){
@@ -349,7 +352,10 @@ function Get-Pc-Page-Metrics {
     const frames=[...doc.querySelectorAll('iframe,frame')];
     tally.iframe_count+=frames.length;
     for(const el of frames){
-      try{if(el.contentDocument)scan(el.contentDocument)}catch(e){}
+      let inner=null;
+      try{inner=el.contentDocument}catch(e){}
+      if(inner)scan(inner);
+      else tally.inaccessible_frame_count++;
     }
   };
   scan(document);
@@ -420,6 +426,8 @@ $result=[ordered]@{
   opaque_requests_blocked_before_click=0
   pc_site_mode=if($PcSite){'MANUAL_PLAYBACK_PROBE'}else{'OFF'}
   pc_initial=$null;pc_observed_targets=@();pc_playing_video_elements=0
+  pc_manual_playback_reported=$false;pc_inaccessible_frames_observed=0
+  pc_embedded_players_observed=0;pc_video_surface_diagnosis='NOT_OBSERVED'
   note='API response status alone is not a verified video download.'
 }
 try {
@@ -487,6 +495,8 @@ try {
     }
     $pcTest=Get-Pc-Page-Metrics
     if($pcTest.accessible_frame_count -lt 1 -or
+       $null -eq $pcTest.inaccessible_frame_count -or
+       $null -eq $pcTest.embed_elements -or
        $pcTest.video_elements -ne 0 -or
        $pcTest.playing_video_elements -ne 0){
       throw 'PC page DOM probe self-test failed.'
@@ -535,8 +545,10 @@ try {
     Pump-CDP 2500
     $result.pc_initial=Get-Pc-Page-Metrics
     Write-Host 'BOAT LAB PC probe: in this isolated Edge window, open Mikuni exhibition replay and play it manually.'
-    Write-Host 'When the video is playing, return here and press ENTER to inspect video element state.'
-    $null=Read-Host 'Press ENTER to inspect the official PC playback session'
+    Write-Host 'Use the isolated Edge opened by this script, NOT your usual Edge.'
+    Write-Host 'After trying to play the video, type Y if it was visibly playing, otherwise press ENTER.'
+    $manualAnswer=Read-Host 'Video visibly played in this Edge? (Y/Enter)'
+    $result.pc_manual_playback_reported=([string]$manualAnswer -match '^[yY]$')
     $script:phase='PC_OBSERVE_ATTACHED_TABS'
     # The isolated CDP port belongs only to this diagnostic Edge profile.
     $tabs=Invoke-RestMethod -Uri "http://127.0.0.1:$port/json/list" -TimeoutSec 5
@@ -559,6 +571,9 @@ try {
           try{
             $item.metrics=Get-Pc-Page-Metrics
             $result.pc_playing_video_elements += [int]$item.metrics.playing_video_elements
+            $result.pc_inaccessible_frames_observed += [int]$item.metrics.inaccessible_frame_count
+            $result.pc_embedded_players_observed += [int]$item.metrics.object_elements
+            $result.pc_embedded_players_observed += [int]$item.metrics.embed_elements
           }catch{
             $item.metrics=@{dom_status='UNAVAILABLE';video_elements=0;playing_video_elements=0}
           }
@@ -568,9 +583,17 @@ try {
     }
     $result.pc_observed_targets=$records
     if($result.pc_playing_video_elements -gt 0){
+      $result.pc_video_surface_diagnosis='HTML_VIDEO_PLAYING'
       $result.access_decision='PC_MANUAL_VIDEO_ELEMENT_PLAYING_VERIFIED'
+    }elseif($result.pc_inaccessible_frames_observed -gt 0){
+      $result.pc_video_surface_diagnosis='CROSS_ORIGIN_OR_UNAVAILABLE_IFRAME'
+      $result.access_decision='PC_VIDEO_IN_INACCESSIBLE_FRAME_POSSIBLE_NOT_VERIFIED'
+    }elseif($result.pc_embedded_players_observed -gt 0){
+      $result.pc_video_surface_diagnosis='OBJECT_OR_EMBED_PLAYER_PRESENT'
+      $result.access_decision='PC_EMBEDDED_PLAYER_UNVERIFIED'
     }else{
-      $result.access_decision='PC_MANUAL_PLAYBACK_BROWSER_VISIBLE_NOT_PROGRAMMATICALLY_VERIFIED'
+      $result.pc_video_surface_diagnosis='NO_HTML_VIDEO_FOUND'
+      $result.access_decision='PC_VIDEO_ELEMENT_PLAYBACK_NOT_VERIFIED'
     }
     # The PC branch is observation-only: no media capture or prediction writes.
   }else{
@@ -911,5 +934,5 @@ try {
   try{Remove-Item -LiteralPath $profile -Recurse -Force -ErrorAction SilentlyContinue}catch{}
 }
 $result|ConvertTo-Json -Depth 12
-if($result.access_decision -in @('EDGE_SELFTEST_PASSED_NO_NETWORK','PLAYBACK_API_2XX_VIDEO_UNVERIFIED','PC_MANUAL_VIDEO_ELEMENT_PLAYING_VERIFIED','PC_MANUAL_PLAYBACK_BROWSER_VISIBLE_NOT_PROGRAMMATICALLY_VERIFIED')){exit 0}
+if($result.access_decision -in @('EDGE_SELFTEST_PASSED_NO_NETWORK','PLAYBACK_API_2XX_VIDEO_UNVERIFIED','PC_MANUAL_VIDEO_ELEMENT_PLAYING_VERIFIED','PC_VIDEO_IN_INACCESSIBLE_FRAME_POSSIBLE_NOT_VERIFIED','PC_EMBEDDED_PLAYER_UNVERIFIED','PC_VIDEO_ELEMENT_PLAYBACK_NOT_VERIFIED')){exit 0}
 exit 2

@@ -222,3 +222,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\check_mikuni_edge_nodocker
 これは**PC版のDOM構造・ブラウザ再生状態を把握する診断**であり、日付・Rを選ぶ自動操作はまだ搭載していない。動画要素はクロスオリジンiframeに埋め込まれている場合があるため、0件は再生失敗の断定ではない。動画本体やスクリーンショット、ページ文字列、URL全文、Cookie、認証情報を収集・保存しない。従来スマホ版フロー、正式予想、結果照合、収支は一切変更なし。
 
 次の段階でPC画面構造に基づいた「展示→三国→日付→1R→再生」各操作の自動化を個別に実装する。動画フレーム取得・6艇追跡はまだ未完成。
+
+
+## 2026-10-30｜PC版のvideo未検出原因を分類
+
+ユーザーのWindowsでは`iframe_count=2`、`accessible_frame_count=2`（親ページ込み）、`video_elements=0`、`playing_video_elements=0`。PC版の再生失敗を示すとは限らず、クロスオリジンiframeまたは別の埋込方式があり得る。診断用Edge内で実際に再生したかも前の診断では不明。
+
+`-PcSite -VisibleEdge` のHTML観測に、`inaccessible_frame_count`・`object_elements`・`embed_elements`・`canvas_elements`を追加。終了時に**この診断で開いたEdgeで再生できたか**をY/Enterで入力し、`pc_manual_playback_reported`を記録。これは目視の自己申告とプログラムが検出したHTML動画の再生を混同しないため。
+
+動画・映像フレーム・全文URL・認証情報は収集しない。正式予想・結果照合・収支と従来のスマホ版診断はそのまま。

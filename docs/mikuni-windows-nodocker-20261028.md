@@ -159,3 +159,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\check_mikuni_edge_nodocker
 **修正：** 手動構築した公式プレイヤーURLへの強制遷移を廃止。既存のJLC一覧画面から正確な日付/レースを操作した後、同じCDPセッションの唯一のタブが公式プレイヤー自身になっている場合だけ再生ボタンを検査。確認できない場合は `PLAYER_TARGET_NOT_ATTACHED_NO_CLICK` と `NATIVE_CLICK_ONLY_NO_DIRECT_URL` を返し、再生ページを憶測で生成しない。既知のサーバーエラーテキストは `SERVER_REPLAY_FILE_NOT_FOUND` と区別。動画の保存/URLクエリ出力/認証回避は行わない。
 
 この修正は安全な診断の正確性を改善するものであり、別プロセスのEdge窓を自動制御できる保証はまだない。結果のスクリーンショットから、実際にUIで再生できたか、CDP側が公式プレイヤーを捉えられたかを分けて確認する。
+
+
+## 2026-10-29｜PLAYER_TARGET_NOT_ATTACHED_NO_CLICK の原因分離
+
+利用者のWindows検証で `browser_tabs_after_click=1`、`playback_auto_click=PLAYER_TARGET_NOT_ATTACHED_NO_CLICK` が再現。公式JLCのプレイヤー自体は以前に別Edgeウィンドウで表示可能だった。CDP監視下のタブが1個であることは、ポップアップが実際に存在しない証拠ではない。
+
+診断機能に `Page.windowOpen` イベント監視を追加した。イベントのURLは保存・出力せず、`window_open_events` 件数と、公式JLCプレイヤーで `date/jo/race` が厳密一致したかを `window_open_kind` として記録。 `OFFICIAL_PLAYER_MATCHED` なら、JavaScriptが公式プレイヤーのウィンドウを開く要求を発したことは確認できるが、別プロセスの実在・自動操作・再生成功までは示さない。
+
+`NO_WINDOW_OPEN_EVENT` の場合はフォーム送信、別プロトコル、プレイヤー側イベント経路などを調べる。既定の診断や `-VisibleEdge -AutoPlay` に追加リスクはなく、再生の強行・URL推測・認証回避・映像保存はしない。Windows実機の次回観測待ち。

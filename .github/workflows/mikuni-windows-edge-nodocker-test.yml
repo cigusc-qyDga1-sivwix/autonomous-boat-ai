@@ -14,6 +14,7 @@ on:
       - fix/mikuni-optin-unblock-and-hitcheck-20261029
       - fix/mikuni-race-icon-hitpoint-20261029
       - fix/mikuni-runtime-click-proof-20261029
+      - fix/mikuni-focus-mouse-events-20261029
       - fix/mikuni-autoplay-no-direct-file-not-found-20261029
       - fix/mikuni-autoplay-same-tab-20261029
     paths:
@@ -60,6 +61,7 @@ jobs:
           if ($audit.fetch_mode_at_race_click -ne 'BLOCKED_DIAGNOSTIC') { exit 1 }
           if ([string]::IsNullOrWhiteSpace($audit.race_click_hit_reason)) { exit 1 }
           if ($null -eq $audit.trusted_race_click_delivered) { exit 1 }
+          if ($null -eq $audit.race_mouse_down_seen -or $null -eq $audit.race_mouse_up_seen -or $null -eq $audit.race_click_point_rechecked) { exit 1 }
           if ($audit.new_tab_url_type -eq 'BROWSER_INTERNAL' -and
               $audit.replay_navigation_mode -eq 'OBSERVED_VERIFIED_JLC_POPUP') { exit 1 }
           if ($audit.race_click_hit_verified -eq $true -and

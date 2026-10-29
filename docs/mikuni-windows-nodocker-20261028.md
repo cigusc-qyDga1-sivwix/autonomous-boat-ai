@@ -188,3 +188,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\check_mikuni_edge_nodocker
 改修：ユニークな対象日・対象Rの画像そのものをスクロールし、**画像矩形の内部**の中心と限定した4つの近傍を検証する。位置を突き抜ける別リンク・オーバーレイがあるときにはクリックしない。クリック可能な1Rアイコン内に本来のリンクか子孫がある場合のみ`race_click_hit_verified=true`にする。
 
 新フィールド`race_click_hit_reason` は `EXACT_DAY_RACE_ICON_HIT`、`ICON_OFFSCREEN`、`ICON_OBSCURED_BY_OTHER_ELEMENT` 等の非機密分類。画像のスクリーンショット／座標・URL全文・動画を保存しない。正式予想/結果/収支には触れない。Windows GitHub CIは自己テストであり、現地PCの動画自動再生成功ではない。
+
+
+## 2026-10-29 夜｜クリック検証成功・内部タブを誤って公式プレイヤー扱いしない
+
+利用者のWindows実機で `race_click_hit_verified=true`、`EXACT_DAY_RACE_ICON_HIT`、`browser_tabs_after_click=2` を達成。ただし追加タブは `new_tab_url_type=BROWSER_INTERNAL`、`new_tab_internal_kind=EDGE_OTHER_INTERNAL`、`window_open_events=0`、`race_click_event_observed=NOT_OBSERVED`。従来の `OBSERVED_OFFICIAL_POPUP` という表示は誤解を招くため修正。
+
+- Edge/Chromiumの内部タブを公式プレイヤーとは呼ばず、`BROWSER_INTERNAL_NOT_OFFICIAL_REPLAY` および `NO_VERIFIED_PLAYER_TARGET_NO_CLICK` と明記。自動クリックしない。
+- DOM側の正しい1Rリンクに届いた**信頼されたclickイベント**が一時的に記録されると、DevToolsの `Runtime.consoleAPICalled` に固定マーカーを発行。診断はこの固定文字列だけを識別して `trusted_race_click_delivered` を出力。ページ内の他のコンソールログやURLは取得・保存しない。ページがすぐ遷移してもイベント通知が届けば切り分け可能。
+- 既存の `race_click_event_observed` が `NOT_OBSERVED` でも、ページ遷移によるリセット等で観測できない場合があるため、それだけでイベント未到達と断定しない。
+- 手動ログイン・アクセス制御の回避なし。動画・フレーム保存なし。正式買い目/結果/収支不変更。再生の実機成功は未確認。

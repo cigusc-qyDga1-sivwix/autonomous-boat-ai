@@ -5,7 +5,8 @@ param(
   [ValidateRange(1,12)][int]$Race=1,
   [switch]$SelfTest,
   [switch]$LayoutAudit,
-  [switch]$VisibleEdge
+  [switch]$VisibleEdge,
+  [switch]$HoldOpen
 )
 $ErrorActionPreference='Stop'
 
@@ -525,6 +526,13 @@ try {
 }finally{
   $result.media_requests_blocked=$script:blockedMedia
   $result.opaque_requests_blocked=$script:blockedOpaque
+  if($HoldOpen -and $VisibleEdge -and -not $SelfTest -and $process -and -not $process.HasExited){
+    # This is an explicitly interactive inspection mode, never enabled in CI.
+    # Keep the isolated Edge window and its page available for manual viewing.
+    # Read-Host only changes process lifetime; it does not record video or credentials.
+    Write-Host 'BOAT LAB: Edge window is held open for inspection. Press ENTER here to close it.'
+    try { $null=Read-Host 'Press ENTER when finished inspecting the playback page' }catch{}
+  }
   if($script:ws){try{$script:ws.Dispose()}catch{}}
   $script:messageBuffer.Dispose()
   if($process){try{& taskkill.exe /PID $process.Id /T /F 2>$null|Out-Null}catch{}}

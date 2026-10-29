@@ -207,3 +207,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\check_mikuni_edge_nodocker
 今回の改善は：1Rのリンクでだけ `mousedown`、`mouseup`、`click` の **信頼された**イベントをそれぞれ固定マーカーに変換して記録する。対象のページは `Page.bringToFront` で前面化し、レースリンクがDOM内に残っていて元のマウス座標下にあることを再検証。途中で対象が消失・移動すればクリックを打たずに `RACE_TARGET_CHANGED_BEFORE_CLICK_NO_CLICK` と報告する。ログに `race_mouse_down_seen`、`race_mouse_up_seen`、`race_click_seen`、`race_click_point_rechecked` を追加。旧 `document.addEventListener(...,{once:true})` は別クリックで消費され得るため改めた。
 
 PowerShellのヘッドレス自己テストでこの3種類のイベント観測が正しく動くことを検証する。Windows/Edgeの実機自動再生成功、動画バイト取得、6艇の追跡は依然未確認。動画・認証・ページ内の機密情報保存なし、正式予想や収支には変更なし。
+
+
+## 2026-10-30｜JLC PC版へ転換（初期診断版）
+
+ユーザーのWindows/EdgeでPC版 `https://livebb.jlc.ne.jp/bb_top/new_bb/index.php?tpl=1` の三国展示リプレイが**手動再生できた**ことを確認。PC版は公式にWindowsおよびChromium Edgeをサポートするため、スマホ版の自動クリック修正は保留にしPC版へ移行。
+
+既存スクリプトに `-PcSite -VisibleEdge` を追加。公式PCの入口ページだけへ遷移し、その後は一時プロファイルのEdgeでユーザーが**手動**で三国展示リプレイを再生する。PowerShellのEnterで制御下のJLCページについて、同一オリジンフレーム内の動画要素・再生中要素の件数、展示リプレイ/レース選択メニュー候補数を取得する。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\check_mikuni_edge_nodocker.ps1 -PcSite -VisibleEdge
+```
+
+これは**PC版のDOM構造・ブラウザ再生状態を把握する診断**であり、日付・Rを選ぶ自動操作はまだ搭載していない。動画要素はクロスオリジンiframeに埋め込まれている場合があるため、0件は再生失敗の断定ではない。動画本体やスクリーンショット、ページ文字列、URL全文、Cookie、認証情報を収集・保存しない。従来スマホ版フロー、正式予想、結果照合、収支は一切変更なし。
+
+次の段階でPC画面構造に基づいた「展示→三国→日付→1R→再生」各操作の自動化を個別に実装する。動画フレーム取得・6艇追跡はまだ未完成。

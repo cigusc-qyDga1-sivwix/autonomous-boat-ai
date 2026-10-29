@@ -89,6 +89,13 @@ function Process-Event($event){
         $marker=[string]$args[0].value
         if($marker -eq '__BOATLABS_RACE_CLICK_TRUSTED__'){
           $script:trustedRaceClickDelivered=$true
+          $script:trustedRaceClickSeen=$true
+        }
+        if($marker -eq '__BOATLABS_RACE_MOUSEDOWN__'){
+          $script:raceMouseDownSeen=$true
+        }
+        if($marker -eq '__BOATLABS_RACE_MOUSEUP__'){
+          $script:raceMouseUpSeen=$true
         }
       }
     }
@@ -340,6 +347,7 @@ $script:blockedMedia=0;$script:blockedOpaque=0;$script:apiGets=0
 $script:apiStatuses=@();$script:landingStatus=$null;$script:ws=$null
 $script:windowOpenEventCount=0;$script:windowOpenEventKind='NO_WINDOW_OPEN_EVENT'
 $script:trustedRaceClickDelivered=$false
+$script:trustedRaceClickSeen=$false;$script:raceMouseDownSeen=$false;$script:raceMouseUpSeen=$false
 $process=$null
 $script:phase='START'
 $profile=Join-Path ([IO.Path]::GetTempPath()) ('boatlabs-edge-'+[guid]::NewGuid().ToString('N'))
@@ -363,6 +371,8 @@ $result=[ordered]@{
   replay_navigation_mode='NOT_ATTEMPTED'
   window_open_events=0;window_open_kind='NO_WINDOW_OPEN_EVENT'
   trusted_race_click_delivered=$false
+  race_mouse_down_seen=$false;race_mouse_up_seen=$false;race_click_seen=$false
+  race_click_point_rechecked=$false
   race_click_hit_verified=$false;race_click_event_observed='NOT_CHECKED'
   race_click_hit_reason='NOT_EVALUATED'
   fetch_mode_at_race_click='BLOCKED_DIAGNOSTIC'
@@ -420,6 +430,13 @@ try {
     Invoke-Trusted-PointClick 55 43
     if((Eval-CDP 'window.__boatlabs_click_trusted===true') -ne $true){
       throw 'Input dispatch did not deliver a trusted browser click.'
+    }
+    $null=Eval-CDP "(function(){const b=document.querySelector('button');for(const k of ['mousedown','mouseup','click'])b.addEventListener(k,e=>{if(e.isTrusted)console.log(k==='mousedown'?'__BOATLABS_RACE_MOUSEDOWN__':k==='mouseup'?'__BOATLABS_RACE_MOUSEUP__':'__BOATLABS_RACE_CLICK_TRUSTED__')});return true;})()"
+    $script:raceMouseDownSeen=$false;$script:raceMouseUpSeen=$false;$script:trustedRaceClickSeen=$false
+    Invoke-Trusted-PointClick 55 43
+    Pump-CDP 250
+    if(-not ($script:raceMouseDownSeen -and $script:raceMouseUpSeen -and $script:trustedRaceClickSeen)){
+      throw 'Mouse event telemetry did not capture down, up and click.'
     }
     $strict=Eval-CDP "'/static/1R.png'.match(new RegExp('(?:^|/)1R[.]png(?:[?#]|$)'))!==null&&'/static/11R.png'.match(new RegExp('(?:^|/)1R[.]png(?:[?#]|$)'))===null"
     if($strict -ne $true){throw '1R versus 11R selector is ambiguous.'}
@@ -596,13 +613,22 @@ try {
    return metrics;
  }
  window.__boatlabsRaceClickTrace='NOT_OBSERVED';
- document.addEventListener('click',e=>{
-   if(e.target===chosenLink||chosenLink.contains(e.target)){
-     window.__boatlabsRaceClickTrace=e.isTrusted?
-       'TRUSTED_CLICK_ON_RACE_LINK':'UNTRUSTED_CLICK_ON_RACE_LINK';
-     if(e.isTrusted)console.debug('__BOATLABS_RACE_CLICK_TRUSTED__');
-   }
- },{capture:true,once:true});
+ window.__boatlabsRaceExpectedAnchor=chosenLink;
+ // Keep the detector active for an independently delivered mouseup/click.
+ // A once-only document listener could be consumed by an unrelated click.
+ for(const kind of ['mousedown','mouseup','click']){
+   document.addEventListener(kind,e=>{
+     if(e.target===chosenLink||chosenLink.contains(e.target)){
+       if(!e.isTrusted)return;
+       if(kind==='mousedown')console.log('__BOATLABS_RACE_MOUSEDOWN__');
+       if(kind==='mouseup')console.log('__BOATLABS_RACE_MOUSEUP__');
+       if(kind==='click'){
+         window.__boatlabsRaceClickTrace='TRUSTED_CLICK_ON_RACE_LINK';
+         console.log('__BOATLABS_RACE_CLICK_TRUSTED__');
+       }
+     }
+   },{capture:true});
+ }
  return metrics;
 })()
 "@
@@ -632,8 +658,20 @@ try {
         $null=Await-CDP $id
         $result.fetch_mode_at_race_click='NORMAL_BROWSER_USER_OPT_IN'
       }
-      Invoke-Trusted-PointClick ([int]$clicked.point.x) ([int]$clicked.point.y)
-      $result.race_click_status='TRUSTED_MOUSE_CLICK_EXACT_DAY_AND_RACE'
+      # Verify the target did not move since the earlier hit-test. Explicit
+      # focus helps distinguish background Edge input from page interaction.
+      $id=Send-CDP 'Page.bringToFront'
+      $null=Await-CDP $id
+      $preX=[int]$clicked.point.x
+      $preY=[int]$clicked.point.y
+      $verifyJs="(()=>{const a=window.__boatlabsRaceExpectedAnchor;const h=document.elementFromPoint($preX,$preY);return !!a&&document.contains(a)&&!!h&&(h===a||a.contains(h));})()"
+      $result.race_click_point_rechecked=[bool](Eval-CDP $verifyJs)
+      if($result.race_click_point_rechecked){
+        Invoke-Trusted-PointClick $preX $preY
+        $result.race_click_status='TRUSTED_MOUSE_CLICK_EXACT_DAY_AND_RACE'
+      }else{
+        $result.race_click_status='RACE_TARGET_CHANGED_BEFORE_CLICK_NO_CLICK'
+      }
       try{
         $eventTrace=Eval-CDP "(function(){return String(window.__boatlabsRaceClickTrace||'NOT_OBSERVED')})()"
         $result.race_click_event_observed=[string]$eventTrace
@@ -726,6 +764,9 @@ try {
       }
     }
     $result.trusted_race_click_delivered=[bool]$script:trustedRaceClickDelivered
+    $result.race_mouse_down_seen=[bool]$script:raceMouseDownSeen
+    $result.race_mouse_up_seen=[bool]$script:raceMouseUpSeen
+    $result.race_click_seen=[bool]$script:trustedRaceClickSeen
     $result.window_open_events=$script:windowOpenEventCount
     $result.window_open_kind=$script:windowOpenEventKind
     $result.landing_http_status=$script:landingStatus

@@ -319,6 +319,81 @@ function Try-Official-Play($target,[string]$date,[int]$race){
 '@)
 }
 
+function Get-Pc-Frame-Topology {
+  # Read-only frame/target metadata from the already connected isolated Edge.
+  # Never record full URLs, query strings, frame IDs, titles, storage or media.
+  $summary=[ordered]@{
+    frame_tree_status='UNAVAILABLE'
+    frame_total=0
+    frame_official_jlc=0
+    frame_external_https=0
+    frame_other_or_blank=0
+    frame_cross_origin=0
+    iframe_targets_status='UNAVAILABLE'
+    iframe_target_total=0
+    iframe_target_external_https=0
+  }
+  try {
+    $id=Send-CDP 'Page.enable'
+    $null=Await-CDP $id 5000
+    $id=Send-CDP 'Page.getFrameTree'
+    $tree=Await-CDP $id 5000
+    if($tree.frameTree){
+      $summary.frame_tree_status='AVAILABLE'
+      $stack=New-Object 'System.Collections.Stack'
+      $stack.Push($tree.frameTree)
+      $rootOrigin=''
+      try{
+        $rootUri=[Uri][string]$tree.frameTree.frame.url
+        if($rootUri.Scheme -in @('https','http')){
+          $rootOrigin=$rootUri.GetLeftPart([UriPartial]::Authority)
+        }
+      }catch{}
+      while($stack.Count -gt 0 -and $summary.frame_total -lt 100){
+        $node=$stack.Pop()
+        $summary.frame_total++
+        $frameUrl=[string]$node.frame.url
+        $frameUri=$null
+        try {$frameUri=[Uri]$frameUrl}catch{}
+        if($frameUri -and $frameUri.Scheme -eq 'https'){
+          if($frameUri.Host.ToLowerInvariant() -eq 'livebb.jlc.ne.jp'){
+            $summary.frame_official_jlc++
+          }else{
+            $summary.frame_external_https++
+          }
+        }else{
+          $summary.frame_other_or_blank++
+        }
+        if($frameUri -and $frameUri.Scheme -in @('https','http') -and
+           $rootOrigin -and $frameUri.GetLeftPart([UriPartial]::Authority) -ne $rootOrigin){
+          $summary.frame_cross_origin++
+        }
+        foreach($child in @($node.childFrames)){
+          if($null -ne $child){$stack.Push($child)}
+        }
+      }
+    }
+  }catch{
+    $summary.frame_tree_status='CDP_UNAVAILABLE'
+  }
+  try {
+    $id=Send-CDP 'Target.getTargets'
+    $targets=Await-CDP $id 5000
+    $summary.iframe_targets_status='AVAILABLE'
+    foreach($target in @($targets.targetInfos)){
+      if($null -eq $target -or $target.type -ne 'iframe'){continue}
+      $summary.iframe_target_total++
+      $safe=Get-Safe-Popup-Info ([string]$target.url)
+      if($safe.category -eq 'HTTPS_HOST' -and $safe.host -ne 'livebb.jlc.ne.jp'){
+        $summary.iframe_target_external_https++
+      }
+    }
+  }catch{
+    $summary.iframe_targets_status='CDP_UNAVAILABLE'
+  }
+  return $summary
+}
+
 function Get-Pc-Page-Metrics {
   # Count only generic, non-identifying player/controls metadata. No URLs,
   # page text, video frames, tokens, cookies or media requests are recorded.
@@ -430,6 +505,8 @@ $result=[ordered]@{
   pc_initial=$null;pc_observed_targets=@();pc_playing_video_elements=0
   pc_manual_playback_reported=$false;pc_inaccessible_frames_observed=0
   pc_embedded_players_observed=0;pc_video_surface_diagnosis='NOT_OBSERVED'
+  pc_frame_topology_status='NOT_OBSERVED';pc_cross_origin_frames_total=0
+  pc_oopif_target_count=0
   note='API response status alone is not a verified video download.'
 }
 try {
@@ -499,6 +576,11 @@ try {
     if($pcVenue.Host -ne 'livebb.jlc.ne.jp' -or
        $pcVenue.AbsolutePath -ne '/bb_top/new_bb/index.php' -or
        $pcVenue.Query -ne '?tpl=10'){throw 'PC venue mapping self-test failed.'}
+    $frameTest=Get-Pc-Frame-Topology
+    if($frameTest.frame_tree_status -ne 'AVAILABLE' -or
+       $frameTest.frame_total -lt 1){
+      throw 'PC CDP frame-tree inspection self-test failed.'
+    }
     $pcTest=Get-Pc-Page-Metrics
     if($pcTest.accessible_frame_count -lt 1 -or
        $null -eq $pcTest.inaccessible_frame_count -or
@@ -584,6 +666,14 @@ try {
           $id=Send-CDP 'Runtime.enable';$null=Await-CDP $id
           try{
             $item.metrics=Get-Pc-Page-Metrics
+            $item.frame_topology=Get-Pc-Frame-Topology
+            $result.pc_cross_origin_frames_total += [int]$item.frame_topology.frame_cross_origin
+            $result.pc_oopif_target_count += [int]$item.frame_topology.iframe_target_total
+            if($item.frame_topology.frame_tree_status -eq 'AVAILABLE'){
+              $result.pc_frame_topology_status='AVAILABLE'
+            }elseif($result.pc_frame_topology_status -ne 'AVAILABLE'){
+              $result.pc_frame_topology_status='UNAVAILABLE'
+            }
             $result.pc_playing_video_elements += [int]$item.metrics.playing_video_elements
             $result.pc_inaccessible_frames_observed += [int]$item.metrics.inaccessible_frame_count
             $result.pc_embedded_players_observed += [int]$item.metrics.object_elements

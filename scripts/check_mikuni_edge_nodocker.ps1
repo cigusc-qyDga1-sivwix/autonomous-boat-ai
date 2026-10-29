@@ -837,9 +837,11 @@ try {
     if($PcAutoStart){
       Write-Host ('Select Mikuni {0}, race {1} exhibition replay manually, but do NOT press Play.' -f $Date,$Race)
       Write-Host 'Check the date, venue and race on the screen before continuing.'
-      $confirmed=Read-Host 'Type START to request playback of the visibly selected replay (anything else cancels)'
+      Write-Host 'IMPORTANT: type exactly START (uppercase English letters), then ENTER. Y or ENTER alone cancels.'
+      $confirmed=Read-Host 'Enter START to request playback'
       if($confirmed -cne 'START'){
-        throw 'PC auto-start canceled: target replay not user-confirmed.'
+        $result.pc_autostart_status='CANCELED_NOT_CONFIRMED'
+        throw 'PC auto-start canceled: START confirmation was not received.'
       }
       $result.pc_selection_verified='USER_CONFIRMED_ONLY'
     }else{
@@ -1246,12 +1248,17 @@ try {
     else{$result.access_decision='NO_PLAYBACK_API_RESPONSE'}
   }
 }catch{
-  $result.access_decision='EDGE_DIAGNOSTIC_FAILED'
-  $result['failure_category']='EDGE_CDP_OR_NETWORK_UNAVAILABLE'
+  if($result.pc_autostart_status -eq 'CANCELED_NOT_CONFIRMED'){
+    $result.access_decision='PC_AUTOSTART_CANCELED_BY_USER'
+    $result['failure_category']='START_CONFIRMATION_NOT_PROVIDED'
+  }else{
+    $result.access_decision='EDGE_DIAGNOSTIC_FAILED'
+    $result['failure_category']='EDGE_CDP_OR_NETWORK_UNAVAILABLE'
+    $result['failure_exception_type']=$_.Exception.GetType().Name
+    $result['failure_script_line']=[int]$_.InvocationInfo.ScriptLineNumber
+    if($SelfTest){$result['selftest_failure_detail']=[string]$_.Exception.Message}
+  }
   $result['failure_stage']=$script:phase
-  $result['failure_exception_type']=$_.Exception.GetType().Name
-  $result['failure_script_line']=[int]$_.InvocationInfo.ScriptLineNumber
-  if($SelfTest){$result['selftest_failure_detail']=[string]$_.Exception.Message}
 }finally{
   $result.media_requests_blocked=$script:blockedMedia
   $result.opaque_requests_blocked=$script:blockedOpaque

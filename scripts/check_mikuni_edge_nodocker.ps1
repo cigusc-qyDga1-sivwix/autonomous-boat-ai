@@ -8,7 +8,8 @@ param(
   [switch]$VisibleEdge,
   [switch]$HoldOpen,
   [switch]$AutoPlay,
-  [switch]$PcSite
+  [switch]$PcSite,
+  [switch]$PcLiveWatch
 )
 $ErrorActionPreference='Stop'
 
@@ -396,7 +397,7 @@ function Get-Pc-Frame-Topology {
   return $summary
 }
 
-function Get-Pc-External-Iframe-Video-Metrics {
+function Get-Pc-External-Iframe-Video-Metrics([switch]$Watch) {
   # Read-only video ELEMENT counts in already-loaded external HTTPS iframe
   # targets. Uses flat CDP session attachment on this temporary isolated
   # user's Edge only. No stream URLs, tokens, images, screenshots, audio,
@@ -409,6 +410,11 @@ function Get-Pc-External-Iframe-Video-Metrics {
     failures=0
     video_elements=0
     playing_video_elements=0
+    time_advancing_elements=0
+    paused_elements_last_sample=0
+    ended_elements_last_sample=0
+    ready_elements_last_sample=0
+    sample_count=0
     canvas_elements=0
   }
   $targetInfos=@()
@@ -442,26 +448,59 @@ function Get-Pc-External-Iframe-Video-Metrics {
       $out.attached++
       $id=Send-CDP 'Runtime.enable' @{} $sid
       $null=Await-CDP $id 7000
+      # In opt-in Watch mode, sample the video element's playback clock
+      # across a short interval. Never emit currentTime or media URLs.
+      $samples=if($Watch){8}else{1}
       $expr=@'
-(()=>{
- const videos=[...document.querySelectorAll('video')];
+(async()=>{
+ const sampleCount=__SAMPLE_COUNT__;
+ const last=new Map(), advanced=new Set();
+ let peakVideo=0,peakPlaying=0,lastPaused=0,lastEnded=0,lastReady=0,peakCanvas=0;
+ for(let i=0;i<sampleCount;i++){
+   const videos=[...document.querySelectorAll('video')];
+   peakVideo=Math.max(peakVideo,videos.length);
+   peakPlaying=Math.max(peakPlaying,videos.filter(v=>!v.paused&&!v.ended&&v.readyState>=2).length);
+   lastPaused=videos.filter(v=>v.paused).length;
+   lastEnded=videos.filter(v=>v.ended).length;
+   lastReady=videos.filter(v=>v.readyState>=2).length;
+   peakCanvas=Math.max(peakCanvas,document.querySelectorAll('canvas').length);
+   for(const v of videos){
+     const now=Number(v.currentTime);
+     if(Number.isFinite(now)){
+       if(last.has(v) && now>last.get(v)+0.12)advanced.add(v);
+       last.set(v,now);
+     }
+   }
+   if(i+1<sampleCount)await new Promise(r=>setTimeout(r,700));
+ }
  return {
-   video_elements:videos.length,
-   playing_video_elements:videos.filter(v=>!v.paused&&!v.ended&&v.readyState>=2).length,
-   canvas_elements:document.querySelectorAll('canvas').length
+   video_elements:peakVideo,
+   playing_video_elements:peakPlaying,
+   time_advancing_elements:advanced.size,
+   paused_elements_last_sample:lastPaused,
+   ended_elements_last_sample:lastEnded,
+   ready_elements_last_sample:lastReady,
+   sample_count:sampleCount,
+   canvas_elements:peakCanvas
  };
 })()
 '@
+      $expr=$expr.Replace('__SAMPLE_COUNT__',[string]$samples)
       $id=Send-CDP 'Runtime.evaluate' @{
-        expression=$expr;returnByValue=$true;awaitPromise=$false
+        expression=$expr;returnByValue=$true;awaitPromise=$true
       } $sid
-      $reply=Await-CDP $id 7000
+      $reply=Await-CDP $id 20000
       if($reply.exceptionDetails -or $null -eq $reply.result.value){
         throw 'Video element inventory not available'
       }
       $out.inspected++
       $out.video_elements += [int]$reply.result.value.video_elements
       $out.playing_video_elements += [int]$reply.result.value.playing_video_elements
+      $out.time_advancing_elements += [int]$reply.result.value.time_advancing_elements
+      $out.paused_elements_last_sample += [int]$reply.result.value.paused_elements_last_sample
+      $out.ended_elements_last_sample += [int]$reply.result.value.ended_elements_last_sample
+      $out.ready_elements_last_sample += [int]$reply.result.value.ready_elements_last_sample
+      $out.sample_count=[Math]::Max($out.sample_count,[int]$reply.result.value.sample_count)
       $out.canvas_elements += [int]$reply.result.value.canvas_elements
     }catch{
       $out.failures++
@@ -597,6 +636,9 @@ $result=[ordered]@{
   pc_oopif_target_count=0
   pc_external_iframe_probe_status='NOT_OBSERVED'
   pc_external_iframe_video_elements=0;pc_external_iframe_playing_elements=0
+  pc_external_iframe_advancing_elements=0
+  pc_external_iframe_paused_elements=0;pc_external_iframe_ended_elements=0
+  pc_live_watch_mode=if($PcLiveWatch){'OPT_IN_8_SAMPLES'}else{'SINGLE_SNAPSHOT'}
   note='API response status alone is not a verified video download.'
 }
 try {
@@ -606,6 +648,7 @@ try {
     [Globalization.DateTimeStyles]::None,[ref]$d)){throw 'Invalid calendar date.'}
   if($AutoPlay -and -not $VisibleEdge){throw 'AutoPlay requires -VisibleEdge.'}
   if($PcSite -and -not $VisibleEdge){throw 'PcSite requires -VisibleEdge.'}
+  if($PcLiveWatch -and -not $PcSite){throw 'PcLiveWatch requires -PcSite.'}
   if($PcSite -and ($AutoPlay -or $LayoutAudit -or $SelfTest)){
     throw 'PcSite is a separate, manual UI diagnostic mode; omit AutoPlay/LayoutAudit/SelfTest.'
   }
@@ -676,6 +719,11 @@ try {
        $childTest.status -ne 'NO_EXTERNAL_IFRAME_TARGET'){
       throw 'Unexpected external iframe in isolated blank self-test.'
     }
+    $watchSelfTest=Get-Pc-External-Iframe-Video-Metrics -Watch
+    if($watchSelfTest.candidates -ne 0 -or
+       $watchSelfTest.status -ne 'NO_EXTERNAL_IFRAME_TARGET'){
+      throw 'PC playback-watch mode must have no targets on blank self-test.'
+    }
     $pcTest=Get-Pc-Page-Metrics
     if($pcTest.accessible_frame_count -lt 1 -or
        $null -eq $pcTest.inaccessible_frame_count -or
@@ -737,7 +785,10 @@ try {
     $result.pc_venue_url_verified=$true
     Write-Host 'BOAT LAB PC probe: in this isolated Edge window, open Mikuni exhibition replay and play it manually.'
     Write-Host 'Use the isolated Edge opened by this script, NOT your usual Edge.'
-    Write-Host 'After trying to play the video, type Y if it was visibly playing, otherwise press ENTER.'
+    Write-Host 'After starting the replay, return promptly and type Y while it is playing.'
+    if($PcLiveWatch){
+      Write-Host 'The next probe samples iframe video state 8 times without recording video.'
+    }
     $manualAnswer=Read-Host 'Video visibly played in this Edge? (Y/Enter)'
     $result.pc_manual_playback_reported=([string]$manualAnswer -match '^[yY]$')
     $script:phase='PC_OBSERVE_ATTACHED_TABS'
@@ -762,9 +813,12 @@ try {
           try{
             $item.metrics=Get-Pc-Page-Metrics
             $item.frame_topology=Get-Pc-Frame-Topology
-            $item.external_iframe_video_probe=Get-Pc-External-Iframe-Video-Metrics
+            $item.external_iframe_video_probe=Get-Pc-External-Iframe-Video-Metrics -Watch:$PcLiveWatch
             $result.pc_external_iframe_video_elements += [int]$item.external_iframe_video_probe.video_elements
             $result.pc_external_iframe_playing_elements += [int]$item.external_iframe_video_probe.playing_video_elements
+            $result.pc_external_iframe_advancing_elements += [int]$item.external_iframe_video_probe.time_advancing_elements
+            $result.pc_external_iframe_paused_elements += [int]$item.external_iframe_video_probe.paused_elements_last_sample
+            $result.pc_external_iframe_ended_elements += [int]$item.external_iframe_video_probe.ended_elements_last_sample
             $result.pc_external_iframe_probe_status=[string]$item.external_iframe_video_probe.status
             $result.pc_cross_origin_frames_total += [int]$item.frame_topology.frame_cross_origin
             $result.pc_oopif_target_count += [int]$item.frame_topology.iframe_target_total
@@ -785,10 +839,18 @@ try {
       $records+= $item
     }
     $result.pc_observed_targets=$records
-    if($result.pc_playing_video_elements -gt 0 -or
+    if($result.pc_external_iframe_advancing_elements -gt 0){
+      $result.pc_video_surface_diagnosis='EXTERNAL_VIDEO_CLOCK_ADVANCING'
+      $result.access_decision='PC_VIDEO_PLAYBACK_PROGRESS_VERIFIED'
+    }elseif($result.pc_playing_video_elements -gt 0 -or
        $result.pc_external_iframe_playing_elements -gt 0){
-      $result.pc_video_surface_diagnosis='HTML_VIDEO_PLAYING'
+      $result.pc_video_surface_diagnosis='HTML_VIDEO_PLAYING_STATE_OBSERVED'
       $result.access_decision='PC_MANUAL_VIDEO_ELEMENT_PLAYING_VERIFIED'
+    }elseif($result.pc_external_iframe_video_elements -gt 0 -and
+       ($result.pc_external_iframe_paused_elements -gt 0 -or
+        $result.pc_external_iframe_ended_elements -gt 0)){
+      $result.pc_video_surface_diagnosis='EXTERNAL_VIDEO_PAUSED_OR_ENDED_AT_SNAPSHOT'
+      $result.access_decision='PC_EXTERNAL_VIDEO_PAUSED_OR_ENDED_NOT_PLAYING'
     }elseif($result.pc_inaccessible_frames_observed -gt 0){
       $result.pc_video_surface_diagnosis='CROSS_ORIGIN_OR_UNAVAILABLE_IFRAME'
       $result.access_decision='PC_VIDEO_IN_INACCESSIBLE_FRAME_POSSIBLE_NOT_VERIFIED'
@@ -1138,5 +1200,5 @@ try {
   try{Remove-Item -LiteralPath $profile -Recurse -Force -ErrorAction SilentlyContinue}catch{}
 }
 $result|ConvertTo-Json -Depth 12
-if($result.access_decision -in @('EDGE_SELFTEST_PASSED_NO_NETWORK','PLAYBACK_API_2XX_VIDEO_UNVERIFIED','PC_MANUAL_VIDEO_ELEMENT_PLAYING_VERIFIED','PC_VIDEO_IN_INACCESSIBLE_FRAME_POSSIBLE_NOT_VERIFIED','PC_EMBEDDED_PLAYER_UNVERIFIED','PC_VIDEO_ELEMENT_PLAYBACK_NOT_VERIFIED')){exit 0}
+if($result.access_decision -in @('EDGE_SELFTEST_PASSED_NO_NETWORK','PLAYBACK_API_2XX_VIDEO_UNVERIFIED','PC_MANUAL_VIDEO_ELEMENT_PLAYING_VERIFIED','PC_VIDEO_PLAYBACK_PROGRESS_VERIFIED','PC_EXTERNAL_VIDEO_PAUSED_OR_ENDED_NOT_PLAYING','PC_VIDEO_IN_INACCESSIBLE_FRAME_POSSIBLE_NOT_VERIFIED','PC_EMBEDDED_PLAYER_UNVERIFIED','PC_VIDEO_ELEMENT_PLAYBACK_NOT_VERIFIED')){exit 0}
 exit 2

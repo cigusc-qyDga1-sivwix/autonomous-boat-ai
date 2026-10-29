@@ -139,3 +139,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\check_mikuni_edge_nodocker
 ```
 
 比較指標は`edge_start_mode`（`VISIBLE_ISOLATED` / `HEADLESS_ISOLATED`）、`race_click_status`、`new_tab_url_type`、`new_tab_internal_kind`、`playback_api_statuses`。新タブへの接続条件が同じになるかを確かめるための**試験機能**で、Windows実機での成功はまだ確認していない。通常ブラウザのCookieを抜き出したり、配信制限を回避したりしない。共有する際は動画のURL全文・クエリ・Cookie・トークンを貼らない。
+
+
+## 2026-10-29｜自動再生のタブ不検出フォールバック（実機追試待ち）
+
+利用者のWindows実測：`-VisibleEdge -AutoPlay` にて、`race_icon_target_day_matches=1`、`race_click_status=TRUSTED_MOUSE_CLICK_EXACT_DAY_AND_RACE`、`browser_tabs_after_click=1`、`playback_auto_click=NOT_ATTEMPTED`。他方、利用者スクリーンショットでは正規JLCプレイヤー `streamer26pi.php` が別のEdge窓で開き、手動再生ができている。**再生ボタンへの自動クリック自体は未試行**であった。
+
+対応：選択日と正確なRが1件だけ確認済みで、CDP検出ページが1つのときに限り、利用者が通常表示できたJLC公式**プレイヤーページ**（`https://livebb.jlc.ne.jp/bb_top/sp_bb/streamer/streamer26pi.php`）へ同一CDPタブから移動し、正規の再生ボタンを自動クリックする。ページURLは`tenji=1&jo=10&race=01&date=20261028`の形式で日付・レースから構成し、API秘密情報は使わない。
+
+`-AutoPlay`明示時だけメディアのリクエストブロックを解除して**ブラウザでの通常の動画視聴**を許す（動画ファイル／フレーム／認証情報を収集・保存しない）。`playback_auto_click` と新しい `replay_navigation_mode` をログに表示。再生確認には実機で`VIDEO_ELEMENT_PLAYING`が必要。プレイヤー側がiframeや独自UIを使う場合は、現状`PLAY_CONTROL_NOT_UNIQUE`等で安全停止する。回避技術や無差別クリックは行わない。
+
+使い方：`-Date 2026-10-28 -Race 1 -VisibleEdge -AutoPlay`。実測未完了のため、正式予想・結果・収支は変えない。

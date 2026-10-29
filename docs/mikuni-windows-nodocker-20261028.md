@@ -150,3 +150,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\check_mikuni_edge_nodocker
 `-AutoPlay`明示時だけメディアのリクエストブロックを解除して**ブラウザでの通常の動画視聴**を許す（動画ファイル／フレーム／認証情報を収集・保存しない）。`playback_auto_click` と新しい `replay_navigation_mode` をログに表示。再生確認には実機で`VIDEO_ELEMENT_PLAYING`が必要。プレイヤー側がiframeや独自UIを使う場合は、現状`PLAY_CONTROL_NOT_UNIQUE`等で安全停止する。回避技術や無差別クリックは行わない。
 
 使い方：`-Date 2026-10-28 -Race 1 -VisibleEdge -AutoPlay`。実測未完了のため、正式予想・結果・収支は変えない。
+
+
+## 2026-10-29｜「File not found.」実機障害への修正
+
+実機の `-VisibleEdge -AutoPlay` で、以前の修正による `Page.navigate` の直リンク（`streamer26pi.php`）から「File not found.」が表示された。公式の展示一覧には2026年10月28日開催が引き続き掲載されているため、日付の期限切れかどうかは未確定。直接構築したURLは、一覧経由の通常操作と同等と見なせない。
+
+**修正：** 手動構築した公式プレイヤーURLへの強制遷移を廃止。既存のJLC一覧画面から正確な日付/レースを操作した後、同じCDPセッションの唯一のタブが公式プレイヤー自身になっている場合だけ再生ボタンを検査。確認できない場合は `PLAYER_TARGET_NOT_ATTACHED_NO_CLICK` と `NATIVE_CLICK_ONLY_NO_DIRECT_URL` を返し、再生ページを憶測で生成しない。既知のサーバーエラーテキストは `SERVER_REPLAY_FILE_NOT_FOUND` と区別。動画の保存/URLクエリ出力/認証回避は行わない。
+
+この修正は安全な診断の正確性を改善するものであり、別プロセスのEdge窓を自動制御できる保証はまだない。結果のスクリーンショットから、実際にUIで再生できたか、CDP側が公式プレイヤーを捉えられたかを分けて確認する。

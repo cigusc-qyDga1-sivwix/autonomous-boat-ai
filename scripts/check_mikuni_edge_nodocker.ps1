@@ -425,6 +425,8 @@ $result=[ordered]@{
   fetch_mode_at_race_click='BLOCKED_DIAGNOSTIC'
   opaque_requests_blocked_before_click=0
   pc_site_mode=if($PcSite){'MANUAL_PLAYBACK_PROBE'}else{'OFF'}
+  pc_requested_venue=if($PcSite){'MIKUNI_10'}else{'NOT_REQUESTED'}
+  pc_venue_url_verified=$false
   pc_initial=$null;pc_observed_targets=@();pc_playing_video_elements=0
   pc_manual_playback_reported=$false;pc_inaccessible_frames_observed=0
   pc_embedded_players_observed=0;pc_video_surface_diagnosis='NOT_OBSERVED'
@@ -493,6 +495,10 @@ try {
     if(-not ($script:raceMouseDownSeen -and $script:raceMouseUpSeen -and $script:trustedRaceClickSeen)){
       throw 'Mouse event telemetry did not capture down, up and click.'
     }
+    $pcVenue=[Uri]'https://livebb.jlc.ne.jp/bb_top/new_bb/index.php?tpl=10'
+    if($pcVenue.Host -ne 'livebb.jlc.ne.jp' -or
+       $pcVenue.AbsolutePath -ne '/bb_top/new_bb/index.php' -or
+       $pcVenue.Query -ne '?tpl=10'){throw 'PC venue mapping self-test failed.'}
     $pcTest=Get-Pc-Page-Metrics
     if($pcTest.accessible_frame_count -lt 1 -or
        $null -eq $pcTest.inaccessible_frame_count -or
@@ -537,13 +543,21 @@ try {
     $script:phase='PC_OFFICIAL_ENTRY'
     # This is the official, documented PC landing PAGE, not a synthesized
     # media URL or unauthorized replay endpoint.
-    $id=Send-CDP 'Page.navigate' @{
-      url='https://livebb.jlc.ne.jp/bb_top/new_bb/index.php?tpl=1'
+    # Venue IDs are site-specific: tpl=01 is Kiryu, tpl=10 is Mikuni.
+    # This is the official PC venue ENTRY only, never a synthesized media URL.
+    $pcVenueUrl='https://livebb.jlc.ne.jp/bb_top/new_bb/index.php?tpl=10'
+    $validatedPcUri=[Uri]$pcVenueUrl
+    if($validatedPcUri.Host -ne 'livebb.jlc.ne.jp' -or
+       $validatedPcUri.AbsolutePath -ne '/bb_top/new_bb/index.php' -or
+       $validatedPcUri.Query -ne '?tpl=10'){
+      throw 'PC venue URL does not match Mikuni (tpl=10).'
     }
+    $id=Send-CDP 'Page.navigate' @{url=$pcVenueUrl}
     $nav=Await-CDP $id
     if($nav.errorText){throw 'Official PC landing page navigation failed.'}
     Pump-CDP 2500
     $result.pc_initial=Get-Pc-Page-Metrics
+    $result.pc_venue_url_verified=$true
     Write-Host 'BOAT LAB PC probe: in this isolated Edge window, open Mikuni exhibition replay and play it manually.'
     Write-Host 'Use the isolated Edge opened by this script, NOT your usual Edge.'
     Write-Host 'After trying to play the video, type Y if it was visibly playing, otherwise press ENTER.'

@@ -50,3 +50,25 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: python -u scripts/official_results_watchdog.py --day '${{ needs.initialize.outputs.day }}' --minutes 345 --start-hour 6
+  continue-watch:
+    needs: [initialize, monitor]
+    if: >-
+      always() && github.ref == 'refs/heads/main' &&
+      needs.initialize.result == 'success' && needs.monitor.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Queue the next bounded watch without waiting for cron
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import os
+          from scripts.official_results_watchdog import Client, WATCHDOG
+          Client(os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_TOKEN"]).dispatch(WATCHDOG)
+          print("Queued the next bounded watch; schedules remain the backup.")
+          PY

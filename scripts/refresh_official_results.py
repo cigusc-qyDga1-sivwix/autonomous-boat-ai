@@ -94,30 +94,35 @@ def update(ledger: dict, view: dict, old: dict, pay: dict, now: datetime):
         "page_verified":len(merged.get("results",{}))
     }
 
-def main():
-    parser=argparse.ArgumentParser()
-    parser.add_argument("--dir",type=Path,default=APP_DATA)
-    args=parser.parse_args()
-    now=datetime.now(UTC)
+def run(directory: Path, now: datetime, fetcher=fetch_official_pay) -> dict:
     day=now.astimezone(JST).date().isoformat()
     compact=day.replace("-","")
-    path=args.dir/f"{day}.json"
-    live=args.dir/"latest.json"
-    pay_path=args.dir/"official-pay"/f"{day}.json"
+    path=directory/f"{day}.json"
+    live=directory/"latest.json"
+    pay_path=directory/"official-pay"/f"{day}.json"
     if not path.exists() or not live.exists():
         raise SystemExit("Forecast snapshot unavailable, cannot attach official outcome")
     ledger=json.loads(path.read_text(encoding="utf-8"))
     view=json.loads(live.read_text(encoding="utf-8"))
     previous=json.loads(pay_path.read_text(encoding="utf-8")) if pay_path.exists() else {}
-    incoming=fetch_official_pay(compact)
+    incoming=fetcher(compact)
     updated_ledger,updated_view,merged,changed,report=update(ledger,view,previous,incoming,now)
-    # Publish only when official data has actually changed, never rewrite
-    # a forecast or replay past races with a new inference model.
+    # Publish the small verified evidence and its actual check time even if no
+    # frozen race gained a result. Clients use this independently of forecasts.
+    write_json(pay_path,merged)
     if changed:
         write_json(path,updated_ledger)
         write_json(live,updated_view)
-        write_json(pay_path,merged)
+    report["checked_at_utc"]=now.astimezone(UTC).isoformat()
+    return report
+
+def main():
+    parser=argparse.ArgumentParser()
+    parser.add_argument("--dir",type=Path,default=APP_DATA)
+    args=parser.parse_args()
+    report=run(args.dir,datetime.now(UTC))
     print(json.dumps(report,ensure_ascii=False))
 
 if __name__=="__main__":
     main()
+

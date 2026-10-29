@@ -13,11 +13,11 @@ assert.match(research,/setInterval\(\(\)=>\{if\(!document\.hidden/);
 assert.match(research,/最新観測/);
 assert.match(research,/以前の記録を表示中。最新情報ではありません/);
 assert.match(html,/exhibition-research\.js\?v=20261027-auto-fresh/);
-assert.match(index,/app\.js\?v=20261027-venue-v14/);
+assert.match(index,/app\.js\?v=20261029-result-sync-v1/);
 assert.match(index,/tactical-1m\.js\?v=20261027-venue-v14/);
 assert.match(index,/venue-tactics-v2\.js\?v=20261027-venue23/);
 assert.match(venue,/four-factor-v1\.3-conditional-scenarios-untrained/);
-assert.match(sw,/boat-lab-static-v57/);
+assert.match(sw,/boat-lab-static-v58/);
 const listeners={};
 const fetchCalls=[],cacheCalls=[];
 const self={
@@ -43,3 +43,4 @@ async function verify(url){
  await verify('https://example.test/data/experiments/turn-video-pilot-2026-10-28.json');
  console.log('Exhibition heartbeat / automatic research reload / network-only JSON / v1.3 label checks PASS');
 })().catch(e=>{console.error(e);process.exitCode=1;});
+

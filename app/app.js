@@ -22,6 +22,7 @@
   let batchOfficial = {};
   let lastLiveUpdate = '';
   let resultsRefreshBusy = false;
+  let officialPollBusy = false;
   let resultsRefreshNotice = '';
   let resultsRefreshIsError = false;
   let favorites = [];
@@ -620,9 +621,13 @@
     const official=data?.official_pay_info;
     const officialAt=official?.retrieved_at_utc?formatJst(official.retrieved_at_utc):'未確認';
     const failed=official?.source_status==='FETCH_FAILED';
+    const checked=Date.parse(official?.retrieved_at_utc||'');
+    const stale=data?.mode==='auto-live'&&!imported&&
+      (!Number.isFinite(checked)||Date.now()-checked>30*60*1000);
     const message=resultsRefreshNotice||(imported?
       '手動インポート中です。自動照合に戻すにはデータ管理で「元の予想に戻す」を選んでね。':
-      'ボタンを押すと最新の公開済み公式照合データを再読み込みします。');
+      stale?'公式結果の自動更新が遅れています。表示中の確認時刻以降の結果は未確認です。':
+      '公式結果は自動で確認しています。ボタンでも最新の公開済みデータを再読み込みできます。');
     return `<div class="results-refresh" aria-label="公式結果の更新">
       <div class="results-refresh-main">
         <div class="results-refresh-copy"><strong>🔄 公式結果をチェック</strong>
@@ -632,7 +637,7 @@
           ${resultsRefreshBusy?'⏳ 更新を確認中…':'↻ 結果を更新'}
         </button>
       </div>
-      <p class="results-refresh-status ${resultsRefreshIsError?'is-error':''}" role="status" aria-live="polite">${escape(resultsRefreshBusy?'最新の公開データを取得しています…':message)}</p>
+      <p class="results-refresh-status ${resultsRefreshIsError||stale?'is-error':''}" role="status" aria-live="polite">${escape(resultsRefreshBusy?'最新の公開データを取得しています…':message)}</p>
       ${failed?'<p class="results-refresh-hint">直近の自動収集では公式サイトへのアクセスに失敗しています。未確認レースは的中・不的中として計上しません。</p>':''}
       <p class="results-refresh-hint">全国予想の公開データと、公式払戻の検証済み日別データを別々に再取得します。公式サイトへ直接アクセスする機能ではありません。</p>
     </div>`;
@@ -1048,11 +1053,16 @@
     if(incoming.mode!=='auto-live')throw Error('Not a live forecast');
     return incoming;
   }
+  function liveEvidenceRevision(value) {
+    return JSON.stringify([value?.event_date,value?.updated_at_utc,
+      value?.official_pay_info,value?.result_sync,
+      value?.official_results,value?.settlement_alerts]);
+  }
   function acceptLiveData(incoming) {
     if(data&&incoming.event_date<data.event_date)return false;
     if(data&&incoming.event_date===data.event_date&&lastLiveUpdate&&incoming.updated_at_utc &&
        incoming.updated_at_utc<lastLiveUpdate)return false;
-    const previous=(data?.event_date||'')+'|'+(lastLiveUpdate||'')+'|'+Object.keys(autoResults).length;
+    const previous=liveEvidenceRevision(data);
     const priorDay=data?.event_date,priorResults=autoResults;
     data=incoming;
     autoResults={...(incoming.official_results||{})};
@@ -1078,10 +1088,48 @@
     if(state.resultVenue&&!findRace(state.resultVenue,state.resultRace)){
       state.resultRace=allRaces().find(r=>r.venue===state.resultVenue)?.race||1;
     }
-    return previous!==(data.event_date+'|'+lastLiveUpdate+'|'+Object.keys(autoResults).length);
+    return previous!==liveEvidenceRevision(data);
+  }
+  function applyOfficialPayResult(result) {
+    if(!result?.available)return false;
+    const previous=liveEvidenceRevision(data);
+    autoResults=result.results;
+    data.official_results=autoResults;
+    data.settlement_alerts=result.alerts;
+    if(result.retrieved_at_utc&&
+       Date.parse(result.retrieved_at_utc)>Date.parse(data.official_pay_info?.retrieved_at_utc||0)){
+      data.official_pay_info={...(data.official_pay_info||{}),
+        retrieved_at_utc:result.retrieved_at_utc,
+        verified_on_page:result.verified_on_page,
+        confirmed_forecast_results:Object.keys(autoResults).length,
+        source_status:'OK'};
+    }
+    return previous!==liveEvidenceRevision(data);
+  }
+  async function pollOfficialResults(){
+    if(!data||data.mode!=='auto-live'||document.hidden||
+       readJSON(STORE_DATA,null)||resultsRefreshBusy||officialPollBusy||
+       liveUpdateInFlight||!window.BoatOfficialDirect?.refresh)return;
+    officialPollBusy=true;
+    const day=data.event_date;
+    try{
+      const result=await window.BoatOfficialDirect.refresh(
+        day,allRaces(),autoResults,data.settlement_alerts||{});
+      if(data.event_date!==day)return;
+      if(applyOfficialPayResult(result)){
+        if(result.added){
+          resultsRefreshIsError=false;
+          resultsRefreshNotice='自動照合で新たに'+result.added+'Rの公式結果を確認しました。';
+          void window.BoatCumulative?.load(true).then(()=>
+            {if(['results','analysis'].includes(state.view))render()}).catch(()=>{});
+        }
+        if(['overview','results','analysis'].includes(state.view))render();
+      }
+    }catch(error){console.warn('Automatic official pay refresh:',error?.message);}
+    finally{officialPollBusy=false;}
   }
   async function refreshOfficialResults(){
-    if(resultsRefreshBusy)return;
+    if(resultsRefreshBusy||officialPollBusy)return;
     if(readJSON(STORE_DATA,null)){
       resultsRefreshIsError=true;
       resultsRefreshNotice='手動インポート中です。データ管理から「元の予想に戻す」を選ぶと公式の自動照合を確認できます。';
@@ -1112,18 +1160,7 @@
         networkSucceeded=true;
         if(result?.available){
           extra=result.added||0;
-          autoResults=result.results;
-          data.official_results=autoResults;
-          data.settlement_alerts=result.alerts;
-          if(result.retrieved_at_utc&&
-             Date.parse(result.retrieved_at_utc)>
-               Date.parse(data.official_pay_info?.retrieved_at_utc||0)){
-            data.official_pay_info={...(data.official_pay_info||{}),
-              retrieved_at_utc:result.retrieved_at_utc,
-              verified_on_page:result.verified_on_page,
-              confirmed_forecast_results:Object.keys(autoResults).length,
-              source_status:'OK'};
-          }
+          applyOfficialPayResult(result);
         }
       }catch(error){
         directError=error;
@@ -1223,11 +1260,11 @@
   }
   let liveUpdateInFlight=false;
   async function reloadLiveIfNew(){
-    if(readJSON(STORE_DATA,null)||resultsRefreshBusy||liveUpdateInFlight||document.hidden)return;
+    if(readJSON(STORE_DATA,null)||resultsRefreshBusy||officialPollBusy||liveUpdateInFlight||document.hidden)return;
     liveUpdateInFlight=true;
     try{
       const incoming=await fetchLive();
-      if(incoming.event_date===data?.event_date&&incoming.updated_at_utc===lastLiveUpdate)return;
+      if(liveEvidenceRevision(incoming)===liveEvidenceRevision(data))return;
       if(acceptLiveData(incoming))render();
       window.BoatExhibitionAudit?.load(incoming.event_date).then(()=>render()).catch(()=>{});
     }catch(error){console.warn('Live data refresh failed:',error.message);}
@@ -1259,11 +1296,12 @@
         // The external publisher is periodic; this is best-effort, not true realtime.
         setInterval(()=>{if(state.view==='races'&&state.raceDetail&&state.showExternalAnalysis&&!document.hidden)void refreshOriginalExhibition(false);},20000);
         setInterval(refreshTimelineClock,60000);
-        // While the result screen is visible, check published snapshots more
-        // frequently without notifications or source-site scraping.
-        setInterval(()=>{if(['results','analysis'].includes(state.view)&&!document.hidden&&!readJSON(STORE_DATA,null))void refreshOfficialResults();},90000);
+        // Poll the small verified payout file on every visible screen, independently
+        // of the much larger forecast JSON and its prediction timestamp.
+        setInterval(pollOfficialResults,60000);
       }
-      document.addEventListener('visibilitychange',()=>{if(!document.hidden){void reloadLiveIfNew();void pollExhibitionHeartbeat();if(state.view==='races'&&state.showExternalAnalysis)void refreshOriginalExhibition(false);}});
+      void pollOfficialResults();
+      document.addEventListener('visibilitychange',()=>{if(!document.hidden){void pollOfficialResults().then(reloadLiveIfNew);void pollExhibitionHeartbeat();if(state.view==='races'&&state.showExternalAnalysis)void refreshOriginalExhibition(false);}});
     }catch(error){el('main').innerHTML=`<section class="card card-pad"><h1>データを読み込めませんでした</h1><p class="muted">${escape(error.message)}</p><p>アプリはHTTPSまたはローカルHTTPサーバー上で開いてください。ダウンロードしたHTMLを直接開くと、ブラウザの制限で予想データを取得できない場合があります。</p></section>`;}
   }
   window.BoatLab={validate:normalizeData,stats,officialStats,officialFor,compute,getData:()=>data,refreshOfficialResults};

@@ -2,6 +2,14 @@ name: BOAT LAB fast official result updates
 
 on:
   workflow_dispatch:
+  workflow_run:
+    # Independent wake-ups if GitHub's own result cron is delayed or skipped.
+    workflows:
+      - BOAT LAB nationwide auto forecasts
+      - BOAT LAB nationwide intelligence research
+      - BOAT LAB Mikuni authorized video research
+      - BOAT LAB statistical training and temporal audit
+    types: [completed]
   push:
     branches: [main]
     paths:
@@ -23,13 +31,20 @@ concurrency:
 
 jobs:
   official-quick:
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name != 'workflow_run' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment:
       name: github-pages
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -87,3 +102,4 @@ jobs:
           path: official-result-status.json
           if-no-files-found: ignore
           retention-days: 3
+

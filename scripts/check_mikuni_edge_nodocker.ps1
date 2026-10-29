@@ -351,6 +351,7 @@ $result=[ordered]@{
   replay_navigation_mode='NOT_ATTEMPTED'
   window_open_events=0;window_open_kind='NO_WINDOW_OPEN_EVENT'
   race_click_hit_verified=$false;race_click_event_observed='NOT_CHECKED'
+  race_click_hit_reason='NOT_EVALUATED'
   fetch_mode_at_race_click='BLOCKED_DIAGNOSTIC'
   opaque_requests_blocked_before_click=0
   note='API response status alone is not a verified video download.'
@@ -537,28 +538,57 @@ try {
  const linkInfo=describeLink(chosenLink);
  const metrics={meeting,day,click:false,iconTotal:allIcons.length,
    visibleExactCount:icons.length,dayIconCount:dayIcons.length,
-   linkInfo,point:null,hints:[],hitVerified:false};
+   linkInfo,point:null,hints:[],hitVerified:false,hitReason:'NOT_EVALUATED'};
  if($layoutFlag){metrics.hints=hints;return metrics;}
- if(!meeting||!day||dayIcons.length!==1||!chosenLink)return metrics;
- chosenLink.scrollIntoView({block:'center',inline:'center'});
- await sleep(90);
- const rect=chosenLink.getBoundingClientRect();
- const x=Math.round(rect.left+rect.width/2);
- const y=Math.round(rect.top+rect.height/2);
- if(rect.width>4&&rect.height>4&&x>0&&y>0&&
-   x<innerWidth&&y<innerHeight){
+ if(!meeting||!day||dayIcons.length!==1||!chosenLink){
+   metrics.hitReason='NO_UNIQUE_DAY_RACE_LINK';
+   return metrics;
+ }
+ const icon=dayIcons[0];
+ if(!chosenLink.contains(icon)){
+   metrics.hitReason='ICON_NOT_CHILD_OF_LINK';
+   return metrics;
+ }
+ // The anchor can span an entire table cell; its geometric center may not
+ // actually point to the race icon. Check bounded points INSIDE the exact
+ // icon, not inside the anchor, and reject any obstructing outside element.
+ icon.scrollIntoView({block:'center',inline:'center'});
+ await sleep(150);
+ const rect=icon.getBoundingClientRect();
+ if(rect.width<6||rect.height<6){
+   metrics.hitReason='TARGET_ICON_TOO_SMALL';
+   return metrics;
+ }
+ const candidates=[[0.5,0.5],[0.35,0.5],[0.65,0.5],
+                   [0.5,0.35],[0.5,0.65]];
+ let hadViewportPoint=false,hadTopElement=false;
+ for(const [dx,dy] of candidates){
+   const x=Math.round(rect.left+rect.width*dx);
+   const y=Math.round(rect.top+rect.height*dy);
+   if(x<1||y<1||x>=innerWidth||y>=innerHeight)continue;
+   hadViewportPoint=true;
    const hit=document.elementFromPoint(x,y);
-   metrics.hitVerified=!!hit&&(hit===chosenLink||chosenLink.contains(hit));
-   if(metrics.hitVerified){
+   if(!hit)continue;
+   hadTopElement=true;
+   if(hit===chosenLink||chosenLink.contains(hit)){
+     metrics.hitVerified=true;
+     metrics.hitReason='EXACT_DAY_RACE_ICON_HIT';
      metrics.point={x,y};
-     window.__boatlabsRaceClickTrace='NOT_OBSERVED';
-     document.addEventListener('click',e=>{
-       if(e.target===chosenLink||chosenLink.contains(e.target)){
-         window.__boatlabsRaceClickTrace=e.isTrusted?'TRUSTED_CLICK_ON_RACE_LINK':'UNTRUSTED_CLICK_ON_RACE_LINK';
-       }
-     },{capture:true,once:true});
+     break;
    }
  }
+ if(!metrics.hitVerified){
+   metrics.hitReason=!hadViewportPoint?'ICON_OFFSCREEN':
+     !hadTopElement?'NO_ELEMENT_AT_ICON':'ICON_OBSCURED_BY_OTHER_ELEMENT';
+   return metrics;
+ }
+ window.__boatlabsRaceClickTrace='NOT_OBSERVED';
+ document.addEventListener('click',e=>{
+   if(e.target===chosenLink||chosenLink.contains(e.target)){
+     window.__boatlabsRaceClickTrace=e.isTrusted?
+       'TRUSTED_CLICK_ON_RACE_LINK':'UNTRUSTED_CLICK_ON_RACE_LINK';
+   }
+ },{capture:true,once:true});
  return metrics;
 })()
 "@
@@ -574,6 +604,7 @@ try {
     $result.race_link_target=[string]$clicked.linkInfo.target
     $result.race_link_has_inline_handler=[bool]$clicked.linkInfo.inline
     $result.race_click_hit_verified=[bool]$clicked.hitVerified
+    $result.race_click_hit_reason=[string]$clicked.hitReason
     if(-not $LayoutAudit -and $clicked.point -and
       $clicked.dayIconCount -eq 1 -and $clicked.meeting -and $clicked.day){
       $script:phase='TRUSTED_POINTING_DEVICE_CLICK'

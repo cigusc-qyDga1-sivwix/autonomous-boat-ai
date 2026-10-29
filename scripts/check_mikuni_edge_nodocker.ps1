@@ -902,7 +902,10 @@ try {
     $result.pc_observed_targets=$records
     if($result.pc_external_iframe_advancing_elements -gt 0){
       $result.pc_video_surface_diagnosis='EXTERNAL_VIDEO_CLOCK_ADVANCING'
-      $result.access_decision=if($PcAutoStart){
+      # Clock advancement alone does not prove that THIS probe started
+      # playback: video may already have been playing when inspected.
+      $result.access_decision=if($PcAutoStart -and
+          $result.pc_autostart_status -eq 'PLAY_PROMISE_RESOLVED'){
         'PC_AUTOSTART_VIDEO_CLOCK_ADVANCING'
       }else{
         'PC_VIDEO_PLAYBACK_PROGRESS_VERIFIED'

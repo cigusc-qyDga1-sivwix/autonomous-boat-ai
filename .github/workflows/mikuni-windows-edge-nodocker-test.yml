@@ -11,6 +11,7 @@ on:
       - fix/mikuni-edge-replay-popup-origin-20261028
       - fix/mikuni-visible-edge-compare-20261028
       - fix/mikuni-cdp-popup-origin-observation-20261029
+      - fix/mikuni-optin-unblock-and-hitcheck-20261029
       - fix/mikuni-autoplay-no-direct-file-not-found-20261029
       - fix/mikuni-autoplay-same-tab-20261029
     paths:
@@ -54,6 +55,9 @@ jobs:
           if ($audit.schema -ne 'boatlabs.mikuni_edge_nodocker.v1') { exit 1 }
           if ($audit.video_bytes_saved -ne 0 -or $audit.video_frames_decoded -ne 0) { exit 1 }
           if ($audit.edge_start_mode -ne 'HEADLESS_ISOLATED') { exit 1 }
+          if ($audit.fetch_mode_at_race_click -ne 'BLOCKED_DIAGNOSTIC') { exit 1 }
+          if ($audit.race_click_status -eq 'TRUSTED_MOUSE_CLICK_EXACT_DAY_AND_RACE' -and
+              $audit.race_click_hit_verified -ne $true) { exit 1 }
           if ($audit.race_click_status -eq 'TRUSTED_MOUSE_CLICK_EXACT_DAY_AND_RACE') {
             if ($audit.race_icon_target_day_matches -ne 1) { exit 1 }
           }

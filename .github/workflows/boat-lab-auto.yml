@@ -195,18 +195,7 @@ jobs:
               git commit -m 'data: retry fresh pre-cutoff forecasts on latest ledger'
             done
           fi
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-      - name: Upload BOAT LAB web app
-        uses: actions/upload-pages-artifact@v3
-        with:
-          name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
-          path: './app'
-      - name: Deploy site
-        id: deploy
-        uses: actions/deploy-pages@v4
-        with:
-          artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
+      # The single Pages publisher reads fresh main after this workflow succeeds.
       - name: Keep run diagnostics
         if: always()
         uses: actions/upload-artifact@v4

@@ -61,13 +61,4 @@ jobs:
             fi
             sleep 2
           done
-      # GITHUB_TOKEN data commits do not trigger Pages' push workflow;
-      # deploy here so the iPhone app actually receives reconciled results.
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
-          path: './app'
-      - uses: actions/deploy-pages@v4
-        with:
-          artifact_name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
+      # Successful completion wakes the single Pages publisher, including bot commits.

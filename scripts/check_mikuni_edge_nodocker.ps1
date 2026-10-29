@@ -484,6 +484,12 @@ try {
     if(-not ($script:raceMouseDownSeen -and $script:raceMouseUpSeen -and $script:trustedRaceClickSeen)){
       throw 'Mouse event telemetry did not capture down, up and click.'
     }
+    $pcTest=Get-Pc-Page-Metrics
+    if($pcTest.accessible_frame_count -lt 1 -or
+       $pcTest.video_elements -ne 0 -or
+       $pcTest.playing_video_elements -ne 0){
+      throw 'PC page DOM probe self-test failed.'
+    }
     $strict=Eval-CDP "'/static/1R.png'.match(new RegExp('(?:^|/)1R[.]png(?:[?#]|$)'))!==null&&'/static/11R.png'.match(new RegExp('(?:^|/)1R[.]png(?:[?#]|$)'))===null"
     if($strict -ne $true){throw '1R versus 11R selector is ambiguous.'}
     $safe=Get-Safe-Popup-Info 'https://player.example.org/path?token=DO_NOT_DISCLOSE'

@@ -5,7 +5,8 @@ param(
   [ValidateRange(1,12)][int]$Race=1,
   [switch]$SelfTest,
   [switch]$LayoutAudit,
-  [switch]$VisibleEdge
+  [switch]$VisibleEdge,
+  [switch]$PlaybackProbe
 )
 $ErrorActionPreference='Stop'
 
@@ -243,6 +244,9 @@ $result=[ordered]@{
   schema='boatlabs.mikuni_edge_nodocker.v1';date=$Date;venue='三国';race=$Race
   access_decision='NOT_RUN';landing_http_status=$null
   edge_start_mode=if($VisibleEdge){'VISIBLE_ISOLATED'}else{'HEADLESS_ISOLATED'}
+  playback_probe='NOT_REQUESTED';player_video_count=0
+  player_button_candidates=0;player_click='NOT_ATTEMPTED'
+  playback_time_progressed=$false
   race_click_status='NOT_ATTEMPTED';meeting_header_clicked=$false
   day_header_clicked=$false;race_icon_matches=0;race_icon_visible_exact=0
   race_icon_target_day_matches=0;browser_tabs_after_click=0
@@ -262,6 +266,9 @@ try {
   if(-not [datetime]::TryParseExact($Date,'yyyy-MM-dd',
     [Globalization.CultureInfo]::InvariantCulture,
     [Globalization.DateTimeStyles]::None,[ref]$d)){throw 'Invalid calendar date.'}
+  if($PlaybackProbe -and (-not $VisibleEdge -or $SelfTest -or $LayoutAudit)){
+    throw 'PlaybackProbe requires VisibleEdge, without SelfTest or LayoutAudit.'
+  }
   $script:phase='FIND_EDGE'
   $edge=Find-Edge
   New-Item -ItemType Directory -Path $profile -Force|Out-Null
@@ -333,8 +340,12 @@ try {
     $result.access_decision='EDGE_SELFTEST_PASSED_NO_NETWORK'
   }else{
     $script:phase='JLC_PAGE_DIAGNOSTIC'
-    $id=Send-CDP 'Fetch.enable' @{patterns=@(@{urlPattern='*';requestStage='Request'})}
-    $null=Await-CDP $id
+    # PlaybackProbe deliberately uses normal browser streaming for observation.
+    # No media is captured by the script. The default diagnostic blocks media.
+    if(-not $PlaybackProbe){
+      $id=Send-CDP 'Fetch.enable' @{patterns=@(@{urlPattern='*';requestStage='Request'})}
+      $null=Await-CDP $id
+    }
     $id=Send-CDP 'Page.navigate' @{url='https://livebb.jlc.ne.jp/bb_top/sp_bb/tvod_10.php'}
     $null=Await-CDP $id
     Pump-CDP 2200
@@ -498,6 +509,42 @@ try {
       }else{
         $result.new_tab_guard_status='AMBIGUOUS_POPUP_COUNT_NO_REPLAY'
       }
+    }
+    if($PlaybackProbe){
+      $script:phase='PLAYER_PLAYBACK_PROBE'
+      # Observe one same-tab HTML5 video or one explicitly named play control.
+      # Do not inspect cross-origin frames, service worker tokens, or network bodies.
+      $probeJs=@'
+(function(){
+ const shown=e=>!!e.getClientRects().length && getComputedStyle(e).visibility!=='hidden';
+ const videos=[...document.querySelectorAll('video')].filter(shown);
+ const buttons=[...document.querySelectorAll('button,[role="button"]')].filter(shown)
+   .filter(e=>/^(play|再生|動画を再生|再生する)$/i.test(
+     ((e.getAttribute('aria-label')||e.getAttribute('title')||e.textContent||'').trim())));
+ const candidate=videos.length===1?videos[0]:
+   videos.length===0&&buttons.length===1?buttons[0]:null;
+ let point=null;
+ if(candidate){const r=candidate.getBoundingClientRect();
+   const x=Math.round(r.x+r.width/2),y=Math.round(r.y+r.height/2);
+   if(r.width>10&&r.height>10&&x>=0&&y>=0&&x<innerWidth&&y<innerHeight)
+     point={x,y};}
+ return {videos:videos.length,buttons:buttons.length,point,
+   time:videos.length===1?Number(videos[0].currentTime)||0:null};
+})()
+'@
+      $probe=Eval-CDP $probeJs
+      $result.player_video_count=[int]$probe.videos
+      $result.player_button_candidates=[int]$probe.buttons
+      if($probe.point){
+        Invoke-Trusted-PointClick ([int]$probe.point.x) ([int]$probe.point.y)
+        $result.player_click='ONE_UNAMBIGUOUS_VISIBLE_CONTROL_CLICKED'
+        Pump-CDP 2400
+        $after=Eval-CDP '(function(){const v=[...document.querySelectorAll("video")].filter(e=>!!e.getClientRects().length);return v.length===1?{time:Number(v[0].currentTime)||0,paused:v[0].paused}:null})()'
+        if($null -ne $after -and $null -ne $probe.time){
+          $result.playback_time_progressed=([double]$after.time -gt [double]$probe.time + 0.25)
+        }
+      }else{$result.player_click='NO_UNIQUE_SAME_DOCUMENT_CONTROL'}
+      $result.playback_probe=if($result.playback_time_progressed){'HTML5_TIME_ADVANCED'}else{'PLAYBACK_NOT_VERIFIED'}
     }
     $result.landing_http_status=$script:landingStatus
     $result.playback_api_statuses=@($script:apiStatuses|Sort-Object -Unique)

@@ -10,6 +10,7 @@ on:
       - fix/mikuni-day-scoped-autoclick-20261028
       - fix/mikuni-edge-replay-popup-origin-20261028
       - fix/mikuni-visible-edge-compare-20261028
+      - feat/mikuni-player-probe-20261029
     paths:
       - scripts/check_mikuni_edge_nodocker.ps1
       - .github/workflows/mikuni-windows-edge-nodocker-test.yml
@@ -42,6 +43,13 @@ jobs:
         run: |
           & powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/check_mikuni_edge_nodocker.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { exit 1 }
+      - name: Reject playback probe without explicit visible mode
+        shell: powershell
+        run: |
+          $out = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/check_mikuni_edge_nodocker.ps1 -PlaybackProbe -SelfTest
+          $obj = ($out | Out-String) | ConvertFrom-Json
+          if ($obj.access_decision -ne 'EDGE_DIAGNOSTIC_FAILED') { exit 1 }
+          if ($obj.video_bytes_saved -ne 0) { exit 1 }
       - name: Exercise public Mikuni replay UI without downloading media
         shell: powershell
         run: |

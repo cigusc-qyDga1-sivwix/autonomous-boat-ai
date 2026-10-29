@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from scripts.official_results_watchdog import (
     Client, COOLDOWN_SECONDS, FORECAST, PUBLIC_ROOT, PUBLISH, REPOSITORY,
-    RESULTS, STALE_SECONDS, check, choose_target, snapshot_time, target_window,
+    RESULTS, STALE_SECONDS, WATCHDOG, check, choose_target, snapshot_time, target_window,
 )
 
 DAY = "2026-10-29"
@@ -106,9 +106,10 @@ class ClientTests(unittest.TestCase):
         with patch.object(client, "request") as request:
             request.return_value = {"encoding": "base64", "content": base64.b64encode(json.dumps(doc).encode()).decode()}
             self.assertEqual(client.snapshot(DAY), doc)
-            client.dispatch(RESULTS)
-            self.assertEqual(request.call_args.args[1], {"ref": "main"})
-            self.assertTrue(request.call_args.args[0].endswith("/official-results-fast.yml/dispatches"))
+            for target in (RESULTS, WATCHDOG):
+                client.dispatch(target)
+                self.assertEqual(request.call_args.args[1], {"ref": "main"})
+                self.assertEqual(request.call_args.args[0], client.api + "/actions/workflows/" + target.rsplit("/", 1)[1] + "/dispatches")
             with self.assertRaises(ValueError):
                 client.dispatch("unrelated.yml")
 

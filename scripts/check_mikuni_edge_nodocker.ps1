@@ -6,7 +6,8 @@ param(
   [switch]$SelfTest,
   [switch]$LayoutAudit,
   [switch]$VisibleEdge,
-  [switch]$HoldOpen
+  [switch]$HoldOpen,
+  [switch]$AutoPlay
 )
 $ErrorActionPreference='Stop'
 
@@ -210,6 +211,51 @@ function Inspect-Official-Playback-Tab($target){
   return 'GUARDED_RELOAD_COMPLETE'
 }
 
+function Try-Official-Play($target,[string]$date,[int]$race){
+  try {$u=[Uri][string]$target.url}catch{return 'BAD_TARGET'}
+  if($u.Scheme -ne 'https' -or $u.Host.ToLowerInvariant() -ne 'livebb.jlc.ne.jp' -or
+    $u.AbsolutePath -ne '/bb_top/sp_bb/streamer/streamer26pi.php'){return 'UNVERIFIED_OFFICIAL_REPLAY'}
+  Add-Type -AssemblyName System.Web
+  $q=[System.Web.HttpUtility]::ParseQueryString($u.Query)
+  if($q['date'] -ne $date.Replace('-','') -or $q['race'] -notin @([string]$race,('{0:D2}' -f $race)) -or
+    $q['jo'] -ne '10'){return 'WRONG_DATE_RACE'}
+  $socket=[Uri][string]$target.webSocketDebuggerUrl
+  if($socket.Scheme -ne 'ws' -or $socket.Host -notin @('localhost','127.0.0.1')){
+    return 'NONLOCAL_SOCKET_REJECTED'
+  }
+  if($script:ws){$script:ws.Dispose()}
+  $script:pendingRead=$null
+  $script:messageBuffer.Dispose()
+  $script:messageBuffer=New-Object IO.MemoryStream
+  $script:ws=New-Object Net.WebSockets.ClientWebSocket
+  [void]$script:ws.ConnectAsync($socket,[Threading.CancellationToken]::None).GetAwaiter().GetResult()
+  foreach($cmd in @('Page.enable','Runtime.enable')){
+    $id=Send-CDP $cmd;$null=Await-CDP $id
+  }
+  $point=Eval-CDP @'
+(()=>{
+ const visible=e=>{const r=e.getBoundingClientRect();return r.width>15&&r.height>15&&r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight};
+ const candidates=[...document.querySelectorAll('button,[role="button"],.vjs-big-play-button,.jw-display-icon-container')]
+  .filter(visible).filter(e=>/play|再生|start/i.test([e.getAttribute('aria-label'),e.title,e.className,e.textContent].join(' ')));
+ if(candidates.length!==1)return {kind:'PLAY_CONTROL_NOT_UNIQUE',count:candidates.length};
+ const e=candidates[0],r=e.getBoundingClientRect(),x=Math.round(r.left+r.width/2),y=Math.round(r.top+r.height/2);
+ const top=document.elementFromPoint(x,y);
+ if(!top||!(top===e||e.contains(top)))return {kind:'PLAY_CONTROL_OBSCURED'};
+ return {kind:'FOUND',x,y};
+})()
+'@
+  if($point.kind -ne 'FOUND'){return [string]$point.kind}
+  Invoke-Trusted-PointClick ([int]$point.x) ([int]$point.y)
+  Start-Sleep -Milliseconds 1800
+  return [string](Eval-CDP @'
+(()=>{
+ const v=[...document.querySelectorAll('video')];
+ if(v.some(e=>!e.paused&&!e.ended))return 'VIDEO_ELEMENT_PLAYING';
+ return v.length?'CLICKED_PLAY_UNCONFIRMED':'CLICKED_VIDEO_ELEMENT_NOT_FOUND';
+})()
+'@)
+}
+
 function Invoke-Trusted-PointClick([int]$x,[int]$y){
   # DevTools Input events model an actual pointing-device click. DOM el.click()
   # lacks user activation and may open a browser-internal fallback tab.
@@ -256,6 +302,7 @@ $result=[ordered]@{
   playback_api_requests=0;media_requests_blocked=0;opaque_requests_blocked=0
   video_bytes_saved=0;video_frames_decoded=0;confirmed_six_boat_tracks=0
   formal_forecast_modified=$false
+  playback_auto_click=if($AutoPlay){'NOT_ATTEMPTED'}else{'NOT_REQUESTED'}
   note='API response status alone is not a verified video download.'
 }
 try {
@@ -488,7 +535,10 @@ try {
         if($popupInfo.category -in @('BROWSER_INTERNAL','ABOUT_BLANK_OR_INTERNAL')){
           $result.new_tab_internal_kind=Get-Safe-Internal-Popup-Kind ([string]$popup.url)
         }
-        if($popupInfo.category -eq 'HTTPS_HOST' -and
+        if($AutoPlay -and $VisibleEdge){
+          $script:phase='OPT_IN_REPLAY_PLAY'
+          $result.playback_auto_click=Try-Official-Play $popup $Date $Race
+        }elseif($popupInfo.category -eq 'HTTPS_HOST' -and
           $popupInfo.host -in @('front.player.boatrace-cdn.jp',
             'livebb.jlc.ne.jp','playback.api.streaks.jp')){
           $script:phase='POPUP_GUARDED_REPLAY_DIAGNOSTIC'
@@ -526,7 +576,7 @@ try {
 }finally{
   $result.media_requests_blocked=$script:blockedMedia
   $result.opaque_requests_blocked=$script:blockedOpaque
-  if($HoldOpen -and $VisibleEdge -and -not $SelfTest -and $process -and -not $process.HasExited){
+  if(($HoldOpen -or $AutoPlay) -and $VisibleEdge -and -not $SelfTest -and $process -and -not $process.HasExited){
     # This is an explicitly interactive inspection mode, never enabled in CI.
     # Keep the isolated Edge window and its page available for manual viewing.
     # Read-Host only changes process lifetime; it does not record video or credentials.

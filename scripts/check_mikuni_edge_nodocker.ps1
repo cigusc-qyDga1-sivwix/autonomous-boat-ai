@@ -350,6 +350,9 @@ $result=[ordered]@{
   playback_auto_click=if($AutoPlay){'NOT_ATTEMPTED'}else{'NOT_REQUESTED'}
   replay_navigation_mode='NOT_ATTEMPTED'
   window_open_events=0;window_open_kind='NO_WINDOW_OPEN_EVENT'
+  race_click_hit_verified=$false;race_click_event_observed='NOT_CHECKED'
+  fetch_mode_at_race_click='BLOCKED_DIAGNOSTIC'
+  opaque_requests_blocked_before_click=0
   note='API response status alone is not a verified video download.'
 }
 try {
@@ -534,7 +537,7 @@ try {
  const linkInfo=describeLink(chosenLink);
  const metrics={meeting,day,click:false,iconTotal:allIcons.length,
    visibleExactCount:icons.length,dayIconCount:dayIcons.length,
-   linkInfo,point:null,hints:[]};
+   linkInfo,point:null,hints:[],hitVerified:false};
  if($layoutFlag){metrics.hints=hints;return metrics;}
  if(!meeting||!day||dayIcons.length!==1||!chosenLink)return metrics;
  chosenLink.scrollIntoView({block:'center',inline:'center'});
@@ -543,7 +546,19 @@ try {
  const x=Math.round(rect.left+rect.width/2);
  const y=Math.round(rect.top+rect.height/2);
  if(rect.width>4&&rect.height>4&&x>0&&y>0&&
-   x<innerWidth&&y<innerHeight){metrics.point={x,y};}
+   x<innerWidth&&y<innerHeight){
+   const hit=document.elementFromPoint(x,y);
+   metrics.hitVerified=!!hit&&(hit===chosenLink||chosenLink.contains(hit));
+   if(metrics.hitVerified){
+     metrics.point={x,y};
+     window.__boatlabsRaceClickTrace='NOT_OBSERVED';
+     document.addEventListener('click',e=>{
+       if(e.target===chosenLink||chosenLink.contains(e.target)){
+         window.__boatlabsRaceClickTrace=e.isTrusted?'TRUSTED_CLICK_ON_RACE_LINK':'UNTRUSTED_CLICK_ON_RACE_LINK';
+       }
+     },{capture:true,once:true});
+   }
+ }
  return metrics;
 })()
 "@
@@ -558,11 +573,29 @@ try {
     $result.race_link_host=[string]$clicked.linkInfo.host
     $result.race_link_target=[string]$clicked.linkInfo.target
     $result.race_link_has_inline_handler=[bool]$clicked.linkInfo.inline
+    $result.race_click_hit_verified=[bool]$clicked.hitVerified
     if(-not $LayoutAudit -and $clicked.point -and
       $clicked.dayIconCount -eq 1 -and $clicked.meeting -and $clicked.day){
       $script:phase='TRUSTED_POINTING_DEVICE_CLICK'
+      # Opt-in browser playback must be allowed to perform the web site's
+      # normal network operations BEFORE clicking. The previous probe blocked
+      # an XHR and may have prevented the replay window from being created.
+      # Never disable the request guard for ordinary diagnostics or CI.
+      if($AutoPlay -and $VisibleEdge){
+        $result.opaque_requests_blocked_before_click=$script:blockedOpaque
+        $id=Send-CDP 'Fetch.disable'
+        $null=Await-CDP $id
+        $result.fetch_mode_at_race_click='NORMAL_BROWSER_USER_OPT_IN'
+      }
       Invoke-Trusted-PointClick ([int]$clicked.point.x) ([int]$clicked.point.y)
       $result.race_click_status='TRUSTED_MOUSE_CLICK_EXACT_DAY_AND_RACE'
+      try{
+        $eventTrace=Eval-CDP "(function(){return String(window.__boatlabsRaceClickTrace||'NOT_OBSERVED')})()"
+        $result.race_click_event_observed=[string]$eventTrace
+      }catch{
+        # The page may have navigated as a direct result of the click.
+        $result.race_click_event_observed='PAGE_CHANGED_OR_NOT_AVAILABLE'
+      }
     }elseif($LayoutAudit){
       $result.race_click_status='LAYOUT_ONLY_NO_CLICK'
     }elseif($clicked.dayIconCount -gt 1){

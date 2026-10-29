@@ -46,6 +46,36 @@ assert.equal(api.summary(manual,day22).checked,1,'manual data never contributes'
 const mismatch=structuredClone(l22);
 mismatch.race_records['14-1'].official_pay.snapshot_sha256='b'.repeat(64);
 assert.equal(api.summary(mismatch,day22).checked,1,'snapshot mismatch never contributes');
+// Settlement must honor the policy frozen with the original prediction.
+const all=[];
+for(let a=1;a<=6;a++)for(let b=1;b<=6;b++)for(let c=1;c<=6;c++)
+ if(new Set([a,b,c]).size===3)all.push(`${a}-${b}-${c}`);
+function widened(day,count,model){
+ const record=rec(day,1,'1-2-3',1000);
+ const snapshot=record.versions[0];
+ if(model)snapshot.model_version=model;
+ const base=Math.floor(500/count),extra=500-base*count;
+ snapshot.bets=all.slice(0,count).map((combination,i)=>
+  ({combination,virtual_yen:100*(base+Number(i<extra))}));
+ return ledger(day,{'14-1':record});
+}
+const pointFree='four-factor-v1.5-point-free-untrained';
+for(const count of [1,20,120]){
+ const doc=widened('2026-10-28',count,pointFree),before=JSON.stringify(doc);
+ const s=api.summary(doc,'2026-10-28');
+ assert.equal(s.checked,1,'point-free predictions must remain in historical totals');
+ assert.equal(s.invested,50000);
+ assert.equal(s.paid,doc.race_records['14-1'].versions[0].bets[0].virtual_yen*10);
+ assert.equal(JSON.stringify(doc),before,'settlement never rewrites historical tickets');
+}
+assert.equal(api.summary(widened('2026-10-28',20),'2026-10-28').checked,0,
+ 'point-free exception requires its recorded model');
+assert.equal(api.summary(widened('2026-10-27',20),'2026-10-27').checked,0,
+ 'legacy bounds stay in force for old predictions');
+assert.equal(api.summary(widened('2026-10-29',20),'2026-10-29').checked,1,
+ '20-point predictions are eligible after the recorded rollout');
+assert.equal(api.summary(widened('2026-10-29',21),'2026-10-29').checked,0,
+ 'current bounds do not permit arbitrary wider predictions');
 (async()=>{
  const docs={[day22]:l22,[day23]:l23};
  await api.load(false,async url=>({ok:true,json:async()=>docs[url.match(/\d{4}-\d\d-\d\d/)[0]]}),new Date('2026-10-23T10:00:00+09:00'));
@@ -115,3 +145,4 @@ assert.equal(api.summary(mismatch,day22).checked,1,'snapshot mismatch never cont
  assert.match(api.render(),/公式照合 5R/,'today direct pay must enter cumulative');
  console.log('BOAT LAB dynamic Oct22-to-today verified cumulative settlement: PASS');
 })().catch(err=>{console.error(err);process.exitCode=1});
+

@@ -23,10 +23,18 @@ const EMPTY=()=>({eligible:0,checked:0,hits:0,invested:0,paid:0,profit:0,exclude
 const combo=x=>typeof x==='string'&&/^[1-6]-[1-6]-[1-6]$/.test(x)&&new Set(x.split('-')).size===3;
 const money=n=>(n>=0?'+':'−')+Math.abs(n).toLocaleString('ja-JP')+'円';
 const yen=n=>n.toLocaleString('ja-JP')+'円';
-const validBets=bets=>Array.isArray(bets)&&bets.length>=4&&bets.length<=12&&
- bets.every(b=>b&&combo(b.combination)&&Number.isSafeInteger(b.virtual_yen)&&b.virtual_yen>=0&&b.virtual_yen%100===0)&&
- new Set(bets.map(b=>b.combination)).size===bets.length&&
- bets.reduce((s,b)=>s+b.virtual_yen,0)===50000;
+function validBets(bets,snapshot,day){
+ const pointFree=day==='2026-10-28'&&
+   snapshot.model_version==='four-factor-v1.5-point-free-untrained';
+ const min=pointFree?1:4;
+ const max=pointFree?120:
+   Date.parse(snapshot.frozen_at_utc)>=Date.parse('2026-10-29T00:00:00+09:00')?20:12;
+ return Array.isArray(bets)&&bets.length>=min&&bets.length<=max&&
+  bets.every(b=>b&&combo(b.combination)&&Number.isSafeInteger(b.virtual_yen)&&
+   b.virtual_yen>=(pointFree?100:0)&&b.virtual_yen%100===0)&&
+  new Set(bets.map(b=>b.combination)).size===bets.length&&
+  bets.reduce((s,b)=>s+b.virtual_yen,0)===50000;
+}
 function summary(doc,day,formalOnly=false){
  if(!doc||doc.event_date!==day||!doc.race_records||typeof doc.race_records!=='object'||Array.isArray(doc.race_records))
    throw Error('日付別の固定記録が不正です');
@@ -41,7 +49,7 @@ function summary(doc,day,formalOnly=false){
      typeof r.cutoff_iso_jst!=='string'||!r.cutoff_iso_jst.startsWith(day+'T')||
      !/(\+09:00)$/.test(r.cutoff_iso_jst)||
      !Number.isFinite(cutoff)||!Number.isFinite(frozen)||frozen>=cutoff||
-     !validBets(r.bets)||r.venue!==record.venue||r.race!==record.race){out.excluded++;continue;}
+     !validBets(r.bets,r,day)||r.venue!==record.venue||r.race!==record.race){out.excluded++;continue;}
   if(formalOnly&&!root.BoatTicketPolicy?.classify(r,day).formal)continue;
   out.eligible++;
   if(record.official_conflict||record.official_review){out.excluded++;continue;}
@@ -181,3 +189,4 @@ function render(){
 }
 root.BoatCumulative={summary,overlayVerifiedPays,load,render,status,needsRefresh,daysThrough,jstDay,get dates(){return daysThrough(new Date())}};
 })(typeof window==='undefined'?globalThis:window);
+

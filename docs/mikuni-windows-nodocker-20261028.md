@@ -262,3 +262,12 @@ PC専用診断に `Get-Pc-External-Iframe-Video-Metrics` を追加。JLC公式�
 追加ログ：`pc_observed_targets[].external_iframe_video_probe`、`pc_external_iframe_probe_status`、`pc_external_iframe_video_elements`、`pc_external_iframe_playing_elements`。
 
 CDPコマンドにセッションIDを指定できるようにするが、従来の送信は変更しない。動画URL・トークン・フレームバイト・音声・スクリーンショット・Cookie・ページ本文は一切取得／保存しない。アクセス不能なら`EXTERNAL_IFRAME_NOT_ATTACHED_OR_UNAVAILABLE`を返し、再生成功扱いしない。今回も動画保存や正式予想修正はしない。
+
+
+## 2026-10-30｜外部iframe動画の再生時間進行を実測
+
+Windows実機で外部iframeへの接続成功（1/1検査）、HTMLVideoElement 1個を確認。ただし `playing_video_elements=0`、ユーザーの手動再生報告 `true` と不一致。この0件は、診断の瞬間に動画が一時停止、終了、または待機状態だった可能性がある。映像フレームや動画を取得した証拠ではない。
+
+オプトイン `-PcSite -VisibleEdge -PcLiveWatch` を追加。隔離Edgeで手動再生開始→すぐPowerShellでY→Enterとすると、外部HTTPS iframeの同一CDPセッション内でHTMLVideoElementを約5秒にわたり8回サンプリング。各要素のcurrentTimeが連続して進んだかだけをその場で比較して集計。currentTimeの値そのもの、動画URL、画像、音声、Cookie、データ片は出力・保存しない。
+
+結果の`pc_external_iframe_advancing_elements`が1以上なら、プログラムで映像の再生時間進行を検出。`pc_external_iframe_paused_elements`・`pc_external_iframe_ended_elements`により一時停止／終了の可能性を分ける。`pc_live_watch_mode`で単発検査と連続監視を区別。正式予想・結果・収支は変更なし。自動再生ボタン・映像フレーム取得・6艇識別は未達成。

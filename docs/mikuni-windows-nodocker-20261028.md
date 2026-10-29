@@ -231,3 +231,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\check_mikuni_edge_nodocker
 `-PcSite -VisibleEdge` のHTML観測に、`inaccessible_frame_count`・`object_elements`・`embed_elements`・`canvas_elements`を追加。終了時に**この診断で開いたEdgeで再生できたか**をY/Enterで入力し、`pc_manual_playback_reported`を記録。これは目視の自己申告とプログラムが検出したHTML動画の再生を混同しないため。
 
 動画・映像フレーム・全文URL・認証情報は収集しない。正式予想・結果照合・収支と従来のスマホ版診断はそのまま。
+
+
+## 2026-10-30｜PC版場番号の修正：桐生01→三国10
+
+ユーザー実機で`-PcSite -VisibleEdge`実行時に桐生ページが表示されることを確認。原因はスクリプト内のPCエントリー`?tpl=1`が桐生（01）を意味するのに、三国のつもりで固定していたこと。
+
+公式JLCの場リンクに対応する`https://livebb.jlc.ne.jp/bb_top/new_bb/index.php?tpl=10`（三国）へ修正。これが場の入口であって再生動画URLではないことを明示。新診断`pc_requested_venue=MIKUNI_10`と`pc_venue_url_verified=true`はサイトURLの選択チェックであり、動画/レースの選択成功を意味しない。
+
+スマホ版・正式予想・結果・収支・動画保存処理は変更していない。次は診断Edgeで三国のページが表示されるか確認する。

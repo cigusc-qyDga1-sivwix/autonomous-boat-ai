@@ -217,7 +217,7 @@ function Try-Official-Play($target,[string]$date,[int]$race){
     $u.AbsolutePath -ne '/bb_top/sp_bb/streamer/streamer26pi.php'){return 'UNVERIFIED_OFFICIAL_REPLAY'}
   Add-Type -AssemblyName System.Web
   $q=[System.Web.HttpUtility]::ParseQueryString($u.Query)
-  if($q['date'] -ne $date.Replace('-','') -or $q['race'] -ne [string]$race -or
+  if($q['date'] -ne $date.Replace('-','') -or $q['race'] -notin @([string]$race,('{0:D2}' -f $race)) -or
     $q['jo'] -ne '10'){return 'WRONG_DATE_RACE'}
   $socket=[Uri][string]$target.webSocketDebuggerUrl
   if($socket.Scheme -ne 'ws' -or $socket.Host -notin @('localhost','127.0.0.1')){

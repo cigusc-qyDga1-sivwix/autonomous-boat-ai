@@ -198,3 +198,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\check_mikuni_edge_nodocker
 - DOM側の正しい1Rリンクに届いた**信頼されたclickイベント**が一時的に記録されると、DevToolsの `Runtime.consoleAPICalled` に固定マーカーを発行。診断はこの固定文字列だけを識別して `trusted_race_click_delivered` を出力。ページ内の他のコンソールログやURLは取得・保存しない。ページがすぐ遷移してもイベント通知が届けば切り分け可能。
 - 既存の `race_click_event_observed` が `NOT_OBSERVED` でも、ページ遷移によるリセット等で観測できない場合があるため、それだけでイベント未到達と断定しない。
 - 手動ログイン・アクセス制御の回避なし。動画・フレーム保存なし。正式買い目/結果/収支不変更。再生の実機成功は未確認。
+
+
+## 2026-10-29｜信頼されたクリック未観測時のマウス入力経路検証
+
+現地Windows実測で対象1Rのヒットテスト成功（`EXACT_DAY_RACE_ICON_HIT`）にもかかわらず、`trusted_race_click_delivered=false`、`race_click_event_observed=NOT_OBSERVED`、新タブ1件だった。これはマウス入力イベントが届かなかった可能性と、監視側の取りこぼしを区別できない。
+
+今回の改善は：1Rのリンクでだけ `mousedown`、`mouseup`、`click` の **信頼された**イベントをそれぞれ固定マーカーに変換して記録する。対象のページは `Page.bringToFront` で前面化し、レースリンクがDOM内に残っていて元のマウス座標下にあることを再検証。途中で対象が消失・移動すればクリックを打たずに `RACE_TARGET_CHANGED_BEFORE_CLICK_NO_CLICK` と報告する。ログに `race_mouse_down_seen`、`race_mouse_up_seen`、`race_click_seen`、`race_click_point_rechecked` を追加。旧 `document.addEventListener(...,{once:true})` は別クリックで消費され得るため改めた。
+
+PowerShellのヘッドレス自己テストでこの3種類のイベント観測が正しく動くことを検証する。Windows/Edgeの実機自動再生成功、動画バイト取得、6艇の追跡は依然未確認。動画・認証・ページ内の機密情報保存なし、正式予想や収支には変更なし。

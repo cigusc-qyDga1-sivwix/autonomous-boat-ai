@@ -211,17 +211,6 @@ function Inspect-Official-Playback-Tab($target){
   return 'GUARDED_RELOAD_COMPLETE'
 }
 
-function Get-Official-Mikuni-Replay-Page([string]$date,[int]$race){
-  # This page URL was visible in the user's ordinary Edge browser.
-  # It is the published JLC player PAGE, not a media URL or bearer token.
-  $dt=[datetime]::MinValue
-  if(-not [datetime]::TryParseExact($date,'yyyy-MM-dd',
-      [Globalization.CultureInfo]::InvariantCulture,
-      [Globalization.DateTimeStyles]::None,[ref]$dt) -or
-    $race -lt 1 -or $race -gt 12){throw 'Invalid replay date or race'}
-  return ('https://livebb.jlc.ne.jp/bb_top/sp_bb/streamer/streamer26pi.php?tenji=1&jo=10&race={0:D2}&date={1}' -f $race,$dt.ToString('yyyyMMdd'))
-}
-
 function Try-Official-Play($target,[string]$date,[int]$race){
   try {$u=[Uri][string]$target.url}catch{return 'BAD_TARGET'}
   if($u.Scheme -ne 'https' -or $u.Host.ToLowerInvariant() -ne 'livebb.jlc.ne.jp' -or
@@ -243,6 +232,10 @@ function Try-Official-Play($target,[string]$date,[int]$race){
   foreach($cmd in @('Page.enable','Runtime.enable')){
     $id=Send-CDP $cmd;$null=Await-CDP $id
   }
+  $pageStatus=Eval-CDP @'
+(()=>{const t=(document.body?.innerText||'').trim();return t==='File not found.'?'SERVER_REPLAY_FILE_NOT_FOUND':'CHECK_PLAY_CONTROL';})()
+'@
+  if($pageStatus -eq 'SERVER_REPLAY_FILE_NOT_FOUND'){return $pageStatus}
   $point=$null
   for($attempt=0;$attempt -lt 10;$attempt++){
     $point=Eval-CDP @'
@@ -396,16 +389,6 @@ try {
        (Get-Safe-Internal-Popup-Kind 'https://front.player.boatrace-cdn.jp/path?secret=1') -ne 'NOT_BROWSER_INTERNAL'){
       throw 'Privacy-safe browser internal classification failed.'
     }
-    $expected='https://livebb.jlc.ne.jp/bb_top/sp_bb/streamer/streamer26pi.php?tenji=1&jo=10&race=01&date=20261028'
-    $actual=Get-Official-Mikuni-Replay-Page '2026-10-28' 1
-    if($actual -ne $expected){throw 'Official replay page construction failed.'}
-    $url=[Uri]$actual
-    Add-Type -AssemblyName System.Web
-    $params=[System.Web.HttpUtility]::ParseQueryString($url.Query)
-    if($url.Host -ne 'livebb.jlc.ne.jp' -or $params['race'] -ne '01' -or
-      $params['jo'] -ne '10' -or $params['date'] -ne '20261028'){
-      throw 'Replay date/race provenance failed.'
-    }
     $result.access_decision='EDGE_SELFTEST_PASSED_NO_NETWORK'
   }else{
     $script:phase='JLC_PAGE_DIAGNOSTIC'
@@ -554,36 +537,30 @@ try {
       Start-Sleep -Milliseconds 400
     }
     $result.browser_tabs_after_click=@($tabList|Where-Object {$_.type -eq 'page'}).Count
-    # A real JLC streamer window may open outside the remote-debugged target
-    # list (observed on the licensed Windows PC). Do not treat one tab as
-    # proof that the replay page is missing. Only in explicit opt-in AutoPlay
-    # mode, after an exact date/1R match, open the already-observed official
-    # PLAYER PAGE in the same controlled tab. No authentication bypass.
+    # Important: the official page works from a normal UI click, but a
+    # manually reconstructed URL returned "File not found." on the user's PC.
+    # Never synthesize a replay link or force Page.navigate to it. Instead,
+    # inspect only the browser target reached through the real site's click.
     if($AutoPlay -and $VisibleEdge -and $result.browser_tabs_after_click -eq 1){
       if($result.race_click_status -ne 'TRUSTED_MOUSE_CLICK_EXACT_DAY_AND_RACE' -or
          $result.race_icon_target_day_matches -ne 1){
         $result.playback_auto_click='EXACT_RACE_NOT_VERIFIED_NO_REPLAY'
       }else{
-        $script:phase='AUTHORIZED_REPLAY_PAGE_SAME_TAB'
-        $replayPage=Get-Official-Mikuni-Replay-Page $Date $Race
-        # The default metadata probe intentionally blocks media requests.
-        # Disable that block only for explicitly opted-in, regular browser
-        # playback; never save media, headers, tokens or video frames.
-        $id=Send-CDP 'Fetch.disable'
-        $null=Await-CDP $id
-        $id=Send-CDP 'Page.navigate' @{url=$replayPage}
-        $nav=Await-CDP $id
-        if($nav.errorText){
-          $result.playback_auto_click='REPLAY_PAGE_NAVIGATION_FAILED'
+        $onlyTabs=@($tabList|Where-Object {$_.type -eq 'page'})
+        $only=$onlyTabs[0]
+        $onlyUrl=[string]$only.url
+        try {$onlyUri=[Uri]$onlyUrl}catch{$onlyUri=$null}
+        if($onlyUri -and $onlyUri.Scheme -eq 'https' -and
+           $onlyUri.Host.ToLowerInvariant() -eq 'livebb.jlc.ne.jp' -and
+           $onlyUri.AbsolutePath -eq '/bb_top/sp_bb/streamer/streamer26pi.php'){
+          $result.replay_navigation_mode='OFFICIAL_PLAYER_ALREADY_IN_CDP_TAB'
+          $script:phase='OPT_IN_PLAY_EXISTING_CDP_TARGET'
+          $result.playback_auto_click=Try-Official-Play $only $Date $Race
         }else{
-          Pump-CDP 2000
-          $result.replay_navigation_mode='VERIFIED_OFFICIAL_PAGE_SAME_TAB'
-          $verifiedTarget=@{
-            url=$replayPage
-            webSocketDebuggerUrl=$page[0].webSocketDebuggerUrl
-          }
-          $script:phase='OPT_IN_REPLAY_PLAY_ON_SAME_TAB'
-          $result.playback_auto_click=Try-Official-Play $verifiedTarget $Date $Race
+          # The visible popup could be outside this diagnostic CDP session.
+          # Do not guess at a URL, send credentials, or click blindly.
+          $result.replay_navigation_mode='NATIVE_CLICK_ONLY_NO_DIRECT_URL'
+          $result.playback_auto_click='PLAYER_TARGET_NOT_ATTACHED_NO_CLICK'
         }
       }
     }

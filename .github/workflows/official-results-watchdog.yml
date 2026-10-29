@@ -1,0 +1,52 @@
+name: BOAT LAB continuous official result watchdog
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/official_results_watchdog.py'
+      - 'tests/test_official_results_watchdog.py'
+      - '.github/workflows/official-results-watchdog.yml'
+  schedule:
+    # Start before JST morning races; additional starts replace only pending watches.
+    - cron: '43 20 * * *'
+    - cron: '47 2,8,14 * * *'
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: boat-lab-continuous-official-result-watchdog
+  cancel-in-progress: false
+jobs:
+  initialize:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      day: ${{ steps.clock.outputs.day }}
+    steps:
+      - id: clock
+        run: echo "day=$(TZ=Asia/Tokyo date +%F)" >> "$GITHUB_OUTPUT"
+  monitor:
+    needs: initialize
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        shift: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate bounded result and publication recovery
+        run: python -m unittest discover -s tests -p test_official_results_watchdog.py -v
+      - name: Recover stalled result collection and publication through the JST day
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python -u scripts/official_results_watchdog.py --day '${{ needs.initialize.outputs.day }}' --minutes 345 --start-hour 6

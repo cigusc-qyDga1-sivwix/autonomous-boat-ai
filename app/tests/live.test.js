@@ -8,9 +8,10 @@ assert.ok(raw.forecast_races.length<=288);
 for(const r of raw.forecast_races){
   assert.ok(r.sha256 && r.frozen_at_utc);
   // 2026-10-28 point-free main v1.5 explicitly permits 1–120 tickets.
-  // Keep the old 4–12 bound for every other frozen model.
+  // Other snapshots use 4–20 after the JST 29 Oct rollout, 4–12 before it.
   const pointFree=r.model_version==='four-factor-v1.5-point-free-untrained';
-  assert.ok(r.bets.length>=(pointFree?1:4)&&r.bets.length<=(pointFree?120:12));
+  const expanded=Date.parse(r.frozen_at_utc)>=Date.parse('2026-10-29T00:00:00+09:00');
+  assert.ok(r.bets.length>=(pointFree?1:4)&&r.bets.length<=(pointFree?120:expanded?20:12));
   if(r.point_count!==undefined)assert.equal(r.point_count,r.bets.length);
   assert.equal(r.bets.reduce((a,b)=>a+b.virtual_yen,0),50000);
   assert.ok(['baseline','exhibition'].includes(r.phase));
@@ -51,3 +52,4 @@ setTimeout(()=>{
   assert.ok(officialEntries.length>=verifiedCount);
   console.log('BOAT LAB nationwide live app smoke: PASS');
 },100);
+

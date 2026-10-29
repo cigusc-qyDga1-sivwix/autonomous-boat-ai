@@ -7,7 +7,8 @@ param(
   [switch]$LayoutAudit,
   [switch]$VisibleEdge,
   [switch]$HoldOpen,
-  [switch]$AutoPlay
+  [switch]$AutoPlay,
+  [switch]$PcSite
 )
 $ErrorActionPreference='Stop'
 
@@ -318,6 +319,45 @@ function Try-Official-Play($target,[string]$date,[int]$race){
 '@)
 }
 
+function Get-Pc-Page-Metrics {
+  # Count only generic, non-identifying player/controls metadata. No URLs,
+  # page text, video frames, tokens, cookies or media requests are recorded.
+  return (Eval-CDP @'
+(()=>{
+  const tally={dom_status:document.readyState,iframe_count:0,
+    accessible_frame_count:0,video_elements:0,playing_video_elements:0,
+    replay_menu_candidates:0,exhibition_menu_candidates:0,
+    race_one_candidates:0};
+  const scanned=new Set();
+  const scan=doc=>{
+    if(!doc || scanned.has(doc))return;
+    scanned.add(doc); tally.accessible_frame_count++;
+    for(const v of doc.querySelectorAll('video')){
+      tally.video_elements++;
+      if(!v.paused && !v.ended && v.readyState>=2 && v.currentTime>0){
+        tally.playing_video_elements++;
+      }
+    }
+    const controls=[...doc.querySelectorAll('a,button,[role="button"],input[type="button"],input[type="submit"]')];
+    for(const el of controls){
+      let label=[el.textContent,el.getAttribute('aria-label'),el.getAttribute('value'),el.getAttribute('title')].filter(Boolean).join(' ').trim().replace(/\s+/g,' ');
+      if(label.length>90)continue;
+      if(/展示リプレイ|展示\s*リプレイ/.test(label))tally.exhibition_menu_candidates++;
+      else if(/過去のレース|リプレイ/.test(label))tally.replay_menu_candidates++;
+      if(/^(?:1R|1Ｒ|１Ｒ|1レース|１レース)$/.test(label))tally.race_one_candidates++;
+    }
+    const frames=[...doc.querySelectorAll('iframe,frame')];
+    tally.iframe_count+=frames.length;
+    for(const el of frames){
+      try{if(el.contentDocument)scan(el.contentDocument)}catch(e){}
+    }
+  };
+  scan(document);
+  return tally;
+})()
+'@)
+}
+
 function Invoke-Trusted-PointClick([int]$x,[int]$y){
   # DevTools Input events model an actual pointing-device click. DOM el.click()
   # lacks user activation and may open a browser-internal fallback tab.
@@ -377,6 +417,8 @@ $result=[ordered]@{
   race_click_hit_reason='NOT_EVALUATED'
   fetch_mode_at_race_click='BLOCKED_DIAGNOSTIC'
   opaque_requests_blocked_before_click=0
+  pc_site_mode=if($PcSite){'MANUAL_PLAYBACK_PROBE'}else{'OFF'}
+  pc_initial=$null;pc_observed_targets=@();pc_playing_video_elements=0
   note='API response status alone is not a verified video download.'
 }
 try {
@@ -385,6 +427,10 @@ try {
     [Globalization.CultureInfo]::InvariantCulture,
     [Globalization.DateTimeStyles]::None,[ref]$d)){throw 'Invalid calendar date.'}
   if($AutoPlay -and -not $VisibleEdge){throw 'AutoPlay requires -VisibleEdge.'}
+  if($PcSite -and -not $VisibleEdge){throw 'PcSite requires -VisibleEdge.'}
+  if($PcSite -and ($AutoPlay -or $LayoutAudit -or $SelfTest)){
+    throw 'PcSite is a separate, manual UI diagnostic mode; omit AutoPlay/LayoutAudit/SelfTest.'
+  }
   $script:phase='FIND_EDGE'
   $edge=Find-Edge
   New-Item -ItemType Directory -Path $profile -Force|Out-Null
@@ -470,6 +516,56 @@ try {
       throw 'Blank window-open classification failed'
     }
     $result.access_decision='EDGE_SELFTEST_PASSED_NO_NETWORK'
+  }elseif($PcSite){
+    $script:phase='PC_OFFICIAL_ENTRY'
+    # This is the official, documented PC landing PAGE, not a synthesized
+    # media URL or unauthorized replay endpoint.
+    $id=Send-CDP 'Page.navigate' @{
+      url='https://livebb.jlc.ne.jp/bb_top/new_bb/index.php?tpl=1'
+    }
+    $nav=Await-CDP $id
+    if($nav.errorText){throw 'Official PC landing page navigation failed.'}
+    Pump-CDP 2500
+    $result.pc_initial=Get-Pc-Page-Metrics
+    Write-Host 'BOAT LAB PC probe: in this isolated Edge window, open Mikuni exhibition replay and play it manually.'
+    Write-Host 'When the video is playing, return here and press ENTER to inspect video element state.'
+    $null=Read-Host 'Press ENTER to inspect the official PC playback session'
+    $script:phase='PC_OBSERVE_ATTACHED_TABS'
+    # The isolated CDP port belongs only to this diagnostic Edge profile.
+    $tabs=Invoke-RestMethod -Uri "http://127.0.0.1:$port/json/list" -TimeoutSec 5
+    $records=@()
+    foreach($target in @($tabs|Where-Object {$_.type -eq 'page'})){
+      $safe=Get-Safe-Popup-Info ([string]$target.url)
+      $item=[ordered]@{page_kind=[string]$safe.category;
+        host=if($safe.host -eq 'livebb.jlc.ne.jp'){'JLC_PC_OFFICIAL'}else{'OTHER_OR_INTERNAL'};
+        metrics=$null}
+      if($safe.category -eq 'HTTPS_HOST' -and $safe.host -eq 'livebb.jlc.ne.jp'){
+        $socket=[Uri][string]$target.webSocketDebuggerUrl
+        if($socket.Scheme -eq 'ws' -and $socket.Host -in @('127.0.0.1','localhost')){
+          if($script:ws){$script:ws.Dispose()}
+          $script:pendingRead=$null
+          $script:messageBuffer.Dispose()
+          $script:messageBuffer=New-Object IO.MemoryStream
+          $script:ws=New-Object Net.WebSockets.ClientWebSocket
+          [void]$script:ws.ConnectAsync($socket,[Threading.CancellationToken]::None).GetAwaiter().GetResult()
+          $id=Send-CDP 'Runtime.enable';$null=Await-CDP $id
+          try{
+            $item.metrics=Get-Pc-Page-Metrics
+            $result.pc_playing_video_elements += [int]$item.metrics.playing_video_elements
+          }catch{
+            $item.metrics=@{dom_status='UNAVAILABLE';video_elements=0;playing_video_elements=0}
+          }
+        }
+      }
+      $records+= $item
+    }
+    $result.pc_observed_targets=$records
+    if($result.pc_playing_video_elements -gt 0){
+      $result.access_decision='PC_MANUAL_VIDEO_ELEMENT_PLAYING_VERIFIED'
+    }else{
+      $result.access_decision='PC_MANUAL_PLAYBACK_BROWSER_VISIBLE_NOT_PROGRAMMATICALLY_VERIFIED'
+    }
+    # The PC branch is observation-only: no media capture or prediction writes.
   }else{
     $script:phase='JLC_PAGE_DIAGNOSTIC'
     $id=Send-CDP 'Fetch.enable' @{patterns=@(@{urlPattern='*';requestStage='Request'})}
@@ -795,7 +891,7 @@ try {
 }finally{
   $result.media_requests_blocked=$script:blockedMedia
   $result.opaque_requests_blocked=$script:blockedOpaque
-  if(($HoldOpen -or $AutoPlay) -and $VisibleEdge -and -not $SelfTest -and $process -and -not $process.HasExited){
+  if(($HoldOpen -or $AutoPlay) -and $VisibleEdge -and -not $PcSite -and -not $SelfTest -and $process -and -not $process.HasExited){
     # This is an explicitly interactive inspection mode, never enabled in CI.
     # Keep the isolated Edge window and its page available for manual viewing.
     # Read-Host only changes process lifetime; it does not record video or credentials.
@@ -808,5 +904,5 @@ try {
   try{Remove-Item -LiteralPath $profile -Recurse -Force -ErrorAction SilentlyContinue}catch{}
 }
 $result|ConvertTo-Json -Depth 12
-if($result.access_decision -in @('EDGE_SELFTEST_PASSED_NO_NETWORK','PLAYBACK_API_2XX_VIDEO_UNVERIFIED')){exit 0}
+if($result.access_decision -in @('EDGE_SELFTEST_PASSED_NO_NETWORK','PLAYBACK_API_2XX_VIDEO_UNVERIFIED','PC_MANUAL_VIDEO_ELEMENT_PLAYING_VERIFIED','PC_MANUAL_PLAYBACK_BROWSER_VISIBLE_NOT_PROGRAMMATICALLY_VERIFIED')){exit 0}
 exit 2

@@ -179,3 +179,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\check_mikuni_edge_nodocker
 - `document.elementFromPoint`でクリック座標に本物のリンクまたは子要素があることを検証。曖昧な場合はクリックしない。
 - `race_click_hit_verified`（座標検証）、`race_click_event_observed`（ページ側のクリック発火）、`fetch_mode_at_race_click`（通信モード）、`opaque_requests_blocked_before_click`（事前遮断数）を追加。
 - URLの組み立て・直アクセスを再導入しない。メディア取得成功・6艇識別は未確認のまま。正式予想/照合/収支は変更しない。
+
+
+## 2026-10-29｜実機race_click_hit_verified=falseの座標補正
+
+ユーザーPCで `race_icon_target_day_matches=1`、`race_icon_visible_exact=1`、しかし `race_click_hit_verified=false` のためクリック停止。旧コードは1Rアイコンを含む`<a>`の矩形中心で`elementFromPoint`を検証していたが、リンク矩形の中心が画像自身の位置と一致する保証がない。
+
+改修：ユニークな対象日・対象Rの画像そのものをスクロールし、**画像矩形の内部**の中心と限定した4つの近傍を検証する。位置を突き抜ける別リンク・オーバーレイがあるときにはクリックしない。クリック可能な1Rアイコン内に本来のリンクか子孫がある場合のみ`race_click_hit_verified=true`にする。
+
+新フィールド`race_click_hit_reason` は `EXACT_DAY_RACE_ICON_HIT`、`ICON_OFFSCREEN`、`ICON_OBSCURED_BY_OTHER_ELEMENT` 等の非機密分類。画像のスクリーンショット／座標・URL全文・動画を保存しない。正式予想/結果/収支には触れない。Windows GitHub CIは自己テストであり、現地PCの動画自動再生成功ではない。

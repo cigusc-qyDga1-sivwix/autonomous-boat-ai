@@ -36,9 +36,9 @@ const fetch=async(url,opts)=>{
 const ctx=vm.createContext({window,document,localStorage,fetch,navigator:{},
  location:{protocol:'file:'},console,setTimeout,clearTimeout,setInterval:(cb,ms)=>{intervals.push({cb,ms});},Blob,URL,Intl,Date});
 vm.runInContext(fs.readFileSync('app/app.js','utf8'),ctx);
-function navResults(){
+function navigate(view){
  for(const cb of listen.click||[])cb({
-  target:{closest:selector=>selector==='[data-view]'?{dataset:{view:'results'}}:null}
+  target:{closest:selector=>selector==='[data-view]'?{dataset:{view}}:null}
  });
 }
 function pressResultsRefresh(){
@@ -49,7 +49,7 @@ function pressResultsRefresh(){
 }
 async function main(){
  await new Promise(r=>setTimeout(r,70));
- navResults();
+ navigate('results');
  const ui=elements.get('main');
  assert.match(ui.innerHTML,/結果を更新/);
  assert.match(ui.innerHTML,/公式ページ確認/);
@@ -102,15 +102,38 @@ async function main(){
  assert.match(ui.innerHTML,/より古いため/);
  assert.equal(window.BoatLab.getData().event_date,saved.event_date);
  response=newVersion;
- const scheduled=intervals.find(x=>x.ms===90000);
+ // Backlog reconciliation updates evidence while preserving forecast time.
+ const backlog=deep(newVersion);
+ backlog.official_pay_info.retrieved_at_utc='2026-10-22T07:25:00+00:00';
+ backlog.settlement_alerts[officialEntry[0]]={status:'conflict',reason:'公式結果の再確認'};
+ response=backlog;
+ const frozen=JSON.stringify(window.BoatLab.getData().forecast_races);
+ const nationalPoll=intervals.find(x=>x.ms===300000);
+ await nationalPoll.cb();
+ assert.equal(window.BoatLab.officialStats(window.BoatLab.getData().forecast_races).count,0,
+   'same forecast timestamp must not hide a new settlement review');
+ assert.equal(JSON.stringify(window.BoatLab.getData().forecast_races),frozen);
+ assert.match(ui.innerHTML,/公式結果の再確認|要確認/);
+ const scheduled=intervals.find(x=>x.cb.name==='pollOfficialResults');
  assert.ok(scheduled,'automatic results check must be installed');
+ assert.equal(scheduled.ms,60000);
  let directChecks=0;
  window.BoatOfficialDirect={refresh:async()=>{directChecks++;return {available:false};}};
  const priorCalls=calls.length;
- scheduled.cb();
- await new Promise(r=>setTimeout(r,30));
- assert.ok(calls.length>priorCalls,'automatic results screen update must fetch published results');
+ await scheduled.cb();
+ assert.equal(calls.length,priorCalls,'automatic result checks must avoid the large forecast JSON');
  assert.equal(directChecks,1,'unchanged national timestamp must still query independent official results');
+ navigate('overview');
+ await scheduled.cb();
+ assert.equal(directChecks,2,'home screen must also update official results');
+ document.hidden=true;
+ await scheduled.cb();
+ assert.equal(directChecks,2,'hidden app must not poll');
+ document.hidden=false;
+ for(const cb of listen.visibilitychange||[])cb();
+ await new Promise(r=>setTimeout(r,30));
+ assert.equal(directChecks,3,'returning to the app must immediately check official results');
  console.log('BOAT LAB manual official result refresh tests: PASS');
 }
 main().catch(e=>{console.error(e);process.exitCode=1});
+

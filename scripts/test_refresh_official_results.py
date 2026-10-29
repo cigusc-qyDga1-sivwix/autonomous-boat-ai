@@ -1,10 +1,13 @@
 """Tests for independent fast official payout updates; no live network."""
 import copy
+import json
+import tempfile
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from scripts.refresh_official_results import merge_pay, update
+from scripts.refresh_official_results import merge_pay, run, update
 
 DAY="2026-10-25"
 NOW=datetime(2026,10,25,16,35,tzinfo=ZoneInfo("Asia/Tokyo"))
@@ -63,6 +66,29 @@ class FastOfficialTests(unittest.TestCase):
         self.assertEqual(again_a["race_records"]["16-1"]["versions"],
                          a["race_records"]["16-1"]["versions"])
 
+    def test_check_heartbeat_publishes_without_rewriting_frozen_files(self):
+        ledger,view=fixture()
+        with tempfile.TemporaryDirectory() as tmp:
+            directory=Path(tmp)
+            day_path=directory/(DAY+".json")
+            live_path=directory/"latest.json"
+            day_path.write_text(json.dumps(ledger),encoding="utf-8")
+            live_path.write_text(json.dumps(view),encoding="utf-8")
+            run(directory,NOW,lambda _:pay())
+            before=(day_path.read_bytes(),live_path.read_bytes())
+            checked=pay()
+            checked["retrieved_at_utc"]="2026-10-25T07:40:00+00:00"
+            # The official page can contain races without a frozen prediction.
+            checked["results"]["16-2"]={"finish":"1-2-3","payout_per_100":500}
+            report=run(directory,NOW+timedelta(minutes=5),lambda _:checked)
+            self.assertFalse(report["changed"])
+            self.assertEqual(report["newly_verified"],0)
+            self.assertEqual((day_path.read_bytes(),live_path.read_bytes()),before)
+            evidence=json.loads((directory/"official-pay"/(DAY+".json")).read_text())
+            self.assertEqual(evidence["retrieved_at_utc"],checked["retrieved_at_utc"])
+            self.assertEqual(len(evidence["results"]),2)
+            self.assertEqual(evidence["status"],"verified_by_server_fetch")
+
     def test_conflicting_official_values_are_quarantined(self):
         ledger,view=fixture()
         old,old_view,old_pay,_,_=update(ledger,view,{},pay(),NOW)
@@ -108,3 +134,4 @@ class FastOfficialTests(unittest.TestCase):
 
 if __name__=="__main__":
     unittest.main()
+

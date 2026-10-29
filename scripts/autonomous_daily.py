@@ -1064,6 +1064,41 @@ def integrate_official(ledger: dict, view: dict, pay: dict,
                     "source": "same_pre_cutoff_shadow_only",
                     "legacy_sha256": old_control.get("sha256"),
                 }
+        role_comparison = None
+        shadow = snap.get("role_skill_shadow")
+        if (isinstance(shadow, dict)
+                and shadow.get("status") == "ready"
+                and shadow.get("model_role") == "shadow_validation"
+                and shadow.get("generated_pre_cutoff") is True
+                and shadow.get("result_data_used") is False
+                and shadow.get("frozen_at_utc") == snap.get("frozen_at_utc")):
+            alternative = shadow.get("bets")
+            if (isinstance(alternative, list)
+                    and len(alternative) == len(snap["bets"])
+                    and len({b.get("combination") for b in alternative
+                             if isinstance(b, dict)}) == len(alternative)
+                    and all(isinstance(b, dict)
+                            and isinstance(b.get("combination"), str)
+                            and len(b["combination"].split("-")) == 3
+                            and len(set(b["combination"].split("-"))) == 3
+                            and all(i in "123456" for i in b["combination"].split("-"))
+                            and isinstance(b.get("virtual_yen"), int)
+                            and b["virtual_yen"] > 0 for b in alternative)
+                    and sorted(b["virtual_yen"] for b in alternative)
+                        == sorted(b["virtual_yen"] for b in snap["bets"])
+                    and sum(b["virtual_yen"] for b in alternative) == VIRTUAL_BUDGET_YEN):
+                test_bet = next((b for b in alternative if b["combination"] == p["finish"]), None)
+                test_paid = (test_bet["virtual_yen"] * p["payout_per_100"] // 100
+                             if test_bet else 0)
+                role_comparison = {
+                    "main_hit": bool(winning_bet), "shadow_hit": bool(test_bet),
+                    "main_payout": paid, "shadow_payout": test_paid,
+                    "shadow_minus_main_yen": test_paid - paid,
+                    "same_frozen_input": True, "same_point_count": True,
+                    "same_stake_distribution": True, "no_extra_formal_stake": True,
+                    "model_version": shadow.get("version"),
+                    "source": "same_pre_cutoff_role_skill_shadow_only",
+                }
         results[key] = {
             **p, "hit": bool(winning_bet), "virtual_stake": stake,
             "virtual_payout": paid, "virtual_profit": paid - stake,
@@ -1072,6 +1107,21 @@ def integrate_official(ledger: dict, view: dict, pay: dict,
             "snapshot_phase": snap["phase"], "snapshot_sha256": snap["sha256"],
             "weather_comparison": weather_comparison,
             "legacy_comparison": old_comparison,
+            **({"role_skill_comparison": role_comparison} if role_comparison else {}),
+        }
+
+    role_trials = [r["role_skill_comparison"] for r in results.values()
+                   if r.get("role_skill_comparison")]
+    if role_trials:
+        view["role_skill_backtest"] = {
+            "races": len(role_trials),
+            "main_hits": sum(r["main_hit"] for r in role_trials),
+            "shadow_hits": sum(r["shadow_hit"] for r in role_trials),
+            "main_payout": sum(r["main_payout"] for r in role_trials),
+            "shadow_payout": sum(r["shadow_payout"] for r in role_trials),
+            "shadow_minus_main_yen": sum(r["shadow_minus_main_yen"] for r in role_trials),
+            "virtual_stake_per_model": len(role_trials) * VIRTUAL_BUDGET_YEN,
+            "scope": "発走前同一入力の試験比較。正式予想・収支に試験買い目を合算しない",
         }
 
     comparable = [

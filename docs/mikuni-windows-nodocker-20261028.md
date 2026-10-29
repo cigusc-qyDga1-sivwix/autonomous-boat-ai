@@ -240,3 +240,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\check_mikuni_edge_nodocker
 公式JLCの場リンクに対応する`https://livebb.jlc.ne.jp/bb_top/new_bb/index.php?tpl=10`（三国）へ修正。これが場の入口であって再生動画URLではないことを明示。新診断`pc_requested_venue=MIKUNI_10`と`pc_venue_url_verified=true`はサイトURLの選択チェックであり、動画/レースの選択成功を意味しない。
 
 スマホ版・正式予想・結果・収支・動画保存処理は変更していない。次は診断Edgeで三国のページが表示されるか確認する。
+
+
+## 2026-10-30｜JLC PC版の別ドメインiframeをCDPで判定
+
+実機診断：`pc_manual_playback_reported=true`（ユーザーが診断専用Edgeで目視再生）、`pc_inaccessible_frames_observed=1`、`pc_video_surface_diagnosis=CROSS_ORIGIN_OR_UNAVAILABLE_IFRAME`、`pc_playing_video_elements=0`。動画再生は目視で確認されているが、再生中のHTMLVideoElement自体をプログラムが確認したわけではない。
+
+読み取り専用CDP `Page.getFrameTree` と `Target.getTargets` で、フレーム総数、JLC公式のフレーム数、別HTTPSホストのフレーム数、メインページと別オリジンのフレーム数、独立したiframeターゲット数を計測。URL全文・動画バイト・フレーム画像・認証情報・ページタイトル・CDPフレームIDは記録しない。
+
+追加結果：`pc_observed_targets[].frame_topology`、`pc_frame_topology_status`、`pc_cross_origin_frames_total`、`pc_oopif_target_count`。
+
+`iframe_target_total=0` でも別ドメインiframeが無いと断定しない。フレームが独立したレンダラープロセスに分かれていない場合、iframeターゲットが独立表示されないことがある。プレイヤー実体の特定、許可範囲の映像解析および自動再生は未完了。正式予想・結果・収支は一切変更しない。

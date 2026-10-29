@@ -81,6 +81,17 @@ function Classify-Official-Player-Open([string]$raw,[string]$date,[int]$race){
 
 function Process-Event($event){
   switch([string]$event.method){
+    'Runtime.consoleAPICalled' {
+      # Observe only an exact application-generated marker. Never record
+      # arbitrary page console content, URLs or page-provided code.
+      $args=@($event.params.args)
+      if($args.Count -ge 1){
+        $marker=[string]$args[0].value
+        if($marker -eq '__BOATLABS_RACE_CLICK_TRUSTED__'){
+          $script:trustedRaceClickDelivered=$true
+        }
+      }
+    }
     'Page.windowOpen' {
       $script:windowOpenEventCount++
       $kind=Classify-Official-Player-Open ([string]$event.params.url) $Date $Race
@@ -328,6 +339,7 @@ $script:messageBuffer=New-Object IO.MemoryStream
 $script:blockedMedia=0;$script:blockedOpaque=0;$script:apiGets=0
 $script:apiStatuses=@();$script:landingStatus=$null;$script:ws=$null
 $script:windowOpenEventCount=0;$script:windowOpenEventKind='NO_WINDOW_OPEN_EVENT'
+$script:trustedRaceClickDelivered=$false
 $process=$null
 $script:phase='START'
 $profile=Join-Path ([IO.Path]::GetTempPath()) ('boatlabs-edge-'+[guid]::NewGuid().ToString('N'))
@@ -350,6 +362,7 @@ $result=[ordered]@{
   playback_auto_click=if($AutoPlay){'NOT_ATTEMPTED'}else{'NOT_REQUESTED'}
   replay_navigation_mode='NOT_ATTEMPTED'
   window_open_events=0;window_open_kind='NO_WINDOW_OPEN_EVENT'
+  trusted_race_click_delivered=$false
   race_click_hit_verified=$false;race_click_event_observed='NOT_CHECKED'
   race_click_hit_reason='NOT_EVALUATED'
   fetch_mode_at_race_click='BLOCKED_DIAGNOSTIC'
@@ -587,6 +600,7 @@ try {
    if(e.target===chosenLink||chosenLink.contains(e.target)){
      window.__boatlabsRaceClickTrace=e.isTrusted?
        'TRUSTED_CLICK_ON_RACE_LINK':'UNTRUSTED_CLICK_ON_RACE_LINK';
+     if(e.isTrusted)console.debug('__BOATLABS_RACE_CLICK_TRUSTED__');
    }
  },{capture:true,once:true});
  return metrics;
@@ -684,9 +698,21 @@ try {
           $result.new_tab_internal_kind=Get-Safe-Internal-Popup-Kind ([string]$popup.url)
         }
         if($AutoPlay -and $VisibleEdge){
-          $result.replay_navigation_mode='OBSERVED_OFFICIAL_POPUP'
-          $script:phase='OPT_IN_REPLAY_PLAY'
-          $result.playback_auto_click=Try-Official-Play $popup $Date $Race
+          if($popupInfo.category -eq 'BROWSER_INTERNAL' -or
+             $popupInfo.category -eq 'ABOUT_BLANK_OR_INTERNAL'){
+            $result.replay_navigation_mode='BROWSER_INTERNAL_NOT_OFFICIAL_REPLAY'
+            $result.playback_auto_click='NO_VERIFIED_PLAYER_TARGET_NO_CLICK'
+          }else{
+            # Try-Official-Play independently validates HTTPS, official JLC
+            # host, precise player path, venue/date/race, and local CDP socket.
+            $script:phase='OPT_IN_REPLAY_PLAY'
+            $result.playback_auto_click=Try-Official-Play $popup $Date $Race
+            if($result.playback_auto_click -eq 'UNVERIFIED_OFFICIAL_REPLAY'){
+              $result.replay_navigation_mode='NEW_TARGET_NOT_OFFICIAL_REPLAY'
+            }else{
+              $result.replay_navigation_mode='OBSERVED_VERIFIED_JLC_POPUP'
+            }
+          }
         }elseif($popupInfo.category -eq 'HTTPS_HOST' -and
           $popupInfo.host -in @('front.player.boatrace-cdn.jp',
             'livebb.jlc.ne.jp','playback.api.streaks.jp')){
@@ -699,6 +725,7 @@ try {
         $result.new_tab_guard_status='AMBIGUOUS_POPUP_COUNT_NO_REPLAY'
       }
     }
+    $result.trusted_race_click_delivered=[bool]$script:trustedRaceClickDelivered
     $result.window_open_events=$script:windowOpenEventCount
     $result.window_open_kind=$script:windowOpenEventKind
     $result.landing_http_status=$script:landingStatus

@@ -53,8 +53,43 @@ function Is-Media([string]$url){
   return $url -match '(?i)\.(m3u8|mpd|mp4|webm|mov|m4v|ts|m4s|cmfv|cmfa|key|license)(\?|#|$)'
 }
 
+function Classify-Official-Player-Open([string]$raw,[string]$date,[int]$race){
+  # Classify only the public URL type; never print or persist a full URL,
+  # authentication string, query or media token.
+  if([string]::IsNullOrWhiteSpace($raw)){return 'BLANK_OR_EMPTY_WINDOW_OPEN'}
+  try {$u=[Uri]$raw}catch{return 'UNPARSEABLE_WINDOW_OPEN'}
+  if($u.Scheme -eq 'about'){return 'BLANK_OR_EMPTY_WINDOW_OPEN'}
+  if($u.Scheme -ne 'https' -or $u.Host.ToLowerInvariant() -ne 'livebb.jlc.ne.jp' -or
+     $u.AbsolutePath -ne '/bb_top/sp_bb/streamer/streamer26pi.php'){
+    return 'WINDOW_OPEN_NOT_OFFICIAL_PLAYER'
+  }
+  $values=@{}
+  foreach($part in $u.Query.TrimStart('?').Split('&')){
+    $pair=$part.Split('=',2)
+    if($pair.Count -eq 2 -and $pair[0] -in @('date','race','jo')){
+      $values[$pair[0]]=$pair[1]
+    }
+  }
+  $ymd=$date.Replace('-','')
+  if($values['date'] -ne $ymd -or
+     $values['race'] -notin @([string]$race,('{0:D2}' -f $race)) -or
+     $values['jo'] -ne '10'){
+    return 'OFFICIAL_PLAYER_WRONG_RACE_OR_DATE'
+  }
+  return 'OFFICIAL_PLAYER_MATCHED'
+}
+
 function Process-Event($event){
   switch([string]$event.method){
+    'Page.windowOpen' {
+      $script:windowOpenEventCount++
+      $kind=Classify-Official-Player-Open ([string]$event.params.url) $Date $Race
+      if($kind -eq 'OFFICIAL_PLAYER_MATCHED'){
+        $script:windowOpenEventKind=$kind
+      }elseif($script:windowOpenEventKind -ne 'OFFICIAL_PLAYER_MATCHED'){
+        $script:windowOpenEventKind=$kind
+      }
+    }
     'Fetch.requestPaused' {
       $q=$event.params
       $url=[string]$q.request.url
@@ -292,6 +327,7 @@ $script:nextId=0;$script:pendingRead=$null
 $script:messageBuffer=New-Object IO.MemoryStream
 $script:blockedMedia=0;$script:blockedOpaque=0;$script:apiGets=0
 $script:apiStatuses=@();$script:landingStatus=$null;$script:ws=$null
+$script:windowOpenEventCount=0;$script:windowOpenEventKind='NO_WINDOW_OPEN_EVENT'
 $process=$null
 $script:phase='START'
 $profile=Join-Path ([IO.Path]::GetTempPath()) ('boatlabs-edge-'+[guid]::NewGuid().ToString('N'))
@@ -313,6 +349,7 @@ $result=[ordered]@{
   formal_forecast_modified=$false
   playback_auto_click=if($AutoPlay){'NOT_ATTEMPTED'}else{'NOT_REQUESTED'}
   replay_navigation_mode='NOT_ATTEMPTED'
+  window_open_events=0;window_open_kind='NO_WINDOW_OPEN_EVENT'
   note='API response status alone is not a verified video download.'
 }
 try {
@@ -388,6 +425,15 @@ try {
        (Get-Safe-Internal-Popup-Kind 'chrome-error://chromewebdata/') -ne 'BROWSER_ERROR_PAGE' -or
        (Get-Safe-Internal-Popup-Kind 'https://front.player.boatrace-cdn.jp/path?secret=1') -ne 'NOT_BROWSER_INTERNAL'){
       throw 'Privacy-safe browser internal classification failed.'
+    }
+    if((Classify-Official-Player-Open 'https://livebb.jlc.ne.jp/bb_top/sp_bb/streamer/streamer26pi.php?tenji=1&jo=10&race=01&date=20261028' '2026-10-28' 1) -ne 'OFFICIAL_PLAYER_MATCHED'){
+      throw 'Official window-open classifier self-test failed'
+    }
+    if((Classify-Official-Player-Open 'https://livebb.jlc.ne.jp/bb_top/sp_bb/streamer/streamer26pi.php?tenji=1&jo=10&race=11&date=20261028' '2026-10-28' 1) -ne 'OFFICIAL_PLAYER_WRONG_RACE_OR_DATE'){
+      throw 'Official window-open classifier must reject different race'
+    }
+    if((Classify-Official-Player-Open 'about:blank' '2026-10-28' 1) -ne 'BLANK_OR_EMPTY_WINDOW_OPEN'){
+      throw 'Blank window-open classification failed'
     }
     $result.access_decision='EDGE_SELFTEST_PASSED_NO_NETWORK'
   }else{
@@ -589,6 +635,8 @@ try {
         $result.new_tab_guard_status='AMBIGUOUS_POPUP_COUNT_NO_REPLAY'
       }
     }
+    $result.window_open_events=$script:windowOpenEventCount
+    $result.window_open_kind=$script:windowOpenEventKind
     $result.landing_http_status=$script:landingStatus
     $result.playback_api_statuses=@($script:apiStatuses|Sort-Object -Unique)
     $result.playback_api_requests=$script:apiGets

@@ -251,3 +251,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\check_mikuni_edge_nodocker
 追加結果：`pc_observed_targets[].frame_topology`、`pc_frame_topology_status`、`pc_cross_origin_frames_total`、`pc_oopif_target_count`。
 
 `iframe_target_total=0` でも別ドメインiframeが無いと断定しない。フレームが独立したレンダラープロセスに分かれていない場合、iframeターゲットが独立表示されないことがある。プレイヤー実体の特定、許可範囲の映像解析および自動再生は未完了。正式予想・結果・収支は一切変更しない。
+
+
+## 2026-10-30｜独立した外部HTTPS iframeの再生状態を読み取り専用で検査
+
+実機で `frame_total=2`、`frame_official_jlc=2`、`iframe_target_total=1`、`iframe_target_external_https=1` を確認。一方 `pc_manual_playback_reported=false` なので、今回の実行で動画が目視再生されたとは証明されていない。外部 iframe の実体が動画かどうかも未確定。
+
+PC専用診断に `Get-Pc-External-Iframe-Video-Metrics` を追加。JLC公式ページを手動で表示したユーザーの隔離Edgeで、HTTPS外部iframeターゲットだけに`Target.attachToTarget(flatten=true)`で一時的に接続し、`Runtime.evaluate`でHTMLVideoElementの存在と再生中要素数、およびcanvas要素数のみ計測。完了後にセッションをdetachする。対象は最大4件。
+
+追加ログ：`pc_observed_targets[].external_iframe_video_probe`、`pc_external_iframe_probe_status`、`pc_external_iframe_video_elements`、`pc_external_iframe_playing_elements`。
+
+CDPコマンドにセッションIDを指定できるようにするが、従来の送信は変更しない。動画URL・トークン・フレームバイト・音声・スクリーンショット・Cookie・ページ本文は一切取得／保存しない。アクセス不能なら`EXTERNAL_IFRAME_NOT_ATTACHED_OR_UNAVAILABLE`を返し、再生成功扱いしない。今回も動画保存や正式予想修正はしない。

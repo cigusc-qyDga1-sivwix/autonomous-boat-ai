@@ -174,28 +174,59 @@ async def try_replay_from_archive(context, day, race):
         # Open the *visible* meeting/day sections in the official UI, as the
         # verified Windows Edge probe did. No race link is activated yet.
         expansion = await page.evaluate("""async args=>{
-          const visible=e=>!!e.getClientRects().length &&
-            getComputedStyle(e).visibility!=='hidden';
-          const clickText=needle=>{
-            const hits=[...document.querySelectorAll('span,button,a,div,td,p,li')]
-              .filter(e=>visible(e)&&(e.textContent||'').trim().includes(needle)
-                && (e.textContent||'').trim().length<140);
-            hits.sort((a,b)=>a.textContent.trim().length-b.textContent.trim().length);
-            if(!hits.length)return false;
-            hits[0].click();return true;
-          };
-          const str=document.body.innerText||'';
-          const found=[...new Set(str.match(/20[0-9]{2}[/][0-9]{1,2}[/][0-9]{1,2}/g)||[])]
-            .filter(v=>new Date(v)<=new Date(args.full)).sort();
-          const meeting=found.length?clickText(found[found.length-1]):false;
-          await new Promise(resolve=>setTimeout(resolve,500));
-          const day=clickText(args.short);
-          await new Promise(resolve=>setTimeout(resolve,500));
-          return {meeting,day};
-        }""", {"full":day.replace("-","/").replace("-","/"),
-                 "short":f"{int(day[5:7])}/{int(day[8:10])}"})
-        result["meeting_toggle_clicked"]=bool(expansion["meeting"])
-        result["day_toggle_clicked"]=bool(expansion["day"])
+          const imageIs=(img,n)=>new RegExp('(?:^|/)' + n +
+            'R[.](?:png|gif)(?:[?]|$)','i').test(img.getAttribute('src')||'');
+          const leaves=[...document.querySelectorAll('body *')].filter(
+            el=>el.children.length===0 && (el.textContent||'').trim().includes(args.day));
+          const groups=new Set();
+          for(const leaf of leaves.slice(0,30)){
+            let parent=leaf;
+            for(let d=0;d<7&&parent;d++,parent=parent.parentElement){
+              const imgs=[...parent.querySelectorAll('img')];
+              if(imgs.length>=12&&imgs.length<=24&&imgs.filter(i=>imageIs(i,1)).length===1){
+                groups.add(parent);break;
+              }
+            }
+          }
+          const result={meeting_clicked:false,day_clicked:false,
+            meeting_children_visible:false,day_children_visible:false,
+            group_count:groups.size,target_found:false};
+          if(groups.size!==1)return result;
+          const icons=[...[...groups][0].querySelectorAll('img')]
+            .filter(img=>imageIs(img,args.race));
+          if(icons.length!==1)return result;
+          result.target_found=true;
+          const raceLi=icons[0].closest('li');
+          const dayLi=raceLi?.parentElement?.closest('li');
+          const meetingLi=dayLi?.parentElement?.closest('li');
+          const heading=li=>li?.querySelector(':scope > p');
+          const panel=li=>li?.querySelector(':scope > ul');
+          const shown=el=>!!el && !!el.getClientRects().length &&
+            getComputedStyle(el).display!=='none';
+          if(!heading(meetingLi)||!panel(meetingLi)||!heading(dayLi)||!panel(dayLi))
+            return result;
+          if(!shown(panel(meetingLi)) && shown(heading(meetingLi))){
+            heading(meetingLi).click();
+            result.meeting_clicked=true;
+            await new Promise(done=>setTimeout(done,650));
+          }
+          result.meeting_children_visible=shown(panel(meetingLi));
+          if(!result.meeting_children_visible)return result;
+          if(!shown(panel(dayLi)) && shown(heading(dayLi))){
+            heading(dayLi).click();
+            result.day_clicked=true;
+            await new Promise(done=>setTimeout(done,650));
+          }
+          result.day_children_visible=shown(panel(dayLi));
+          return result;
+        }""",{"day":f"{int(day[5:7])}/{int(day[8:10])}","race":race})
+        result["meeting_toggle_clicked"]=bool(expansion["meeting_clicked"])
+        result["day_toggle_clicked"]=bool(expansion["day_clicked"])
+        result["meeting_children_visible"]=bool(expansion["meeting_children_visible"])
+        result["day_children_visible"]=bool(expansion["day_children_visible"])
+        if not (result["meeting_children_visible"] and result["day_children_visible"]):
+            result["player_status"]="ACCORDION_NOT_OPEN_NO_CLICK"
+            return result
         phase = "LOCATE_UNIQUE_RACE_ICON"
         handle = await page.evaluate_handle("""args=>{
           const imgIs=(img,n)=>new RegExp('(?:^|/)' + n +

@@ -155,8 +155,8 @@ async def try_replay_from_archive(context, day, race):
           return {meeting,day};
         }""", {"full":day.replace("-","/").replace("-","/"),
                  "short":f"{int(day[5:7])}/{int(day[8:10])}"})
-        result["meeting_expanded"]=bool(expansion["meeting"])
-        result["day_expanded"]=bool(expansion["day"])
+        result["meeting_toggle_clicked"]=bool(expansion["meeting"])
+        result["day_toggle_clicked"]=bool(expansion["day"])
         phase = "LOCATE_UNIQUE_RACE_ICON"
         handle = await page.evaluate_handle("""args=>{
           const imgIs=(img,n)=>new RegExp('(?:^|/)' + n +
@@ -186,6 +186,9 @@ async def try_replay_from_archive(context, day, race):
         # The official page sometimes scrolls/collapses after expanding.
         # Check a fresh point hit against the exact day-group 1R anchor.
         result["target_image_visible"]=bool(await icon.is_visible())
+        if not result["target_image_visible"]:
+            result["player_status"]="TARGET_IMAGE_COLLAPSED_NO_CLICK"
+            return result
         phase = "SCROLL_TARGET_IMAGE"
         try:
             await icon.scroll_into_view_if_needed(timeout=4500)

@@ -284,11 +284,37 @@ async def try_replay_from_archive(context, day, race):
         if not hit:
             result["player_status"]="RACE_ICON_HIT_NOT_VERIFIED_NO_CLICK"
             return result
+        # Capture event-type booleans and link shape, never page text or URLs.
+        result["icon_link_controls"]=await page.evaluate("""point=>{
+          const x=document.elementFromPoint(point.x,point.y);
+          const a=x?.closest('a');
+          const href=a?.getAttribute('href')||'';
+          window.__boatlabsClickTrace={mousedown:false,mouseup:false,click:false,
+            image_or_anchor:false};
+          for(const type of ['mousedown','mouseup','click']){
+            document.addEventListener(type, e=>{
+              const trace=window.__boatlabsClickTrace;
+              trace[type]=true;
+              if(e.target===x || a?.contains(e.target))
+                trace.image_or_anchor=true;
+            },{capture:true,once:true});
+          }
+          return {anchor_present:!!a,inline_handler:!!a?.getAttribute('onclick'),
+            link_kind:!href?'EMPTY':href.startsWith('#')?'FRAGMENT':
+              /^javascript:/i.test(href)?'JAVASCRIPT':
+              /^https?:/i.test(href)?'ABSOLUTE_HTTP':'RELATIVE_OR_OTHER',
+            target_kind:a?.getAttribute('target')==='_blank'?'BLANK':'OTHER'};
+        }""", point)
         popups=[]
         page.on("popup", lambda p: popups.append(p))
         phase = "TRUSTED_RACE_ICON_CLICK"
         await page.mouse.click(point["x"],point["y"])
         result["ui_click_attempted"]=True
+        try:
+            result["race_click_event_trace"]=await page.evaluate(
+                "() => window.__boatlabsClickTrace || null")
+        except Exception:
+            result["race_click_event_trace"]=None
         phase = "PLAYER_URL_VERIFY"
         # The official click may produce a separate popup, a new browser
         # context tab, or an iframe. Only a strict date/venue/race match

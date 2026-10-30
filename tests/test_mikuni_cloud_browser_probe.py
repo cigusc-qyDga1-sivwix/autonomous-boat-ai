@@ -25,3 +25,11 @@ class CloudBrowserTests(unittest.TestCase):
         report = {"site_loaded": True, "venue_query_verified": True,
                   "video_elements": 0, "exhibition_menu_candidates": 0}
         self.assertEqual(classify(report), "OFFICIAL_PC_ENTRY_ONLY")
+
+    def test_cloud_archive_is_separate_from_replay_verification(self):
+        report = {"site_loaded": True, "venue_query_verified": True,
+                  "video_elements": 0, "exhibition_menu_candidates": 0,
+                  "archive_site_loaded": True,
+                  "archive_requested_day_visible": True,
+                  "archive_day_group_candidates": 1}
+        self.assertEqual(classify(report), "OFFICIAL_PC_ENTRY_ONLY")

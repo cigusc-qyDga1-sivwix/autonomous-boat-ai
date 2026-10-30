@@ -290,14 +290,37 @@ async def try_replay_from_archive(context, day, race):
         await page.mouse.click(point["x"],point["y"])
         result["ui_click_attempted"]=True
         phase = "PLAYER_URL_VERIFY"
-        await page.wait_for_timeout(3500)
-        player=popups[-1] if popups else page
-        try:
-            await player.wait_for_load_state("domcontentloaded", timeout=7000)
-        except Exception:
-            pass
-        if not verified_player_page(player.url, day, race):
-            result["player_status"] = "OPENED_PAGE_NOT_VERIFIED_REPLAY"
+        # The official click may produce a separate popup, a new browser
+        # context tab, or an iframe. Only a strict date/venue/race match
+        # authorizes the next step; never try an unrecognized media URL.
+        player=None
+        available=[]
+        for _ in range(24):
+            available=[]
+            for tab in context.pages[:12]:
+                try:
+                    available.append((tab, None, tab.url))
+                    for candidate in tab.frames[:16]:
+                        available.append((tab, candidate, candidate.url))
+                except Exception:
+                    pass
+            matches=[(tab, frame) for tab, frame, url in available
+                     if verified_player_page(url, day, race)]
+            if len(matches)==1:
+                player=matches[0][0]
+                result["player_frame_nested"]=matches[0][1] is not None
+                break
+            await page.wait_for_timeout(400)
+        result["popup_event_count"]=len(popups)
+        result["candidate_browser_tabs"]=len(context.pages)
+        result["official_jlc_urls_observed"]=sum(
+            urlsplit(url).hostname=="livebb.jlc.ne.jp" for _,_,url in available)
+        result["official_player_path_candidates"]=sum(
+            urlsplit(url).hostname=="livebb.jlc.ne.jp" and
+            urlsplit(url).path=="/bb_top/sp_bb/streamer/streamer26pi.php"
+            for _,_,url in available)
+        if player is None:
+            result["player_status"] = "NO_EXACT_OFFICIAL_DAY_RACE_PLAYER_OBSERVED"
             return result
         result["exact_day_race_verified"]=True
         result["player_status"]="VERIFIED_REPLAY_NO_VIDEO"

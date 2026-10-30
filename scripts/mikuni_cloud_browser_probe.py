@@ -131,9 +131,36 @@ async def try_replay_from_archive(context, day, race):
             result["player_status"] = "ARCHIVE_UNAVAILABLE"
             return result
         await page.wait_for_timeout(1800)
+        phase = "EXPAND_MEETING_AND_DAY"
+        # Open the *visible* meeting/day sections in the official UI, as the
+        # verified Windows Edge probe did. No race link is activated yet.
+        expansion = await page.evaluate("""async args=>{
+          const visible=e=>!!e.getClientRects().length &&
+            getComputedStyle(e).visibility!=='hidden';
+          const clickText=needle=>{
+            const hits=[...document.querySelectorAll('span,button,a,div,td,p,li')]
+              .filter(e=>visible(e)&&(e.textContent||'').trim().includes(needle)
+                && (e.textContent||'').trim().length<140);
+            hits.sort((a,b)=>a.textContent.trim().length-b.textContent.trim().length);
+            if(!hits.length)return false;
+            hits[0].click();return true;
+          };
+          const str=document.body.innerText||'';
+          const found=[...new Set(str.match(/20[0-9]{2}[/][0-9]{1,2}[/][0-9]{1,2}/g)||[])]
+            .filter(v=>new Date(v)<=new Date(args.full)).sort();
+          const meeting=found.length?clickText(found[found.length-1]):false;
+          await new Promise(resolve=>setTimeout(resolve,500));
+          const day=clickText(args.short);
+          await new Promise(resolve=>setTimeout(resolve,500));
+          return {meeting,day};
+        }""", {"full":day.replace("-","/").replace("-","/"),
+                 "short":f"{int(day[5:7])}/{int(day[8:10])}"})
+        result["meeting_expanded"]=bool(expansion["meeting"])
+        result["day_expanded"]=bool(expansion["day"])
+        phase = "LOCATE_UNIQUE_RACE_ICON"
         handle = await page.evaluate_handle("""args=>{
           const imgIs=(img,n)=>new RegExp('(?:^|/)' + n +
-            'R\\.(?:png|gif)(?:\\?|$)','i').test(img.getAttribute('src')||'');
+            'R[.](?:png|gif)(?:[?]|$)','i').test(img.getAttribute('src')||'');
           const leaves=[...document.querySelectorAll('body *')].filter(
             el=>el.children.length===0 && (el.textContent||'').trim().includes(args.day));
           const groups=new Set();
@@ -158,8 +185,10 @@ async def try_replay_from_archive(context, day, race):
             return result
         popups=[]
         page.on("popup", lambda p: popups.append(p))
+        phase = "TRUSTED_RACE_ICON_CLICK"
         await icon.click(timeout=10000)
         result["ui_click_attempted"]=True
+        phase = "PLAYER_URL_VERIFY"
         await page.wait_for_timeout(3500)
         player=popups[-1] if popups else page
         try:
@@ -172,6 +201,7 @@ async def try_replay_from_archive(context, day, race):
         result["exact_day_race_verified"]=True
         result["player_status"]="VERIFIED_REPLAY_NO_VIDEO"
         await player.wait_for_timeout(3200)
+        phase = "PLAYER_VIDEO_STATE"
         for frame in player.frames[:16]:
             try:
                 sample=await frame.evaluate("""async()=>{
@@ -198,8 +228,10 @@ async def try_replay_from_archive(context, day, race):
         elif result["video_element_count"]:
             result["player_status"]="VERIFIED_PLAYER_NO_PLAYBACK_PROGRESS"
         return result
-    except Exception:
+    except Exception as exc:
         result["player_status"]="CLOUD_PLAYER_DIAGNOSTIC_UNAVAILABLE"
+        result["failure_stage"]=locals().get("phase","ARCHIVE_OPEN")
+        result["failure_exception_type"]=type(exc).__name__
         return result
     finally:
         await page.close()

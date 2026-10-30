@@ -131,6 +131,45 @@ async def try_replay_from_archive(context, day, race):
             result["player_status"] = "ARCHIVE_UNAVAILABLE"
             return result
         await page.wait_for_timeout(1800)
+        # Observe only CSS/tag state for the exact race icon's accordion
+        # ancestry; never print page contents, URLs or capture media.
+        result["accordion_structure"] = await page.evaluate("""args=>{
+          const matchesDay=(x)=>(x.textContent||'').includes(args.day);
+          const imgIs=(img,n)=>new RegExp('(?:^|/)' + n +
+            'R[.](?:png|gif)(?:[?]|$)','i').test(img.getAttribute('src')||'');
+          const leaves=[...document.querySelectorAll('body *')].filter(
+            el=>el.children.length===0 && matchesDay(el));
+          const groups=new Set();
+          for(const leaf of leaves.slice(0,30)){
+            let el=leaf;
+            for(let i=0;i<7&&el;i++,el=el.parentElement){
+              const imgs=[...el.querySelectorAll('img')];
+              if(imgs.length>=12&&imgs.length<=24&&imgs.filter(img=>imgIs(img,1)).length===1){
+                groups.add(el);break;
+              }
+            }
+          }
+          const group=groups.size===1?[...groups][0]:null;
+          const icon=group&&[...group.querySelectorAll('img')].find(img=>imgIs(img,args.race));
+          const raceLi=icon&&icon.closest('li');
+          const dayLi=raceLi&&raceLi.parentElement&&raceLi.parentElement.closest('li');
+          const meetingLi=dayLi&&dayLi.parentElement&&dayLi.parentElement.closest('li');
+          const small=(el)=>!el?null:{
+            tag:el.tagName.toLowerCase(),
+            child_tags:[...el.children].slice(0,8).map(x=>x.tagName.toLowerCase()),
+            own_style_display:el.style.display||"unset",
+            css_display:getComputedStyle(el).display,
+            visible:!!el.getClientRects().length,
+            child_styles:[...el.children].slice(0,6).map(x=>({
+              tag:x.tagName.toLowerCase(),
+              display:getComputedStyle(x).display,
+              visible:!!x.getClientRects().length
+            }))
+          };
+          return {group_count:groups.size, icon_found:!!icon,
+            icon_visible:!!icon&&!!icon.getClientRects().length,
+            race_li:small(raceLi),day_li:small(dayLi),meeting_li:small(meetingLi)};
+        }""",{"day":f"{int(day[5:7])}/{int(day[8:10])}","race":race})
         phase = "EXPAND_MEETING_AND_DAY"
         # Open the *visible* meeting/day sections in the official UI, as the
         # verified Windows Edge probe did. No race link is activated yet.

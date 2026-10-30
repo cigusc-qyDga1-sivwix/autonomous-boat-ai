@@ -349,6 +349,21 @@ async def try_replay_from_archive(context, day, race):
                 pass
         if result["video_time_advanced"]:
             result["player_status"]="CLOUD_OFFICIAL_REPLAY_CLOCK_ADVANCING"
+            # Research the rendered player pixels only after successful
+            # date/venue/race verification and observed video clock progress.
+            try:
+                from scripts.mikuni_cloud_frame_research import collect_rendered_player
+                researched=False
+                for frame in player.frames[:16]:
+                    if await frame.locator("video").count()==1:
+                        result["rendered_frame_research"]=await collect_rendered_player(frame)
+                        researched=True
+                        break
+                if not researched:
+                    result["rendered_frame_research_status"]="NO_ONE_VIDEO_FRAME_TARGET"
+            except Exception as exc:
+                result["rendered_frame_research_status"]="RENDERED_FRAME_RESEARCH_UNAVAILABLE"
+                result["rendered_frame_failure_type"]=type(exc).__name__
         elif result["video_element_count"]:
             result["player_status"]="VERIFIED_PLAYER_NO_PLAYBACK_PROGRESS"
         return result

@@ -183,10 +183,38 @@ async def try_replay_from_archive(context, day, race):
         if icon is None:
             result["player_status"] = "TARGET_DAY_RACE_AMBIGUOUS"
             return result
+        # The official page sometimes scrolls/collapses after expanding.
+        # Check a fresh point hit against the exact day-group 1R anchor.
+        result["target_image_visible"]=bool(await icon.is_visible())
+        phase = "SCROLL_TARGET_IMAGE"
+        try:
+            await icon.scroll_into_view_if_needed(timeout=4500)
+        except Exception:
+            result["player_status"]="TARGET_IMAGE_NOT_SCROLLABLE_NO_CLICK"
+            return result
+        box = await icon.bounding_box()
+        result["target_has_box"]=bool(box and box["width"]>1 and box["height"]>1)
+        if not result["target_has_box"]:
+            result["player_status"]="TARGET_IMAGE_NOT_VISIBLE_NO_CLICK"
+            return result
+        point={"x":box["x"]+box["width"]/2,"y":box["y"]+box["height"]/2}
+        hit=await page.evaluate("""point=>{
+          const el=document.elementFromPoint(point.x,point.y);
+          if(!el)return false;
+          const imgIs=e=>e && e.tagName==='IMG' &&
+            /(?:^|\/)1R[.]png(?:[?]|$)/i.test(e.getAttribute('src')||'');
+          if(imgIs(el))return true;
+          const anchor=el.closest('a');
+          return !!anchor && [...anchor.querySelectorAll('img')].some(imgIs);
+        }""",point)
+        result["target_click_hit_verified"]=bool(hit)
+        if not hit:
+            result["player_status"]="RACE_ICON_HIT_NOT_VERIFIED_NO_CLICK"
+            return result
         popups=[]
         page.on("popup", lambda p: popups.append(p))
         phase = "TRUSTED_RACE_ICON_CLICK"
-        await icon.click(timeout=10000)
+        await page.mouse.click(point["x"],point["y"])
         result["ui_click_attempted"]=True
         phase = "PLAYER_URL_VERIFY"
         await page.wait_for_timeout(3500)

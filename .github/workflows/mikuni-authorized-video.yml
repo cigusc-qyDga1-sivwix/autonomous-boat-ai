@@ -11,6 +11,8 @@ on:
       - 'scripts/mikuni_auto_vision.py'
       - 'scripts/run_mikuni_vision_tests.py'
       - 'scripts/mikuni_video_shadow.py'
+      - 'scripts/mikuni_video_verification_gate.py'
+      - 'tests/test_mikuni_video_verification_gate.py'
       - 'scripts/mikuni_official_video_catalog.py'
       - 'tests/test_mikuni_video_autocollect.py'
       - 'tests/test_mikuni_video_motion_pipeline.py'
@@ -59,6 +61,7 @@ jobs:
       - name: Verify Mikuni source guard and idempotence
         run: |
           python -m scripts.run_mikuni_vision_tests
+          python -m unittest discover -s tests -p 'test_mikuni_video_verification_gate.py' -v
       - name: Discover Mikuni venue-specified official YouTube channel metadata
         run: |
           set -euo pipefail
@@ -80,6 +83,12 @@ jobs:
           python scripts/mikuni_video_shadow.py --date "$DAY"
           python -m json.tool "app/data/experiments/mikuni-video-shadow-${DAY}.json" >/dev/null
           # Zero verified tracks -> zero shadow bets. Never rewrites formal v1.5.
+      - name: Verify real video provenance and label missing evidence
+        run: |
+          set -euo pipefail
+          DAY=$(TZ=Asia/Tokyo date +%F)
+          python -m scripts.mikuni_video_verification_gate --date "$DAY"
+          python -m json.tool "app/data/experiments/mikuni-video-verification-${DAY}.json" >/dev/null
       - name: Save research ledger without video content or forecast modifications
         run: |
           set -euo pipefail
@@ -87,9 +96,10 @@ jobs:
           FILE="app/data/experiments/mikuni-video-auto-${DAY}.json"
           CATALOG="app/data/experiments/mikuni-video-catalog-${DAY}.json"
           SHADOW="app/data/experiments/mikuni-video-shadow-${DAY}.json"
+          AUDIT="app/data/experiments/mikuni-video-verification-${DAY}.json"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add "$FILE" "$CATALOG" "$SHADOW"
+          git add "$FILE" "$CATALOG" "$SHADOW" "$AUDIT"
           if git diff --cached --quiet; then
             echo "No research state change"
             exit 0
@@ -109,7 +119,8 @@ jobs:
             python scripts/mikuni_official_video_catalog.py --date "$DAY"
             python -m scripts.mikuni_video_ephemeral --date "$DAY"
             python scripts/mikuni_video_shadow.py --date "$DAY"
-            git add "$FILE" "$CATALOG" "$SHADOW"
+            python -m scripts.mikuni_video_verification_gate --date "$DAY"
+            git add "$FILE" "$CATALOG" "$SHADOW" "$AUDIT"
             if git diff --cached --quiet; then
               exit 0
             fi

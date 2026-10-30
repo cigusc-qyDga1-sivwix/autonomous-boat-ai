@@ -28,3 +28,19 @@ GitHubクラウドで10月28日の一意な12Rグループが見つかったた�
 クラウドEdgeでJLC三国公式ページと展示アーカイブは200系で表示され、10/28の対象日グループが1件に絞れた。だが`meeting_toggle_clicked=true`、`day_toggle_clicked=true`は見出しへのクリック発行を意味するだけで、折りたたみが展開された証拠ではない。実際の対象`1R`画像は`target_image_visible=false`であり、Playwrightは安全のためクリックを見送った。クラウド再生は**未達成**。
 
 以降は非表示を明示的に`TARGET_IMAGE_COLLAPSED_NO_CLICK`として記録。誤レースのクリック、画像取得、隠しストリームURLの探索を行わない。開催節/日付が実際に開いたかをブラウザDOMの可視性で判定する修正が必要。
+
+## 2026-10-31：開催節・日付を構造に沿って展開する方式へ変更
+
+GitHub hosted Windows Edgeの実DOMでは、開催節・日付の両方が直接子要素`p`（見出し）と`ul`（格納されたパネル）で構成され、当初は両`ul`が`display:none`だった。
+
+対象日に属する唯一の1R画像から`li`祖先をたどり、開催節の`p`と日付の`p`のみクリックする実装へ修正。結果、`meeting_children_visible=true`、`day_children_visible=true`、`target_image_visible=true`、`target_click_hit_verified=true`、`ui_click_attempted=true`をクラウドで実測した。
+
+ただしその後のプレイヤーを確認できず、`NO_EXACT_OFFICIAL_DAY_RACE_PLAYER_OBSERVED`。別タブ、ポップアップ、埋込フレームから公式URL/日付/場/Rの一致を検証しても、当該プレイヤーを取得できなかった。HTML動画の再生・映像フレームの解析はまだ実証できていない。
+
+## RAM内限定のAI映像研究モジュール
+
+`scripts/mikuni_cloud_frame_research.py`では、**公式プレイヤーの対象日・場・Rが一致し、HTMLVideoElementの時計進行が確認された場合だけ**、Playwrightから見えている動画要素のPNGスナップショットをRAM内で最大10枚取得する。画像のデコード・動きの有無・色候補追跡をRAM内で実行し、数値のみ研究JSONへ反映する。PNG/JPEG/映像原本はファイルに保存しない。
+
+停滞時計・静止/黒画面・複数動画要素などは「取得成功」と判定せず、初期色検出が6艇候補を返しても艇番本人確認・実距離較正・正式買い目への利用は未承認とする。
+
+これを実映像で検証するには、配信元が提供する直接動画ファイル入力経路（既存の`mikuni_video_ephemeral.py`）か、クラウドの公式再生ページで実際に動画の時刻が進むことが必要。

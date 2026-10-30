@@ -14,3 +14,10 @@
 実際のGitHub Windows runnerでは公式JLC PC版の読み込み成功（`site_loaded=true`、1R候補33件、video要素0）。次にJLC公式スマホの展示一覧`/bb_top/sp_bb/tvod_10.php`をブラウザで開き、対象10月28日が表示されているか、日付セクション内に12個のR選択画像と1R画像が1個だけ存在するか数で確認する。
 
 結果`archive_requested_day_visible`、`archive_day_group_candidates`、`archive_status`を追加する。場所や日にちの候補が正しく特定できても**まだクリックしない**。サイトの直接動画URLを推測せず、動画ファイル/画像を保存しない。
+
+
+## 2026-10-31：GitHubで展示アーカイブを日付別に選択し、公式プレイヤーを確認
+
+GitHubクラウドで10月28日の一意な12Rグループが見つかったため、そのグループ内の1R画像のみ通常のクリックで選択する試験を追加。開いたページの公式JLCホスト・再生ページ・`tenji=1`・`jo=10`・`race=01`・`date=20261028`を検証した場合のみ、HTMLVideoElement.play()を試し時計の進行を測る。正規の画面操作であり、隠し動画URLを推測・取得しない。
+
+`player_status`が`CLOUD_OFFICIAL_REPLAY_CLOCK_ADVANCING`になるまでは成功を宣言しない。動画ファイル・画像・生画素は記録せず、正式予想・結果・収支は変更しない。

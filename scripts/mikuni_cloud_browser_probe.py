@@ -131,32 +131,102 @@ async def try_replay_from_archive(context, day, race):
             result["player_status"] = "ARCHIVE_UNAVAILABLE"
             return result
         await page.wait_for_timeout(1800)
+        # Observe only CSS/tag state for the exact race icon's accordion
+        # ancestry; never print page contents, URLs or capture media.
+        result["accordion_structure"] = await page.evaluate("""args=>{
+          const matchesDay=(x)=>(x.textContent||'').includes(args.day);
+          const imgIs=(img,n)=>new RegExp('(?:^|/)' + n +
+            'R[.](?:png|gif)(?:[?]|$)','i').test(img.getAttribute('src')||'');
+          const leaves=[...document.querySelectorAll('body *')].filter(
+            el=>el.children.length===0 && matchesDay(el));
+          const groups=new Set();
+          for(const leaf of leaves.slice(0,30)){
+            let el=leaf;
+            for(let i=0;i<7&&el;i++,el=el.parentElement){
+              const imgs=[...el.querySelectorAll('img')];
+              if(imgs.length>=12&&imgs.length<=24&&imgs.filter(img=>imgIs(img,1)).length===1){
+                groups.add(el);break;
+              }
+            }
+          }
+          const group=groups.size===1?[...groups][0]:null;
+          const icon=group&&[...group.querySelectorAll('img')].find(img=>imgIs(img,args.race));
+          const raceLi=icon&&icon.closest('li');
+          const dayLi=raceLi&&raceLi.parentElement&&raceLi.parentElement.closest('li');
+          const meetingLi=dayLi&&dayLi.parentElement&&dayLi.parentElement.closest('li');
+          const small=(el)=>!el?null:{
+            tag:el.tagName.toLowerCase(),
+            child_tags:[...el.children].slice(0,8).map(x=>x.tagName.toLowerCase()),
+            own_style_display:el.style.display||"unset",
+            css_display:getComputedStyle(el).display,
+            visible:!!el.getClientRects().length,
+            child_styles:[...el.children].slice(0,6).map(x=>({
+              tag:x.tagName.toLowerCase(),
+              display:getComputedStyle(x).display,
+              visible:!!x.getClientRects().length
+            }))
+          };
+          return {group_count:groups.size, icon_found:!!icon,
+            icon_visible:!!icon&&!!icon.getClientRects().length,
+            race_li:small(raceLi),day_li:small(dayLi),meeting_li:small(meetingLi)};
+        }""",{"day":f"{int(day[5:7])}/{int(day[8:10])}","race":race})
         phase = "EXPAND_MEETING_AND_DAY"
         # Open the *visible* meeting/day sections in the official UI, as the
         # verified Windows Edge probe did. No race link is activated yet.
         expansion = await page.evaluate("""async args=>{
-          const visible=e=>!!e.getClientRects().length &&
-            getComputedStyle(e).visibility!=='hidden';
-          const clickText=needle=>{
-            const hits=[...document.querySelectorAll('span,button,a,div,td,p,li')]
-              .filter(e=>visible(e)&&(e.textContent||'').trim().includes(needle)
-                && (e.textContent||'').trim().length<140);
-            hits.sort((a,b)=>a.textContent.trim().length-b.textContent.trim().length);
-            if(!hits.length)return false;
-            hits[0].click();return true;
-          };
-          const str=document.body.innerText||'';
-          const found=[...new Set(str.match(/20[0-9]{2}[/][0-9]{1,2}[/][0-9]{1,2}/g)||[])]
-            .filter(v=>new Date(v)<=new Date(args.full)).sort();
-          const meeting=found.length?clickText(found[found.length-1]):false;
-          await new Promise(resolve=>setTimeout(resolve,500));
-          const day=clickText(args.short);
-          await new Promise(resolve=>setTimeout(resolve,500));
-          return {meeting,day};
-        }""", {"full":day.replace("-","/").replace("-","/"),
-                 "short":f"{int(day[5:7])}/{int(day[8:10])}"})
-        result["meeting_toggle_clicked"]=bool(expansion["meeting"])
-        result["day_toggle_clicked"]=bool(expansion["day"])
+          const imageIs=(img,n)=>new RegExp('(?:^|/)' + n +
+            'R[.](?:png|gif)(?:[?]|$)','i').test(img.getAttribute('src')||'');
+          const leaves=[...document.querySelectorAll('body *')].filter(
+            el=>el.children.length===0 && (el.textContent||'').trim().includes(args.day));
+          const groups=new Set();
+          for(const leaf of leaves.slice(0,30)){
+            let parent=leaf;
+            for(let d=0;d<7&&parent;d++,parent=parent.parentElement){
+              const imgs=[...parent.querySelectorAll('img')];
+              if(imgs.length>=12&&imgs.length<=24&&imgs.filter(i=>imageIs(i,1)).length===1){
+                groups.add(parent);break;
+              }
+            }
+          }
+          const result={meeting_clicked:false,day_clicked:false,
+            meeting_children_visible:false,day_children_visible:false,
+            group_count:groups.size,target_found:false};
+          if(groups.size!==1)return result;
+          const icons=[...[...groups][0].querySelectorAll('img')]
+            .filter(img=>imageIs(img,args.race));
+          if(icons.length!==1)return result;
+          result.target_found=true;
+          const raceLi=icons[0].closest('li');
+          const dayLi=raceLi?.parentElement?.closest('li');
+          const meetingLi=dayLi?.parentElement?.closest('li');
+          const heading=li=>li?.querySelector(':scope > p');
+          const panel=li=>li?.querySelector(':scope > ul');
+          const shown=el=>!!el && !!el.getClientRects().length &&
+            getComputedStyle(el).display!=='none';
+          if(!heading(meetingLi)||!panel(meetingLi)||!heading(dayLi)||!panel(dayLi))
+            return result;
+          if(!shown(panel(meetingLi)) && shown(heading(meetingLi))){
+            heading(meetingLi).click();
+            result.meeting_clicked=true;
+            await new Promise(done=>setTimeout(done,650));
+          }
+          result.meeting_children_visible=shown(panel(meetingLi));
+          if(!result.meeting_children_visible)return result;
+          if(!shown(panel(dayLi)) && shown(heading(dayLi))){
+            heading(dayLi).click();
+            result.day_clicked=true;
+            await new Promise(done=>setTimeout(done,650));
+          }
+          result.day_children_visible=shown(panel(dayLi));
+          return result;
+        }""",{"day":f"{int(day[5:7])}/{int(day[8:10])}","race":race})
+        result["meeting_toggle_clicked"]=bool(expansion["meeting_clicked"])
+        result["day_toggle_clicked"]=bool(expansion["day_clicked"])
+        result["meeting_children_visible"]=bool(expansion["meeting_children_visible"])
+        result["day_children_visible"]=bool(expansion["day_children_visible"])
+        if not (result["meeting_children_visible"] and result["day_children_visible"]):
+            result["player_status"]="ACCORDION_NOT_OPEN_NO_CLICK"
+            return result
         phase = "LOCATE_UNIQUE_RACE_ICON"
         handle = await page.evaluate_handle("""args=>{
           const imgIs=(img,n)=>new RegExp('(?:^|/)' + n +
@@ -214,20 +284,77 @@ async def try_replay_from_archive(context, day, race):
         if not hit:
             result["player_status"]="RACE_ICON_HIT_NOT_VERIFIED_NO_CLICK"
             return result
+        # Capture event-type booleans and link shape, never page text or URLs.
+        result["icon_link_controls"]=await page.evaluate("""point=>{
+          const x=document.elementFromPoint(point.x,point.y);
+          const a=x?.closest('a');
+          const href=a?.getAttribute('href')||'';
+          window.__boatlabsClickTrace={mousedown:false,mouseup:false,click:false,
+            image_or_anchor:false};
+          for(const type of ['mousedown','mouseup','click']){
+            document.addEventListener(type, e=>{
+              const trace=window.__boatlabsClickTrace;
+              trace[type]=true;
+              if(e.target===x || a?.contains(e.target))
+                trace.image_or_anchor=true;
+            },{capture:true,once:true});
+          }
+          return {anchor_present:!!a,inline_handler:!!a?.getAttribute('onclick'),
+            link_kind:!href?'EMPTY':href.startsWith('#')?'FRAGMENT':
+              /^javascript:/i.test(href)?'JAVASCRIPT':
+              /^https?:/i.test(href)?'ABSOLUTE_HTTP':'RELATIVE_OR_OTHER',
+            target_kind:a?.getAttribute('target')==='_blank'?'BLANK':'OTHER'};
+        }""", point)
         popups=[]
         page.on("popup", lambda p: popups.append(p))
         phase = "TRUSTED_RACE_ICON_CLICK"
         await page.mouse.click(point["x"],point["y"])
         result["ui_click_attempted"]=True
-        phase = "PLAYER_URL_VERIFY"
-        await page.wait_for_timeout(3500)
-        player=popups[-1] if popups else page
         try:
-            await player.wait_for_load_state("domcontentloaded", timeout=7000)
+            result["race_click_event_trace"]=await page.evaluate(
+                "() => window.__boatlabsClickTrace || null")
         except Exception:
-            pass
-        if not verified_player_page(player.url, day, race):
-            result["player_status"] = "OPENED_PAGE_NOT_VERIFIED_REPLAY"
+            result["race_click_event_trace"]=None
+        phase = "PLAYER_URL_VERIFY"
+        # The official click may produce a separate popup, a new browser
+        # context tab, or an iframe. Only a strict date/venue/race match
+        # authorizes the next step; never try an unrecognized media URL.
+        player=None
+        available=[]
+        for _ in range(24):
+            available=[]
+            for tab in context.pages[:12]:
+                try:
+                    available.append((tab, None, tab.url))
+                    for candidate in tab.frames[:16]:
+                        available.append((tab, candidate, candidate.url))
+                except Exception:
+                    pass
+            matches=[(tab, frame) for tab, frame, url in available
+                     if verified_player_page(url, day, race)]
+            if len(matches)==1:
+                player=matches[0][0]
+                result["player_frame_nested"]=matches[0][1] is not None
+                break
+            await page.wait_for_timeout(400)
+        result["popup_event_count"]=len(popups)
+        result["candidate_browser_tabs"]=len(context.pages)
+        result["official_jlc_urls_observed"]=sum(
+            urlsplit(url).hostname=="livebb.jlc.ne.jp" for _,_,url in available)
+        result["official_player_path_candidates"]=sum(
+            urlsplit(url).hostname=="livebb.jlc.ne.jp" and
+            urlsplit(url).path=="/bb_top/sp_bb/streamer/streamer26pi.php"
+            for _,_,url in available)
+        result["browser_surface_kinds"]=[
+            "OFFICIAL_REPLAY" if urlsplit(tab.url).path=="/bb_top/sp_bb/streamer/streamer26pi.php"
+            else "OFFICIAL_ARCHIVE" if urlsplit(tab.url).path.endswith("/tvod_10.php")
+            else "OFFICIAL_ENTRY" if urlsplit(tab.url).path.endswith("/index.php")
+            else "BROWSER_INTERNAL" if urlsplit(tab.url).scheme not in ("http","https")
+            else "OTHER_WEB_PAGE"
+            for tab in context.pages[:12]
+        ]
+        if player is None:
+            result["player_status"] = "NO_EXACT_OFFICIAL_DAY_RACE_PLAYER_OBSERVED"
             return result
         result["exact_day_race_verified"]=True
         result["player_status"]="VERIFIED_REPLAY_NO_VIDEO"
@@ -256,6 +383,21 @@ async def try_replay_from_archive(context, day, race):
                 pass
         if result["video_time_advanced"]:
             result["player_status"]="CLOUD_OFFICIAL_REPLAY_CLOCK_ADVANCING"
+            # Research the rendered player pixels only after successful
+            # date/venue/race verification and observed video clock progress.
+            try:
+                from scripts.mikuni_cloud_frame_research import collect_rendered_player
+                researched=False
+                for frame in player.frames[:16]:
+                    if await frame.locator("video").count()==1:
+                        result["rendered_frame_research"]=await collect_rendered_player(frame)
+                        researched=True
+                        break
+                if not researched:
+                    result["rendered_frame_research_status"]="NO_ONE_VIDEO_FRAME_TARGET"
+            except Exception as exc:
+                result["rendered_frame_research_status"]="RENDERED_FRAME_RESEARCH_UNAVAILABLE"
+                result["rendered_frame_failure_type"]=type(exc).__name__
         elif result["video_element_count"]:
             result["player_status"]="VERIFIED_PLAYER_NO_PLAYBACK_PROGRESS"
         return result
@@ -268,13 +410,14 @@ async def try_replay_from_archive(context, day, race):
         await page.close()
 
 
-async def inspect(day, race, try_player=False):
+async def inspect(day, race, try_player=False, headed=False):
     from playwright.async_api import async_playwright
     if date.fromisoformat(day).isoformat() != day or race not in range(1, 13):
         raise ValueError("invalid_date_or_race")
     report = {
         "schema": SCHEMA, "date": day, "venue_code": "10", "race": race,
         "probe_kind": "OFFICIAL_UI_READ_ONLY",
+        "browser_mode": "WINDOWED_EDGE" if headed else "HEADLESS_EDGE",
         "browser_started": False, "site_loaded": False,
         "venue_query_verified": (urlsplit(ENTRY).query == "tpl=10"),
         "official_frames": 0, "external_frames": 0, "uninspectable_frames": 0,
@@ -294,7 +437,7 @@ async def inspect(day, race, try_player=False):
     }
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(channel="msedge", headless=True,
+            browser = await p.chromium.launch(channel="msedge", headless=not headed,
                 args=["--no-first-run", "--disable-extensions"], timeout=20000)
             report["browser_started"] = True
             try:
@@ -334,8 +477,10 @@ def main():
     parser.add_argument("--race", type=int, default=1)
     parser.add_argument("--out", type=Path)
     parser.add_argument("--try-player", action="store_true")
+    parser.add_argument("--headed", action="store_true")
     args = parser.parse_args()
-    result = asyncio.run(inspect(args.date, args.race, try_player=args.try_player))
+    result = asyncio.run(inspect(args.date, args.race,
+                                 try_player=args.try_player, headed=args.headed))
     payload = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)

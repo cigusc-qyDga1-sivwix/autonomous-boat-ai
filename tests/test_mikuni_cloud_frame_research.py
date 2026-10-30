@@ -1,7 +1,10 @@
 """No user PC or copyrighted video required; synthetic pixel tests only."""
 import unittest
-import cv2
-import numpy as np
+try:
+    import cv2
+    import numpy as np
+except ImportError:
+    cv2 = np = None
 from scripts.mikuni_cloud_frame_research import analyze_png_samples
 
 
@@ -13,6 +16,7 @@ def frame(shift=0):
     return data.tobytes()
 
 
+@unittest.skipIf(cv2 is None, 'optional video dependencies absent in general unit-test CI')
 class CloudFrameTests(unittest.TestCase):
     def test_static_video_pixels_are_not_accepted_as_boats(self):
         image=frame(0)

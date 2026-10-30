@@ -345,6 +345,14 @@ async def try_replay_from_archive(context, day, race):
             urlsplit(url).hostname=="livebb.jlc.ne.jp" and
             urlsplit(url).path=="/bb_top/sp_bb/streamer/streamer26pi.php"
             for _,_,url in available)
+        result["browser_surface_kinds"]=[
+            "OFFICIAL_REPLAY" if urlsplit(tab.url).path=="/bb_top/sp_bb/streamer/streamer26pi.php"
+            else "OFFICIAL_ARCHIVE" if urlsplit(tab.url).path.endswith("/tvod_10.php")
+            else "OFFICIAL_ENTRY" if urlsplit(tab.url).path.endswith("/index.php")
+            else "BROWSER_INTERNAL" if urlsplit(tab.url).scheme not in ("http","https")
+            else "OTHER_WEB_PAGE"
+            for tab in context.pages[:12]
+        ]
         if player is None:
             result["player_status"] = "NO_EXACT_OFFICIAL_DAY_RACE_PLAYER_OBSERVED"
             return result
@@ -402,13 +410,14 @@ async def try_replay_from_archive(context, day, race):
         await page.close()
 
 
-async def inspect(day, race, try_player=False):
+async def inspect(day, race, try_player=False, headed=False):
     from playwright.async_api import async_playwright
     if date.fromisoformat(day).isoformat() != day or race not in range(1, 13):
         raise ValueError("invalid_date_or_race")
     report = {
         "schema": SCHEMA, "date": day, "venue_code": "10", "race": race,
         "probe_kind": "OFFICIAL_UI_READ_ONLY",
+        "browser_mode": "WINDOWED_EDGE" if headed else "HEADLESS_EDGE",
         "browser_started": False, "site_loaded": False,
         "venue_query_verified": (urlsplit(ENTRY).query == "tpl=10"),
         "official_frames": 0, "external_frames": 0, "uninspectable_frames": 0,
@@ -428,7 +437,7 @@ async def inspect(day, race, try_player=False):
     }
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(channel="msedge", headless=True,
+            browser = await p.chromium.launch(channel="msedge", headless=not headed,
                 args=["--no-first-run", "--disable-extensions"], timeout=20000)
             report["browser_started"] = True
             try:
@@ -468,8 +477,10 @@ def main():
     parser.add_argument("--race", type=int, default=1)
     parser.add_argument("--out", type=Path)
     parser.add_argument("--try-player", action="store_true")
+    parser.add_argument("--headed", action="store_true")
     args = parser.parse_args()
-    result = asyncio.run(inspect(args.date, args.race, try_player=args.try_player))
+    result = asyncio.run(inspect(args.date, args.race,
+                                 try_player=args.try_player, headed=args.headed))
     payload = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)

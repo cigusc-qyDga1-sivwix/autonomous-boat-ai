@@ -1,0 +1,9 @@
+# 三国公式映像：GitHubクラウドEdge到達性テスト
+
+ユーザーの自宅Windowsからは三国のJLC PC版で手動レース選択後に動画自動再生成功。ユーザー申告で個人研究の動画自動保存・AI解析の利用許可は取得済み。**GitHubから実動画を扱えるかは別の技術課題**。
+
+この研究ブランチではGitHub ActionsのWindows hosted runnerでEdgeを起動し、JLCの公式PC入口（tpl=10）を**通常のブラウザ**で開く。公開画面の展示メニュー、1R候補、iframeやvideo要素の件数だけ調査する。日付・レースをプログラムが未選択なら再生成功を宣言しない。動画の取得、隠しURL収集、配信保護回避、画像・原本保存は行わない。
+
+結果はGitHub Actionsの7日間保持の数値JSONアーティファクト。これでWindows PCを持たないGitHubクラウドから公式表示が可能かを確認し、続く日付/RのUI選択自動化の実装可否を判断する。
+
+ステータスは OFFICIAL_PC_SITE_UNAVAILABLE、OFFICIAL_PC_ENTRY_ONLY、EXHIBITION_UI_VISIBLE_REPLAY_NOT_SELECTED、VIDEO_ELEMENT_FOUND_REPLAY_NOT_VERIFIED のいずれか。実映像を取得したり6艇を追跡した証拠とは扱わない。正式予想・結果・収支は不変更。

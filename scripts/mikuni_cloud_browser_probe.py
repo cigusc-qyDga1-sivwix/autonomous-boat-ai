@@ -12,6 +12,7 @@ from datetime import date
 
 ENTRY = "https://livebb.jlc.ne.jp/bb_top/new_bb/index.php?tpl=10"
 SCHEMA = "boatlabs.mikuni_cloud_browser_probe.v1"
+ARCHIVE = "https://livebb.jlc.ne.jp/bb_top/sp_bb/tvod_10.php"
 
 
 def classify(report):
@@ -41,6 +42,66 @@ async def inventory(frame):
         return {"menu": 0, "race": 0, "video": 0, "error": True}
 
 
+async def inspect_archive(context, day):
+    """Count day-scoped race image groups; NEVER click unverified races."""
+    target = f"{int(day[5:7])}/{int(day[8:10])}"
+    result = {
+        "archive_site_loaded": False,
+        "archive_requested_day_visible": False,
+        "archive_race_one_images_total": 0,
+        "archive_day_group_candidates": 0,
+        "archive_status": "ARCHIVE_SITE_UNAVAILABLE",
+    }
+    page = await context.new_page()
+    try:
+        response = await page.goto(ARCHIVE, wait_until="domcontentloaded", timeout=25000)
+        result["archive_site_loaded"] = response is not None and 200 <= response.status < 400
+        if not result["archive_site_loaded"]:
+            return result
+        await page.wait_for_timeout(2000)
+        data = await page.evaluate("""target=>{
+          const srcIsOne=img=>/(?:^|\/)1R\.(?:png|gif)(?:\?|$)/i.test(
+            img.getAttribute('src')||'');
+          const one=[...document.images].filter(srcIsOne);
+          const visibleText=(document.body.innerText||'');
+          const leaves=[...document.querySelectorAll('body *')].filter(
+            e=>e.children.length===0 &&
+            (e.textContent||'').trim().includes(target));
+          const groups=new Set();
+          for(const leaf of leaves.slice(0,30)){
+            let parent=leaf;
+            for(let depth=0;depth<7 && parent;depth++,parent=parent.parentElement){
+              const imgs=[...parent.querySelectorAll('img')];
+              const raceOnes=imgs.filter(srcIsOne).length;
+              // Isolated date section should contain 12 race icons and
+              // exactly one 1R icon. Generic whole-page ancestors rejected.
+              if(imgs.length>=12 && imgs.length<=24 && raceOnes===1){
+                groups.add(parent);break;
+              }
+            }
+          }
+          return {
+            day_visible:visibleText.includes(target),
+            race_one_images:one.length,
+            date_group_candidates:groups.size,
+          };
+        }""", target)
+        result["archive_requested_day_visible"] = bool(data["day_visible"])
+        result["archive_race_one_images_total"] = int(data["race_one_images"])
+        result["archive_day_group_candidates"] = int(data["date_group_candidates"])
+        if not result["archive_requested_day_visible"]:
+            result["archive_status"] = "ARCHIVE_TARGET_DAY_NOT_VISIBLE"
+        elif result["archive_day_group_candidates"] == 1:
+            result["archive_status"] = "ARCHIVE_DAY_RACE_GROUP_CANDIDATE_ONLY"
+        else:
+            result["archive_status"] = "ARCHIVE_DATE_VISIBLE_GROUP_AMBIGUOUS"
+    except Exception:
+        result["archive_status"] = "ARCHIVE_UI_DIAGNOSTIC_UNAVAILABLE"
+    finally:
+        await page.close()
+    return result
+
+
 async def inspect(day, race):
     from playwright.async_api import async_playwright
     if date.fromisoformat(day).isoformat() != day or race not in range(1, 13):
@@ -55,6 +116,11 @@ async def inspect(day, race):
         "video_elements": 0, "exact_day_race_verified": False,
         "video_bytes_saved": 0, "images_saved": 0,
         "formal_forecasts_modified": False,
+        "archive_site_loaded": False,
+        "archive_requested_day_visible": False,
+        "archive_race_one_images_total": 0,
+        "archive_day_group_candidates": 0,
+        "archive_status": "ARCHIVE_NOT_TESTED",
     }
     try:
         async with async_playwright() as p:
@@ -80,6 +146,7 @@ async def inspect(day, race):
                         report["video_elements"] += values["video"]
                         if values.get("error"):
                             report["uninspectable_frames"] += 1
+                report.update(await inspect_archive(context, day))
                 await context.close()
             finally:
                 await browser.close()

@@ -1,6 +1,6 @@
 """Cloud UI diagnostic never promotes a page view to verified video."""
 import unittest
-from scripts.mikuni_cloud_browser_probe import classify
+from scripts.mikuni_cloud_browser_probe import classify, verified_player_page
 
 class CloudBrowserTests(unittest.TestCase):
     def test_official_site_unavailable(self):
@@ -33,3 +33,19 @@ class CloudBrowserTests(unittest.TestCase):
                   "archive_requested_day_visible": True,
                   "archive_day_group_candidates": 1}
         self.assertEqual(classify(report), "OFFICIAL_PC_ENTRY_ONLY")
+
+    def test_only_intended_official_player_is_accepted(self):
+        origin = "https://livebb.jlc.ne.jp/bb_top/sp_bb/streamer/streamer26pi.php"
+        good = origin + "?tenji=1&jo=10&race=01&date=20261028"
+        self.assertTrue(verified_player_page(good, "2026-10-28", 1))
+        bad = [
+          "?tenji=1&jo=10&race=02&date=20261028",
+          "?tenji=1&jo=10&race=01&date=20261027",
+          "?tenji=0&jo=10&race=01&date=20261028",
+          "?tenji=1&jo=01&race=01&date=20261028",
+          "?tenji=1&jo=10&race=01&date=20261028&race=02",
+        ]
+        for query in bad:
+            self.assertFalse(verified_player_page(origin + query, "2026-10-28", 1))
+        self.assertFalse(verified_player_page(
+            good.replace("https://", "http://"), "2026-10-28", 1))

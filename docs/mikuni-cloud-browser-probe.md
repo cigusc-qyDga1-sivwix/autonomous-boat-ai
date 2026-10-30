@@ -14,3 +14,17 @@
 実際のGitHub Windows runnerでは公式JLC PC版の読み込み成功（`site_loaded=true`、1R候補33件、video要素0）。次にJLC公式スマホの展示一覧`/bb_top/sp_bb/tvod_10.php`をブラウザで開き、対象10月28日が表示されているか、日付セクション内に12個のR選択画像と1R画像が1個だけ存在するか数で確認する。
 
 結果`archive_requested_day_visible`、`archive_day_group_candidates`、`archive_status`を追加する。場所や日にちの候補が正しく特定できても**まだクリックしない**。サイトの直接動画URLを推測せず、動画ファイル/画像を保存しない。
+
+
+## 2026-10-31：GitHubで展示アーカイブを日付別に選択し、公式プレイヤーを確認
+
+GitHubクラウドで10月28日の一意な12Rグループが見つかったため、そのグループ内の1R画像のみ通常のクリックで選択する試験を追加。開いたページの公式JLCホスト・再生ページ・`tenji=1`・`jo=10`・`race=01`・`date=20261028`を検証した場合のみ、HTMLVideoElement.play()を試し時計の進行を測る。正規の画面操作であり、隠し動画URLを推測・取得しない。
+
+`player_status`が`CLOUD_OFFICIAL_REPLAY_CLOCK_ADVANCING`になるまでは成功を宣言しない。動画ファイル・画像・生画素は記録せず、正式予想・結果・収支は変更しない。
+
+
+## 実測で確認した未突破箇所（2026-10-31）
+
+クラウドEdgeでJLC三国公式ページと展示アーカイブは200系で表示され、10/28の対象日グループが1件に絞れた。だが`meeting_toggle_clicked=true`、`day_toggle_clicked=true`は見出しへのクリック発行を意味するだけで、折りたたみが展開された証拠ではない。実際の対象`1R`画像は`target_image_visible=false`であり、Playwrightは安全のためクリックを見送った。クラウド再生は**未達成**。
+
+以降は非表示を明示的に`TARGET_IMAGE_COLLAPSED_NO_CLICK`として記録。誤レースのクリック、画像取得、隠しストリームURLの探索を行わない。開催節/日付が実際に開いたかをブラウザDOMの可視性で判定する修正が必要。

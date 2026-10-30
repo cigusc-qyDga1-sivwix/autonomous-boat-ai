@@ -52,8 +52,15 @@ def audit(auto, shadow):
         raise ValueError("formal_forecasts_changed")
     if s.get("video_not_assumed_to_be_verified") is not True:
         raise ValueError("missing_independent_verification_guard")
+    # The venue's permission for personal, non-reposted automatic video
+    # research was explicitly reported by the user. Do not mislabel missing
+    # cloud-direct media configuration as missing venue consent.
+    venue_permission_reported = (
+        auto.get("permission_provenance")
+        == "USER_REPORTED_VENUE_PERMISSION_PERSONAL_AUTO_ANALYSIS_NO_REPOST"
+    )
     if not source:
-        state, blocker = "AWAITING_AUTHORIZED_DIRECT_MEDIA", "APPROVED_VIDEO_INPUT_REQUIRED"
+        state, blocker = "AWAITING_DIRECT_MEDIA_ENDPOINT", "DIRECT_MEDIA_ENDPOINT_NOT_CONFIGURED"
     elif not real:
         state, blocker = "SOURCE_CONFIGURED_NO_DECODED_MEDIA", "REAL_FRAME_DECODE_NOT_CONFIRMED"
     else:
@@ -63,6 +70,11 @@ def audit(auto, shadow):
         "state": state, "blocker": blocker,
         "github_unattended_audit_no_pc": True,
         "source_configured": source,
+        "venue_permission_status": (
+            "USER_REPORTED_GRANTED_PERSONAL_AUTO_ANALYSIS_NO_REPOST"
+            if venue_permission_reported else "NOT_RECORDED_IN_LEDGER"
+        ),
+        "direct_media_provider_access": "NOT_CONFIRMED_BY_BROWSER_PLAYBACK",
         "reported_real_video_races_decoded": real,
         "six_colour_candidates_not_identities": six,
         "reported_confirmed_tracks_not_independently_reviewed": claimed,
@@ -71,7 +83,11 @@ def audit(auto, shadow):
         "real_footage_independently_verified": False,
         "video_ai_complete": False,
         "formal_forecasts_modified": False,
-        "explanation": "Browser playback and synthetic tracking are not authenticated, licensed real-race boat identification.",
+        "explanation": (
+            "Venue consent for personal non-reposted automated analysis is user-reported. "
+            "A working browser player does not provide an unattended direct media endpoint. "
+            "Synthetic tracking does not validate real-race boat identities."
+        ),
     }
 
 

@@ -8,6 +8,7 @@ def base():
     auto = {"schema": "boatlabs.mikuni_authorized_video_ingestion.v1",
             "event_date": "2026-10-30", "venue": "三国", "venue_code": "10",
             "source_configured": False,
+            "permission_provenance": "USER_REPORTED_VENUE_PERMISSION_PERSONAL_AUTO_ANALYSIS_NO_REPOST",
             "summary": {"video_races_observed": 0, "automatic_candidate_races": 0,
                         "automatic_six_candidate_races": 0, "confirmed_boat_tracks": 0}}
     shadow = {"schema": "boatlabs.mikuni_video_motion_shadow_v0.1",
@@ -21,7 +22,10 @@ def base():
 class EvidenceTests(unittest.TestCase):
     def test_missing_source_is_not_fake_success(self):
         report = audit(*base())
-        self.assertEqual(report["state"], "AWAITING_AUTHORIZED_DIRECT_MEDIA")
+        self.assertEqual(report["state"], "AWAITING_DIRECT_MEDIA_ENDPOINT")
+        self.assertEqual(report["blocker"], "DIRECT_MEDIA_ENDPOINT_NOT_CONFIGURED")
+        self.assertEqual(report["venue_permission_status"], "USER_REPORTED_GRANTED_PERSONAL_AUTO_ANALYSIS_NO_REPOST")
+        self.assertEqual(report["direct_media_provider_access"], "NOT_CONFIRMED_BY_BROWSER_PLAYBACK")
         self.assertFalse(report["video_ai_complete"])
         self.assertEqual(report["verified_six_boat_races"], 0)
 

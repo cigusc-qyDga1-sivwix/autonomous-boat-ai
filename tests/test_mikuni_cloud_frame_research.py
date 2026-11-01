@@ -39,6 +39,29 @@ class CloudFrameTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             analyze_png_samples([frame()]*3,[0,.7,1.4])
 
+    def test_full_hd_browser_capture_reaches_bounded_tracking(self):
+        # Real browser video elements are wider than the tracker's 640px cap.
+        base = np.random.default_rng(71).integers(40, 100, (180, 320, 3), dtype=np.uint8)
+        images = []
+        for i in range(8):
+            image = cv2.resize(np.roll(base, i * 3, axis=1), (1920, 1080))
+            ok, encoded = cv2.imencode('.png', image)
+            self.assertTrue(ok)
+            images.append(encoded.tobytes())
+        report = analyze_png_samples(images, [i * .7 for i in range(8)])
+        self.assertEqual(report['status'], 'RENDERED_VIDEO_UNVERIFIED_CANDIDATES')
+        self.assertEqual(report['player_screenshot_samples'], 8)
+        self.assertEqual(report['confirmed_boat_tracks'], 0)
+        self.assertFalse(report['eligible_for_formal_forecast'])
+
+    def test_source_size_changes_are_rejected_before_resizing(self):
+        normal = frame()
+        image = cv2.imdecode(np.frombuffer(normal, np.uint8), cv2.IMREAD_COLOR)
+        ok, encoded = cv2.imencode('.png', cv2.resize(image, (720, 480)))
+        self.assertTrue(ok)
+        with self.assertRaisesRegex(ValueError, 'frame_size_changed'):
+            analyze_png_samples([normal] * 7 + [encoded.tobytes()], [i * .7 for i in range(8)])
+
 
 if __name__=="__main__":
     unittest.main()

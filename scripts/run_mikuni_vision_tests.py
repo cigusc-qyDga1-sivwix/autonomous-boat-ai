@@ -18,7 +18,8 @@ def main():
     suite = unittest.TestSuite()
     for pattern in ("test_mikuni_auto_vision.py", "test_mikuni_video_motion_pipeline.py",
                     "test_mikuni_six_boat_tracker.py", "test_mikuni_video_autocollect.py",
-                    "test_mikuni_official_video_catalog.py"):
+                    "test_mikuni_official_video_catalog.py", "test_mikuni_cloud_browser_probe.py",
+                    "test_mikuni_cloud_frame_research.py"):
         suite.addTests(unittest.defaultTestLoader.discover("tests", pattern=pattern))
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     if result.skipped:

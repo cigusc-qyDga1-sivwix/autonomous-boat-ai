@@ -41,7 +41,16 @@ def analyze_png_samples(png_samples, timestamps):
         if imgs and imgs[0].shape!=im.shape:
             raise ValueError("video_player_frame_size_changed")
         imgs.append(im)
-        ok,encoded=cv2.imencode(".jpg",im,[cv2.IMWRITE_JPEG_QUALITY,88])
+        # Browser screenshots are commonly 1280/1920px wide, whereas the
+        # bounded tracking runtime accepts at most 640px. Keep the original
+        # frames for the motion gate and scale only the analysis input.
+        scaled=im
+        if w>640:
+            scaled_height=round(h*640/w)
+            if scaled_height<80:
+                raise ValueError("video_player_analysis_frame_too_short")
+            scaled=cv2.resize(im,(640,scaled_height),interpolation=cv2.INTER_AREA)
+        ok,encoded=cv2.imencode(".jpg",scaled,[cv2.IMWRITE_JPEG_QUALITY,88])
         if not ok:
             raise ValueError("in_memory_jpeg_encode_failed")
         jpegs.append(encoded.tobytes())

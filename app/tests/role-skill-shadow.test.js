@@ -19,6 +19,7 @@ const enabled=bridge.run({...input,venue_tactics_trial:true,role_skill_shadow_tr
 assert.deepEqual(enabled.bets,control.bets,'formal bets must never change');
 assert.equal(JSON.stringify(input),frozen,'source must stay immutable');
 const role=enabled.role_skill_shadow;
+assert.equal(role.version,'racer-role-suitability-shadow-v0.1','historical variant stays available');
 assert.equal(role.status,'ready');
 assert.equal(role.generated_pre_cutoff,true);
 assert.equal(role.no_additional_stake,true);
@@ -51,4 +52,26 @@ assert.match(html,/選手の2・3着適性/);
 assert.match(html,/正式予想・正式収支には加算しません/);
 assert.match(html,/試験買い目/);
 assert.throws(()=>skill.run({...input,racers:[...input.racers.slice(0,5),input.racers[0]]},control.bets));
+const headSignature=bets=>Array.from({length:6},(_,i)=>bets
+ .filter(b=>Number(b.combination[0])===i+1).map(b=>b.virtual_yen).sort((a,b)=>a-b));
+// A low-ranked head can be intentionally retained by the main coverage policy.
+// Global re-ranking loses it even when the head score itself never changes.
+const broadControl=Array.from({length:6},(_,i)=>[
+ {combination:[i+1,(i+1)%6+1,(i+2)%6+1].join('-'),virtual_yen:i===0?5000:4000},
+ {combination:[i+1,(i+2)%6+1,(i+1)%6+1].join('-'),virtual_yen:i===0?5000:4000}
+]).flat();
+assert.notDeepEqual(headSignature(skill.run(input,broadControl).bets),headSignature(broadControl),
+ 'fixture must expose the historical global-rerank failure');
+const preserved=skill.run(input,broadControl,{preserveHeadCoverage:true});
+assert.equal(preserved.version,'racer-role-suitability-shadow-v0.2-head-preserved');
+assert.deepEqual(headSignature(preserved.bets),headSignature(broadControl),
+ 'each original head keeps its ticket count and exact stake distribution');
+assert.equal(new Set(preserved.bets.map(b=>b.combination)).size,broadControl.length);
+const viaBridge=bridge.run({...input,venue_tactics_trial:true,role_skill_shadow_trial:true,
+ role_skill_head_preserved_trial:true});
+assert.deepEqual(viaBridge.bets,control.bets,'v0.2 cannot alter the main forecast');
+assert.deepEqual(headSignature(viaBridge.role_skill_shadow.bets),headSignature(control.bets));
+const v2Poison=bridge.run({...input,venue_tactics_trial:true,role_skill_shadow_trial:true,
+ role_skill_head_preserved_trial:true,result:{finish:'6-5-4'},odds:{'6-5-4':10000}});
+assert.deepEqual(v2Poison.role_skill_shadow,viaBridge.role_skill_shadow);
 console.log('Role-skill shadow: isolation, provenance, guards, matching point/stake, no-result leakage, role evidence PASS');

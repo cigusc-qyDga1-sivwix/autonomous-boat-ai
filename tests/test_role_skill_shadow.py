@@ -72,5 +72,46 @@ class RoleSkillShadowIntegrationTest(unittest.TestCase):
                                     datetime.fromisoformat("2026-10-31T10:00:00+00:00"))
         self.assertNotIn("role_skill_backtest", result)
 
+    def test_head_preserved_variant_and_versioned_comparison(self):
+        import copy
+        args = ("唐津", "exhibition", self.racers, get_profile("23"),
+                {"wind_speed": 2, "wave_height": 1}, "2026-11-02T04:00:00+00:00")
+        old = promoted_v09(*args, four_factor=True, venue_tactics=True,
+                           role_skill_trial=True)
+        new = promoted_v09(*args, four_factor=True, venue_tactics=True,
+                           role_skill_trial=True, role_skill_preserve_heads=True)
+        self.assertEqual(old["bets"], new["bets"])
+        def heads(bets):
+            return {str(h): sorted(b["virtual_yen"] for b in bets
+                                    if b["combination"].startswith(str(h) + "-"))
+                    for h in range(1, 7)}
+        self.assertEqual(heads(new["bets"]), heads(new["role_skill_shadow"]["bets"]))
+        records, payouts = {}, {}
+        for i, model in enumerate((old, new), 1):
+            shadow = copy.deepcopy(model["role_skill_shadow"])
+            records[str(i)] = {"venue": "唐津", "race": i, "versions": [{
+                "bets": copy.deepcopy(model["bets"]), "role_skill_shadow": shadow,
+                "sha256": str(i)*64, "frozen_at_utc": args[-1],
+                "cutoff_iso_jst": "2026-11-02T14:00:00+09:00", "phase": "exhibition"}]}
+            payouts[str(i)] = {"finish": shadow["bets"][0]["combination"], "payout_per_100": 500}
+        ledger = {"event_date": "2026-11-02", "race_records": records}
+        before = copy.deepcopy(ledger)
+        result = integrate_official(ledger, {"event_date": "2026-11-02"}, {
+            "date": "2026-11-02", "results": payouts,
+            "source_url": "https://www.boatrace.jp/owpc/pc/race/pay?hd=20261102",
+            "retrieved_at_utc": "2026-11-02T10:00:00+00:00"
+        }, datetime.fromisoformat("2026-11-02T10:00:00+00:00"))
+        comparison = result["role_skill_backtest"]
+        self.assertTrue(comparison["mixed_versions"])
+        self.assertEqual(len(comparison["by_model_version"]), 2)
+        for version in comparison["by_model_version"].values():
+            self.assertEqual(version["races"], 1)
+        self.assertEqual(comparison["by_model_version"][
+            "racer-role-suitability-shadow-v0.2-head-preserved"]["main_head_misses"],
+            comparison["by_model_version"][
+            "racer-role-suitability-shadow-v0.2-head-preserved"]["shadow_head_misses"])
+        self.assertEqual(records["1"]["versions"], before["race_records"]["1"]["versions"])
+        self.assertEqual(records["2"]["versions"], before["race_records"]["2"]["versions"])
+
 if __name__ == "__main__":
     unittest.main()

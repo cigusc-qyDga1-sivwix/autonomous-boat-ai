@@ -13,7 +13,8 @@ function relative(values,scale){
  const mean=numbers.reduce((a,b)=>a+b,0)/numbers.length;
  return values.map(v=>v===null?null:clamp((v-mean)/scale,-1,1));
 }
-function run(input,controlBets){
+function run(input,controlBets,options={}){
+ const preserveHeads=options.preserveHeadCoverage===true;
  const model=root.BoatTacticalModel,base=root.BoatFourFactor;
  if(!model||!base)throw Error('Pre-cutoff model dependencies unavailable');
  if(!input||!Array.isArray(input.racers)||input.racers.length!==6||
@@ -90,16 +91,37 @@ function run(input,controlBets){
  });
  ranked.sort((a,b)=>b.shadow_score-a.shadow_score||a.combination.localeCompare(b.combination));
  const amounts=controlBets.map(b=>b.virtual_yen).sort((a,b)=>b-a);
- const bets=ranked.slice(0,amounts.length).map((c,i)=>({
+ let bets;
+ if(preserveHeads){
+  // Re-ranking every head together discards the main model's head coverage
+  // policy. Isolate the 2nd/3rd role trial by keeping each head's original
+  // ticket count AND stake distribution; only its followers may change.
+  bets=[];
+  for(let h=1;h<=6;h++){
+   const stakes=controlBets.filter(b=>Number(b.combination[0])===h)
+     .map(b=>b.virtual_yen).sort((a,b)=>b-a);
+   const candidates=ranked.filter(c=>Number(c.combination[0])===h);
+   if(candidates.length<stakes.length)throw Error('Insufficient same-head candidates');
+   stakes.forEach((stake,i)=>bets.push({
+    combination:candidates[i].combination,virtual_yen:stake
+   }));
+  }
+  bets.sort((a,b)=>b.virtual_yen-a.virtual_yen||a.combination.localeCompare(b.combination));
+ }else{
+  bets=ranked.slice(0,amounts.length).map((c,i)=>({
    combination:c.combination,virtual_yen:amounts[i]
- }));
+  }));
+ }
  if(bets.reduce((sum,b)=>sum+b.virtual_yen,0)!==50000)throw Error('Shadow budget mismatch');
- return {version:'racer-role-suitability-shadow-v0.1',status:'ready',
+ return {version:preserveHeads?'racer-role-suitability-shadow-v0.2-head-preserved':
+   'racer-role-suitability-shadow-v0.1',status:'ready',
   model_role:'shadow_validation',generated_pre_cutoff:true,result_data_used:false,
   odds_used:false,calibrated:false,no_additional_stake:true,
   frozen_at_utc:input.frozen_at_utc,control_model:'same_snapshot_main',
   control_point_count:controlBets.length,selected_count:bets.length,
   selected_with_original_stake_distribution:true,
+  ...(preserveHeads?{head_candidate_counts_preserved:true,
+    head_stake_distribution_preserved:true}:{}),
   method:'Same-input 120 scenario rerank; top3-vs-win residual, frame start order, evidence-gated following/inside survival. Head score preserved.',
   limitations:'No racer-specific 1st/2nd/3rd finish rates, attack success rates or movement video are measured. No learned coefficients.',
   evidence:{top3_residual_boats:roles.filter(r=>r.top3_residual_used).length,

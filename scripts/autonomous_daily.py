@@ -425,7 +425,8 @@ def promoted_v09(venue: str, phase: str, racers: list[dict],
                  profile: dict | None, weather: dict | None,
                  frozen_at_utc: str, four_factor: bool = False, head_coverage: bool = False,
                  postrace_conditional: bool = False, venue_tactics: bool = False, point_free: bool = False,
-                 role_skill_trial: bool = False) -> dict:
+                 role_skill_trial: bool = False,
+                 role_skill_preserve_heads: bool = False) -> dict:
     """Invoke one explicit model identity; never fall back on bridge failure."""
     inputs = {
         "venue": venue, "phase": phase,
@@ -440,6 +441,8 @@ def promoted_v09(venue: str, phase: str, racers: list[dict],
         "postrace_conditional_trial": postrace_conditional,
         "venue_tactics_trial": venue_tactics,
         "role_skill_shadow_trial": bool(role_skill_trial and four_factor),
+        "role_skill_head_preserved_trial": bool(role_skill_trial and four_factor
+                                                and role_skill_preserve_heads),
     }
     try:
         job = subprocess.run(
@@ -564,7 +567,10 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
                                 head_coverage=bool(race.get("_head_coverage_trial")) and not postrace_active,
                                 postrace_conditional=postrace_active and not venue_active,
                                 venue_tactics=venue_active, point_free=point_free_active,
-                                role_skill_trial=role_skill_active)
+                                role_skill_trial=role_skill_active,
+                                role_skill_preserve_heads=(role_skill_active
+                                    and cutoff.date() >= date(2026, 11, 2)
+                                    and now.astimezone(JST).date() >= date(2026, 11, 2)))
         chosen_model = promoted["model_version"]
     else:
         promoted = promoted_v07(venue, phase, racers, profile, selected_weather, frozen_at)
@@ -1096,7 +1102,15 @@ def integrate_official(ledger: dict, view: dict, pay: dict,
                     "shadow_minus_main_yen": test_paid - paid,
                     "same_frozen_input": True, "same_point_count": True,
                     "same_stake_distribution": True, "no_extra_formal_stake": True,
-                    "model_version": shadow.get("version"),
+                    "main_head_captured": head,
+                    "shadow_head_captured": any(
+                        b["combination"].split("-")[0] == p["finish"].split("-")[0]
+                        for b in alternative),
+                    "main_first_second": first_second,
+                    "shadow_first_second": any(
+                        b["combination"].split("-")[:2] == p["finish"].split("-")[:2]
+                        for b in alternative),
+                    "model_version": shadow.get("version") or "unknown",
                     "source": "same_pre_cutoff_role_skill_shadow_only",
                 }
         results[key] = {
@@ -1113,14 +1127,27 @@ def integrate_official(ledger: dict, view: dict, pay: dict,
     role_trials = [r["role_skill_comparison"] for r in results.values()
                    if r.get("role_skill_comparison")]
     if role_trials:
+        def role_summary(rows):
+            return {
+                "races": len(rows),
+                "main_hits": sum(r["main_hit"] for r in rows),
+                "shadow_hits": sum(r["shadow_hit"] for r in rows),
+                "main_payout": sum(r["main_payout"] for r in rows),
+                "shadow_payout": sum(r["shadow_payout"] for r in rows),
+                "shadow_minus_main_yen": sum(r["shadow_minus_main_yen"] for r in rows),
+                "virtual_stake_per_model": len(rows) * VIRTUAL_BUDGET_YEN,
+                "main_head_misses": sum(not r["main_head_captured"] for r in rows),
+                "shadow_head_misses": sum(not r["shadow_head_captured"] for r in rows),
+                "main_third_misses": sum(r["main_first_second"] and not r["main_hit"] for r in rows),
+                "shadow_third_misses": sum(r["shadow_first_second"] and not r["shadow_hit"] for r in rows),
+            }
+        versions = sorted({r["model_version"] for r in role_trials})
         view["role_skill_backtest"] = {
-            "races": len(role_trials),
-            "main_hits": sum(r["main_hit"] for r in role_trials),
-            "shadow_hits": sum(r["shadow_hit"] for r in role_trials),
-            "main_payout": sum(r["main_payout"] for r in role_trials),
-            "shadow_payout": sum(r["shadow_payout"] for r in role_trials),
-            "shadow_minus_main_yen": sum(r["shadow_minus_main_yen"] for r in role_trials),
-            "virtual_stake_per_model": len(role_trials) * VIRTUAL_BUDGET_YEN,
+            **role_summary(role_trials),
+            "mixed_versions": len(versions) > 1,
+            "by_model_version": {version: role_summary([
+                r for r in role_trials if r["model_version"] == version
+            ]) for version in versions},
             "scope": "発走前同一入力の試験比較。正式予想・収支に試験買い目を合算しない",
         }
 

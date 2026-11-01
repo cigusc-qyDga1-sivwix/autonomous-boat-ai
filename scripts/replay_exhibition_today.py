@@ -174,7 +174,7 @@ def generate_candidates(day: str, ledger: dict, research: dict, now: datetime):
             simulated = cutoff - timedelta(seconds=181)
             safe, origin = inject(
                 source, sanitized_measurements(observed), simulated,
-                venue_code, race_no
+                venue_code, race_no, require_capture_evidence=False
             )
             if not origin or not preview_complete(safe):
                 skips["archived_exhibition_invalid_or_too_late_for_3min_margin"] += 1

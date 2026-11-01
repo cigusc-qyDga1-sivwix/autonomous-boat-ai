@@ -39,7 +39,8 @@ def build(research, ledger, now=None):
             try:
                 cutoff = datetime.fromisoformat(day + "T" + matching["cutoff_jst"] + ":00+09:00")
                 observed = datetime.fromisoformat(row["source_observed_jst"]).astimezone(JST)
-                collected_raw = row.get("first_seen_at_utc") or research.get("created_at_utc")
+                collected_raw = (row.get("preview_captured_at_utc")
+                                 or row.get("first_seen_at_utc") or research.get("created_at_utc"))
                 collected = datetime.fromisoformat(collected_raw) if collected_raw else None
                 if collected is not None and collected.tzinfo is not None and collected.astimezone(JST) >= cutoff - timedelta(seconds=120):
                     reason = "research_import_after_safe_freeze_deadline"
@@ -54,6 +55,7 @@ def build(research, ledger, now=None):
         reasons[reason] += 1
         details.append({"race_code": code, "reason": reason,
                         "first_seen_at_utc": row.get("first_seen_at_utc"),
+                        "preview_captured_at_utc": row.get("preview_captured_at_utc"),
                         "source_observed_jst": row.get("source_observed_jst")})
     return {
         "event_date": day,

@@ -11,6 +11,29 @@ from scripts.autonomous_daily import (build, prediction, preview_complete, valid
 JST = ZoneInfo("Asia/Tokyo")
 
 
+def test_completed_collector_publishes_forecast_only_heartbeat(tmp_path, monkeypatch):
+    import json
+    import sys
+    import scripts.autonomous_daily as collector
+    day='2026-11-03'
+    source=tmp_path/'source.json'
+    source.write_text(json.dumps(data(race(cutoff=day+' 10:00:00'))))
+    out=tmp_path/'live'
+    monkeypatch.setattr(sys,'argv',['collector','--input-json',str(source),'--out-dir',str(out),
+                                  '--now-iso',day+'T08:00:00+09:00'])
+    monkeypatch.setattr(collector,'fetch_official_pay',lambda _: {
+        'date':day,'results':{},'reviews':{},'cancellations':{},
+        'source_url':'https://www.boatrace.jp/owpc/pc/race/pay?hd=20261103',
+        'retrieved_at_utc':'2026-11-02T23:01:00+00:00'})
+    collector.main()
+    view=json.loads((out/'latest.json').read_text())
+    heartbeat=json.loads((out/'forecast-sync-latest.json').read_text())
+    assert heartbeat['event_date']==day and heartbeat['status']=='completed'
+    assert heartbeat['forecast_races']==1
+    assert heartbeat['captured_at_utc']==view['forecast_updated_at_utc']
+    assert view['forecast_races'][0]['role_skill_shadow']['version'].endswith('v0.2-head-preserved')
+
+
 def race(cutoff="2026-10-22 10:00:00", show_preview=False, finished=False):
     r = {"closed_at": cutoff,
          "racers": {str(i): {"name": f"選手{i}", "national_win_rate": 5.2,

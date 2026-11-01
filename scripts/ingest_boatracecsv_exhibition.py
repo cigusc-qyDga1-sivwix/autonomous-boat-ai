@@ -1,6 +1,7 @@
 """Read-only BoatraceCSV exhibition backfill. NEVER modifies pre-cutoff forecasts."""
-import argparse, csv, io, json, math
+import argparse, csv, hashlib, io, json, math
 from concurrent.futures import ThreadPoolExecutor
+from collections import Counter
 from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -39,14 +40,40 @@ def numeric(value):
 def index(rows):
     return {r["レースコード"]:r for r in rows if r.get("レースコード")}
 
-def build(day, inputs, prior=None):
+def preview_signature(row):
+    value = {key: row.get(key) for key in
+             ("race_code", "source_observed_jst", "boats", "weather")}
+    return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False,
+                                    separators=(",", ":")).encode()).hexdigest()
+
+
+def build(day, inputs, prior=None, collected_at=None):
+    captured = collected_at or datetime.now(timezone.utc)
+    if captured.tzinfo is None:
+        raise ValueError("Collection time requires a timezone")
+    captured_iso = captured.astimezone(timezone.utc).isoformat()
     # Missing optional feeds must behave like empty CSVs, not crash the importer.
     src={k:index(inputs.get(k) or []) for k in SOURCES}
     merged={r["race_code"]:r for r in (prior or {}).get("records",[])}
+    rejected=Counter()
     for code,st in src["stt"].items():
         tk=src["tkz"].get(code)
         su=src["sui"].get(code) or {}
-        if not tk or len(code)!=12 or code[:8]!=day.strftime("%Y%m%d"):
+        if (not isinstance(code,str) or len(code)!=12 or not code.isdigit()
+                or code[:8]!=day.strftime("%Y%m%d")
+                or not 1 <= int(code[8:10]) <= 24 or not 1 <= int(code[10:12]) <= 12):
+            rejected["invalid_race_identity"]+=1
+            continue
+        if not tk:
+            rejected["missing_exhibition_times"]+=1
+            continue
+        try:
+            datetime.strptime(st["締切時刻"],"%H:%M")
+            observed=datetime.fromisoformat(st["取得日時"])
+            if observed.tzinfo is None or observed.astimezone(ZoneInfo("Asia/Tokyo")).date()!=day:
+                raise ValueError("Wrong source day")
+        except (KeyError,TypeError,ValueError):
+            rejected["invalid_preview_timestamp"]+=1
             continue
         og=src["original"].get(code,{})
         rr=src["result"].get(code)
@@ -64,7 +91,12 @@ def build(day, inputs, prior=None):
                 "weight_kg":numeric(tk.get(f"艇{lane}_体重(kg)")),
                 "original_exhibition":[v for v in original if v["metric"] and v["value"] is not None]
             })
-        if any(b["course"] is None or b["exhibition_time"] is None or b["exhibition_st"] is None for b in boats):
+        if (len({b["course"] for b in boats})!=6
+                or any(b["course"] not in range(1,7)
+                       or b["exhibition_time"] is None or not 5 <= b["exhibition_time"] <= 10
+                       or b["exhibition_st"] is None or not -.5 <= b["exhibition_st"] <= 1
+                       for b in boats)):
+            rejected["invalid_or_incomplete_six_boat_preview"]+=1
             continue
         entry={
             "race_code":code,"venue":VENUES[int(code[8:10])-1],
@@ -83,21 +115,29 @@ def build(day, inputs, prior=None):
             },
             "result":({
                 "finish":"-".join(rr.get(f"{i}着_艇番","") for i in (1,2,3)),
-                "decision":rr.get("決まり手") or None,"recorded_jst":rr["取得日時"],
+                "decision":rr.get("決まり手") or None,"recorded_jst":rr.get("取得日時"),
                 "source":"BoatraceCSV/realtime_unofficial"
             } if rr and all(rr.get(f"{i}着_艇番") for i in (1,2,3)) else None),
             "payout":({
                 "finish":pp.get("3連単_組番") or None,
                 "yen_per_100":numeric(pp.get("3連単_払戻金")),
-                "recorded_jst":pp["取得日時"],
+                "recorded_jst":pp.get("取得日時"),
                 "source":"BoatraceCSV/payouts_unofficial"
             } if pp else None)
         }
         old=merged.get(code)
         # Earliest time THIS importer first persisted the race; never backdate.
-        entry["first_seen_at_utc"] = (old or {}).get("first_seen_at_utc") or datetime.now(timezone.utc).isoformat()
+        entry["first_seen_at_utc"] = (old or {}).get("first_seen_at_utc") or captured_iso
         if old and old.get("source_observed_jst","")>entry["source_observed_jst"]:
             continue
+        # Bind the first actual capture to these exact preview measurements.
+        # An old first_seen for the race cannot backdate a later changed value.
+        fingerprint = preview_signature(entry)
+        same_preview = bool(old and old.get("preview_sha256") == fingerprint)
+        entry["preview_sha256"] = fingerprint
+        entry["preview_captured_at_utc"] = (
+            old.get("preview_captured_at_utc") if same_preview else None
+        ) or captured_iso
         if old:
             for kind in ("result","payout"):
                 if entry[kind] is None:
@@ -118,20 +158,25 @@ def build(day, inputs, prior=None):
             "payout_rows":sum(bool(r["payout"]) for r in records),
             "boat_rows":len(records)*6
         },
-        "source_paths":{k:url(k,day) for k in SOURCES},"records":records
+        "source_paths":{k:url(k,day) for k in SOURCES},"records":records,
+        "rejected_rows":dict(rejected),
     }
 
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--date",help="YYYY-MM-DD; default today in JST")
     ap.add_argument("--output",type=Path)
+    ap.add_argument("--previews-only",action="store_true",
+                    help="Fetch preview inputs before forecasting; defer results to research")
     args=ap.parse_args()
     day=date.fromisoformat(args.date) if args.date else datetime.now(ZoneInfo("Asia/Tokyo")).date()
     path=args.output or Path(f"app/data/exhibition/{day.isoformat()}.json")
     prior=json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
     # Independent public CSVs: bound concurrency and keep each request timeout.
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        sources=dict(zip(SOURCES, pool.map(lambda name: fetch(name,day), SOURCES)))
+    names=[name for name in SOURCES if not args.previews_only or name not in ("result","payout")]
+    with ThreadPoolExecutor(max_workers=len(names)) as pool:
+        sources={name:[] for name in SOURCES}
+        sources.update(zip(names, pool.map(lambda name: fetch(name,day), names)))
     has_essential=all(sources[k] for k in ("stt","tkz"))
     # Weather (sui) is optional: a missing weather feed must not suppress
     # otherwise complete six-boat exhibition readings.
@@ -156,6 +201,7 @@ def main():
         "complete_sources":has_essential,
         "weather_source_available":bool(sources["sui"]),
         "fetch_counts":{k:len(rows) for k,rows in sources.items()},
+        "rejected_rows":current.get("rejected_rows",{}),
         "research_races":len(records),
         "research_venues":len({r.get("venue_code") for r in records}),
         "complete_six_boat_research_races":sum(len(r.get("boats") or []) == 6 for r in records),

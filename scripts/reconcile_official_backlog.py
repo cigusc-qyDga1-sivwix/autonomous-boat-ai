@@ -14,6 +14,7 @@ from pathlib import Path
 
 from scripts.autonomous_daily import APP_DATA, JST, integrate_official, write_json
 from scripts.official_pay import fetch_official_pay
+from scripts.forecast_audit import frozen_projection, persist as persist_audit
 
 
 def valid_snapshot(snapshot: dict | None, day: str) -> bool:
@@ -113,7 +114,7 @@ def reconcile_day(directory: Path, day: str, now: datetime,
     before = copy.deepcopy(ledger)
     is_today = day == now.astimezone(JST).date().isoformat()
     latest_path = directory / "latest.json"
-    view = {}
+    view = frozen_projection(ledger)
     if is_today and latest_path.exists():
         candidate = json.loads(latest_path.read_text(encoding="utf-8"))
         if candidate.get("event_date") == day and candidate.get("mode") == "auto-live":
@@ -136,6 +137,10 @@ def reconcile_day(directory: Path, day: str, now: datetime,
             "needs_review": len(view.get("settlement_alerts", {})),
         }
         write_json(latest_path, view)
+    # Historical days have a separate derived audit; only the matching current
+    # dashboard may replace audit-latest. No historical model is re-executed.
+    audit=persist_audit(directory,view,latest=is_today and view.get("mode")=="auto-live")
+    status["audit_verified"]=audit["metrics"]["verified_races"]
     status["state"] = "UPDATED" if ledger != before else "UNCHANGED"
     status["verified"] = len(view.get("official_results", {}))
     status["newly_verified"] = view.get("official_pay_info", {}).get("newly_confirmed", 0)

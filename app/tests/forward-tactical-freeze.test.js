@@ -50,4 +50,17 @@ assert.equal(after.doc.records.filter(x=>x.race===3).length,2,'baseline+exhibiti
 assert.equal(after.doc.records.find(x=>x.phase==='baseline'&&x.race===3).record_sha256,
  first.doc.records.find(x=>x.phase==='baseline'&&x.race===3).record_sha256);
 assert.throws(()=>run({...make(),event_date:'not-a-day'},null,now),/Missing source event date/);
+const many=Array.from({length:6},(_,a)=>Array.from({length:6},(_,b)=>Array.from({length:6},(_,c)=>
+ a!==b&&b!==c&&a!==c?[a+1,b+1,c+1].join('-'):null))).flat(2).filter(Boolean).slice(0,14)
+ .map((combination,i)=>({combination,virtual_yen:i===0?11000:3000}));
+assert.equal(validateBets(many,'four-factor-v1.4-venue-aware-23-untrained','2026-11-02'),true);
+assert.equal(validateBets(many,'four-factor-v1.4-venue-aware-23-untrained','2026-10-28'),false);
+assert.equal(validateBets([{combination:'1-1-2',virtual_yen:50000}],
+ 'four-factor-v1.5-point-free-untrained','2026-11-02'),false);
+const expanded={event_date:'2026-11-02',updated_at_utc:'2026-11-02T01:00:00Z',forecast_races:[{
+ ...base(4,'14:00'),model_version:'four-factor-v1.4-venue-aware-23-untrained',bets:many,
+ frozen_at_utc:'2026-11-02T00:30:00Z'}]};
+const recovered=run(expanded,null,Date.parse('2026-11-02T01:01:00Z'));
+assert.equal(recovered.status.new_forward_freezes,1,'valid current 14-point source is not silently dropped');
+assert.equal(recovered.status.errors,0);
 console.log('Pre-cutoff tactical A/B seal, 3-minute safety, replay separation and no overwrite: PASS');

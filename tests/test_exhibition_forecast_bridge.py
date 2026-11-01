@@ -4,6 +4,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from scripts.exhibition_bridge import inject, available_rows
+from scripts.ingest_boatracecsv_exhibition import preview_signature
 from scripts.autonomous_daily import build, preview_complete
 
 JST = ZoneInfo("Asia/Tokyo")
@@ -18,10 +19,11 @@ def source():
     return {"programs":{"stadiums":{"18":{"races":{"3":race()}}}}}
 
 def row():
-    return {
+    sample = {
         "race_code":"202610231803","venue_code":"18","venue":"徳山","race":3,
         "source_status":"historical_research_only_not_frozen_forecast",
         "source_observed_jst":"2026-10-23T11:09:00+09:00",
+        "preview_captured_at_utc":"2026-10-23T02:10:00+00:00",
         "boats":[{
             "lane":i,"course":i,"exhibition_st":.08 if i==3 else .20,
             "exhibition_time":6.6 if i==3 else 6.9,
@@ -35,6 +37,8 @@ def row():
         # Deliberately wrong result: the forecast MUST never inspect it.
         "result":{"finish":"6-5-4"},"payout":{"finish":"6-5-4","yen_per_100":99900},
     }
+    sample["preview_sha256"] = preview_signature(sample)
+    return sample
 
 def test_missing_csv_yields_only_baseline():
     now=datetime(2026,10,23,11,0,tzinfo=JST)
@@ -97,3 +101,15 @@ def test_same_exhibition_is_not_repeated_and_source_revision_is_preserved():
                        "api",exhibition_rows={row()["race_code"]:row()})
     assert stats["new_exhibition"]==0
     assert same["race_records"]["18-3"]["versions"][-1]==version
+
+
+def test_capture_evidence_is_bound_to_the_actual_preview_not_the_race_first_seen():
+    now=datetime(2026,10,23,11,12,tzinfo=JST)
+    sample=row()
+    sample["first_seen_at_utc"]="2026-10-23T00:00:00+00:00"
+    sample["preview_captured_at_utc"]="2026-10-23T02:25:00+00:00"
+    assert inject(race(),sample,now,"18",3)[1] is None
+    sample=row();sample.pop("preview_captured_at_utc")
+    assert inject(race(),sample,now,"18",3)[1] is None
+    sample=row();sample["boats"][0]["exhibition_time"]=6.5
+    assert inject(race(),sample,now,"18",3)[1] is None

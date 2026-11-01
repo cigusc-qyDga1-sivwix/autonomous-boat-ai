@@ -884,6 +884,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         "event_date": local_day,
         "mode": "auto-live",
         "updated_at_utc": ledger["last_updated_at_utc"],
+        "forecast_updated_at_utc": ledger["last_updated_at_utc"],
         "timezone": "Asia/Tokyo",
         "method": ("全国24場・新規予想はv0.7スタート差＋6艇着順連動がメイン"
                    "／旧モデル固定分は不変・同時点の旧方式を別枠検証"
@@ -1298,6 +1299,15 @@ def main():
     # A successful GET with no scheduled races still writes a factual empty dashboard.
     write_json(path, ledger)
     write_json(args.out_dir / "latest.json", webapp)
+    # This record is written only by the forecast collector. Result updates
+    # cannot make an old exhibition capture look fresh to its watchdog.
+    write_json(args.out_dir / "forecast-sync-latest.json", {
+        "schema": "boatlabs.forecast_capture.v1", "event_date": day,
+        "status": "completed", "captured_at_utc": webapp["forecast_updated_at_utc"],
+        "completed_at_utc": (now if args.input_json else datetime.now(UTC)).astimezone(UTC).isoformat(),
+        "listed_races": summary["listed_races"], "forecast_races": summary["forecast_races"],
+        "final_exhibition_verified_races": webapp["final_exhibition_verified_races"],
+    })
     print(json.dumps(summary, ensure_ascii=False))
 
 

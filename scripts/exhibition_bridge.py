@@ -12,6 +12,10 @@ JST = ZoneInfo('Asia/Tokyo')
 SAFE_MARGIN_SECONDS = 120
 from pathlib import Path
 import json
+if __package__:
+    from .ingest_boatracecsv_exhibition import preview_signature
+else:
+    from ingest_boatracecsv_exhibition import preview_signature
 
 SOURCE_NAME = "BoatraceCSV"
 METRICS = {"一周": ("lap_time", 30, 50),
@@ -43,7 +47,7 @@ def available_rows(path: Path, day: str) -> dict:
 
 
 def inject(race: dict, row: dict | None, now: datetime, venue_code: str,
-           race_number: int):
+           race_number: int, *, require_capture_evidence=True):
     """Return (copy of race, provenance), or original race and None.
 
     Strictly require collection by the current run prior to the safety cutoff.
@@ -61,6 +65,17 @@ def inject(race: dict, row: dict | None, now: datetime, venue_code: str,
         return race, None
     if cutoff is None or now.astimezone(JST) >= cutoff - timedelta(seconds=SAFE_MARGIN_SECONDS):
         return race, None
+    if require_capture_evidence:
+        try:
+            captured = datetime.fromisoformat(row["preview_captured_at_utc"])
+            if (captured.tzinfo is None
+                    or captured.astimezone(JST).date() != cutoff.date()
+                    or captured > now + timedelta(seconds=30)
+                    or captured.astimezone(JST) >= cutoff - timedelta(seconds=SAFE_MARGIN_SECONDS)
+                    or row.get("preview_sha256") != preview_signature(row)):
+                return race, None
+        except (KeyError, TypeError, ValueError):
+            return race, None
     try:
         seen = datetime.fromisoformat(row["source_observed_jst"])
         if seen.tzinfo is None:
@@ -124,5 +139,7 @@ def inject(race: dict, row: dict | None, now: datetime, venue_code: str,
         "source":SOURCE_NAME, "observed_at_jst":row["source_observed_jst"],
         "captured_before_cutoff":True,"metrics":list(extras),
         "forecast_run_utc":now.astimezone(timezone.utc).isoformat(),
+        "captured_at_utc":row.get("preview_captured_at_utc"),
+        "measurement_sha256":row.get("preview_sha256"),
     }
     return copy, copy["_exhibition_origin"]

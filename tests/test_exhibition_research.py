@@ -1,5 +1,5 @@
 """Research importer tests: historical data MUST NOT become frozen forecast data."""
-from datetime import date
+from datetime import date, datetime, timezone, timedelta
 from scripts.ingest_boatracecsv_exhibition import build, numeric
 
 def fixtures():
@@ -73,3 +73,47 @@ def test_collection_health_and_archive_are_both_written(tmp_path, monkeypatch):
     assert doc["coverage"]["race_count"] == status["research_races"] == 1
     assert status["fetch_counts"]["stt"] == 1
     assert status["forecast_eligibility"] == "not_certified_by_archived_sources"
+
+
+def test_changed_preview_gets_its_actual_capture_not_the_races_old_first_seen():
+    first=datetime(2026,10,23,0,20,tzinfo=timezone.utc)
+    old=build(date(2026,10,23),fixtures(),collected_at=first)
+    same=build(date(2026,10,23),fixtures(),old,collected_at=first+timedelta(minutes=10))
+    assert same["records"][0]["preview_captured_at_utc"]==first.isoformat()
+    changed=fixtures();changed["tkz"][0]["艇1_展示タイム"]="6.65"
+    later=first+timedelta(hours=1)
+    new=build(date(2026,10,23),changed,old,collected_at=later)
+    a,b=old["records"][0],new["records"][0]
+    assert a["first_seen_at_utc"]==b["first_seen_at_utc"]
+    assert b["preview_captured_at_utc"]==later.isoformat()
+    assert a["preview_sha256"]!=b["preview_sha256"]
+
+
+def test_previews_only_does_not_request_result_or_payout_feeds(tmp_path, monkeypatch):
+    import sys
+    import scripts.ingest_boatracecsv_exhibition as exporter
+    requested=[];data=fixtures()
+    def fetch(name,day):
+        requested.append(name)
+        assert name not in ('result','payout')
+        return data[name]
+    monkeypatch.setattr(exporter,'fetch',fetch)
+    path=tmp_path/'2026-10-23.json'
+    monkeypatch.setattr(sys,'argv',['ingest','--date','2026-10-23','--output',str(path),'--previews-only'])
+    exporter.main()
+    assert set(requested)=={'stt','tkz','sui','original'}
+
+
+def test_bad_feed_rows_are_counted_without_stopping_valid_venues():
+    data=fixtures()
+    for code in ('202610230001','202610232501','202610231413'):
+        st={**data['stt'][0],'レースコード':code}
+        tk={**data['tkz'][0],'レースコード':code}
+        data['stt'].append(st);data['tkz'].append(tk)
+    result=build(date(2026,10,23),data)
+    assert result['coverage']['race_count']==1
+    assert result['rejected_rows']['invalid_race_identity']==3
+    data=fixtures();data['stt'][0]['艇6_コース']='1'
+    result=build(date(2026,10,23),data)
+    assert result['coverage']['race_count']==0
+    assert result['rejected_rows']['invalid_or_incomplete_six_boat_preview']==1

@@ -15,11 +15,12 @@ const MAX_SOURCE_LAG_MS=45*60*1000;
 const hash=value=>crypto.createHash('sha256').update(JSON.stringify(value),'utf8').digest('hex');
 const dateAt=(day,clock)=>Date.parse(day+'T'+clock+':00+09:00');
 const parseDate=iso=>Date.parse(iso);
-function validateBets(bets,modelVersion){
+function validateBets(bets,modelVersion,day){
  const free=modelVersion==='four-factor-v1.5-point-free-untrained',unit=free?100:1000;
- return Array.isArray(bets)&&bets.length>=(free?1:4)&&bets.length<=(free?120:12)&&
+ const expanded=typeof modelVersion==='string'&&modelVersion.startsWith('four-factor-')&&day>='2026-10-29';
+ return Array.isArray(bets)&&bets.length>=(free?1:4)&&bets.length<=(free?120:expanded?20:12)&&
     new Set(bets.map(x=>x.combination)).size===bets.length&&
-    bets.every(x=>/^[1-6]-[1-6]-[1-6]$/.test(x.combination)&&Number.isInteger(x.virtual_yen)&&x.virtual_yen>=unit&&(!free||x.virtual_yen%unit===0))&&
+    bets.every(x=>/^[1-6]-[1-6]-[1-6]$/.test(x.combination)&&new Set(x.combination.split('-')).size===3&&Number.isSafeInteger(x.virtual_yen)&&x.virtual_yen>=unit&&(!free||x.virtual_yen%unit===0))&&
     bets.reduce((s,b)=>s+b.virtual_yen,0)===50000;
 }
 function run(live,earlier,nowMs){
@@ -45,7 +46,7 @@ function run(live,earlier,nowMs){
    const fixedAt=parseDate(race.frozen_at_utc);
    // No original evidence after the cutoff, and not before our experiment.
    if(!Number.isFinite(fixedAt)||fixedAt>cutoff-MIN_CUTOFF_LEAD_MS||fixedAt>nowMs) {errors++;continue}
-   if(!validateBets(race.bets,race.model_version)){errors++;continue}
+   if(!validateBets(race.bets,race.model_version,day)){errors++;continue}
    let newTrial;
    try{
       newTrial=engine.forecast({

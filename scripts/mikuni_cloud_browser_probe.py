@@ -1,7 +1,7 @@
-"""Read-only browser reachability of JLC Mikuni PC page on GitHub-hosted runner.
+"""Official Mikuni replay selection and bounded in-memory frame research.
 
-No user PC, player click, video download, HLS scraping or DRM bypass.
-Only aggregate UI counts are emitted, no site URLs, images or credentials.
+No user PC, stream extraction or DRM bypass. Optional --try-player uses
+the visible official archive; only numeric audit data leaves memory.
 """
 import argparse
 import asyncio
@@ -13,6 +13,10 @@ from datetime import date
 ENTRY = "https://livebb.jlc.ne.jp/bb_top/new_bb/index.php?tpl=10"
 SCHEMA = "boatlabs.mikuni_cloud_browser_probe.v1"
 ARCHIVE = "https://livebb.jlc.ne.jp/bb_top/sp_bb/tvod_10.php"
+REPLAY_PATHS = frozenset({
+    "/bb_top/sp_bb/streamer/streamer26pi.php",
+    "/bb_top/sp_bb/streamer/streamer26pj.php",
+})
 
 
 def classify(report):
@@ -20,6 +24,8 @@ def classify(report):
         return "OFFICIAL_PC_SITE_UNAVAILABLE"
     if not report["venue_query_verified"]:
         return "WRONG_VENUE_NOT_TRUSTED"
+    if report.get("exact_day_race_verified"):
+        return report.get("player_status", "VERIFIED_REPLAY_NO_VIDEO")
     if report["video_elements"]:
         return "VIDEO_ELEMENT_FOUND_REPLAY_NOT_VERIFIED"
     if report["exhibition_menu_candidates"]:
@@ -59,7 +65,7 @@ async def inspect_archive(context, day):
         if not result["archive_site_loaded"]:
             return result
         await page.wait_for_timeout(2000)
-        data = await page.evaluate("""target=>{
+        data = await page.evaluate(r"""target=>{
           const srcIsOne=img=>/(?:^|\/)1R\.(?:png|gif)(?:\?|$)/i.test(
             img.getAttribute('src')||'');
           const one=[...document.images].filter(srcIsOne);
@@ -104,14 +110,35 @@ async def inspect_archive(context, day):
 
 def verified_player_page(url, day, race):
     """Accept only the official replay URL obtained after a real UI click."""
-    parsed = urlsplit(url)
+    try:
+        if date.fromisoformat(day).isoformat() != day:
+            return False
+        parsed = urlsplit(url)
+        port = parsed.port
+    except (ValueError, TypeError):
+        return False
+    if isinstance(race, bool) or not isinstance(race, int) or race not in range(1, 13):
+        return False
     if (parsed.scheme != "https" or parsed.hostname != "livebb.jlc.ne.jp" or
-            parsed.path != "/bb_top/sp_bb/streamer/streamer26pi.php"):
+            parsed.path not in REPLAY_PATHS or parsed.username is not None or
+            parsed.password is not None or port not in (None, 443) or parsed.fragment):
         return False
     params = parse_qs(parsed.query, keep_blank_values=True)
     expected = {"tenji": "1", "jo": "10", "race": f"{race:02d}",
                 "date": day.replace("-", "")}
     return all(params.get(key) == [value] for key, value in expected.items())
+
+
+def verified_player_surfaces(available, day, race):
+    """Deduplicate a tab and its main frame, but preserve real ambiguity."""
+    matches = {}
+    for tab, frame, url in available:
+        if not verified_player_page(url, day, race):
+            continue
+        surface = None if frame is getattr(tab, "main_frame", None) else frame
+        matches.setdefault((id(tab), id(surface) if surface is not None else None),
+                           (tab, surface))
+    return list(matches.values())
 
 
 async def try_replay_from_archive(context, day, race):
@@ -271,15 +298,16 @@ async def try_replay_from_archive(context, day, race):
             result["player_status"]="TARGET_IMAGE_NOT_VISIBLE_NO_CLICK"
             return result
         point={"x":box["x"]+box["width"]/2,"y":box["y"]+box["height"]/2}
-        hit=await page.evaluate("""point=>{
-          const el=document.elementFromPoint(point.x,point.y);
+        hit=await page.evaluate("""args=>{
+          const el=document.elementFromPoint(args.x,args.y);
           if(!el)return false;
           const imgIs=e=>e && e.tagName==='IMG' &&
-            /(?:^|\/)1R[.]png(?:[?]|$)/i.test(e.getAttribute('src')||'');
+            new RegExp('(?:^|/)' + args.race + 'R[.](?:png|gif)(?:[?]|$)', 'i')
+              .test(e.getAttribute('src')||'');
           if(imgIs(el))return true;
           const anchor=el.closest('a');
           return !!anchor && [...anchor.querySelectorAll('img')].some(imgIs);
-        }""",point)
+        }""",{**point, "race": race})
         result["target_click_hit_verified"]=bool(hit)
         if not hit:
             result["player_status"]="RACE_ICON_HIT_NOT_VERIFIED_NO_CLICK"
@@ -330,8 +358,7 @@ async def try_replay_from_archive(context, day, race):
                         available.append((tab, candidate, candidate.url))
                 except Exception:
                     pass
-            matches=[(tab, frame) for tab, frame, url in available
-                     if verified_player_page(url, day, race)]
+            matches=verified_player_surfaces(available, day, race)
             if len(matches)==1:
                 player=matches[0][0]
                 result["player_frame_nested"]=matches[0][1] is not None
@@ -343,10 +370,10 @@ async def try_replay_from_archive(context, day, race):
             urlsplit(url).hostname=="livebb.jlc.ne.jp" for _,_,url in available)
         result["official_player_path_candidates"]=sum(
             urlsplit(url).hostname=="livebb.jlc.ne.jp" and
-            urlsplit(url).path=="/bb_top/sp_bb/streamer/streamer26pi.php"
+            urlsplit(url).path in REPLAY_PATHS
             for _,_,url in available)
         result["browser_surface_kinds"]=[
-            "OFFICIAL_REPLAY" if urlsplit(tab.url).path=="/bb_top/sp_bb/streamer/streamer26pi.php"
+            "OFFICIAL_REPLAY" if urlsplit(tab.url).path in REPLAY_PATHS
             else "OFFICIAL_ARCHIVE" if urlsplit(tab.url).path.endswith("/tvod_10.php")
             else "OFFICIAL_ENTRY" if urlsplit(tab.url).path.endswith("/index.php")
             else "BROWSER_INTERNAL" if urlsplit(tab.url).scheme not in ("http","https")
@@ -364,11 +391,17 @@ async def try_replay_from_archive(context, day, race):
             try:
                 sample=await frame.evaluate("""async()=>{
                   const vs=[...document.querySelectorAll('video')];
+                  if((document.body.innerText||'').includes('この動画の視聴は許可されていません'))
+                    return {count:vs.length,started:false,advanced:false,access_denied:true};
                   if(vs.length!==1)return {count:vs.length,started:false,advanced:false};
                   const v=vs[0],before=v.currentTime;
                   let started=false;
                   if(v.paused){
-                    try{await v.play();started=true;}catch(e){
+                    try{
+                      await Promise.race([v.play(),new Promise((_,reject)=>
+                        setTimeout(()=>reject(new Error('play_timeout')),3000))]);
+                      started=true;
+                    }catch(e){
                       return {count:1,started:true,advanced:false};
                     }
                   }
@@ -379,6 +412,10 @@ async def try_replay_from_archive(context, day, race):
                 result["video_element_count"] += int(sample["count"])
                 result["video_play_invoked"] |= bool(sample["started"])
                 result["video_time_advanced"] |= bool(sample["advanced"])
+                if sample.get("access_denied"):
+                    result["player_status"]="OFFICIAL_PLAYER_VIEWING_NOT_PERMITTED"
+                    result["site_reported_viewing_not_permitted"]=True
+                    return result
             except Exception:
                 pass
         if result["video_time_advanced"]:

@@ -113,3 +113,19 @@ def test_capture_evidence_is_bound_to_the_actual_preview_not_the_race_first_seen
     assert inject(race(),sample,now,"18",3)[1] is None
     sample=row();sample["boats"][0]["exhibition_time"]=6.5
     assert inject(race(),sample,now,"18",3)[1] is None
+
+
+def test_changed_time_is_reflected_even_when_st_feed_timestamp_is_unchanged():
+    first,_,_=build(None,source(),datetime(2026,10,23,11,12,tzinfo=JST),"api",
+                    exhibition_rows={row()["race_code"]:row()})
+    old=deepcopy(first["race_records"]["18-3"]["versions"])
+    revised=row();revised["boats"][2]["exhibition_time"]=6.53
+    revised["preview_captured_at_utc"]="2026-10-23T02:13:00+00:00"
+    revised["preview_sha256"]=preview_signature(revised)
+    updated,view,status=build(first,source(),datetime(2026,10,23,11,14,tzinfo=JST),"api",
+                             exhibition_rows={revised["race_code"]:revised})
+    versions=updated["race_records"]["18-3"]["versions"]
+    assert status["new_exhibition"]==1 and status["revised_exhibition"]==1
+    assert versions[:-1]==old
+    assert versions[-1]["racers"][2]["exhibition_time"]==6.53
+    assert versions[-1]["exhibition_origin"]["measurement_sha256"]==revised["preview_sha256"]

@@ -758,10 +758,15 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 preview_ready = selected_source != "unavailable"
                 existing_exhibition = [v for v in record["versions"] if v["phase"] == "exhibition"]
                 previous_csv_time = (existing_exhibition[-1].get("exhibition_origin") or {}).get("observed_at_jst") if existing_exhibition else None
+                previous_measurement = (existing_exhibition[-1].get("exhibition_origin") or {}).get("measurement_sha256") if existing_exhibition else None
+                changed_measurement = bool(selected_csv_origin
+                    and selected_csv_origin.get("measurement_sha256")
+                    and selected_csv_origin["measurement_sha256"] != previous_measurement)
                 revision = bool(
                     selected_csv_origin and existing_exhibition
                     and len(existing_exhibition) < 3
-                    and (not previous_csv_time or previous_csv_time < selected_csv_origin["observed_at_jst"])
+                    and (changed_measurement or not previous_csv_time
+                         or previous_csv_time < selected_csv_origin["observed_at_jst"])
                 )
                 if preview_ready and ("exhibition" not in phases or revision):
                     origin_url = selected_csv_origin and "https://boatracecsv.github.io/docs/data/previews.html" or source_url

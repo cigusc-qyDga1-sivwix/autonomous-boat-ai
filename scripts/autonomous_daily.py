@@ -426,7 +426,8 @@ def promoted_v09(venue: str, phase: str, racers: list[dict],
                  frozen_at_utc: str, four_factor: bool = False, head_coverage: bool = False,
                  postrace_conditional: bool = False, venue_tactics: bool = False, point_free: bool = False,
                  role_skill_trial: bool = False,
-                 role_skill_preserve_heads: bool = False) -> dict:
+                 role_skill_preserve_heads: bool = False,
+                 venue_motor_exhibition_trial: bool = False) -> dict:
     """Invoke one explicit model identity; never fall back on bridge failure."""
     inputs = {
         "venue": venue, "phase": phase,
@@ -443,6 +444,7 @@ def promoted_v09(venue: str, phase: str, racers: list[dict],
         "role_skill_shadow_trial": bool(role_skill_trial and four_factor),
         "role_skill_head_preserved_trial": bool(role_skill_trial and four_factor
                                                 and role_skill_preserve_heads),
+        "venue_motor_exhibition_shadow_trial": bool(venue_motor_exhibition_trial and four_factor),
     }
     try:
         job = subprocess.run(
@@ -549,6 +551,9 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     venue_active = postrace_active and venue != "江戸川" and now.astimezone(UTC) >= VENUE_TACTICS_ACTIVATION_UTC
     point_free_active = cutoff.date() == POINT_FREE_DATE and now.astimezone(JST).date() == POINT_FREE_DATE
     role_skill_active = four_factor and cutoff.date() >= date(2026, 10, 31) and now.astimezone(JST).date() >= date(2026, 10, 31)
+    motor_exhibition_shadow_active = (four_factor and phase == "exhibition"
+                                      and cutoff.date() >= date(2026, 11, 2)
+                                      and now.astimezone(JST).date() >= date(2026, 11, 2))
     new_primary = cutoff.date() >= WAKE_PROMOTION_DATE
     if new_primary:
         same_time_old = (promoted_v09(venue, phase, racers, profile, selected_weather, frozen_at) if four_factor else
@@ -570,7 +575,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
                                 role_skill_trial=role_skill_active,
                                 role_skill_preserve_heads=(role_skill_active
                                     and cutoff.date() >= date(2026, 11, 2)
-                                    and now.astimezone(JST).date() >= date(2026, 11, 2)))
+                                    and now.astimezone(JST).date() >= date(2026, 11, 2)),
+                                venue_motor_exhibition_trial=motor_exhibition_shadow_active)
         chosen_model = promoted["model_version"]
     else:
         promoted = promoted_v07(venue, phase, racers, profile, selected_weather, frozen_at)
@@ -602,6 +608,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     body = {
         "model_version": chosen_model,
         **({"role_skill_shadow": promoted["role_skill_shadow"]} if promoted.get("role_skill_shadow") else {}),
+        **({"venue_motor_exhibition_shadow": promoted["venue_motor_exhibition_shadow"]}
+           if promoted.get("venue_motor_exhibition_shadow") else {}),
         **({"point_free_control": promoted["point_free_control"],
             "point_free_provenance": promoted["point_free_provenance"]} if point_free_active else {}),
         **({"head_coverage_control": promoted["head_coverage_control"]} if promoted.get("head_coverage_control") else {}),
@@ -865,7 +873,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "start_v07", "coupled_v06", "wake_v09", "four_factor", "racer_context_upgrade", "model_upgrade", "primary_model_ab", "head_course_shares",
                       "role_coverage", "role_changes", "head_coverage_control", "postrace_conditional_v13",
                       "postrace_conditional_control", "venue_tactics_v2", "venue_tactics_ab", "point_free_control", "point_free_provenance",
-                      "role_skill_shadow",
+                      "role_skill_shadow", "venue_motor_exhibition_shadow",
                       "relative_scores_uncalibrated"):
             if extra in current:
                 r[extra] = current[extra]

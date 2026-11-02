@@ -97,7 +97,7 @@ function panel(r){
    '<details><summary>場別モーター×展示 試験買い目（'+vm.trial_bets.length+'点・仮想5万円）</summary>'+
    '<p>正式：'+(vm.control_bets||[]).map(b=>esc(b.combination)).join(' / ')+'</p>'+
    '<p>試験：'+vm.trial_bets.map(b=>esc(b.combination)).join(' / ')+'</p>'+
-   '<p>買い目・配分変更：'+(vm.bet_changes?'あり':'なし')+' ／ 点数一致：'+(vm.point_count_equal?'はい':'いいえ')+'</p></details>':'';
+   '<p>買い目・配分変更：'+(vm.bet_changes?'あり':'なし')+' ／ 評価スコア・表示順の変化：'+(vm.score_or_order_changes?'あり':'なし')+' ／ 点数一致：'+(vm.point_count_equal?'はい':'いいえ')+'</p></details>':'';
  const motorHTML=vm?
    '<section class="card card-pad"><h3>場別モーター×展示の一致度（試験・正式とは別）</h3>'+
    '<p class="help">状態：'+esc(vm.status)+' ／ 対象場：'+esc(vm.venue||'未取得')+

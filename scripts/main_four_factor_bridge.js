@@ -21,6 +21,10 @@ function validBets(bets,maxPoints=12){
     x.virtual_yen%1000===0)&&
   bets.reduce((s,x)=>s+x.virtual_yen,0)===50000;
 }
+// Compare actual 3連単 combinations and virtual allocations, not score drift or display order.
+function ticketSignature(bets){
+ return JSON.stringify(bets.map(b=>[b.combination,b.virtual_yen]).sort((a,b)=>a[0].localeCompare(b[0])));
+}
 function run(input){
  if(!input||typeof input!=='object'||!Array.isArray(input.racers)||
     input.racers.length!==6)throw Error('Six complete pre-cutoff racers required');
@@ -106,7 +110,8 @@ function run(input){
      frozen_at_utc:input.frozen_at_utc,
      same_inputs_except_shadow:true,
      point_count_equal:result.bets.length===shadow.bets.length,
-     bet_changes:JSON.stringify(result.bets)!==JSON.stringify(shadow.bets),
+     bet_changes:ticketSignature(result.bets)!==ticketSignature(shadow.bets),
+     score_or_order_changes:JSON.stringify(result.bets)!==JSON.stringify(shadow.bets),
      no_additional_stake:true,not_formal:true
    };
   }catch(_){
@@ -169,5 +174,5 @@ function main(){
   process.stdout.write(JSON.stringify(payload)+'\n');
  }catch(e){process.stderr.write('MAIN_FOUR_FACTOR_BRIDGE: '+String(e?.message||e)+'\n');process.exitCode=1;}
 }
-module.exports={run,validBets};
+module.exports={run,validBets,ticketSignature};
 if(require.main===module)main();

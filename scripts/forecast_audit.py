@@ -17,6 +17,12 @@ JST = timezone(timedelta(hours=9))
 RESEARCH_BUDGET = 50_000
 
 
+def _ticket_signature(bets: list[dict]) -> tuple:
+    """Order and relative scores are not a virtual 3連単 ticket change."""
+    return tuple(sorted(((b.get('combination'), b.get('virtual_yen')) for b in bets),
+                        key=lambda row: row[0]))
+
+
 def _metrics(rows: list[dict]) -> dict:
     n = len(rows)
     hit = sum(x["stage"] == "hit" for x in rows)
@@ -157,6 +163,15 @@ def analyze(dataset: dict) -> dict:
     all_count = dataset.get("listed_races") or 0
     forecast_count = len(raw)
     exhibition_count = sum(x.get("phase") == "exhibition" for x in raw)
+    motor_shadows = [r["venue_motor_exhibition_shadow"] for r in raw
+                     if isinstance(r.get("venue_motor_exhibition_shadow"), dict)]
+    motor_comparable = [s for s in motor_shadows
+                        if isinstance(s.get("control_bets"), list)
+                        and isinstance(s.get("trial_bets"), list)]
+    motor_ticket_deltas = [
+        _ticket_signature(s["control_bets"]) != _ticket_signature(s["trial_bets"])
+        for s in motor_comparable
+    ]
     report = {
         "audit_version": "1.0",
         "event_date": day, "source_updated_at_utc": dataset.get("updated_at_utc"),
@@ -175,6 +190,23 @@ def analyze(dataset: dict) -> dict:
             "weather_adjusted_forecasts": sum(bool((x.get("weather_adjustment") or {}).get("applied")) for x in raw),
         },
         "metrics": summary,
+        "motor_exhibition_shadow": {
+            "generated": len(motor_shadows),
+            "comparable": len(motor_comparable),
+            "applied": sum(s.get("applied") is True for s in motor_shadows),
+            "actual_ticket_or_allocation_changes": sum(motor_ticket_deltas),
+            "legacy_bet_changes_flag_mismatches": sum(
+                bool(s.get("bet_changes")) != changed
+                for s, changed in zip(motor_comparable, motor_ticket_deltas)),
+            "status_counts": dict(sorted(Counter(
+                s.get("status", "unknown") for s in motor_shadows).items())),
+            "complete_six_boat_motor": sum(
+                s.get("six_boat_motor_complete") is True for s in motor_shadows),
+            "metric_coverage": dict(sorted(Counter(
+                metric for s in motor_shadows
+                for metric in (s.get("metric_coverage") or [])).items())),
+            "warning": "Shadow-only; historical frozen change flags may include score-only drift. No formal pick or payout is changed.",
+        },
         "bias": {
             "first_bet_head_1_all_forecasts": all_bet_heads["1"],
             "first_bet_head_1_verified": head1,

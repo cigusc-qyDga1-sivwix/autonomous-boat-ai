@@ -692,6 +692,24 @@ def context_quality(racers: list[dict]) -> int:
                if key in fields)
 
 
+def safe_to_append_pre_cutoff(snapshot: dict, cutoff: datetime, margin_seconds: int,
+                              observed_now: datetime) -> bool:
+    """Fail closed if a nationwide prediction finished after the safe cutoff.
+
+    A job can start before cutoff and spend time inside the Node bridge. The
+    initial per-race clock is not sufficient to authorize appending its result.
+    The frozen timestamp AND the fresh completion clock must be safe.
+    """
+    try:
+        frozen = datetime.fromisoformat(snapshot["frozen_at_utc"])
+        if frozen.tzinfo is None or observed_now.tzinfo is None:
+            return False
+        limit = cutoff - timedelta(seconds=margin_seconds)
+        return frozen < limit and observed_now < limit
+    except (KeyError, ValueError, TypeError, AttributeError):
+        return False
+
+
 def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
           weather_by_venue: dict | None = None, exhibition_rows: dict | None = None,
           enforce_wall_clock: bool = False, racer_context_rows: dict | None = None) -> tuple[dict, dict, dict]:
@@ -756,8 +774,12 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                              FOUR_FACTOR_MODEL if cutoff.date() >= FOUR_FACTOR_DATE else MAIN_WAKE_MODEL)
             if runtime_now.astimezone(JST) < cutoff - timedelta(seconds=margin) and valid_entrants(race):
                 if "baseline" not in phases:
-                    record["versions"].append(prediction(race, VENUES[venue_code], n,
-                                                         "baseline", runtime_now, source_url, nearby))
+                    baseline = prediction(race, VENUES[venue_code], n,
+                                          "baseline", runtime_now, source_url, nearby)
+                    completed_at = datetime.now(UTC) if enforce_wall_clock else now
+                    if not safe_to_append_pre_cutoff(baseline, cutoff, margin, completed_at):
+                        continue  # Historical baseline remains untouched; never backdate.
+                    record["versions"].append(baseline)
                     new_baseline += 1
                 code = f"{local_day.replace('-', '')}{int(venue_code):02d}{n:02d}"
                 candidate, selected_csv_origin, selected_source = select_exhibition_source(
@@ -775,6 +797,9 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                     origin_url = selected_csv_origin and "https://boatracecsv.github.io/docs/data/previews.html" or source_url
                     new = prediction(candidate, VENUES[venue_code], n,
                                      "exhibition", (datetime.now(UTC) if enforce_wall_clock else now), origin_url, nearby)
+                    completed_at = datetime.now(UTC) if enforce_wall_clock else now
+                    if not safe_to_append_pre_cutoff(new, cutoff, margin, completed_at):
+                        continue  # Keep the prior pre-cutoff version; no late exhibition.
                     before = record["versions"][-1] if record["versions"] else None
                     if before:
                         prev_bets = {b["combination"]: b["virtual_yen"] for b in before["bets"]}
@@ -825,6 +850,9 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                         candidate_now, VENUES[venue_code], n,
                         phase_to_promote, latest_timestamp, source_url, nearby
                     )
+                    completed_at = datetime.now(UTC) if enforce_wall_clock else now
+                    if not safe_to_append_pre_cutoff(upgrade, cutoff, margin, completed_at):
+                        continue  # No delayed upgrade, regardless of the initial clock.
                     # Unique immutable record, not a rewrite of earlier SHA.
                     upgrade["model_upgrade"] = {
                         "previous_sha256": latest_before["sha256"],

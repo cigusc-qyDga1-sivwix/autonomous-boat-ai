@@ -47,9 +47,22 @@ for(const name of names){
  assert.deepEqual(trial.venue_motor_exhibition_shadow.control_bets,control.bets);
  assert.equal(trial.venue_motor_exhibition_shadow.same_inputs_except_shadow,true);
  assert.equal(trial.venue_motor_exhibition_shadow.no_additional_stake,true);
+ const motorShadow=trial.venue_motor_exhibition_shadow;
+ assert.equal(motorShadow.bet_changes,
+  bridge.ticketSignature(motorShadow.control_bets)!==bridge.ticketSignature(motorShadow.trial_bets));
+ assert.equal(motorShadow.score_or_order_changes,
+  JSON.stringify(motorShadow.control_bets)!==JSON.stringify(motorShadow.trial_bets));
  assert.ok(bridge.validBets(trial.venue_motor_exhibition_shadow.trial_bets,20));
  if(name==='江戸川')assert.deepEqual(trial.venue_motor_exhibition_shadow.trial_bets,control.bets);
 }
+assert.equal(bridge.ticketSignature([
+ {combination:'1-2-3',virtual_yen:5000,relative_score:.1},
+ {combination:'2-1-3',virtual_yen:3000,relative_score:.2}]),
+ bridge.ticketSignature([
+ {combination:'2-1-3',virtual_yen:3000,relative_score:.25},
+ {combination:'1-2-3',virtual_yen:5000,relative_score:.11}]));
+assert.notEqual(bridge.ticketSignature([{combination:'1-2-3',virtual_yen:5000}]),
+ bridge.ticketSignature([{combination:'1-2-3',virtual_yen:6000}]));
 const base=fixture();
 const check=engine.evaluate(base);
 assert.ok(check.rows[0].multipliers.straight>1);

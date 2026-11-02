@@ -8,6 +8,7 @@
 const fs=require('node:fs');
 require('../app/four-factor.js');
 require('../app/venue-tactics-v2.js');
+require('../app/venue-motor-exhibition.js');
 require('../app/tactical-1m.js');
 require('../app/role-skill-shadow.js');
 const model=globalThis.BoatTacticalModel;
@@ -78,8 +79,45 @@ function run(input){
     status:'unavailable',reason:'isolated_shadow_computation_failed',
     model_role:'shadow_validation',no_additional_stake:true};}
  }
+ // Same-instant matched shadow, NEVER a replacement for the formal pick.
+ // Failure is isolated: do not suppress the main forecast.
+ let motorExhibitionShadow=null;
+ if(input.venue_motor_exhibition_shadow_trial===true){
+  try{
+   const shadow=forecast({
+     venue:input.venue,phase:input.phase,racers:input.racers,
+     weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
+     frozen_at_utc:input.frozen_at_utc,
+     surface_trial_disabled:input.surface_trial_disabled===true,
+     venue_tactics_disabled:input.venue_tactics_disabled===true,
+     venue_motor_exhibition_shadow_trial:true
+   });
+   const detail=shadow.metadata?.venue_motor_exhibition_v1;
+   if(!detail||detail.version!=='venue-motor-exhibition-shadow-v0.1'||
+      detail.pre_cutoff_only!==true||detail.result_data_used!==false||
+      !validBets(shadow.bets,model.ticketMaxPoints(input)))
+     throw Error('invalid motor/exhibition shadow provenance or tickets');
+   motorExhibitionShadow={
+     ...detail,status:detail.status,
+     trial_model_version:'venue-motor-exhibition-v0.1-shadow-untrained',
+     control_model_version:result.model,
+     control_bets:result.bets,
+     trial_bets:shadow.bets,
+     frozen_at_utc:input.frozen_at_utc,
+     same_inputs_except_shadow:true,
+     point_count_equal:result.bets.length===shadow.bets.length,
+     bet_changes:JSON.stringify(result.bets)!==JSON.stringify(shadow.bets),
+     no_additional_stake:true,not_formal:true
+   };
+  }catch(_){
+   motorExhibitionShadow={version:'venue-motor-exhibition-shadow-v0.1',
+     status:'unavailable',reason:'isolated_shadow_computation_failed',
+     model_role:'shadow_validation',not_formal:true,no_additional_stake:true};
+  }
+ }
  return {
   model_version:result.model,
+  ...(motorExhibitionShadow?{venue_motor_exhibition_shadow:motorExhibitionShadow}:{}),
   ...(roleSkillShadow?{role_skill_shadow:roleSkillShadow}:{}),
   venue_tactics_v2:venueMeta,
   venue_tactics_ab:venueAware?{

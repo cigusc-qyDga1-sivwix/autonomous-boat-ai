@@ -160,6 +160,11 @@ function forecast(input){
  const metricMean=Object.fromEntries(validMetrics.map(k=>[k,mean(k)]));
  const factorModel=fourFactor?global.BoatFourFactor?.evaluate(input):null;
  if(fourFactor&&!factorModel)throw Error('Four-factor engine unavailable');
+ // Only the independent forward shadow may change the movement scenarios.
+ const motorExhibition=input.venue_motor_exhibition_shadow_trial===true?
+   global.BoatVenueMotorExhibition?.evaluate(input):null;
+ if(input.venue_motor_exhibition_shadow_trial===true&&!motorExhibition)
+   throw Error('Venue motor/exhibition shadow engine unavailable');
  const move=v.map((x,i)=>{
   if(fourFactor){const score=factorModel.rows[i].combined_multiplier;return {go:score,turn:score,straight:score,overall:score};}
   let skill=Math.exp(clamp(.145*(x.win-meanWin),-.45,.45));
@@ -177,6 +182,14 @@ function forecast(input){
   return {go:clamp(go,.38,2.8),turn:clamp(turn,.35,2.8),
           straight:clamp(straight,.35,2.8),overall:clamp(skill*motor,.3,2.8)};
  });
+ if(motorExhibition?.status==='ready'){
+   motorExhibition.rows.forEach((row,i)=>{
+     const w=row.multipliers;
+     move[i]={go:move[i].go*w.go,turn:move[i].turn*w.turn,
+       straight:move[i].straight*w.straight,
+       overall:move[i].overall*w.overall};
+   });
+ }
  // V0.2 research only. Start pressure is relative to the neighboring actual
  // *course*, not the boat number. No result, odds or future data is consulted.
  const outsideAttacks=[4,5,6].map(course=>{
@@ -818,6 +831,7 @@ function forecast(input){
        proof_note:'Untrained relative model, not calibrated win probabilities. No blanket exterior picks.'
      }}:{}),
      ...(openChasers?{venue_surface_v1:venueSurface}:{}),
+     ...(motorExhibition?{venue_motor_exhibition_v1:motorExhibition}:{}),
      ...(venueAware?{venue_tactics_v2:({
        version:venueTactics.version,venue:venueTactics.venue,
        excluded:venueTactics.excluded,eligible:venueTactics.eligible,

@@ -85,7 +85,28 @@ function panel(r){
   role.bets.map(b=>'<tr><td>'+esc(b.combination)+'</td><td>'+esc(Number(b.virtual_yen).toLocaleString('ja-JP'))+'円</td></tr>').join('')+'</tbody></table></details>'+
   '<p class="help"><strong>正式予想・正式収支には加算しません。</strong> 公式結果確定後に別枠でA/B比較します。</p></section>':
   role?.status==='unavailable'?'<section class="card card-pad"><p class="help">選手着順適性の試験は未生成。正式予想は変更していません。</p></section>':'';
- return '<section class="card card-pad four-factor-panel"><h3>4要素の基礎評価</h3><p>選手60・モーター25・展示10・気象5</p><div class="boat-entry-overflow"><table class="bets-table"><thead><tr><th>艇</th>'+labels.map(x=>'<th>'+x+'</th>').join('')+'<th>合成</th></tr></thead><tbody>'+rows+'</tbody></table></div><p class="help">表示は重み適用後の倍率。欠損は中立の×1とし、取得値を捏造しません。この基礎評価と実進入・艇間連動から買い目を作ります。比率は試験設定で、的中確率や金銭的期待値ではありません。</p>'+policyHTML+chaserHTML+'</section>'+roleHTML;
+ const vm=r?.venue_motor_exhibition_shadow;
+ const vmRows=Array.isArray(vm?.rows)?vm.rows:[];
+ const multiplier=x=>typeof x==='number'&&Number.isFinite(x)?'×'+x.toFixed(3):'未取得';
+ const pct=x=>typeof x==='number'&&Number.isFinite(x)?x.toFixed(1)+'%':'未取得';
+ const vmEvidence=vmRows.length===6?
+   '<div class="boat-entry-overflow"><table class="bets-table"><thead><tr><th>艇</th><th>モーター2連対率</th><th>行き足</th><th>旋回</th><th>直線</th></tr></thead><tbody>'+
+   vmRows.map(v=>'<tr><td>'+esc(v.lane)+'</td><td>'+pct(v.motor_top2_pct)+'</td><td>'+multiplier(v.multipliers?.go)+'</td><td>'+multiplier(v.multipliers?.turn)+'</td><td>'+multiplier(v.multipliers?.straight)+'</td></tr>').join('')+
+   '</tbody></table></div>':'';
+ const vmBets=vm?.status==='ready'&&Array.isArray(vm.trial_bets)?
+   '<details><summary>場別モーター×展示 試験買い目（'+vm.trial_bets.length+'点・仮想5万円）</summary>'+
+   '<p>正式：'+(vm.control_bets||[]).map(b=>esc(b.combination)).join(' / ')+'</p>'+
+   '<p>試験：'+vm.trial_bets.map(b=>esc(b.combination)).join(' / ')+'</p>'+
+   '<p>買い目・配分変更：'+(vm.bet_changes?'あり':'なし')+' ／ 点数一致：'+(vm.point_count_equal?'はい':'いいえ')+'</p></details>':'';
+ const motorHTML=vm?
+   '<section class="card card-pad"><h3>場別モーター×展示の一致度（試験・正式とは別）</h3>'+
+   '<p class="help">状態：'+esc(vm.status)+' ／ 対象場：'+esc(vm.venue||'未取得')+
+   ' ／ 6艇完備の展示指標：'+esc((vm.metric_coverage||[]).join('・')||'なし')+
+   ' ／ 周辺予報風の注意：'+(vm.wind_caution_from_nearby_forecast?'あり':'なし')+'</p>'+
+   '<p class="help">モーターの過去2連対率と当日の展示の良し悪しが同方向の場合のみ、小幅に行き足・旋回・直線を試算。展示Fで有利にしません。モーター交換・整備・使用回数・実測潮位は未接続。係数は未学習です。</p>'+
+   vmEvidence+vmBets+
+   '<p class="help"><strong>正式予想・正式収支は変更しません。</strong> 発走前に固定した試験を別集計します。</p></section>':'';
+ return '<section class="card card-pad four-factor-panel"><h3>4要素の基礎評価</h3><p>選手60・モーター25・展示10・気象5</p><div class="boat-entry-overflow"><table class="bets-table"><thead><tr><th>艇</th>'+labels.map(x=>'<th>'+x+'</th>').join('')+'<th>合成</th></tr></thead><tbody>'+rows+'</tbody></table></div><p class="help">表示は重み適用後の倍率。欠損は中立の×1とし、取得値を捏造しません。この基礎評価と実進入・艇間連動から買い目を作ります。比率は試験設定で、的中確率や金銭的期待値ではありません。</p>'+policyHTML+chaserHTML+'</section>'+roleHTML+motorHTML;
 }
 root.BoatFourFactor={evaluate,panel,WEIGHTS};
 if(typeof module!=='undefined')module.exports=root.BoatFourFactor;

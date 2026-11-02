@@ -128,7 +128,9 @@ def analyze(dataset: dict) -> dict:
         paid = exact["virtual_yen"] * p["payout_per_100"] // 100 if exact else 0
         row = {
             "venue": r["venue"], "race": r["race"],
-            "classification": r["classification"], "model_version": r.get("model_version", "unknown"),
+            "classification": r.get("classification", "unclassified"),
+            "ticket_status": r.get("ticket_status", "unclassified"),
+            "model_version": r.get("model_version", "unknown"),
             "phase": r.get("phase", "unknown"), "points": len(bets),
             "stage": stage, "actual_finish": win, "actual_head": win[0],
             "first_bet_head": bets[0]["combination"][0],
@@ -175,6 +177,8 @@ def analyze(dataset: dict) -> dict:
     report = {
         "audit_version": "1.0",
         "event_date": day, "source_updated_at_utc": dataset.get("updated_at_utc"),
+        "forecast_updated_at_utc": dataset.get("forecast_updated_at_utc"),
+        "official_evidence_at_utc": (dataset.get("official_pay_info") or {}).get("retrieved_at_utc"),
         "source": "verified BOATRACE official payouts + immutable pre-cutoff predictions",
         "sample_note": "Single-day observations, not a statistically validated lift/accuracy claim.",
         "coverage": {
@@ -224,6 +228,8 @@ def analyze(dataset: dict) -> dict:
                          for phase in ['baseline', 'exhibition']},
         },
         "by_phase": _group(verified, "phase"),
+        "by_classification": _group(verified, "classification"),
+        "by_ticket_status": _group(verified, "ticket_status"),
         "by_model": _group(verified, "model_version"),
         "by_points": _group(verified, "points"),
         "by_venue": _group(verified, "venue"),
@@ -246,6 +252,57 @@ def analyze(dataset: dict) -> dict:
         report["warnings"] = [s for s in report["warnings"] if s]
     else:
         report["warnings"] = ["Too few verified races for any reliable assessment."]
+    return report
+
+
+def frozen_projection(ledger: dict) -> dict:
+    """Project saved snapshots for audit only; never run a prediction model."""
+    if __package__:
+        from .entry_exhibition_gate import summarize_gate
+    else:
+        from entry_exhibition_gate import summarize_gate
+    day = ledger["event_date"]
+    rows, missing = [], []
+    records = ledger.get("race_records") or {}
+    for record in records.values():
+        versions = record.get("versions") or []
+        if not versions:
+            missing.append({"venue": record.get("venue"), "race": record.get("race")})
+            continue
+        snapshot = dict(versions[-1])
+        snapshot.setdefault("venue", record["venue"])
+        snapshot.setdefault("race", record["race"])
+        snapshot.setdefault("cutoff_jst", record.get("cutoff_jst"))
+        if not snapshot.get("cutoff_jst"):
+            try:
+                cutoff = datetime.fromisoformat(snapshot["cutoff_iso_jst"])
+                if cutoff.tzinfo is not None and cutoff.astimezone(JST).date().isoformat() == day:
+                    snapshot["cutoff_jst"] = cutoff.astimezone(JST).strftime("%H:%M")
+            except (KeyError, TypeError, ValueError):
+                pass
+        gate = summarize_gate(snapshot, day)
+        snapshot["ticket_status"] = "formal" if gate["final_eligible"] else "provisional"
+        rows.append(snapshot)
+    return {"event_date": day, "forecast_races": rows, "listed_races": len(records),
+            "unforecast_races": missing,
+            "updated_at_utc": ledger.get("last_updated_at_utc"),
+            "forecast_updated_at_utc": ledger.get("last_updated_at_utc")}
+
+
+def persist(directory: Path, dataset: dict, *, latest: bool = True) -> dict:
+    """Publish one audit from the exact reconciled view, including unchanged retries."""
+    report = analyze(dataset)
+    targets = [directory / "audit" / (dataset["event_date"] + ".json")]
+    if latest:
+        targets.append(directory / "audit-latest.json")
+    encoded = json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    for target in targets:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists() and target.read_text(encoding="utf-8") == encoded:
+            continue
+        temporary = target.with_name(target.name + ".tmp")
+        temporary.write_text(encoded, encoding="utf-8")
+        temporary.replace(target)
     return report
 
 

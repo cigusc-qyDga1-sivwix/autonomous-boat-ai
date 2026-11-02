@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 from scripts.autonomous_daily import APP_DATA, integrate_official, write_json
 from scripts.official_pay import fetch_official_pay
+from scripts.forecast_audit import persist as persist_audit
 
 JST = ZoneInfo("Asia/Tokyo")
 UTC = timezone.utc
@@ -88,6 +89,10 @@ def update(ledger: dict, view: dict, old: dict, pay: dict, now: datetime):
     if changed:
         updated_view["updated_at_utc"]=now.astimezone(UTC).isoformat()
         updated_view["official_results_updated_at_utc"]=now.astimezone(UTC).isoformat()
+        updated_view["result_sync"]={
+            "checked_at_utc": now.astimezone(UTC).isoformat(), "fresh_fetch": True,
+            "verified": after, "needs_review": len(updated_view.get("settlement_alerts") or {}),
+        }
     return updated_ledger,updated_view,merged,changed,{
         "date":day,"before_verified":before,"after_verified":after,
         "newly_verified":max(0,after-before),"changed":changed,
@@ -113,6 +118,10 @@ def run(directory: Path, now: datetime, fetcher=fetch_official_pay) -> dict:
     if changed:
         write_json(path,updated_ledger)
         write_json(live,updated_view)
+    # Rebuild even on an unchanged official response: this repairs an old audit
+    # without rewriting a frozen forecast or requiring another race to finish.
+    audit=persist_audit(directory,updated_view)
+    report["audit_verified"]=audit["metrics"]["verified_races"]
     report["checked_at_utc"]=now.astimezone(UTC).isoformat()
     return report
 

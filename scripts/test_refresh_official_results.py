@@ -22,7 +22,7 @@ def fixture():
     snap={"venue":"児島","race":1,"cutoff_iso_jst":DAY+"T10:00:00+09:00",
           "frozen_at_utc":"2026-10-25T00:30:00+00:00",
           "sha256":"a"*64,"model_version":"tactical-outside-start-wake-v0.9-untrained",
-          "model_role":"main","phase":"baseline",
+          "model_role":"main","phase":"baseline","cutoff_jst":"10:00","classification":"WATCH",
           "bets":copy.deepcopy(BETS)}
     return ({
       "event_date":DAY,
@@ -30,6 +30,7 @@ def fixture():
         "race":1,"versions":[snap],"payouts":[]}}},
       {"event_date":DAY,"mode":"auto-live",
        "updated_at_utc":"2026-10-25T05:00:00+00:00",
+       "forecast_updated_at_utc":"2026-10-25T05:00:00+00:00",
        "forecast_races":[copy.deepcopy(snap)],
        "official_results":{},"settlement_alerts":{}})
 
@@ -40,6 +41,26 @@ def pay(finish="4-5-1",yen=1320):
       "retrieved_at_utc":"2026-10-25T07:35:00+00:00"}
 
 class FastOfficialTests(unittest.TestCase):
+    def test_result_update_and_unchanged_retry_rebuild_the_same_audit(self):
+        ledger,view=fixture()
+        with tempfile.TemporaryDirectory() as tmp:
+            directory=Path(tmp)
+            day_path=directory/(DAY+".json");live_path=directory/"latest.json"
+            day_path.write_text(json.dumps(ledger));live_path.write_text(json.dumps(view))
+            run(directory,NOW,lambda _:pay())
+            audit_path=directory/"audit-latest.json"
+            audit=json.loads(audit_path.read_text())
+            self.assertEqual(audit["metrics"]["verified_races"],1)
+            self.assertEqual(audit["metrics"]["virtual_payout_yen"],145200)
+            self.assertEqual(audit["by_classification"]["WATCH"]["verified_races"],1)
+            before=day_path.read_bytes(),live_path.read_bytes()
+            audit_path.write_text('{"metrics":{"verified_races":0}}')
+            rerun=run(directory,NOW,lambda _:pay())
+            self.assertFalse(rerun["changed"])
+            self.assertEqual(json.loads(audit_path.read_text())["metrics"]["verified_races"],1)
+            self.assertEqual((day_path.read_bytes(),live_path.read_bytes()),before)
+            self.assertEqual(json.loads((directory/"audit"/(DAY+".json")).read_text()),json.loads(audit_path.read_text()))
+
     def test_add_only_verified_and_preserve_frozen_sha(self):
         ledger,view=fixture()
         past=copy.deepcopy(ledger)
@@ -54,6 +75,7 @@ class FastOfficialTests(unittest.TestCase):
         self.assertEqual(b["official_results"][DAY+"|児島|1"]["virtual_payout"],145200)
         self.assertEqual(view["official_results"],{})
         self.assertEqual(b["updated_at_utc"],"2026-10-25T07:35:00+00:00")
+        self.assertEqual(b["forecast_updated_at_utc"],view["forecast_updated_at_utc"])
         self.assertEqual(c["status"],"verified_by_server_fetch")
 
     def test_repeat_does_not_double_count(self):

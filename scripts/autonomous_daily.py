@@ -788,10 +788,15 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 preview_ready = selected_source != "unavailable"
                 existing_exhibition = [v for v in record["versions"] if v["phase"] == "exhibition"]
                 previous_csv_time = (existing_exhibition[-1].get("exhibition_origin") or {}).get("observed_at_jst") if existing_exhibition else None
+                previous_measurement = (existing_exhibition[-1].get("exhibition_origin") or {}).get("measurement_sha256") if existing_exhibition else None
+                changed_measurement = bool(selected_csv_origin
+                    and selected_csv_origin.get("measurement_sha256")
+                    and selected_csv_origin["measurement_sha256"] != previous_measurement)
                 revision = bool(
                     selected_csv_origin and existing_exhibition
                     and len(existing_exhibition) < 3
-                    and (not previous_csv_time or previous_csv_time < selected_csv_origin["observed_at_jst"])
+                    and (changed_measurement or not previous_csv_time
+                         or previous_csv_time < selected_csv_origin["observed_at_jst"])
                 )
                 if preview_ready and ("exhibition" not in phases or revision):
                     origin_url = selected_csv_origin and "https://boatracecsv.github.io/docs/data/previews.html" or source_url
@@ -920,6 +925,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         "event_date": local_day,
         "mode": "auto-live",
         "updated_at_utc": ledger["last_updated_at_utc"],
+        "forecast_updated_at_utc": ledger["last_updated_at_utc"],
         "timezone": "Asia/Tokyo",
         "method": ("全国24場・新規予想はv0.7スタート差＋6艇着順連動がメイン"
                    "／旧モデル固定分は不変・同時点の旧方式を別枠検証"
@@ -1334,6 +1340,15 @@ def main():
     # A successful GET with no scheduled races still writes a factual empty dashboard.
     write_json(path, ledger)
     write_json(args.out_dir / "latest.json", webapp)
+    # This record is written only by the forecast collector. Result updates
+    # cannot make an old exhibition capture look fresh to its watchdog.
+    write_json(args.out_dir / "forecast-sync-latest.json", {
+        "schema": "boatlabs.forecast_capture.v1", "event_date": day,
+        "status": "completed", "captured_at_utc": webapp["forecast_updated_at_utc"],
+        "completed_at_utc": (now if args.input_json else datetime.now(UTC)).astimezone(UTC).isoformat(),
+        "listed_races": summary["listed_races"], "forecast_races": summary["forecast_races"],
+        "final_exhibition_verified_races": webapp["final_exhibition_verified_races"],
+    })
     print(json.dumps(summary, ensure_ascii=False))
 
 

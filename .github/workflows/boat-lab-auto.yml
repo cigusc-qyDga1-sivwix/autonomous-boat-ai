@@ -100,7 +100,7 @@ jobs:
       - name: Collect exhibition measurements before forecasting
         continue-on-error: true
         run: |
-          python scripts/ingest_boatracecsv_exhibition.py
+          python scripts/ingest_boatracecsv_exhibition.py --previews-only
           python -m json.tool app/data/exhibition/status-latest.json > /dev/null
           # No results here can revise an immutable forecast or official settlement.
       - name: Collect all available venues and freeze only pre-cutoff forecasts
@@ -118,6 +118,7 @@ jobs:
       - name: Analyze research only after primary pre-cutoff revisions are frozen
         continue-on-error: true
         run: |
+          python scripts/ingest_boatracecsv_exhibition.py
           python scripts/research_outside_roles.py
           python -m scripts.research_coupling_patterns
           python -m scripts.research_wake_hypotheses
@@ -177,7 +178,7 @@ jobs:
               fi
               git fetch origin main
               git reset --hard origin/main
-              python scripts/ingest_boatracecsv_exhibition.py
+              python scripts/ingest_boatracecsv_exhibition.py --previews-only
               python scripts/autonomous_daily.py | tee boat-lab-daily-status.json
               python scripts/forecast_audit.py --input app/data/live/latest.json --out app/data/live/audit-latest.json
               DAY=$(TZ=Asia/Tokyo date +%F)

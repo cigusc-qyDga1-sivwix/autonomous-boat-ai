@@ -890,11 +890,18 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 changed_measurement = bool(selected_csv_origin
                     and selected_csv_origin.get("measurement_sha256")
                     and selected_csv_origin["measurement_sha256"] != previous_measurement)
+                # An OpenAPI preview may change after the first valid capture.
+                # Compare the actual six-boat source input against the most
+                # recently frozen version, not just a CSV timestamp.
+                live_measurements_changed = bool(
+                    selected_source == "openapi" and existing_exhibition
+                    and not numeric_exhibition_matches_snapshot(candidate, existing_exhibition[-1]))
                 revision = bool(
-                    selected_csv_origin and existing_exhibition
-                    and len(existing_exhibition) < 3
-                    and (changed_measurement or not previous_csv_time
-                         or previous_csv_time < selected_csv_origin["observed_at_jst"])
+                    existing_exhibition and len(existing_exhibition) < 3
+                    and ((selected_csv_origin
+                          and (changed_measurement or not previous_csv_time
+                               or previous_csv_time < selected_csv_origin["observed_at_jst"]))
+                         or live_measurements_changed)
                 )
                 if preview_ready and ("exhibition" not in phases or revision):
                     origin_url = selected_csv_origin and "https://boatracecsv.github.io/docs/data/previews.html" or source_url

@@ -25,7 +25,7 @@ def test_deterministic_and_normalized():
     assert a["bets_generated"] == 0
     assert abs(a["relative_score_sum"] - 1) < 1e-6
     assert len(a["scenario_assumptions"]) == 4
-    assert len(a["top_combinations"]) == 12
+    assert len(a["top_combinations"]) == 120
     assert all(len(set(x["combination"].split("-"))) == 3
                for x in a["top_combinations"])
 

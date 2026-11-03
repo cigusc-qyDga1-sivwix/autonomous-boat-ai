@@ -1,0 +1,31 @@
+name: BOAT LAB opponent response shadow CI
+on:
+  pull_request:
+    paths:
+      - 'app/counterplay-shadow.js'
+      - 'app/tests/counterplay-shadow.test.js'
+      - 'scripts/main_four_factor_bridge.js'
+      - 'scripts/replay_counterplay_shadow.js'
+      - '.github/workflows/counterplay-shadow-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Counterplay and existing forecast isolation
+        run: |
+          node --check app/counterplay-shadow.js
+          node --check scripts/replay_counterplay_shadow.js
+          node app/tests/counterplay-shadow.test.js
+          node app/tests/role-skill-shadow.test.js
+          node app/tests/four-factor.test.js
+          python -m unittest discover -s tests -p 'test_role_skill_shadow.py' -v

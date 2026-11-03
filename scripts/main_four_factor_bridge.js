@@ -11,6 +11,7 @@ require('../app/venue-tactics-v2.js');
 require('../app/venue-motor-exhibition.js');
 require('../app/tactical-1m.js');
 require('../app/role-skill-shadow.js');
+require('../app/counterplay-shadow.js');
 const model=globalThis.BoatTacticalModel;
 function validBets(bets,maxPoints=12){
  return Array.isArray(bets)&&bets.length>=4&&bets.length<=maxPoints&&
@@ -120,8 +121,16 @@ function run(input){
      model_role:'shadow_validation',not_formal:true,no_additional_stake:true};
   }
  }
+ let counterplayShadow=null;
+ if(input.counterplay_shadow_trial===true){
+  try{counterplayShadow=globalThis.BoatCounterplayShadow.run(input,result.bets);}
+  catch(_){counterplayShadow={version:'counterplay-shadow-v0.1',status:'unavailable',
+    reason:'counterplay_input_or_computation_unavailable',not_formal:true,
+    model_role:'shadow_validation',no_additional_stake:true};}
+ }
  return {
   model_version:result.model,
+  ...(counterplayShadow?{counterplay_shadow:counterplayShadow}:{}),
   ...(motorExhibitionShadow?{venue_motor_exhibition_shadow:motorExhibitionShadow}:{}),
   ...(roleSkillShadow?{role_skill_shadow:roleSkillShadow}:{}),
   venue_tactics_v2:venueMeta,

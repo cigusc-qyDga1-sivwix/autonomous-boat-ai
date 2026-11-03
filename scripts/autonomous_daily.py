@@ -121,11 +121,108 @@ def select_exhibition_source(race: dict, research_row: dict | None, now: datetim
     This helper cannot make an incomplete preview exhibition-confirmed.
     """
     if preview_complete(race):
-        return race, None, "openapi"
+        # The OpenAPI preview was fetched in the current forecast run, unlike
+        # retrospective research. Attribute it to the per-race processing clock;
+        # never claim an unknown upstream publication time.
+        cutoff = cutoff_of(race)
+        if (now.tzinfo is None or cutoff is None
+                or now.astimezone(JST) >= cutoff - timedelta(seconds=SAFE_MARGIN_SECONDS)):
+            return race, None, "unavailable"
+        captured = now.astimezone(UTC).isoformat()
+        live = {**race, "_exhibition_origin": {
+            "source": "BoatraceOpenAPI",
+            "captured_at_utc": captured,
+            "forecast_run_utc": captured,
+            "captured_before_cutoff": True,
+            "source_observation_time": "not_provided",
+            "metrics": [],
+        }}
+        return live, None, "openapi"
     bridged, csv_origin = inject(race, research_row, now, venue_code, race_number)
     if csv_origin and preview_complete(bridged):
         return bridged, csv_origin, "boatracecsv"
     return race, None, "unavailable"
+
+
+def numeric_exhibition_matches_snapshot(candidate: dict, snapshot: dict) -> bool:
+    """Fail closed if ANY displayed six-boat input differs from frozen output.
+
+    This is an input/output invariant, NOT proof that the new bets outperform
+    baseline. Check before persisting; never reconstruct an old frozen version.
+    """
+    if snapshot.get("phase") != "exhibition" or not preview_complete(candidate):
+        return False
+    origin = candidate.get("_exhibition_origin") or {}
+    if (origin.get("source") not in ("BoatraceOpenAPI", "BoatraceCSV")
+            or origin.get("captured_before_cutoff") is not True):
+        return False
+    applied = snapshot.get("racers")
+    preview = candidate["preview"]["racers"]
+    if not isinstance(applied, list) or len(applied) != 6:
+        return False
+    for lane, saved in enumerate(applied, 1):
+        if not isinstance(saved, dict) or saved.get("lane") != lane:
+            return False
+        source = preview[str(lane)]
+        for input_key, output_key in (
+                ("course_number", "course"),
+                ("exhibition_time", "exhibition_time"),
+                ("start_timing", "exhibition_st")):
+            expected, observed = number(source.get(input_key)), number(saved.get(output_key))
+            if (expected is None or observed is None
+                    or abs(expected - observed) > 0.000001):
+                return False
+        for metric, boat_values in (candidate.get("_exhibition_original") or {}).items():
+            if (not isinstance(boat_values, dict) or len(boat_values) != 6
+                    or metric not in ("lap_time", "turn_time", "straight_time")):
+                return False
+            expected = number(boat_values.get(str(lane)))
+            observed = number((saved.get("original_exhibition") or {}).get(metric))
+            if (expected is None or observed is None
+                    or abs(expected - observed) > 0.000001):
+                return False
+    return True
+
+
+def numeric_exhibition_coverage(records: dict, day: str) -> dict:
+    """Read-only per-venue outcome audit, never a new prediction or eligibility override."""
+    grouped = {}
+    totals = {
+        "listed_races": 0, "verified_exhibition": 0, "baseline_or_unverified": 0,
+        "six_boat_input_checked": 0, "openapi_source": 0,
+        "csv_source": 0, "unknown_source": 0, "actual_ticket_changes": 0,
+    }
+    for rec in records.values():
+        venue = rec["venue"]
+        row = grouped.setdefault(venue, {key: 0 for key in totals})
+        row["listed_races"] += 1
+        versions = rec.get("versions") or []
+        latest = versions[-1] if versions else None
+        verified = bool(latest and summarize_gate(latest, day).get("final_eligible"))
+        if verified:
+            row["verified_exhibition"] += 1
+            checked = bool((latest.get("exhibition_input_check") or {}).get(
+                "verified_before_freeze"))
+            row["six_boat_input_checked"] += int(checked)
+            origin = (latest.get("exhibition_origin") or {}).get("source")
+            source_key = (
+                "openapi_source" if origin == "BoatraceOpenAPI" else
+                "csv_source" if origin == "BoatraceCSV" else "unknown_source")
+            row[source_key] += 1
+            row["actual_ticket_changes"] += int(bool(
+                (latest.get("exhibition_change") or {}).get("bets_changed")))
+        else:
+            row["baseline_or_unverified"] += 1
+    for row in grouped.values():
+        for key in totals:
+            totals[key] += row[key]
+    return {
+        "scope": "immutable latest snapshots; pre-cutoff six-boat eligibility, not source availability",
+        "total": totals,
+        "by_venue": dict(sorted(grouped.items())),
+        "note": "A score/order change is not a ticket/allocation change. Old frozen snapshots "
+                "are never labeled input-checked retrospectively.",
+    }
 
 
 def valid_average_st(value) -> float | None:
@@ -724,6 +821,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
     venues_seen = set()
     weather_by_venue = weather_by_venue or {}
     new_baseline, new_exhibition, revised_exhibition, changed_exhibition = 0, 0, 0, 0
+    rejected_exhibition_input_mismatch = 0
     new_model_upgrades = 0
     exhibition_rows = exhibition_rows or {}
     race_source = (payload.get("programs") or {}).get("stadiums") or {}
@@ -792,11 +890,18 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 changed_measurement = bool(selected_csv_origin
                     and selected_csv_origin.get("measurement_sha256")
                     and selected_csv_origin["measurement_sha256"] != previous_measurement)
+                # An OpenAPI preview may change after the first valid capture.
+                # Compare the actual six-boat source input against the most
+                # recently frozen version, not just a CSV timestamp.
+                live_measurements_changed = bool(
+                    selected_source == "openapi" and existing_exhibition
+                    and not numeric_exhibition_matches_snapshot(candidate, existing_exhibition[-1]))
                 revision = bool(
-                    selected_csv_origin and existing_exhibition
-                    and len(existing_exhibition) < 3
-                    and (changed_measurement or not previous_csv_time
-                         or previous_csv_time < selected_csv_origin["observed_at_jst"])
+                    existing_exhibition and len(existing_exhibition) < 3
+                    and ((selected_csv_origin
+                          and (changed_measurement or not previous_csv_time
+                               or previous_csv_time < selected_csv_origin["observed_at_jst"]))
+                         or live_measurements_changed)
                 )
                 if preview_ready and ("exhibition" not in phases or revision):
                     origin_url = selected_csv_origin and "https://boatracecsv.github.io/docs/data/previews.html" or source_url
@@ -805,6 +910,19 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                     completed_at = datetime.now(UTC) if enforce_wall_clock else now
                     if not safe_to_append_pre_cutoff(new, cutoff, margin, completed_at):
                         continue  # Keep the prior pre-cutoff version; no late exhibition.
+                    if not numeric_exhibition_matches_snapshot(candidate, new):
+                        rejected_exhibition_input_mismatch += 1
+                        continue  # Never save a falsely 'exhibition-reflected' forecast.
+                    new["exhibition_input_check"] = {
+                        "verified_before_freeze": True,
+                        "six_boats_matched": 6,
+                        "matched_fields": ["course", "exhibition_time", "exhibition_st"],
+                        "original_metrics_matched": sorted(
+                            (candidate.get("_exhibition_original") or {}).keys()),
+                        "source": selected_source,
+                        "no_result_or_payout_used": True,
+                    }
+                    new["sha256"] = stable_hash({k: v for k, v in new.items() if k != "sha256"})
                     before = record["versions"][-1] if record["versions"] else None
                     if before:
                         prev_bets = {b["combination"]: b["virtual_yen"] for b in before["bets"]}
@@ -907,7 +1025,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "role_coverage", "role_changes", "head_coverage_control", "postrace_conditional_v13",
                       "postrace_conditional_control", "venue_tactics_v2", "venue_tactics_ab", "point_free_control", "point_free_provenance",
                       "role_skill_shadow", "venue_motor_exhibition_shadow",
-                      "relative_scores_uncalibrated"):
+                      "exhibition_input_check", "relative_scores_uncalibrated"):
             if extra in current:
                 r[extra] = current[extra]
         r["version_count"] = len(versions)
@@ -921,8 +1039,10 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         if p and p.get("verified") and not record.get("official_conflict") and not record.get("official_review"):
             official_results[f"{local_day}|{record['venue']}|{record['race']}"] = dict(p)
     latest_races.sort(key=lambda r: (r["cutoff_jst"], r["venue"], r["race"]))
+    coverage = numeric_exhibition_coverage(records, local_day)
     out = {
         "event_date": local_day,
+        "numeric_exhibition_coverage": coverage,
         "mode": "auto-live",
         "updated_at_utc": ledger["last_updated_at_utc"],
         "forecast_updated_at_utc": ledger["last_updated_at_utc"],
@@ -944,6 +1064,10 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         "weather_adjusted_race_count": sum(bool((r.get("weather_adjustment") or {}).get("applied")) for r in latest_races),
         "exhibition_race_count": sum(r.get("phase")=="exhibition" for r in latest_races),
         "exhibition_changed_bet_count": sum(bool((r.get("exhibition_change") or {}).get("bets_changed")) for r in latest_races),
+        "exhibition_input_mismatch_rejected_this_run": rejected_exhibition_input_mismatch,
+        "exhibition_input_verified_race_count": sum(
+            bool((r.get("exhibition_input_check") or {}).get("verified_before_freeze"))
+            for r in latest_races),
         "final_exhibition_verified_races": sum(bool((r.get("entry_exhibition_gate") or {}).get("final_eligible")) for r in latest_races),
         "entry_watch_races": sum(bool((r.get("entry_exhibition_gate") or {}).get("entry_watch")) for r in latest_races),
         "entry_watch_held_races": sum(
@@ -969,6 +1093,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
               "entry_watch_races": out["entry_watch_races"],
               "entry_watch_held_races": out["entry_watch_held_races"],
               "final_exhibition_verified_races": out["final_exhibition_verified_races"],
+              "exhibition_input_mismatch_rejected_this_run": rejected_exhibition_input_mismatch,
+              "numeric_exhibition_coverage": coverage["total"],
               "official_results": len(official_results),
               "weather_venues": len(set(weather_by_venue)&venues_seen),
               "weather_coverage": f"{len(set(weather_by_venue)&venues_seen)}/{len(venues_seen)}"}

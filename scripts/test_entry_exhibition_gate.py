@@ -78,15 +78,26 @@ class EntryGateTests(unittest.TestCase):
                 race_snapshot(courses=COURSES,frozen=stamp),DAY)["final_eligible"])
         self.assertFalse(summarize_gate(race_snapshot(courses=COURSES),None)["final_eligible"])
     def test_multi_source_keeps_complete_openapi_and_does_not_fetch_csv(self):
-        live = {"preview": preview()}
+        from datetime import timezone, timedelta
+        jst = timezone(timedelta(hours=9))
+        now = datetime(2026, 10, 26, 13, 42, tzinfo=jst)
+        live = {"closed_at": "2026-10-26 13:50:00", "preview": preview()}
         original = copy.deepcopy(live)
         with patch("autonomous_daily.inject", side_effect=AssertionError("CSV must not override valid API")):
             chosen, origin, source = select_exhibition_source(
-                live, {"race_code": "202610260908"}, datetime.now().astimezone(), "09", 8)
-        self.assertIs(chosen, live)
-        self.assertIsNone(origin)
+                live, {"race_code": "202610260908"}, now, "09", 8)
         self.assertEqual(source, "openapi")
+        self.assertIsNone(origin)
+        self.assertIsNot(chosen, live)
+        self.assertEqual(chosen["_exhibition_origin"]["source"], "BoatraceOpenAPI")
+        self.assertEqual(chosen["_exhibition_origin"]["source_observation_time"], "not_provided")
         self.assertEqual(live, original)
+
+        # A source without a cutoff or a late source is never exhibition-ready.
+        late, _, label = select_exhibition_source(
+            live, None, datetime(2026, 10, 26, 13, 49, tzinfo=jst), "09", 8)
+        self.assertIs(late, live)
+        self.assertEqual(label, "unavailable")
 
     def test_multi_source_csv_fallback_requires_complete_six_boat_preview(self):
         live = {"preview": {"racers": {}}}

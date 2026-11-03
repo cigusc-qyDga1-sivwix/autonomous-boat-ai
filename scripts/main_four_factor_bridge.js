@@ -76,9 +76,11 @@ function run(input){
  let roleSkillShadow=null;
  if(input.role_skill_shadow_trial===true){
   try{roleSkillShadow=globalThis.BoatRoleSkillShadow.run(input,result.bets,{
-    preserveHeadCoverage:input.role_skill_head_preserved_trial===true
+    preserveHeadCoverage:input.role_skill_head_preserved_trial===true,
+    preserveFollowerCoverage:input.role_skill_follower_coverage_trial===true
   });}
-  catch(_){roleSkillShadow={version:input.role_skill_head_preserved_trial===true?
+  catch(_){roleSkillShadow={version:input.role_skill_follower_coverage_trial===true?
+    'racer-role-suitability-shadow-v0.3-follower-coverage':input.role_skill_head_preserved_trial===true?
     'racer-role-suitability-shadow-v0.2-head-preserved':'racer-role-suitability-shadow-v0.1',
     status:'unavailable',reason:'isolated_shadow_computation_failed',
     model_role:'shadow_validation',no_additional_stake:true};}

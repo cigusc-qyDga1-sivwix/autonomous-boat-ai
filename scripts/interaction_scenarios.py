@@ -119,5 +119,5 @@ def evaluate(racers, *, captured_at_utc: str, cutoff_at_utc: str):
             "scenario_assumptions": details,
             "top_combinations": [{"combination": key, "relative_score": round(value, 8)}
                                  for key, value in sorted(mixture.items(),
-                                 key=lambda item: (-item[1], item[0]))[:12]],
+                                 key=lambda item: (-item[1], item[0]))[:120]],
             "relative_score_sum": round(sum(mixture.values()), 8)}

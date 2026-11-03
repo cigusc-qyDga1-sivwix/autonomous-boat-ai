@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 from scripts.exhibition_bridge import inject, available_rows
 from scripts.ingest_boatracecsv_exhibition import preview_signature
-from scripts.autonomous_daily import build, preview_complete, numeric_exhibition_matches_snapshot
+from scripts.autonomous_daily import build, preview_complete, numeric_exhibition_matches_snapshot, numeric_exhibition_coverage
 
 JST = ZoneInfo("Asia/Tokyo")
 
@@ -182,3 +182,20 @@ def test_csv_numeric_reflection_includes_original_metrics_and_rejects_mismatch()
     assert saved["exhibition_input_check"]["no_result_or_payout_used"] is True
     assert status["exhibition_input_mismatch_rejected_this_run"] == 0
     assert view["forecast_races"][0]["phase"] == "exhibition"
+
+
+def test_numeric_coverage_counts_actual_source_without_reclassifying_baselines():
+    first, _, _ = build(None, source(), datetime(2026, 10, 23, 11, 0, tzinfo=JST), "api")
+    audit = numeric_exhibition_coverage(first["race_records"], "2026-10-23")
+    assert audit["total"]["listed_races"] == 1
+    assert audit["total"]["baseline_or_unverified"] == 1
+    assert audit["total"]["verified_exhibition"] == 0
+
+    sample = row()
+    updated, ui, _ = build(first, source(), datetime(2026, 10, 23, 11, 12, tzinfo=JST),
+                           "api", exhibition_rows={sample["race_code"]: sample})
+    audit = numeric_exhibition_coverage(updated["race_records"], "2026-10-23")
+    assert audit["total"]["verified_exhibition"] == 1
+    assert audit["total"]["csv_source"] == 1
+    assert audit["total"]["six_boat_input_checked"] == 1
+    assert ui["numeric_exhibition_coverage"]["by_venue"]["徳山"]["verified_exhibition"] == 1

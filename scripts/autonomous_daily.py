@@ -25,6 +25,7 @@ if __package__:
     from .exhibition_bridge import available_rows, inject
     from .entry_exhibition_gate import validated_preview, summarize_gate
     from .venue_profiles import get_profile, adjust_weights as adjust_venue_weights
+    from .interaction_scenarios import evaluate as evaluate_interactions, VERSION as INTERACTION_VERSION
 else:
     from racer_context import collect as collect_racer_context, validated as validate_racer_context
     from official_pay import fetch_official_pay
@@ -32,6 +33,7 @@ else:
     from exhibition_bridge import available_rows, inject
     from entry_exhibition_gate import validated_preview, summarize_gate
     from venue_profiles import get_profile, adjust_weights as adjust_venue_weights
+    from interaction_scenarios import evaluate as evaluate_interactions, VERSION as INTERACTION_VERSION
 
 JST = ZoneInfo("Asia/Tokyo")
 UTC = timezone.utc
@@ -63,6 +65,8 @@ FOUR_FACTOR_BRIDGE = Path(__file__).resolve().parent / 'main_four_factor_bridge.
 POINT_FREE_DATE = date(2026, 10, 28)
 POINT_FREE_MODEL = 'four-factor-v1.5-point-free-untrained'
 POINT_FREE_BRIDGE = Path(__file__).resolve().parent / 'main_point_free_bridge.js'
+INTERACTION_MAIN_MODEL = 'four-factor-v1.6-interaction-primary-untrained'
+INTERACTION_MAIN_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T00:00:00+00:00')
 VIRTUAL_BUDGET_YEN = 50_000
 MIN_POINTS, MAX_POINTS = 4, 12
 STAKE_UNIT_YEN = 1_000
@@ -592,6 +596,48 @@ def head_coverage_eligible(record: dict, key: str, now: datetime, cutoff: dateti
     return bool(versions) and all(v.get('phase') == 'baseline' for v in versions)
 
 
+
+def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cutoff: datetime) -> tuple[list[dict], dict]:
+    """Forward-only main tickets. Existing main forecast is an A/B control."""
+    supplied = []
+    for r in racers:
+        relative = number(r.get("relative_weight"))
+        if relative is None or relative <= 0:
+            raise ValueError("Missing pre-cutoff racer weight")
+        supplied.append({"lane": r["lane"], "strength": min(100., max(.01, relative * 20)),
+                         "start_mean": r.get("average_start_timing"),
+                         "exhibition_time": r.get("exhibition_time")})
+    result = evaluate_interactions(supplied, captured_at_utc=frozen_at,
+                                   cutoff_at_utc=cutoff.isoformat())
+    count = len(previous["bets"])
+    if not (4 <= count <= 20):
+        raise ValueError("Unsupported previous main point count")
+    selected = result["top_combinations"][:count]
+    if len(selected) != count:
+        raise ValueError("Insufficient scenarios")
+    units = 50 - count
+    scores = [max(0., x["relative_score"]) for x in selected]
+    total = sum(scores)
+    if total <= 0:
+        raise ValueError("Invalid scenario weights")
+    quotas = [units * x / total for x in scores]
+    base = [int(x) for x in quotas]
+    remain = units - sum(base)
+    for i in sorted(range(count), key=lambda i: (-(quotas[i] - base[i]), i))[:remain]:
+        base[i] += 1
+    bets = [{"combination": x["combination"], "virtual_yen": 1000 * (1 + base[i])}
+            for i, x in enumerate(selected)]
+    if sum(x["virtual_yen"] for x in bets) != VIRTUAL_BUDGET_YEN:
+        raise ValueError("Scenario stake allocation failed")
+    meta = {"version": INTERACTION_VERSION, "uncalibrated": True,
+            "scenario_assumptions": result["scenario_assumptions"],
+            "old_main_model_version": previous["model_version"],
+            "old_main_bets": previous["bets"],
+            "comparison": "same input, point count, 50000 virtual yen",
+            "result_data_used": False}
+    return bets, meta
+
+
 def prediction(race: dict, venue: str, race_number: int, phase: str,
                now: datetime, source_url: str, nearby_weather: dict | None = None) -> dict:
     if phase not in ("baseline", "exhibition"):
@@ -679,6 +725,13 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         promoted = promoted_v07(venue, phase, racers, profile, selected_weather, frozen_at)
         chosen_model = MAIN_MODEL
     bets = promoted["bets"]
+    interaction_active = (four_factor and venue != "江戸川"
+                          and now.astimezone(UTC) >= INTERACTION_MAIN_ACTIVATION_UTC
+                          and cutoff.astimezone(UTC) > INTERACTION_MAIN_ACTIVATION_UTC)
+    interaction_meta = None
+    if interaction_active:
+        bets, interaction_meta = interaction_primary(promoted, racers, frozen_at, cutoff)
+        chosen_model = INTERACTION_MAIN_MODEL
     count = len(bets)
     shares = promoted["head_course_shares"]
     concentration = max(x["relative_share"] for x in shares)
@@ -688,6 +741,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
               if new_primary else
               "6艇連動＋平均ST／展示STと内艇の先行差による着順分岐")
     reason += "（4〜12点・未訓練・確率未校正）"
+    if interaction_active:
+        reason = "艇間連動v1.6：外攻め成功・内側牽制・攻め流れ・追走浮上の4展開（未学習・未校正）"
     top_combo = bets[0]["combination"].split("-")
     leader = racers[int(top_combo[0]) - 1]
     follower = racers[int(top_combo[1]) - 1]
@@ -704,6 +759,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
             reason += "／23場別の決まり手構成と実進入・合法STに基づく着順連動v1.4（未校正）"
     body = {
         "model_version": chosen_model,
+        **({"interaction_primary": interaction_meta} if interaction_meta else {}),
         **({"role_skill_shadow": promoted["role_skill_shadow"]} if promoted.get("role_skill_shadow") else {}),
         **({"venue_motor_exhibition_shadow": promoted["venue_motor_exhibition_shadow"]}
            if promoted.get("venue_motor_exhibition_shadow") else {}),
@@ -866,7 +922,11 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
             coverage_active = head_coverage_eligible(record, key, runtime_now, cutoff) and not postrace_active
             race = {**race, "_head_coverage_trial": coverage_active}
             point_free_active = cutoff.date() == POINT_FREE_DATE and runtime_now.astimezone(JST).date() == POINT_FREE_DATE
-            expected_main = (POINT_FREE_MODEL if point_free_active else VENUE_TACTICS_MODEL if venue_active else
+            interaction_active = (cutoff.date() >= FOUR_FACTOR_DATE and VENUES[venue_code] != "江戸川"
+                                  and runtime_now.astimezone(UTC) >= INTERACTION_MAIN_ACTIVATION_UTC
+                                  and cutoff.astimezone(UTC) > INTERACTION_MAIN_ACTIVATION_UTC)
+            expected_main = (INTERACTION_MAIN_MODEL if interaction_active else
+                             POINT_FREE_MODEL if point_free_active else VENUE_TACTICS_MODEL if venue_active else
                              POSTRACE_CONDITIONAL_MODEL if postrace_active else
                              HEAD_COVERAGE_MODEL if coverage_active else
                              FOUR_FACTOR_MODEL if cutoff.date() >= FOUR_FACTOR_DATE else MAIN_WAKE_MODEL)
@@ -1024,7 +1084,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "start_v07", "coupled_v06", "wake_v09", "four_factor", "racer_context_upgrade", "model_upgrade", "primary_model_ab", "head_course_shares",
                       "role_coverage", "role_changes", "head_coverage_control", "postrace_conditional_v13",
                       "postrace_conditional_control", "venue_tactics_v2", "venue_tactics_ab", "point_free_control", "point_free_provenance",
-                      "role_skill_shadow", "venue_motor_exhibition_shadow",
+                      "role_skill_shadow", "venue_motor_exhibition_shadow", "interaction_primary",
                       "exhibition_input_check", "relative_scores_uncalibrated"):
             if extra in current:
                 r[extra] = current[extra]

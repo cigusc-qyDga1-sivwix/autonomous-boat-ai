@@ -542,8 +542,14 @@
     const exhibitionDetail = r.phase==='exhibition' ? (
       '<section class="card card-pad bottom-margin" aria-label="展示による買い目再計算">'+
       '<h3>🔄 展示情報を反映した再計算</h3>'+
-      '<p><strong>展示の取得元：</strong>'+escape(provenance?.source||'従来の非公式API')+
-      '　<strong>展示の公開記録：</strong>'+escape(provenance?.observed_at_jst||'時刻未取得')+'</p>'+
+      '<p><strong>展示の取得元：</strong>'+escape(provenance?.source||'過去の固定版・取得元未記録')+
+      '　<strong>データ元の記録：</strong>'+escape(provenance?.observed_at_jst||'公開時刻未確認')+'</p>'+
+      (r.exhibition_input_check?.verified_before_freeze ?
+       '<div class="notice"><strong>✅ 展示数値の入力一致確認済み：</strong>6艇の進入・展示ST・展示タイム'+
+       (r.exhibition_input_check.original_metrics_matched?.length ?
+        ' ／ '+escape(r.exhibition_input_check.original_metrics_matched.join('・')):'')+
+       'が保存予想の入力記録と一致。予想精度の改善を意味するものではありません。</div>' :
+       '<div class="notice warn">この固定予想には新しい6艇数値一致監査の記録がありません。展示反映の証明として後付け認定しません。</div>')+
       (compare ? '<div class="notice '+(compare.bets_changed?'':'warn')+'">'+
        '<strong>'+(compare.bets_changed?'買い目・配分に変更あり':'再計算済み：買い目・配分は維持')+'</strong>'+
        '<p>前回 '+escape(compare.previous_top)+' → 展示後 '+escape(compare.new_top)+

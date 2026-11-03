@@ -84,3 +84,11 @@ python -m vision_ai.evaluation --run research/vision/run.json --labels /path/to/
 4. 実映像・6艇・レース同一性・単位・取得／検証時刻が確認できた別スキーマだけで、将来の一方向JSON連携を設計。
 
 将来の橋渡しには、少なくとも `event_date/venue_code/race/source_sha256/captured_at_utc/verified_at_utc/model_version`、6艇ID、校正単位、品質指標、独立検証記録が必要。締切前の安全余裕を満たした同一レースで前向き比較する。現在の候補スキーマを流用して正式化しない。過去の買い目と結果は保持する。
+
+## 独立したレース別取得ジョブ
+
+`python -m vision_ai.source_job --date 2026-11-03 --races 1,2 --output research/vision/source-job.json`
+
+数値AIの展示行・買い目・結果を読む必要はない。`VISION_VIDEO_SOURCE_TEMPLATE` と `VISION_VIDEO_ALLOWED_HOSTS` を利用し、新しいtemplateがなければ既存の `MIKUNI_VIDEO_SOURCE_TEMPLATE` / `MIKUNI_VIDEO_ALLOWED_HOSTS` を再利用する。異なる配信元の設定同士は混ぜない。テンプレートには日付（`{date}` / `{yyyymmdd}`）とR（`{race}` / `{race2}`）を必須とし、既存の `{venue}` / `{jcd}` も受け付ける。
+
+対象Rを明示して実行し、404・408・502・503・504のみ2秒間隔で最大3回まで再試行できる。403・無効媒体・デコード失敗は繰り返さない。各試行の数値レポートを保持し、取得と追跡計算の完了数を分ける。入力未設定・一部R未完了なら終了コード1。定期実行や配信元の新規設定はまだ有効化していない。

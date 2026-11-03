@@ -184,6 +184,47 @@ def numeric_exhibition_matches_snapshot(candidate: dict, snapshot: dict) -> bool
     return True
 
 
+def numeric_exhibition_coverage(records: dict, day: str) -> dict:
+    """Read-only per-venue outcome audit, never a new prediction or eligibility override."""
+    grouped = {}
+    totals = {
+        "listed_races": 0, "verified_exhibition": 0, "baseline_or_unverified": 0,
+        "six_boat_input_checked": 0, "openapi_source": 0,
+        "csv_source": 0, "unknown_source": 0, "actual_ticket_changes": 0,
+    }
+    for rec in records.values():
+        venue = rec["venue"]
+        row = grouped.setdefault(venue, {key: 0 for key in totals})
+        row["listed_races"] += 1
+        versions = rec.get("versions") or []
+        latest = versions[-1] if versions else None
+        verified = bool(latest and summarize_gate(latest, day).get("final_eligible"))
+        if verified:
+            row["verified_exhibition"] += 1
+            checked = bool((latest.get("exhibition_input_check") or {}).get(
+                "verified_before_freeze"))
+            row["six_boat_input_checked"] += int(checked)
+            origin = (latest.get("exhibition_origin") or {}).get("source")
+            source_key = (
+                "openapi_source" if origin == "BoatraceOpenAPI" else
+                "csv_source" if origin == "BoatraceCSV" else "unknown_source")
+            row[source_key] += 1
+            row["actual_ticket_changes"] += int(bool(
+                (latest.get("exhibition_change") or {}).get("bets_changed")))
+        else:
+            row["baseline_or_unverified"] += 1
+    for row in grouped.values():
+        for key in totals:
+            totals[key] += row[key]
+    return {
+        "scope": "immutable latest snapshots; pre-cutoff six-boat eligibility, not source availability",
+        "total": totals,
+        "by_venue": dict(sorted(grouped.items())),
+        "note": "A score/order change is not a ticket/allocation change. Old frozen snapshots "
+                "are never labeled input-checked retrospectively.",
+    }
+
+
 def valid_average_st(value) -> float | None:
     """0.00 / out-of-range average ST can be an unfilled source field.
 
@@ -991,8 +1032,10 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         if p and p.get("verified") and not record.get("official_conflict") and not record.get("official_review"):
             official_results[f"{local_day}|{record['venue']}|{record['race']}"] = dict(p)
     latest_races.sort(key=lambda r: (r["cutoff_jst"], r["venue"], r["race"]))
+    coverage = numeric_exhibition_coverage(records, local_day)
     out = {
         "event_date": local_day,
+        "numeric_exhibition_coverage": coverage,
         "mode": "auto-live",
         "updated_at_utc": ledger["last_updated_at_utc"],
         "forecast_updated_at_utc": ledger["last_updated_at_utc"],
@@ -1044,6 +1087,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
               "entry_watch_held_races": out["entry_watch_held_races"],
               "final_exhibition_verified_races": out["final_exhibition_verified_races"],
               "exhibition_input_mismatch_rejected_this_run": rejected_exhibition_input_mismatch,
+              "numeric_exhibition_coverage": coverage["total"],
               "official_results": len(official_results),
               "weather_venues": len(set(weather_by_venue)&venues_seen),
               "weather_coverage": f"{len(set(weather_by_venue)&venues_seen)}/{len(venues_seen)}"}

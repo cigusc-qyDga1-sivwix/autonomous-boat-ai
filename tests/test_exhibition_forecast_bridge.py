@@ -199,3 +199,32 @@ def test_numeric_coverage_counts_actual_source_without_reclassifying_baselines()
     assert audit["total"]["csv_source"] == 1
     assert audit["total"]["six_boat_input_checked"] == 1
     assert ui["numeric_exhibition_coverage"]["by_venue"]["徳山"]["verified_exhibition"] == 1
+
+
+def test_changed_openapi_six_boat_values_create_new_immutable_exhibition_version():
+    payload = source()
+    racers = {str(i): {
+        "course_number": i, "start_timing": .20,
+        "exhibition_time": 6.8 + i / 100, "tilt_adjustment": 0
+    } for i in range(1, 7)}
+    payload["programs"]["stadiums"]["18"]["races"]["3"]["preview"] = {"racers": racers}
+    first, _, status = build(None, payload, datetime(2026, 10, 23, 11, 10, tzinfo=JST), "api")
+    versions_before = deepcopy(first["race_records"]["18-3"]["versions"])
+    assert status["new_exhibition"] == 1
+    assert len(versions_before) == 2
+
+    revised = deepcopy(payload)
+    revised["programs"]["stadiums"]["18"]["races"]["3"]["preview"]["racers"]["3"]["exhibition_time"] = 6.63
+    second, view, stats = build(first, revised, datetime(2026, 10, 23, 11, 14, tzinfo=JST), "api")
+    versions_after = second["race_records"]["18-3"]["versions"]
+    assert stats["new_exhibition"] == 1
+    assert stats["revised_exhibition"] == 1
+    assert versions_after[:-1] == versions_before
+    assert versions_after[-1]["sha256"] != versions_before[-1]["sha256"]
+    assert versions_after[-1]["racers"][2]["exhibition_time"] == 6.63
+    assert versions_after[-1]["exhibition_input_check"]["verified_before_freeze"] is True
+    assert view["numeric_exhibition_coverage"]["total"]["verified_exhibition"] == 1
+
+    third, _, unchanged = build(second, revised, datetime(2026, 10, 23, 11, 15, tzinfo=JST), "api")
+    assert unchanged["new_exhibition"] == 0
+    assert third["race_records"]["18-3"]["versions"] == versions_after

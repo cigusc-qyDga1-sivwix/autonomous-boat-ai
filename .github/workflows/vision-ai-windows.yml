@@ -1,0 +1,39 @@
+name: BOAT VISION Windows portable checks
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'vision_ai/**'
+      - '.github/workflows/vision-ai-windows.yml'
+permissions:
+  contents: read
+jobs:
+  portable-windows:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Independent standard library checks
+        run: python -S -m vision_ai.run_tests
+      - name: Build isolated portable bundle
+        run: python vision_ai/windows/build_bundle.py --download --output windows-dist
+      - name: Check bundled runtime imports
+        run: windows-dist/BOAT_VISION_WINDOWS/runtime/python.exe -m vision_ai.windows_runner --check-runtime
+      - name: Installed Edge generated canvas test (no official playback)
+        run: windows-dist/BOAT_VISION_WINDOWS/runtime/python.exe vision_ai/windows/smoke_test.py
+      - name: Build and test small updater without changing config or reports
+        run: python vision_ai/windows/build_player_fix.py --output windows-dist/BOAT_VISION_WINDOWS/FIX_PLAYER_WAIT.cmd
+      - name: Test updater command with bundled Windows Python
+        shell: cmd
+        env:
+          BOAT_VISION_FIX_NOPAUSE: '1'
+        run: windows-dist\BOAT_VISION_WINDOWS\FIX_PLAYER_WAIT.cmd
+      - uses: actions/upload-artifact@v4
+        with:
+          name: boat-vision-windows-experimental
+          path: windows-dist/BOAT_VISION_WINDOWS.zip
+          retention-days: 7
+          if-no-files-found: error

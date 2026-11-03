@@ -1,0 +1,45 @@
+name: BOAT VISION AI - isolated research checks
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'vision_ai/**'
+      - '.github/workflows/vision-ai-independent.yml'
+  pull_request:
+    paths:
+      - 'vision_ai/**'
+      - '.github/workflows/vision-ai-independent.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: independent-vision-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  independent-vision-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test independent video candidate contract (zero production imports)
+        run: |
+          python -m unittest discover -s vision_ai/tests -p 'test_*.py' -v
+          python -m compileall -q vision_ai/
+      - name: Confirm production imports are absent
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          paths = list(Path("vision_ai").glob("*.py"))
+          forbidden = ("from scripts.", "from app.", "import scripts.", "from boat_ai.")
+          for path in paths:
+              source = path.read_text(encoding="utf-8")
+              assert not any(x in source for x in forbidden), path
+          print("isolated vision module: no production imports")
+          PY

@@ -53,6 +53,28 @@ def _group(rows: list[dict], field: str) -> dict:
     return {key: _metrics(subset) for key, subset in sorted(groups.items())}
 
 
+def _venue_context(rows: list[dict]) -> dict:
+    """Verified-only venue diagnostics; never infer missing exhibitions or tune picks."""
+    grouped = defaultdict(list)
+    for row in rows:
+        grouped[row["venue"]].append(row)
+    context = {}
+    for venue, races in sorted(grouped.items()):
+        n = len(races)
+        first_one = sum(r["first_bet_head"] == "1" for r in races)
+        actual_one = sum(r["actual_head"] == "1" for r in races)
+        context[venue] = {
+            "verified_races": n,
+            "primary_ticket_head_1": first_one,
+            "actual_winner_1": actual_one,
+            "primary_ticket_head_1_share": round(first_one / n, 4),
+            "actual_winner_1_share": round(actual_one / n, 4),
+            "phase_counts": dict(sorted(Counter(r["phase"] for r in races).items())),
+            "note": "Diagnostic only: primary ticket is not the whole head-candidate set.",
+        }
+    return context
+
+
 def _verify_race(r: dict, p: dict, day: str) -> tuple[bool, str]:
     if not p or p.get("verified") is not True or p.get("source") != "boatrace_official_pay":
         return False, "unverified"
@@ -233,6 +255,7 @@ def analyze(dataset: dict) -> dict:
         "by_model": _group(verified, "model_version"),
         "by_points": _group(verified, "points"),
         "by_venue": _group(verified, "venue"),
+        "by_venue_context": _venue_context(verified),
         "exclusions": dict(exclusions),
         "unhit_examples": race_examples[:30],
     }

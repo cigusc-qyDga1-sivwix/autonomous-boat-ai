@@ -1,6 +1,8 @@
 """Windows bundle smoke: local generated canvas only, never an official replay."""
 from playwright.sync_api import sync_playwright
 from vision_ai.windows_runner import analyze_rendered_samples
+from vision_ai.windows_runner import _wait_visible_video
+from unittest.mock import patch
 import cv2
 import numpy as np
 
@@ -20,5 +22,13 @@ with sync_playwright() as pw:
         assert report['tracking']['confirmed_boat_tracks']==0
         assert report['status']=='RENDERED_CANDIDATES_UNVERIFIED'
         print('PASS: bundled Windows Python/CV/Playwright/installed Edge, generated canvas in RAM. Real replay remains UNVERIFIED.')
+        page.set_content('<script>setTimeout(()=>{let v=document.createElement("video");v.width=320;v.height=180;document.body.appendChild(v)},800)</script>')
+        probe={}
+        # Local synthetic fixture only. Production identity validation stays on.
+        with patch('vision_ai.windows_runner.verify_player') as verifier:
+            video=_wait_visible_video(page.main_frame,'2026-10-28',1,probe)
+        assert video.is_visible() and probe['wait_intervals']>0
+        assert verifier.call_count>1
+        print('PASS: delayed video DOM is awaited in actual Edge; no official source contacted.')
     finally:
         browser.close()

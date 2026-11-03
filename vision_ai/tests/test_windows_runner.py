@@ -97,3 +97,61 @@ class WindowsRunnerTests(unittest.TestCase):
 
 if __name__=='__main__':
     unittest.main()
+
+class PlayerInitializationTests(unittest.TestCase):
+    def frame(self):
+        frame=Mock(url=PLAYER,parent_frame=Mock(url=WRAPPER))
+        frame.locator.return_value.inner_text.return_value='normal player'
+        frame.get_by_role.return_value.all.return_value=[]
+        return frame
+
+    def test_video_can_be_created_after_iframe(self):
+        frame=self.frame()
+        video=Mock()
+        video.is_visible.return_value=True
+        frame.locator.return_value.all.side_effect=[[],[],[video]]
+        probe={}
+        self.assertIs(w._wait_visible_video(frame,'2026-10-28',1,probe),video)
+        self.assertEqual(probe['wait_intervals'],2)
+        self.assertEqual(frame.wait_for_timeout.call_count,2)
+
+    def test_hidden_placeholder_is_not_a_second_visible_player(self):
+        frame=self.frame()
+        hidden,visible=Mock(),Mock()
+        hidden.is_visible.return_value=False
+        visible.is_visible.return_value=True
+        frame.locator.return_value.all.return_value=[hidden,visible]
+        self.assertIs(w._wait_visible_video(frame,'2026-10-28',1),visible)
+
+    def test_normal_play_button_can_create_video_but_clicked_only_once(self):
+        frame=self.frame()
+        video,button=Mock(),Mock()
+        video.is_visible.return_value=True
+        button.is_visible.return_value=True
+        frame.locator.return_value.all.side_effect=[[],[],[video]]
+        frame.get_by_role.return_value.all.return_value=[button]
+        self.assertIs(w._wait_visible_video(frame,'2026-10-28',1),video)
+        button.click.assert_called_once()
+
+    def test_never_ready_is_bounded_with_numeric_diagnostics(self):
+        frame=self.frame()
+        frame.locator.return_value.all.return_value=[]
+        probe={}
+        with self.assertRaisesRegex(w.CaptureError,'VISIBLE_VIDEO_NOT_READY'):
+            w._wait_visible_video(frame,'2026-10-28',1,probe)
+        self.assertEqual(frame.wait_for_timeout.call_count,50)
+        self.assertEqual(probe['video_elements'],0)
+        self.assertEqual(probe['wait_intervals'],50)
+
+    def test_multiple_visible_players_and_denial_fail_closed(self):
+        frame=self.frame()
+        videos=[Mock(),Mock()]
+        for video in videos:
+            video.is_visible.return_value=True
+        frame.locator.return_value.all.return_value=videos
+        with self.assertRaisesRegex(w.CaptureError,'VISIBLE_VIDEO_AMBIGUOUS'):
+            w._wait_visible_video(frame,'2026-10-28',1)
+        frame.wait_for_timeout.assert_not_called()
+        frame.locator.return_value.inner_text.return_value='視聴は許可されていません'
+        with self.assertRaisesRegex(w.CaptureError,'VIEWING_DENIED'):
+            w._wait_visible_video(frame,'2026-10-28',1)

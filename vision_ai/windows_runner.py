@@ -249,12 +249,36 @@ def _select_race(page, day, race):
     selected[0].click()
 
 
-def _start_playback(frame, day, race):
-    verify_player(frame, day, race)
-    video = frame.locator('video')
-    if video.count() != 1 or not video.first.is_visible():
-        raise CaptureError('VISIBLE_VIDEO_NOT_UNIQUE')
-    video = video.first
+def _wait_visible_video(frame, day, race, diagnostics=None):
+    """The player iframe can exist before its video is created or shown."""
+    probe = diagnostics if diagnostics is not None else {}
+    clicked = False
+    for attempt in range(51):
+        verify_player(frame, day, race)
+        videos = frame.locator('video').all()
+        visible = [video for video in videos if video.is_visible()]
+        probe.update(video_elements=len(videos), visible_video_elements=len(visible),
+                     wait_intervals=attempt, play_button_clicked=clicked)
+        if len(visible) > 1:
+            raise CaptureError('VISIBLE_VIDEO_AMBIGUOUS')
+        if len(visible) == 1:
+            return visible[0]
+        buttons = [button for button in frame.get_by_role('button', name='Play Video', exact=True).all()
+                   if button.is_visible()]
+        probe['visible_play_buttons'] = len(buttons)
+        if len(buttons) > 1:
+            raise CaptureError('PLAY_BUTTON_AMBIGUOUS')
+        if not clicked and buttons:
+            buttons[0].click()
+            clicked = True
+            probe['play_button_clicked'] = True
+        if attempt < 50:
+            frame.wait_for_timeout(400)
+    raise CaptureError('VISIBLE_VIDEO_NOT_READY')
+
+
+def _start_playback(frame, day, race, diagnostics=None):
+    video = _wait_visible_video(frame, day, race, diagnostics)
     state = video.evaluate(_STATE_JS)
     if state['paused']:
         button = frame.get_by_role('button', name='Play Video', exact=True)
@@ -354,7 +378,8 @@ def capture_once(config, race, *, browser_factory=None):
                 if player is None:
                     raise CaptureError('PLAYER_NOT_READY')
                 report['stages']['player_identity_matched'] = True
-                video = _start_playback(player, config['event_date'], race)
+                report['player_initialization'] = {}
+                video = _start_playback(player, config['event_date'], race, report['player_initialization'])
                 report['stages']['playback_clock_advanced'] = True
                 best = None
                 windows = []

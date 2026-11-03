@@ -29,3 +29,17 @@ python -m pytest -q
 `scripts/interaction_scenarios.py::evaluate` requires six distinct lanes, positive finite prior strengths and timezone-aware capture/cutoff. It rejects unrecognized racer fields (including outcome and odds features). Its output always declares `SHADOW_UNCALIBRATED`, `eligible_for_formal_forecast=false` and `bets_generated=0`.
 
 Research inputs do not imply that lane-to-lane interference, mark tactics or paths are truly known. No external video data or scraping is introduced.
+
+## Primary promotion decision — 2026-11-04
+User requested the **new interaction logic as the actual MAIN ticket selection**, not a shadow-only output. The first exploratory module still labels its raw scenario scores SHADOW_UNCALIBRATED and never generates stakes; the existing collector now adapts its ordered candidate scores to **primary virtual tickets** and records `interaction_primary` metadata. This is not statistical validation.
+
+- Activation gate: new snapshots generated on/after **2026-11-04 09:00 JST**, only when cutoff is later; never rewrite an older snapshot.
+- Applies where the existing 23-venue tactics is supported; **江戸川 excluded**.
+- Uses existing pre-cutoff six-racer weights and available start/exhibition readings. No outcomes, odds or realized ST.
+- Retains prior primary `bets` in `interaction_primary.old_main_bets` for same-race A/B.
+- Matches prior primary number of tickets (4–20) and 50,000-yen virtual allocation; does not assert true win probabilities.
+- App ticket classification remains governed by the pre-cutoff **complete exhibition gate**; baseline is provisional, not formal exhibition-reflected.
+- Before/after daily aggregates are descriptive only and may be confounded by venue, field composition and weather. Strongest incremental test is same-race pre-cutoff paired control, comparing payout and calibration over future races.
+- No live real-money purchases. Promotion may be reverted if failures or adverse results are observed.
+
+**Verification**: unit and integration tests were authored, but successful GitHub Actions execution and production deployment must be checked separately. No claim of passing CI until run evidence is obtained.

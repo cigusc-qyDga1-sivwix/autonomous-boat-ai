@@ -137,6 +137,13 @@
       '<h1>今日の開催一覧 <span>🚤</span></h1><p>'+date+' ・ 全国のレースを選んで予想を見る</p>' +
       '<div class="venue-hero-stats"><span><strong>'+held.length+'</strong>場 情報あり</span><span><strong>'+racing+'</strong>場 締切予定あり</span><span><strong>'+ready+'</strong>R 予想</span><span><strong>'+expo+'</strong>R 展示反映</span></div></div>' +
       (weatherCount?'<p class="venue-weather-coverage">🌦 開催中の周辺気象予報 '+weatherCount+'/'+held.length+'場取得済み（会場水面の実測ではありません） ・ <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Weather data by Open-Meteo.com ↗</a></p>':'') +
+      (data.numeric_exhibition_coverage?.total?
+        '<p class="venue-weather-coverage">📡 展示数値の締切前固定：'+
+        esc(data.numeric_exhibition_coverage.total.verified_exhibition)+'/'+
+        esc(data.numeric_exhibition_coverage.total.listed_races)+'R ／ 新しい6艇入力一致監査：'+
+        esc(data.numeric_exhibition_coverage.total.six_boat_input_checked)+'R ／ '+
+        'OpenAPI '+esc(data.numeric_exhibition_coverage.total.openapi_source)+'R・CSV '+
+        esc(data.numeric_exhibition_coverage.total.csv_source)+'R。展示未取得のレースは正式反映と数えません。</p>' : '') +
       (data.mode==='auto-live'?'<button type="button" class="venue-official-summary" data-view="results" aria-label="公式結果の照合画面を開く"><span>✅ BOATRACE公式照合 <b>'+official.length+'R</b></span><span>的中 <b>'+hits+'R</b></span><span>仮想回収 <b>'+(invested?(100*payout/invested).toFixed(1)+'%':'—')+'</b></span><span>詳細を見る →</span></button>':'') +
       (stale?'<div class="notice warn"><strong>過去日のデータです。</strong> 最新データはまだ取得できていません。対象日を確認してね。</div>':'') +
       '<div class="venue-board-head"><div><h2>開催場を選択</h2><p>カードをタップ → 全12R → 買い目・仮想配分</p></div>' +

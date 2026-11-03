@@ -155,3 +155,19 @@ class PlayerInitializationTests(unittest.TestCase):
         frame.locator.return_value.inner_text.return_value='視聴は許可されていません'
         with self.assertRaisesRegex(w.CaptureError,'VIEWING_DENIED'):
             w._wait_visible_video(frame,'2026-10-28',1)
+
+    def test_delayed_play_button_and_final_state_are_recorded(self):
+        from unittest.mock import patch
+        frame=self.frame()
+        button=Mock()
+        button.is_visible.return_value=True
+        frame.get_by_role.return_value.all.side_effect=[[],[button],[]]
+        video=Mock()
+        state={'ready':2,'width':640,'height':360,'paused':False,'ended':False,'time':0,'duration':100,'error':False}
+        video.evaluate.side_effect=[None,state,{**state,'time':0.1},{**state,'time':0.4}]
+        probe={}
+        with patch.object(w,'_wait_visible_video',return_value=video), patch.object(w,'verify_player'):
+            self.assertIs(w._start_playback(frame,'2026-10-28',1,probe),video)
+        button.click.assert_called_once()
+        self.assertTrue(probe['playback_button_clicked'])
+        self.assertEqual(probe['playback_last_state']['time'],0.4)

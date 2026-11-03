@@ -279,18 +279,25 @@ def _wait_visible_video(frame, day, race, diagnostics=None):
 
 def _start_playback(frame, day, race, diagnostics=None):
     video = _wait_visible_video(frame, day, race, diagnostics)
-    state = video.evaluate(_STATE_JS)
-    if state['paused']:
-        button = frame.get_by_role('button', name='Play Video', exact=True)
-        if button.count() == 1 and button.is_visible():
-            button.click()
-        else:
-            # Standard playback of the already matched visible HTML5 video.
-            video.evaluate("async v=>{v.muted=true;await v.play();}")
+    probe = diagnostics if diagnostics is not None else {}
+    video.evaluate("v=>{v.muted=true;}")
+    clicked = False
+    requested = False
     start = None
-    for _ in range(20):
+    for attempt in range(75):
         verify_player(frame, day, race)
+        buttons = [b for b in frame.get_by_role('button', name='Play Video', exact=True).all() if b.is_visible()]
+        if len(buttons) > 1:
+            raise CaptureError('PLAY_BUTTON_AMBIGUOUS')
+        if buttons and not clicked:
+            buttons[0].click()
+            clicked = True
         state = video.evaluate(_STATE_JS)
+        if state['paused'] and not requested:
+            video.evaluate("v=>{v.muted=true;const p=v.play();if(p)p.catch(()=>{});}")
+            requested = True
+        probe.update(playback_last_state=state, playback_wait_intervals=attempt,
+                     playback_button_clicked=clicked, html_play_requested=requested)
         if state['ready'] >= 2 and state['width'] > 0 and state['height'] > 0 and not state['paused'] and not state['ended']:
             if start is None:
                 start = state['time']

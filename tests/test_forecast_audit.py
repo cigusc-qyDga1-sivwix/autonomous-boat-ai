@@ -87,3 +87,32 @@ def test_read_only_does_not_mutate_inputs_or_fixed_picks():
     original = deepcopy(payload)
     analyze(payload)
     assert payload == original
+
+
+def test_verified_only_venue_context_separates_primary_1_and_actual_1():
+    report = analyze(make_example())
+    venue = report["by_venue_context"]["徳山"]
+    assert venue["verified_races"] == 4
+    assert venue["primary_ticket_head_1"] == 4
+    assert venue["actual_winner_1"] == 3
+    assert venue["primary_ticket_head_1_share"] == 1.0
+    assert venue["actual_winner_1_share"] == 0.75
+    assert venue["phase_counts"] == {"baseline": 4}
+    assert report["by_venue"]["徳山"]["third_miss"] == 1
+
+    payload = make_example()
+    payload["forecast_races"][0]["phase"] = "exhibition"
+    payload["official_results"]["2026-10-22|徳山|2"]["verified"] = False
+    context = analyze(payload)["by_venue_context"]["徳山"]
+    assert context["verified_races"] == 3
+    assert context["phase_counts"] == {"baseline": 2, "exhibition": 1}
+    assert context["primary_ticket_head_1"] == 3
+    assert context["actual_winner_1"] == 2
+
+
+def test_empty_venue_context_when_no_official_results_are_verified():
+    payload = make_example()
+    payload["official_results"] = {}
+    report = analyze(payload)
+    assert report["by_venue_context"] == {}
+    assert report["metrics"]["verified_races"] == 0

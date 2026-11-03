@@ -75,6 +75,24 @@ function panel(r){
  const chaserHTML=Array.isArray(chasers)&&chasers.length===6?
   '<h3>頭ごとの2着候補</h3><p>隣艇の自動加点は使わず、残り5艇を毎回評価。3着も残り4艇から評価します。選手別の2・3着実績率は未接続です。</p><table class="bets-table"><thead><tr><th>1着の条件</th><th>2着候補（評価順）</th></tr></thead><tbody>'+chasers.map(h=>'<tr><td>'+esc(h.head_course)+'コース</td><td>'+[...h.candidates].sort((a,b)=>b.relative_share-a.relative_share||a.lane-b.lane).map(x=>esc(x.lane)+'号艇').join(' → ')+'</td></tr>').join('')+'</tbody></table>':'';
  const rows=meta.rows.map(x=>'<tr><td>'+esc(x.lane)+'</td>'+keys.map(k=>'<td>'+show(x.factors?.[k]?.applied_multiplier)+'</td>').join('')+'<td>'+show(x.combined_multiplier)+'</td></tr>').join('');
+ const startRows=Array.isArray(r?.racers)?r.racers.map(x=>({
+   lane:x.lane, data:x.racer_context?.values||{}
+ })): [];
+ const haveMeetingST=startRows.some(x=>Number.isFinite(x.data.meeting_st_sd));
+ const stHTML=haveMeetingST?
+   '<section class="card card-pad"><h3>今節ST安定性（新規・検証用）</h3>'+
+   '<p class="help">当日の発走前に取得した出走表の今節過去走から算出。適格なSTが3走未満なら評価保留。展示STや本番STの予測値ではなく、正式予想の重み・買い目は変更していません。</p>'+
+   '<div class="boat-entry-overflow"><table class="bets-table"><thead><tr><th>艇</th><th>有効走数</th><th>平均ST</th><th>ST標準偏差</th><th>直近3走平均との差</th></tr></thead><tbody>'+
+   startRows.map(x=>{
+      const n=x.data.meeting_st_legal_count;
+      const mean=x.data.meeting_st_mean,sd=x.data.meeting_st_sd;
+      const trend=x.data.meeting_st_recent_minus_older;
+      return '<tr><td>'+esc(x.lane)+'</td><td>'+esc(Number.isInteger(n)?n:'—')+'</td>'+
+        '<td>'+esc(Number.isFinite(mean)?mean.toFixed(3):'未取得')+'</td>'+
+        '<td>'+esc(Number.isFinite(sd)?sd.toFixed(3):'標本不足')+'</td>'+
+        '<td>'+esc(Number.isFinite(trend)?trend.toFixed(3):'標本不足')+'</td></tr>';
+   }).join('')+'</tbody></table></div>'+
+   '<p class="help">標準偏差が大きいほど過去のSTがばらついていますが、これだけで選手を一律減点しません。Fは速いSTとして扱わず別カウント。</p></section>':'';
  const role=r?.role_skill_shadow;
  const roleHTML=role?.status==='ready'&&Array.isArray(role.roles)&&Array.isArray(role.bets)?
   '<section class="card card-pad role-skill-shadow"><h3>選手の2・3着適性（試験・正式買い目とは別）</h3>'+
@@ -106,7 +124,7 @@ function panel(r){
    '<p class="help">モーターの過去2連対率と当日の展示の良し悪しが同方向の場合のみ、小幅に行き足・旋回・直線を試算。展示Fで有利にしません。モーター交換・整備・使用回数・実測潮位は未接続。係数は未学習です。</p>'+
    vmEvidence+vmBets+
    '<p class="help"><strong>正式予想・正式収支は変更しません。</strong> 発走前に固定した試験を別集計します。</p></section>':'';
- return '<section class="card card-pad four-factor-panel"><h3>4要素の基礎評価</h3><p>選手60・モーター25・展示10・気象5</p><div class="boat-entry-overflow"><table class="bets-table"><thead><tr><th>艇</th>'+labels.map(x=>'<th>'+x+'</th>').join('')+'<th>合成</th></tr></thead><tbody>'+rows+'</tbody></table></div><p class="help">表示は重み適用後の倍率。欠損は中立の×1とし、取得値を捏造しません。この基礎評価と実進入・艇間連動から買い目を作ります。比率は試験設定で、的中確率や金銭的期待値ではありません。</p>'+policyHTML+chaserHTML+'</section>'+roleHTML+motorHTML;
+ return '<section class="card card-pad four-factor-panel"><h3>4要素の基礎評価</h3><p>選手60・モーター25・展示10・気象5</p><div class="boat-entry-overflow"><table class="bets-table"><thead><tr><th>艇</th>'+labels.map(x=>'<th>'+x+'</th>').join('')+'<th>合成</th></tr></thead><tbody>'+rows+'</tbody></table></div><p class="help">表示は重み適用後の倍率。欠損は中立の×1とし、取得値を捏造しません。この基礎評価と実進入・艇間連動から買い目を作ります。比率は試験設定で、的中確率や金銭的期待値ではありません。</p>'+policyHTML+chaserHTML+'</section>'+roleHTML+motorHTML+stHTML;
 }
 root.BoatFourFactor={evaluate,panel,WEIGHTS};
 if(typeof module!=='undefined')module.exports=root.BoatFourFactor;

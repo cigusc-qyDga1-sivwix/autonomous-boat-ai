@@ -1,0 +1,66 @@
+name: BOAT LAB independent 2nd-3rd historical research
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Run around JST 06:47 once daily; independent from the forecast scheduler.
+    # GitHub cron can run late/skip, so artifacts are descriptive, not a guarantee.
+    - cron: '47 21 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/finish_pair_research.py'
+      - 'tests/test_finish_pair_research.py'
+      - '.github/workflows/boat-lab-finish-pair-research.yml'
+  pull_request:
+    paths:
+      - 'scripts/finish_pair_research.py'
+      - 'tests/test_finish_pair_research.py'
+      - '.github/workflows/boat-lab-finish-pair-research.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: boat-lab-finish-roles-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  historical-label-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify strict previous-day training boundaries
+        run: |
+          python -m unittest discover -s tests -p 'test_finish_pair_research.py' -v
+      - name: Collect previous completed races only into a separate research artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          DAY=$(TZ=Asia/Tokyo date +%F)
+          mkdir -p research-output
+          python scripts/finish_pair_research.py --date "$DAY" --days 21 --out "research-output/finish-pair-priors-$DAY.json"
+          python -m json.tool "research-output/finish-pair-priors-$DAY.json" >/dev/null
+          python - "$DAY" <<'PY'
+          import json,sys
+          from pathlib import Path
+          day=sys.argv[1]
+          value=json.loads(Path(f"research-output/finish-pair-priors-{day}.json").read_text())
+          assert value["target_event_date"]==day
+          assert value["formal_forecasts_modified"]==0
+          assert value["result_data_used_for_current_race_prediction"] is False
+          assert value["forecast_eligibility"].startswith("RESEARCH_ONLY")
+          assert (value["historical_date_range"]["max"] or "0000-00-00")<day
+          print("historical rows",value["validated_historical_races"],"groups",value["group_count"])
+          PY
+      - name: Upload research JSON only — no production forecast or data push
+        uses: actions/upload-artifact@v4
+        with:
+          name: finish-pair-research-${{ github.run_id }}
+          path: research-output/finish-pair-priors-*.json
+          retention-days: 14
+          if-no-files-found: error

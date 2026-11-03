@@ -1,12 +1,58 @@
 """Fresh, allowlisted racer/card context for future four-factor forecasts only."""
 from concurrent.futures import ThreadPoolExecutor
 import re
+import math
+from statistics import fmean, pstdev
 from datetime import datetime, timedelta, timezone
 if __package__:
     from .ingest_global_intelligence import fetch_csv, numeric, source_url
 else:
     from ingest_global_intelligence import fetch_csv, numeric, source_url
 JST = timezone(timedelta(hours=9))
+
+
+def in_meeting_start_consistency(card, lane):
+    """Read only prior *observed* in-meeting starts in current pre-cutoff card.
+
+    Never use the current race's outcome, final ST, or any postrace CSV.
+    Missing values and F/L are not silently treated as fast legal starts.
+    This descriptive feature is not a calibrated predicted start.
+    """
+    if not isinstance(card, dict) or lane not in range(1, 7):
+        return {
+            "meeting_st_legal_count": 0, "meeting_st_mean": None,
+            "meeting_st_sd": None, "meeting_st_recent_mean": None,
+            "meeting_st_recent_minus_older": None,
+            "meeting_st_f_count": 0,
+        }
+    values = []
+    flying = 0
+    for day_index in range(1, 8):
+        for session in (1, 2):
+            key = f"艇{lane}_節D{day_index}走{session}_"
+            race = numeric(card.get(key + "R番号"))
+            if race is None or not race.is_integer() or not 1 <= race <= 12:
+                continue
+            start = numeric(card.get(key + "ST"))
+            if start is None:
+                continue
+            if -.5 <= start < 0:
+                flying += 1
+            elif 0 <= start <= .40:
+                values.append(start)
+    count = len(values)
+    result = {
+        "meeting_st_legal_count": count,
+        "meeting_st_mean": round(fmean(values), 4) if count >= 3 else None,
+        "meeting_st_sd": round(pstdev(values), 4) if count >= 3 else None,
+        "meeting_st_recent_mean": round(fmean(values[-3:]), 4) if count >= 3 else None,
+        "meeting_st_recent_minus_older": (
+            round(fmean(values[-3:]) - fmean(values[:-3]), 4)
+            if count >= 6 else None
+        ),
+        "meeting_st_f_count": flying,
+    }
+    return result
 
 
 def collect(day):
@@ -28,6 +74,9 @@ def collect(day):
             values.update({k:numeric(waku.get(p+field)) for k,field in (
                 ('frame_win','枠番別勝率'),('frame_st','枠番別平均ST'),
                 ('frame_start_order','枠番別平均スタート順'))})
+            # New fields are advisory-only. The formal prediction model reads
+            # an explicit allowlist and does NOT reweight these automatically.
+            values.update(in_meeting_start_consistency(card, lane))
             boats[lane]={'racer_id':int(rid),'lane':lane,'values':values,
                          'sources':{key:meta for key,(_,meta) in fetched.items()}}
         result[code]=boats

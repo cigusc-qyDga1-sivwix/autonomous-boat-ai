@@ -21,9 +21,11 @@ def main(argv=None):
             print("Required vision dependencies missing: " + ", ".join(missing))
             return 1
     root = Path(__file__).resolve().parent
-    suite = unittest.defaultTestLoader.discover(str(root / "tests"), pattern="test_*.py")
+    # Python 3.11 retains the first discovery root on a loader. Each directory
+    # needs its own loader so the second suite remains independently importable.
+    suite = unittest.TestLoader().discover(str(root / "tests"), pattern="test_*.py")
     if args.cv:
-        suite.addTests(unittest.defaultTestLoader.discover(str(root / "cv_tests"), pattern="test_*.py"))
+        suite.addTests(unittest.TestLoader().discover(str(root / "cv_tests"), pattern="test_*.py"))
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     if result.skipped:
         print("Skipped checks cannot prove a completed vision milestone")

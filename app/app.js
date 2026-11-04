@@ -214,6 +214,7 @@
   function entryGateWarning(r) {
     const g=r?.entry_exhibition_gate;
     if(!g && data?.mode!=='auto-live')return '';
+    if(g?.final_eligible && r.classification==='SKIP')return '<div class="notice warn">展示は確認済みですが、予想の差が小さく採用根拠が不足したためSKIPです。掲載の4点は研究用候補で正式買い目ではありません。</div>';
     if(g?.final_eligible)
       return '<div class="notice">✅ 正式買い目：展示進入6艇の発走前確認済み：'+
         escape((g.exhibition_course_order||[]).join('-'))+
@@ -238,7 +239,7 @@
       '<div class="tile-top"><span class="tile-r">'+escape(r.venue)+' '+r.race+'R</span>'+pill(r.classification)+'</div>'+
       '<div class="ticket-list-status '+(isFormalTicket(r)?'ticket-status-formal':'ticket-status-pending')+'">'+(isFormalTicket(r)?'✅ 正式買い目':'⏳ 暫定・購入判断保留')+'</div>'+
       '<div class="tile-time">締切予定 '+escape(r.cutoff_jst)+' · 固定 '+r.bets.length+'点 · '+(r.phase==='exhibition'?'展示反映':'展示前')+'</div>'+
-      '<div class="tile-bets">'+(r.model_role==='main'?'✅ '+(r.model_version==='four-factor-v1.9-aligned-primary-untrained'?'艇間連動v1.9・評価整合':r.model_version==='four-factor-v1.8-adaptive-points-primary-untrained'?'艇間連動v1.8・可変点数':r.model_version==='four-factor-v1.7-interaction-inside-failure-untrained'?'艇間連動v1.7':r.model_version==='four-factor-v1.6-interaction-primary-untrained'?'艇間連動v1.6':r.model_version==='four-factor-v1.5-point-free-untrained'?'点数枠なしv1.5':r.model_version==='four-factor-v1.4-venue-aware-23-untrained'?'場別23場v1.4':r.model_version==='four-factor-v1.3-conditional-scenarios-untrained'?'四要素v1.3':r.model_version==='four-factor-v1.2-head-coverage-untrained'?'四要素v1.2・頭候補保持':r.model_version==='four-factor-v1.1-untrained'?'四要素v1.1':r.model_version==='four-factor-v1.0-untrained'?'四要素v1.0':r.model_version?.includes('v0.9')?'v0.9':'v0.7')+'メイン固定：':'🔒 旧モデル固定：')+
+      '<div class="tile-bets">'+(r.model_role==='main'?'✅ '+(r.model_version==='four-factor-v2.0-justified-points-primary-untrained'?'艇間連動v2.0・根拠審査':r.model_version==='four-factor-v1.9-aligned-primary-untrained'?'艇間連動v1.9・評価整合':r.model_version==='four-factor-v1.8-adaptive-points-primary-untrained'?'艇間連動v1.8・可変点数':r.model_version==='four-factor-v1.7-interaction-inside-failure-untrained'?'艇間連動v1.7':r.model_version==='four-factor-v1.6-interaction-primary-untrained'?'艇間連動v1.6':r.model_version==='four-factor-v1.5-point-free-untrained'?'点数枠なしv1.5':r.model_version==='four-factor-v1.4-venue-aware-23-untrained'?'場別23場v1.4':r.model_version==='four-factor-v1.3-conditional-scenarios-untrained'?'四要素v1.3':r.model_version==='four-factor-v1.2-head-coverage-untrained'?'四要素v1.2・頭候補保持':r.model_version==='four-factor-v1.1-untrained'?'四要素v1.1':r.model_version==='four-factor-v1.0-untrained'?'四要素v1.0':r.model_version?.includes('v0.9')?'v0.9':'v0.7')+'メイン固定：':'🔒 旧モデル固定：')+
       (isFormalTicket(r)?escape(r.bets.slice(0,2).map(b=>b.combination).join(' / ')):'正式買い目は未確定')+'</div>'+
       (r.legacy_control||trial?'<div class="tile-tactical">🔬 比較用モデルあり・正式買い目とは別</div>':'')+
       (r.entry_exhibition_gate?.entry_watch&&!r.entry_exhibition_gate.final_eligible?
@@ -347,7 +348,7 @@
       '<th>戦法試験買い目<br>1着/2着/3着</th><th>点検</th></tr></thead><tbody>'+
       rows+'</tbody></table></div>'+
       (warning?'<div class="notice warn">⚠ 1着上位3艇の中に、正式固定の買い目では1・2着の両方に登場しない艇があります。別モデル間の不整合候補として記録し、無条件の追加はしません。</div>':'')+
-      '<p class="help">相対評価は120通りの条件付き展開を着順ごとに合算した未校正のモデル重みで、実測的中確率ではありません。10/29以降の上限は20点（4〜20点）、過去の従来版は4〜12点、10/28のv1.5は点数枠なし。2着候補は別途攻め・追走・差しの成立条件を要します。固定買い目や正式収支は変更しません。</p>'+
+      '<p class="help">相対評価は120通りの条件付き展開を着順ごとに合算した未校正のモデル重みで、実測的中確率ではありません。v2.0では120通りは内部分析専用。採用は進入・展示と過去の選手戦法実績の根拠で審査し最大24点（通常はそれより少ない）。過去モデルの買い目は保存済み。2着候補は別途攻め・追走・差しの成立条件を要します。固定買い目や正式収支は変更しません。</p>'+
       '</div>';
   }
   // Read-only research-only exterior conditional model, separate from official tickets.
@@ -585,7 +586,17 @@
       </div>` : ''}
       <p class="external-footnote">BOATERSが掲載する独自展示指標は、元の競艇場公式でも公開されることがあります。データ利用条件を確認し、許可された提供元から取り込む方針です。<strong>この機能はBOATERSから自動取得したものではありません。</strong>この端末内の手動再評価では、固定済み買い目を変更しません。</p>
     </section>`;
-    const mainTicketSection = `<section class="card card-pad"><div class="section-head"><h2 class="section-title">${escape(ticketLabel(r))}／3連単フォーメーション</h2>${pill(`${r.bets.length}点 / 仮想`,'pending')}</div><div class="feature-card"><span class="feature-label">SCENARIO / 展開の中心</span><strong>${escape(r.scenario)}</strong><p>着順連動型の仮説。1着の勝ち筋と2・3着の残り方を検証する。</p></div><table class="bets-table"><thead><tr><th>評価</th><th>3連単</th><th>仮想金額</th></tr></thead><tbody>${r.bets.map((b,i)=>`<tr class="${i<3?'top-bet':''}"><td>${i<3?'本線':i<6?'対抗':'穴'}</td><td>${escape(b.combination)}</td><td class="amount">${money(b.virtual_yen)}</td></tr>`).join('')}</tbody></table><div class="detail-total"><span>合計 / ${r.bets.length}点</span><strong>${money(c.stake)}</strong></div><div class="notice warn">実際の購入は0円。${r.phase==='exhibition'?'展示は取得時点の値を反映。':'展示は未反映。'} オッズは未反映。この金額は精度比較用の仮想配分です。</div></section>`;
+    const proof=r.model_version==='four-factor-v2.0-justified-points-primary-untrained'?
+      r.interaction_primary?.point_policy:null;
+    const claimLabels={
+      MINIMUM_MODEL_RANK_ONLY_NOT_OBSERVED_EVIDENCE:'モデル順位のみ（裏付け未確認）',
+      SUPPORTED_PAIR_IN_HYPOTHETICAL_PATH:'展開仮説の1・2着ペア',
+      VERIFIED_EXHIBITION_AND_SUPPORTED_PAIR:'展示確認＋展開仮説',
+      EXHIBITION_AND_HISTORICAL_COURSE_TACTICS_AND_SUPPORTED_PAIR:'展示＋過去戦法実績＋展開仮説'
+    };
+    const mainTicketSection = `<section class="card card-pad"><div class="section-head"><h2 class="section-title">${escape(ticketLabel(r))}／3連単フォーメーション</h2>${pill(`${r.bets.length}点 / 仮想`,'pending')}</div><div class="feature-card"><span class="feature-label">SCENARIO / 展開の中心</span><strong>${escape(r.scenario)}</strong><p>着順連動型の仮説。1着の勝ち筋と2・3着の残り方を検証する。</p></div>
+      ${proof?'<div class="notice"><strong>v2.0 増点の根拠審査：</strong>'+escape(proof.signal_quality)+'。内部120通りは比較だけに使用。採用'+r.bets.length+'点、暫定安全上限24点。<strong>展開仮説は実際の攻防を観測した証拠ではありません。</strong></div>':''}
+      <table class="bets-table"><thead><tr><th>評価</th><th>3連単</th>${proof?'<th>採用根拠（未校正）</th>':''}<th>仮想金額</th></tr></thead><tbody>${r.bets.map((b,i)=>`<tr class="${i<3?'top-bet':''}"><td>${i<3?'本線':i<6?'対抗':'穴'}</td><td>${escape(b.combination)}</td>${proof?'<td>'+escape(claimLabels[proof.ticket_reasons?.[b.combination]?.basis]||'根拠未確認')+'</td>':''}<td class="amount">${money(b.virtual_yen)}</td></tr>`).join('')}</tbody></table><div class="detail-total"><span>合計 / ${r.bets.length}点</span><strong>${money(c.stake)}</strong></div><div class="notice warn">実際の購入は0円。${r.phase==='exhibition'?'展示は取得時点の値を反映。':'展示は未反映。'} オッズは未反映。この金額は精度比較用の仮想配分です。</div></section>`;
     const ticketBlock=isFormalTicket(r)?mainTicketSection:`<details class="ticket-provisional"><summary>暫定買い目を参考表示する（正式買い目ではありません）</summary>${mainTicketSection}</details>`;
     return `<button class="back-btn" data-action="back-races">← レース一覧へ戻る</button>
      ${window.BoatMobileRaceNav?.racePicker(r.venue,r.race,data.forecast_races,data.unforecast_races)||''}
@@ -596,7 +607,7 @@
     ${ticketBlock}
     ${r.model_version==='four-factor-v1.5-point-free-untrained'&&r.point_free_control?.generated_pre_cutoff&&r.point_free_control.frozen_at_utc===r.frozen_at_utc?'<section class="card card-pad"><details><summary>同じ入力の従来版と比較（検証用）</summary><p>点数枠なし '+r.bets.length+'点 ／ 従来版 '+r.point_free_control.bets.length+'点。各方式の仮想総額は5万円。以下は比較用で、追加の正式投資ではありません。</p><table class="bets-table"><thead><tr><th>従来版の買い目</th><th>仮想配分</th></tr></thead><tbody>'+r.point_free_control.bets.map(b=>'<tr><td>'+escape(b.combination)+'</td><td>'+b.virtual_yen.toLocaleString('ja-JP')+'円</td></tr>').join('')+'</tbody></table></details></section>':''}
     ${window.BoatStatisticalShadow?.placeholder(r)||''}
-    ${r.model_role==='main'?'<div class="notice"><strong>採用モデル '+(r.model_version==='four-factor-v1.9-aligned-primary-untrained'?'艇間連動v1.9：選手評価と1〜3着と買い目が同一120展開で連動（未校正）':r.model_version==='four-factor-v1.8-adaptive-points-primary-untrained'?'艇間連動v1.8：展開の強弱で点数を可変選択し100円単位で5万円を配分（未校正）':r.model_version==='four-factor-v1.7-interaction-inside-failure-untrained'?'艇間連動v1.7：イン残存・着外の5展開、二重評価除去（未校正）':r.model_version==='four-factor-v1.6-interaction-primary-untrained'?'艇間連動v1.6：旧比較モデル':r.model_version==='four-factor-v1.5-point-free-untrained'?'点数枠なしv1.5：組合せ評価 → 採否 → 点数 → 配分（試験）':r.model_version==='four-factor-v1.4-venue-aware-23-untrained'?'場別23場v1.4：決まり手傾向＋選手能力・合法ST・展示／2・3着連動を試験':r.model_version==='four-factor-v1.3-conditional-scenarios-untrained'?'四要素v1.3：展示による外攻め・内残り分岐を試験':r.model_version==='four-factor-v1.2-head-coverage-untrained'?'四要素v1.2：頭候補を保持／選手60 × モーター25 × 展示10 × 気象5':r.model_version==='four-factor-v1.1-untrained'?'四要素v1.1：選手60 × モーター25 × 展示10 × 気象5／2・3着は全艇評価':r.model_version==='four-factor-v1.0-untrained'?'四要素v1.0：選手60 × モーター25 × 展示10 × 気象5':r.model_version?.includes('v0.9')?'v0.9：ST差 × 6艇連動 × 1M・2M引き波評価':'v0.7：スタート差 × 6艇連動')+'</strong>。正式・暫定の区分は上の表示を確認してください。旧方式は比較用です。</div>':
+    ${r.model_role==='main'?'<div class="notice"><strong>採用モデル '+(r.model_version==='four-factor-v2.0-justified-points-primary-untrained'?'艇間連動v2.0：内部120展開は評価用、採用は最大24点まで根拠審査（未校正）':r.model_version==='four-factor-v1.9-aligned-primary-untrained'?'艇間連動v1.9：選手評価と1〜3着と買い目が同一120展開で連動（未校正）':r.model_version==='four-factor-v1.8-adaptive-points-primary-untrained'?'艇間連動v1.8：展開の強弱で点数を可変選択し100円単位で5万円を配分（未校正）':r.model_version==='four-factor-v1.7-interaction-inside-failure-untrained'?'艇間連動v1.7：イン残存・着外の5展開、二重評価除去（未校正）':r.model_version==='four-factor-v1.6-interaction-primary-untrained'?'艇間連動v1.6：旧比較モデル':r.model_version==='four-factor-v1.5-point-free-untrained'?'点数枠なしv1.5：組合せ評価 → 採否 → 点数 → 配分（試験）':r.model_version==='four-factor-v1.4-venue-aware-23-untrained'?'場別23場v1.4：決まり手傾向＋選手能力・合法ST・展示／2・3着連動を試験':r.model_version==='four-factor-v1.3-conditional-scenarios-untrained'?'四要素v1.3：展示による外攻め・内残り分岐を試験':r.model_version==='four-factor-v1.2-head-coverage-untrained'?'四要素v1.2：頭候補を保持／選手60 × モーター25 × 展示10 × 気象5':r.model_version==='four-factor-v1.1-untrained'?'四要素v1.1：選手60 × モーター25 × 展示10 × 気象5／2・3着は全艇評価':r.model_version==='four-factor-v1.0-untrained'?'四要素v1.0：選手60 × モーター25 × 展示10 × 気象5':r.model_version?.includes('v0.9')?'v0.9：ST差 × 6艇連動 × 1M・2M引き波評価':'v0.7：スタート差 × 6艇連動')+'</strong>。正式・暫定の区分は上の表示を確認してください。旧方式は比較用です。</div>':
       '<div class="notice warn">過去に固定した旧モデルの予想（当時の買い目・SHAを維持）。新モデルへ事後書き換えしません。</div>'}
     ${r.phase?`<div class="notice">${escape(r.evidence||'')} ・ 発走前保存 ${escape(r.frozen_at_utc||'未記録')} ・ SHA256 ${escape((r.sha256||'').slice(0,18))}…${r.weather_observed?`<br>場内風速 ${escape(r.weather_observed.wind_speed)}m/s ／ 波高 ${escape(r.weather_observed.wave_height)}cm（非公式・取得時点）`:''}<br>予想モデル：未学習・確率未校正。展示動画とオッズは未反映。</div>`:''}
     ${entryGateWarning(r)}

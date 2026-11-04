@@ -3,6 +3,8 @@ const {classify}=require('../ticket-policy.js');
 const day='2026-10-25';
 const r={phase:'exhibition',sha256:'a'.repeat(64),cutoff_jst:'12:00',frozen_at_utc:'2026-10-25T02:57:00Z',racers:Array.from({length:6},(_,i)=>({lane:i+1,course:i+1,exhibition_st:.15,exhibition_time:6.8}))};
 assert.equal(classify(r,day).formal,true);
+assert.equal(classify({...r,classification:'SKIP'},day).formal,false,'SKIP must not be a formal ticket');
+
 assert.equal(classify({...r,phase:'baseline',entry_exhibition_gate:{final_eligible:true}},day).formal,false);
 assert.equal(classify({...r,frozen_at_utc:'2026-10-25T03:01:00Z'},day).formal,false);
 assert.equal(classify({...r,frozen_at_utc:'2026-10-25T02:59:00Z'},day).formal,false);

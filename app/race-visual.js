@@ -18,7 +18,7 @@
    if(r?.entry_exhibition_gate?.entry_watch&&!r.entry_exhibition_gate.final_eligible)
      return {status:'hold',reason:'前付け警戒・展示進入未確認のため順位を保留'};
    try{
-     const primary=r?.model_role==='main'&&/^four-factor-v1\.(?:[6789])\b/.test(r.model_version||'');
+     const primary=r?.model_role==='main'&&/^four-factor-v(?:1\.(?:[6789])|2\.0)\b/.test(r.model_version||'');
      // Main prediction: render only the frozen primary model's shares.
      // Never silently substitute a separate browser/shadow forecast.
      const forecast=primary?r:(window.BoatRacerRating?.forecastForRace?.(r)||
@@ -225,7 +225,7 @@
    const combo=r?.model_role==='main'?picks[0]:(tacticCases[0]?.combo||picks[0]),order=ranks(combo),tactic=tacticFor(combo,r),roles=rolesFor(combo,r);
    let html='<section class="card card-pad boat-sim boat-sim-v3 boat-sim-v4" data-boat-sim aria-label="予想展開アニメーション">'+
      '<div class="section-head"><div><h2 class="section-title">🎬 展開予想アニメ</h2><p class="boat-sim-mini">スタート → 第1ターンマーク → バックストレッチ</p></div><span class="boat-sim-tag">戦法別 v5 / 自動再生</span></div>'+
-     '<div class="boat-sim-narrative"><span>想定する攻め方 <b data-sim-tactic>'+tactic.label+'</b></span><strong data-sim-forecast>'+(r?.model_role==='main'?'メイン'+(r.model_version==='four-factor-v1.9-aligned-primary-untrained'?'艇間連動v1.9評価整合':r.model_version==='four-factor-v1.8-adaptive-points-primary-untrained'?'艇間連動v1.8可変点数':r.model_version==='four-factor-v1.7-interaction-inside-failure-untrained'?'艇間連動v1.7':r.model_version==='four-factor-v1.6-interaction-primary-untrained'?'艇間連動v1.6':r.model_version==='four-factor-v1.1-untrained'?'四要素v1.1'+(r.four_factor?.chaser_policy?' 追走固定解除':''):r.model_version==='four-factor-v1.0-untrained'?'四要素v1.0':r.model_version?.includes('v0.9')?'v0.9':'v0.7')+' 発走前固定 ':tacticCases.length?'戦法研究（未固定） ':'元の予想 ')+combo+'</strong></div>'+
+     '<div class="boat-sim-narrative"><span>想定する攻め方 <b data-sim-tactic>'+tactic.label+'</b></span><strong data-sim-forecast>'+(r?.model_role==='main'?'メイン'+(r.model_version==='four-factor-v2.0-justified-points-primary-untrained'?'艇間連動v2.0根拠審査':r.model_version==='four-factor-v1.9-aligned-primary-untrained'?'艇間連動v1.9評価整合':r.model_version==='four-factor-v1.8-adaptive-points-primary-untrained'?'艇間連動v1.8可変点数':r.model_version==='four-factor-v1.7-interaction-inside-failure-untrained'?'艇間連動v1.7':r.model_version==='four-factor-v1.6-interaction-primary-untrained'?'艇間連動v1.6':r.model_version==='four-factor-v1.1-untrained'?'四要素v1.1'+(r.four_factor?.chaser_policy?' 追走固定解除':''):r.model_version==='four-factor-v1.0-untrained'?'四要素v1.0':r.model_version?.includes('v0.9')?'v0.9':'v0.7')+' 発走前固定 ':tacticCases.length?'戦法研究（未固定） ':'元の予想 ')+combo+'</strong></div>'+
      '<p class="boat-sim-disclaimer">本線・対抗の買い目に加え、非購入の比較用展開も切り替えられるよ。各艇が独立して先マイ／差し／まくり／まくり差しを狙う仮説を描く。実際の進入や艇間の航跡・速度を再現したものではありません。艇の戦法と、1Mの外を回る位置関係を比較する模式図です。</p>'+
      '<div class="boat-sim-roles" data-sim-roles aria-label="各艇の攻め方の仮説">'+roles.map(x=>'<span>'+x.lane+'号艇('+x.course+'コース)：'+esc(x.label)+'</span>').join('')+'</div>'+
      '<div class="boat-sim-picks" role="group" aria-label="再現する買い目">';

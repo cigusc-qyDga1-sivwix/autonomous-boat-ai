@@ -29,6 +29,7 @@ if __package__:
     from .interaction_scenarios import evaluate as evaluate_interactions, VERSION as INTERACTION_VERSION
     from .racer_course_tactics import profile as validate_tactics_profile, pairwise_note as tactic_pair
     from .adaptive_main_points import allocate_dynamic, stake_dynamic, VERSION as ADAPTIVE_POINTS_VERSION
+    from .justified_main_points import justified_selection, justified_stakes, VERSION as JUSTIFIED_POINTS_VERSION
 else:
     from racer_context import collect as collect_racer_context, validated as validate_racer_context
     from official_pay import fetch_official_pay
@@ -39,6 +40,7 @@ else:
     from interaction_scenarios import evaluate as evaluate_interactions, VERSION as INTERACTION_VERSION
     from racer_course_tactics import profile as validate_tactics_profile, pairwise_note as tactic_pair
     from adaptive_main_points import allocate_dynamic, stake_dynamic, VERSION as ADAPTIVE_POINTS_VERSION
+    from justified_main_points import justified_selection, justified_stakes, VERSION as JUSTIFIED_POINTS_VERSION
 
 JST = ZoneInfo("Asia/Tokyo")
 UTC = timezone.utc
@@ -76,6 +78,8 @@ INTERACTION_ADAPTIVE_MODEL = 'four-factor-v1.8-adaptive-points-primary-untrained
 INTERACTION_ADAPTIVE_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T09:02:00+00:00')
 INTERACTION_ALIGNED_MODEL = 'four-factor-v1.9-aligned-primary-untrained'
 INTERACTION_ALIGNED_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T10:25:00+00:00')
+INTERACTION_JUSTIFIED_MODEL = 'four-factor-v2.0-justified-points-primary-untrained'
+INTERACTION_JUSTIFIED_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T12:10:00+00:00')
 VIRTUAL_BUDGET_YEN = 50_000
 MIN_POINTS, MAX_POINTS = 4, 12
 STAKE_UNIT_YEN = 1_000
@@ -609,7 +613,10 @@ def head_coverage_eligible(record: dict, key: str, now: datetime, cutoff: dateti
 def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cutoff: datetime,
                         tactics: dict | None = None,
                         scored_weights: list[float] | None = None,
-                        adaptive_points: bool = False) -> tuple[list[dict], dict]:
+                        adaptive_points: bool = False,
+                        justified_points: bool = False,
+                        exhibition_verified: bool = False,
+                        site_weather_verified: bool = False) -> tuple[list[dict], dict]:
     """Forward-only main tickets. Existing main forecast is an A/B control."""
     if scored_weights is not None and (len(scored_weights) != 6 or
             any(number(value) is None or value <= 0 for value in scored_weights)):
@@ -696,7 +703,18 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
         except (KeyError, TypeError, ValueError) as exc:
             tactics_report = {"status": "REJECTED", "applied": False, "reason": str(exc)}
     dynamic_meta = None
-    if adaptive_points:
+    if justified_points:
+        independent = []
+        if tactics_report.get("applied"):
+            independent.append("past_racer_course_tactics")
+        if site_weather_verified:
+            independent.append("site_observed_weather")
+        selected, dynamic_meta = justified_selection(
+            ranked, result["scenario_assumptions"],
+            exhibition_verified=exhibition_verified,
+            independent_sources=independent)
+        count = len(selected)
+    elif adaptive_points:
         selected, dynamic_meta = allocate_dynamic(ranked)
         count = len(selected)
     else:
@@ -711,12 +729,18 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
     conditional_coverage = bool(
         inside_out_mass >= .25 and selected_without_one == 0 and excluded_candidates
         and excluded_candidates[0]["relative_score"] >= .55 * selected[-1]["relative_score"])
+    if justified_points:
+        # A hypothesized inside-displaced branch does not on its own justify
+        # purchasing an otherwise unselected ticket.
+        conditional_coverage = False
     if conditional_coverage:
         selected[-1] = excluded_candidates[0]
         selected.sort(key=lambda x: (-x["relative_score"], x["combination"]))
     if len(selected) != count:
         raise ValueError("Insufficient scenarios")
-    if adaptive_points:
+    if justified_points:
+        bets = justified_stakes(selected)
+    elif adaptive_points:
         bets = stake_dynamic(selected)
     else:
         units = 50 - count
@@ -788,9 +812,9 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
         } for lane in range(1, 7)
     }
     meta = {"version": INTERACTION_VERSION, "uncalibrated": True,
-            "point_policy": dynamic_meta if adaptive_points else {"status": "legacy_point_count"},
-            "point_count_independent_of_prior": bool(adaptive_points),
-            "stake_unit_yen": 100 if adaptive_points else 1000,
+            "point_policy": dynamic_meta if (adaptive_points or justified_points) else {"status": "legacy_point_count"},
+            "point_count_independent_of_prior": bool(adaptive_points or justified_points),
+            "stake_unit_yen": 1000 if justified_points else 100 if adaptive_points else 1000,
             "new_head_course_shares": new_head_shares,
             "main_role_shares": main_role_shares,
             "ticket_role_counts": ticket_role_counts,
@@ -808,7 +832,9 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
             "conditional_places_are_uncalibrated": True,
             "old_main_model_version": previous["model_version"],
             "old_main_bets": previous["bets"],
-            "comparison": ("prior frozen as audit only; adaptive main picks its own points; same 50000 virtual yen"
+            "comparison": ("prior frozen for audit; justified main limits expansion to verified pre-cutoff context"
+                           if justified_points else
+                           "prior frozen as audit only; adaptive main picks its own points; same 50000 virtual yen"
                            if adaptive_points else "same input, point count, 50000 virtual yen"),
             "result_data_used": False}
     return bets, meta
@@ -908,13 +934,28 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
                        and cutoff.astimezone(UTC) > INTERACTION_ADAPTIVE_ACTIVATION_UTC)
     aligned_active = (adaptive_active and now.astimezone(UTC) >= INTERACTION_ALIGNED_ACTIVATION_UTC
                       and cutoff.astimezone(UTC) > INTERACTION_ALIGNED_ACTIVATION_UTC)
+    justified_active = (aligned_active and now.astimezone(UTC) >= INTERACTION_JUSTIFIED_ACTIVATION_UTC
+                        and cutoff.astimezone(UTC) > INTERACTION_JUSTIFIED_ACTIVATION_UTC)
     interaction_meta = None
     if interaction_active:
-        bets, interaction_meta = interaction_primary(promoted, racers, frozen_at, cutoff,
-                                                      tactics=race.get("_course_tactics"),
-                                                      scored_weights=weathered,
-                                                      adaptive_points=adaptive_active)
-        chosen_model = (INTERACTION_ALIGNED_MODEL if aligned_active else
+        # The same strict six-boat exhibition/entry pre-cutoff gate controls
+        # whether the main can broaden beyond the base ticket set.
+        point_gate = summarize_gate({
+            "racers": racers, "phase": phase,
+            "cutoff_jst": cutoff.strftime("%H:%M"),
+            "frozen_at_utc": frozen_at,
+            "exhibition_origin": race.get("_exhibition_origin"),
+        }, cutoff.astimezone(JST).date().isoformat())
+        bets, interaction_meta = interaction_primary(
+            promoted, racers, frozen_at, cutoff,
+            tactics=race.get("_course_tactics"),
+            scored_weights=weathered,
+            adaptive_points=adaptive_active,
+            justified_points=justified_active,
+            exhibition_verified=bool(point_gate["final_eligible"]),
+            site_weather_verified=bool(selected_weather and selected_weather.get("site_observed")))
+        chosen_model = (INTERACTION_JUSTIFIED_MODEL if justified_active else
+                        INTERACTION_ALIGNED_MODEL if aligned_active else
                         INTERACTION_ADAPTIVE_MODEL if adaptive_active else INTERACTION_MAIN_MODEL)
     count = len(bets)
     shares = interaction_meta["new_head_course_shares"] if interaction_meta else promoted["head_course_shares"]
@@ -939,7 +980,13 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
             reason += "／展示タイム突出・外枠追走・内残りの条件付き試験（確率未校正）"
         if chosen_model == VENUE_TACTICS_MODEL:
             reason += "／23場別の決まり手構成と実進入・合法STに基づく着順連動v1.4（未校正）"
-        if aligned_active:
+        if justified_active:
+            policy = interaction_meta["point_policy"]
+            reason = ("艇間連動v2.0：内部120展開は分析のみ、採用"
+                      + str(len(bets)) + "点。根拠区分="
+                      + policy["signal_quality"] +
+                      "／暫定安全上限24点・仮想5万円・未校正")
+        elif aligned_active:
             reason = ("艇間連動v1.9：選手評価・1〜3着評価・買い目を同一120展開で連動、"
                       "点数も自動増減（未校正）")
         elif adaptive_active:
@@ -971,7 +1018,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         "start_v07": promoted["start_v07"],
         **({"wake_v09": promoted["wake_v09"],
             "primary_promotion_date_jst": (FOUR_FACTOR_DATE if four_factor else WAKE_PROMOTION_DATE).isoformat(),
-            "primary_model_ab": ("v1.9 main ratings + tickets same scored 120; forward-only, 50000 yen" if aligned_active else "v1.8 adaptive primary, independent point count, 50000 yen, older model audit only" if adaptive_active else "v1.7 corrected inside-survival scenario vs previous main, same pre-cutoff inputs, point count and 50000 yen" if interaction_active else "v1.5 point-free selection vs same-input previous primary; same 50000 budget" if point_free_active else "v1.4 venue-aware trial vs same-input v1.3 control and no-tactics ablation" if venue_active else
+            "primary_model_ab": ("v2.0 conservative selection: 120 analyzed, max 24 tickets, evidence-gated" if justified_active else "v1.9 main ratings + tickets same scored 120; forward-only, 50000 yen" if aligned_active else "v1.8 adaptive primary, independent point count, 50000 yen, older model audit only" if adaptive_active else "v1.7 corrected inside-survival scenario vs previous main, same pre-cutoff inputs, point count and 50000 yen" if interaction_active else "v1.5 point-free selection vs same-input previous primary; same 50000 budget" if point_free_active else "v1.4 venue-aware trial vs same-input v1.3 control and no-tactics ablation" if venue_active else
                                   "v1.3 forward trial vs v1.2 matched same-input control, with v0.9 legacy" if postrace_active else
                                  "four-factor primary vs same-time frozen v0.9 control") if four_factor else "v0.9 primary vs same-time frozen v0.7 control"}
            if new_primary else {}),
@@ -1026,7 +1073,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         "evidence": ("展示・場内気象あり" if weather and selected_weather and selected_weather.get("site_observed") else
                      "近隣予報（現地実測ではない）" if selected_weather else
                      "気象未取得") + ("・展示あり" if phase == "exhibition" else "・展示前"),
-        "classification": "WATCH",  # No validated edge or live odds; never BUY automatically.
+        "classification": ("SKIP" if justified_active and interaction_meta["point_policy"]["classification"] == "SKIP"
+                           else "WATCH"),  # No calibrated edge or odds; never automatic BUY.
     }
     return {**body, "sha256": stable_hash(body)}
 
@@ -1125,7 +1173,10 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                                and cutoff.astimezone(UTC) > INTERACTION_ADAPTIVE_ACTIVATION_UTC)
             aligned_active = (adaptive_active and runtime_now.astimezone(UTC) >= INTERACTION_ALIGNED_ACTIVATION_UTC
                               and cutoff.astimezone(UTC) > INTERACTION_ALIGNED_ACTIVATION_UTC)
-            expected_main = (INTERACTION_ALIGNED_MODEL if aligned_active else
+            justified_active = (aligned_active and runtime_now.astimezone(UTC) >= INTERACTION_JUSTIFIED_ACTIVATION_UTC
+                                and cutoff.astimezone(UTC) > INTERACTION_JUSTIFIED_ACTIVATION_UTC)
+            expected_main = (INTERACTION_JUSTIFIED_MODEL if justified_active else
+                             INTERACTION_ALIGNED_MODEL if aligned_active else
                              INTERACTION_ADAPTIVE_MODEL if adaptive_active else INTERACTION_MAIN_MODEL if interaction_active else
                              POINT_FREE_MODEL if point_free_active else VENUE_TACTICS_MODEL if venue_active else
                              POSTRACE_CONDITIONAL_MODEL if postrace_active else
@@ -1293,7 +1344,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         # This is a derived, non-hashed display gate. Do not alter any frozen
         # baseline/exhibition snapshot or re-create SHA with post-race facts.
         r["entry_exhibition_gate"] = summarize_gate(current, local_day)
-        r["ticket_status"] = "formal" if r["entry_exhibition_gate"]["final_eligible"] else "provisional"
+        r["ticket_status"] = ("formal" if r["entry_exhibition_gate"]["final_eligible"] and r.get("classification") != "SKIP" else "provisional")
         r["formal_snapshot_sha256"] = current["sha256"] if r["ticket_status"] == "formal" else None
         latest_races.append(r)
         p = record.get("official_pay")

@@ -16,6 +16,7 @@ POINT_FREE_MAIN_MODELS = frozenset({
     'four-factor-v1.5-point-free-untrained',
     'four-factor-v1.8-adaptive-points-primary-untrained',
     'four-factor-v1.9-aligned-primary-untrained',
+    'four-factor-v2.0-justified-points-primary-untrained',
 })
 
 

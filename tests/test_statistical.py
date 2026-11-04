@@ -138,3 +138,41 @@ def test_adaptive_shadow_keeps_same_large_point_count_and_100_yen(version):
     assert len(bets)==120
     assert sum(x["virtual_yen"] for x in bets)==50000
     assert all(x["virtual_yen"]>=100 and x["virtual_yen"]%100==0 for x in bets)
+
+
+def test_point_free_model_registry_is_shared():
+    assert uses_point_free_allocation('four-factor-v1.5-point-free-untrained')
+    assert uses_point_free_allocation('four-factor-v1.8-adaptive-points-primary-untrained')
+    assert uses_point_free_allocation('four-factor-v1.9-aligned-primary-untrained')
+    assert not uses_point_free_allocation('four-factor-v1.7-interaction-inside-failure-untrained')
+    assert not uses_point_free_allocation(None)
+
+
+@pytest.mark.parametrize('version', [
+    'four-factor-v1.8-adaptive-points-primary-untrained',
+    'four-factor-v1.9-aligned-primary-untrained',
+])
+def test_chronological_training_evaluation_handles_120_point_main(monkeypatch, version):
+    from itertools import permutations
+    from scripts import train_statistical
+    zero = zero_model()
+    monkeypatch.setattr(train_statistical, 'fit', lambda _: zero)
+    older = snapshot('2026-11-01')
+    train = [{'day':'2026-11-01','snapshot':older,'label':[0,1,2],
+              'race_key':f'18-{i}', 'payout':1000} for i in range(100)]
+    current = snapshot('2026-11-03')
+    current['model_version'] = version
+    choices = ['-'.join(map(str,p)) for p in permutations(range(1,7),3)]
+    current['bets'] = [{'combination':combo,'virtual_yen':100}
+                       for combo in choices]
+    current['bets'][-1]['virtual_yen'] = 50000 - (len(choices)-1)*100
+    result = train_statistical.evaluate(train + [{
+        'day':'2026-11-03','snapshot':current,'label':[0,1,2],
+        'race_key':'18-1','payout':1000
+    }])
+    assert len(result['folds']) == 1
+    picks = result['folds'][0]['races'][0]['learned_bets']
+    assert len(picks) == 120
+    assert sum(b['virtual_yen'] for b in picks) == 50000
+    assert all(b['virtual_yen'] >= 100 and b['virtual_yen'] % 100 == 0
+               for b in picks)

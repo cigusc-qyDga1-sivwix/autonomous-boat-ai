@@ -9,7 +9,7 @@ import json
 from collections import Counter
 from datetime import datetime,timezone
 from pathlib import Path
-from boat_ai.statistical import SCHEMA,FEATURES,JST,allocate,dataset,digest,distributions,features,prepare
+from boat_ai.statistical import SCHEMA,FEATURES,JST,allocate,dataset,digest,distributions,features,prepare,uses_point_free_allocation
 
 L2=.03  # Fixed before evaluating the dates. Not tuned on holdout outcomes.
 
@@ -70,7 +70,7 @@ def evaluate(rows):
         for row in test:
             ranked=distributions(row['snapshot'],model)
             # Point count locked to the existing snapshot for a matched comparison.
-            count=len(row['snapshot']['bets']);bets=allocate(ranked,count,point_free=row['snapshot'].get('model_version')=='four-factor-v1.5-point-free-untrained')
+            count=len(row['snapshot']['bets']);bets=allocate(ranked,count,point_free=uses_point_free_allocation(row['snapshot'].get('model_version')))
             finish='-'.join(str(x+1) for x in row['label']);p=next(x['score'] for x in ranked if x['combination']==finish)
             a=score_bets(bets,row['label'],row['payout'],p);b=score_bets(row['snapshot']['bets'],row['label'],row['payout'])
             a['day']=b['day']=day;a['phase']=b['phase']=row['snapshot']['phase']

@@ -12,6 +12,17 @@ from itertools import permutations
 from zoneinfo import ZoneInfo
 
 SCHEMA = 'conditional-choice-v1'
+POINT_FREE_MAIN_MODELS = frozenset({
+    'four-factor-v1.5-point-free-untrained',
+    'four-factor-v1.8-adaptive-points-primary-untrained',
+    'four-factor-v1.9-aligned-primary-untrained',
+})
+
+
+def uses_point_free_allocation(model_version):
+    """Historical main versions that allocate ¥50,000 in ¥100 ticket units."""
+    return isinstance(model_version, str) and model_version in POINT_FREE_MAIN_MODELS
+
 JST = ZoneInfo('Asia/Tokyo')
 BASE_NAMES = ['win_relative','motor_relative','st_relative','exhibition_relative','legal_exhibition_st_relative',
               'win_missing','motor_missing','st_missing','exhibition_missing','legal_st_missing']

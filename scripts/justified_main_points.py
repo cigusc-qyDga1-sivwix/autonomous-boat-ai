@@ -80,7 +80,7 @@ def justified_selection(ranked: Sequence[dict], scenarios: Sequence[dict], *,
     if flat:
         cap=4
         tier="SKIP_FLAT_UNCALIBRATED"
-    elif exhibition_verified and sources and diverse_paths:
+    elif exhibition_verified and "past_racer_course_tactics" in sources and diverse_paths:
         cap=SAFETY_MAX_POINTS
         tier="EXHIBITION_AND_INDEPENDENT_CONTEXT"
     elif exhibition_verified:
@@ -113,8 +113,8 @@ def justified_selection(ranked: Sequence[dict], scenarios: Sequence[dict], *,
                 why="SUPPORTED_PAIR_IN_HYPOTHETICAL_PATH"
             elif len(selected)<12 and exhibition_verified and rel>=.55:
                 why="VERIFIED_EXHIBITION_AND_SUPPORTED_PAIR"
-            elif len(selected)<SAFETY_MAX_POINTS and exhibition_verified and sources and diverse_paths and rel>=.48:
-                why="EXHIBITION_AND_INDEPENDENT_SOURCE_AND_SUPPORTED_PAIR"
+            elif len(selected)<SAFETY_MAX_POINTS and exhibition_verified and "past_racer_course_tactics" in sources and diverse_paths and rel>=.48:
+                why="EXHIBITION_AND_HISTORICAL_COURSE_TACTICS_AND_SUPPORTED_PAIR"
             else:
                 below_cutoff+=1
                 continue
@@ -146,7 +146,7 @@ def justified_selection(ranked: Sequence[dict], scenarios: Sequence[dict], *,
         "not_calibrated":True,
         "no_odds_edge_measured":True,
         "expansion_requires_pre_cutoff_sources":True,
-        "note":"24 is a temporary risk ceiling, not an optimized betting size; no automatic BUY.",
+        "note":"Measured weather alone cannot justify >12 tickets; past course tactics required. 24 is temporary safety ceiling; no automatic BUY.",
     }
     return selected,metadata
 

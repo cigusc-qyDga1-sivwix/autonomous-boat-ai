@@ -23,6 +23,9 @@ const r={
   national_win_rate:6.0+.1*i,motor_top_2_percent:30+i,
   average_start_timing:.14,exhibition_time:6.8,
  })),
+ four_factor:{rows:Array.from({length:6},(_,i)=>({
+  lane:i+1,factors:{athlete:{raw_multiplier:1.05+i*.01}},
+  available:{national_win:true}}))},
  head_course_shares:[.40,.20,.15,.10,.09,.06].map((x,i)=>({
   lane:i+1,course:i+1,relative_share:x})),
  bets:[{combination:'1-2-3',virtual_yen:30000},

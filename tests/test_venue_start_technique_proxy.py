@@ -26,7 +26,6 @@ def test_all_23_venues_and_edogawa_exclusion():
     assert len(summary["venues"]) == 23
     assert summary["venues"]["21"]["races"] == 1
     assert summary["venues"]["02"]["races"] == 1
-    assert summary["venues"]["03"] if False else True
     assert "03" not in summary["venues"]
     assert summary["global_reference"]["valid_comparisons"] == 6
     assert summary["eligible_for_formal_forecast"] is False

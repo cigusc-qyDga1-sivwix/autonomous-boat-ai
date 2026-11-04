@@ -126,7 +126,7 @@ function panel(r){
    '<p class="help"><strong>正式予想・正式収支は変更しません。</strong> 発走前に固定した試験を別集計します。</p></section>':'';
  const newerMain=r?.model_role==='main'&&/^four-factor-v1\.(?:[678])\b/.test(r.model_version||'');
  return '<section class="card card-pad four-factor-panel"><h3>'+(newerMain?'参考：旧4要素の基礎評価':'4要素の基礎評価')+'</h3><p>選手60・モーター25・展示10・気象5</p>'+
-  (newerMain?'<p class="help"><strong>これは旧4要素モデルの参考倍率で、正式v1.6〜v1.8の展開評価や買い目を直接生成する係数ではありません。</strong>最終的な1〜3着評価と採用点数は「6艇の総合評価」にある正式メインの数値をご確認ください。</p>':'')+<div class="boat-entry-overflow"><table class="bets-table"><thead><tr><th>艇</th>'+labels.map(x=>'<th>'+x+'</th>').join('')+'<th>合成</th></tr></thead><tbody>'+rows+'</tbody></table></div><p class="help">表示は重み適用後の倍率。欠損は中立の×1とし、取得値を捏造しません。この基礎評価と実進入・艇間連動から買い目を作ります。比率は試験設定で、的中確率や金銭的期待値ではありません。</p>'+policyHTML+chaserHTML+'</section>'+roleHTML+motorHTML+stHTML;
+  (newerMain?'<p class="help"><strong>これは旧4要素モデルの参考倍率で、正式v1.6〜v1.8の展開評価や買い目を直接生成する係数ではありません。</strong>最終的な1〜3着評価と採用点数は「6艇の総合評価」にある正式メインの数値をご確認ください。</p>':'')+'<div class="boat-entry-overflow"><table class="bets-table"><thead><tr><th>艇</th>'+labels.map(x=>'<th>'+x+'</th>').join('')+'<th>合成</th></tr></thead><tbody>'+rows+'</tbody></table></div><p class="help">表示は重み適用後の倍率。欠損は中立の×1とし、取得値を捏造しません。旧4要素の基礎評価であり、最新メインv1.8の買い目とは同一計算ではありません。比率は試験設定で、的中確率や金銭的期待値ではありません。</p>'+policyHTML+chaserHTML+'</section>'+roleHTML+motorHTML+stHTML;
 }
 root.BoatFourFactor={evaluate,panel,WEIGHTS};
 if(typeof module!=='undefined')module.exports=root.BoatFourFactor;

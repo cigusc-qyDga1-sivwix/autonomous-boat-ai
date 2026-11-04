@@ -81,10 +81,9 @@ def evaluate(racers, *, captured_at_utc: str, cutoff_at_utc: str):
         # Relative strength is a *research input*, NOT a trained probability.
         base = __import__("math").log(float(r["strength"]))
         # Upstream strength already contains course advantage; avoid double count.
-        if r.get("start_mean") is not None:
-            base += max(-.22, min(.22, (.16 - r["start_mean"]) * 1.8))
-        if r.get("exhibition_time") is not None:
-            base += max(-.14, min(.14, (6.85 - r["exhibition_time"]) * .18))
+        # Average ST and exhibition time are already reflected in the
+        # upstream relative weight as well. Validate inputs, but do not
+        # add the same features again in the scenario layer.
         baseline[lane] = base
 
     # Mutually exclusive hypothetical paths: no event is inferred to have occurred.

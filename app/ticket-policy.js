@@ -3,6 +3,7 @@
 'use strict';
 function classify(r,day){
  const held={formal:false,label:'暫定買い目（展示未確認・正式化保留）'};
+ if(r?.classification==='SKIP')return {formal:false,label:'SKIP（参考候補のみ・正式買い目ではありません）'};
  if(r?.phase!=='exhibition'||!/^\d{4}-\d{2}-\d{2}$/.test(day||'')||
     !/^[a-f0-9]{64}$/i.test(r.sha256||''))return held;
  const cutoff=Date.parse(day+'T'+r.cutoff_jst+':00+09:00'),frozen=Date.parse(r.frozen_at_utc);

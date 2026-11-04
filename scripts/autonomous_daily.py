@@ -644,7 +644,6 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
             for entry in ranked:
                 first, second, third = (int(i) for i in entry["combination"].split("-"))
                 attack = validated[first]
-                defender = validated[1 if first != 1 else 2]
                 if first == 1:
                     candidate = attack["technique_per_start"]["escape"]
                 else:
@@ -916,7 +915,8 @@ def safe_to_append_pre_cutoff(snapshot: dict, cutoff: datetime, margin_seconds: 
 
 def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
           weather_by_venue: dict | None = None, exhibition_rows: dict | None = None,
-          enforce_wall_clock: bool = False, racer_context_rows: dict | None = None) -> tuple[dict, dict, dict]:
+          enforce_wall_clock: bool = False, racer_context_rows: dict | None = None,
+          tactics_rows: dict | None = None) -> tuple[dict, dict, dict]:
     if now.tzinfo is None:
         raise ValueError("Timezone-aware now is mandatory")
     local_day = now.astimezone(JST).date().isoformat()
@@ -971,7 +971,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
             postrace_active = cutoff.date() >= FOUR_FACTOR_DATE and runtime_now.astimezone(UTC) >= POSTRACE_ACTIVATION_UTC
             venue_active = postrace_active and VENUES[venue_code] != '江戸川' and runtime_now.astimezone(UTC) >= VENUE_TACTICS_ACTIVATION_UTC
             coverage_active = head_coverage_eligible(record, key, runtime_now, cutoff) and not postrace_active
-            race = {**race, "_head_coverage_trial": coverage_active}
+            race = {**race, "_head_coverage_trial": coverage_active,
+                    "_course_tactics": (tactics_rows or {}).get(f"{local_day.replace('-', '')}{int(venue_code):02d}{n:02d}")}
             point_free_active = cutoff.date() == POINT_FREE_DATE and runtime_now.astimezone(JST).date() == POINT_FREE_DATE
             interaction_active = (cutoff.date() >= FOUR_FACTOR_DATE and VENUES[venue_code] != "江戸川"
                                   and runtime_now.astimezone(UTC) >= INTERACTION_MAIN_ACTIVATION_UTC
@@ -1490,6 +1491,7 @@ def main():
     parser.add_argument("--input-json", type=Path, help="Local fixture; no network")
     parser.add_argument("--now-iso", help="Clock override (test only)")
     parser.add_argument("--out-dir", type=Path, default=APP_DATA)
+    parser.add_argument("--tactics-json", type=Path, help="Licensed past-only course/technique profiles, keyed by race code")
     args = parser.parse_args()
     now = datetime.fromisoformat(args.now_iso) if args.now_iso else datetime.now(UTC)
     day = now.astimezone(JST).date().isoformat()
@@ -1525,9 +1527,17 @@ def main():
             contexts = collect_racer_context(now.astimezone(JST).date())
         except Exception:
             contexts = {}  # Missing sources stay neutral, never fabricate player history.
+    # Explicit opt-in source; never automatically scrape a restricted site.
+    # Each racer row is individually checked against its future cutoff.
+    tactics_rows = {}
+    if args.tactics_json:
+        raw_tactics = json.loads(args.tactics_json.read_text(encoding='utf-8'))
+        if raw_tactics.get('event_date') != day or not isinstance(raw_tactics.get('races'), dict):
+            raise ValueError('Tactics file date or race map mismatch')
+        tactics_rows = raw_tactics['races']
     ledger, webapp, summary = build(previous, source, now, source_url, nearby_forecasts,
                                      exhibition_rows=research, enforce_wall_clock=not bool(args.input_json),
-                                     racer_context_rows=contexts)
+                                     racer_context_rows=contexts, tactics_rows=tactics_rows)
     if weather_error:
         summary["weather_error"] = weather_error
         webapp["weather_fetch_status"] = "UNAVAILABLE"

@@ -118,10 +118,39 @@ def evaluate(racers, *, captured_at_utc: str, cutoff_at_utc: str):
                         "top_3": sorted(scenario.items(), key=lambda item: (-item[1], item[0]))[:3]})
         for key, weight in scenario.items():
             mixture[key] = mixture.get(key, 0.0) + prior * weight
+    # Conditional positions are derived from the SAME 120-outcome mixture
+    # used for tickets. They are diagnostics, not calibrated probabilities;
+    # no fixed "outer follower" can be called a guaranteed second place.
+    by_head = {i: {"head_weight": 0.0, "second": {j: 0.0 for j in range(1, 7)},
+                   "third": {j: 0.0 for j in range(1, 7)}}
+               for i in range(1, 7)}
+    for combo, mass in mixture.items():
+        head, second, third = (int(x) for x in combo.split("-"))
+        by_head[head]["head_weight"] += mass
+        by_head[head]["second"][second] += mass
+        by_head[head]["third"][third] += mass
+    conditional_places = []
+    for head in range(1, 7):
+        h = by_head[head]
+        head_mass = h["head_weight"]
+        if head_mass <= 0:
+            raise ValueError("Invalid zero head weight")
+        conditional_places.append({
+            "head_lane": head,
+            "relative_head_share": round(head_mass, 8),
+            "second_given_head": {str(j): round(h["second"][j] / head_mass, 8)
+                                  for j in range(1, 7)},
+            "third_given_head": {str(j): round(h["third"][j] / head_mass, 8)
+                                 for j in range(1, 7)},
+            "top3_partner_given_head": {
+                str(j): round((h["second"][j] + h["third"][j]) / head_mass, 8)
+                for j in range(1, 7)},
+        })
     return {"version": VERSION, "status": "SHADOW_UNCALIBRATED",
             "eligible_for_formal_forecast": False, "bets_generated": 0,
             "captured_at_utc": captured.isoformat(), "cutoff_at_utc": cutoff.isoformat(),
             "scenario_assumptions": details,
+            "conditional_places_by_head": conditional_places,
             "course1_outside_top3_relative_mass": round(sum(p for k, p in mixture.items()
                 if "1" not in k.split("-")), 8),
             "course1_outside_top3_by_path": exclusion_by_path,

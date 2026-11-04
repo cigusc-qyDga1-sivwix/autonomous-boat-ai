@@ -742,6 +742,8 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
             "conditional_coverage_rule": "relative_mass>=.25, candidate>=.55*last_selected",
             "racer_course_tactics": tactics_report,
             "scenario_assumptions": result["scenario_assumptions"],
+            "conditional_places_by_head": result["conditional_places_by_head"],
+            "conditional_places_are_uncalibrated": True,
             "old_main_model_version": previous["model_version"],
             "old_main_bets": previous["bets"],
             "comparison": "same input, point count, 50000 virtual yen",

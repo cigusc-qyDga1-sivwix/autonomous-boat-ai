@@ -12,7 +12,10 @@ from __future__ import annotations
 from math import isfinite
 from typing import Sequence
 
-from .adaptive_main_points import VALID, stake_dynamic
+try:
+    from .adaptive_main_points import VALID, stake_dynamic
+except ImportError:
+    from adaptive_main_points import VALID, stake_dynamic
 
 VERSION = "justified-main-points-v2.0-conservative-untrained"
 SAFETY_MAX_POINTS = 24

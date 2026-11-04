@@ -214,6 +214,7 @@
   function entryGateWarning(r) {
     const g=r?.entry_exhibition_gate;
     if(!g && data?.mode!=='auto-live')return '';
+    if(g?.final_eligible && r.classification==='SKIP')return '<div class="notice warn">展示は確認済みですが、予想の差が小さく採用根拠が不足したためSKIPです。掲載の4点は研究用候補で正式買い目ではありません。</div>';
     if(g?.final_eligible)
       return '<div class="notice">✅ 正式買い目：展示進入6艇の発走前確認済み：'+
         escape((g.exhibition_course_order||[]).join('-'))+

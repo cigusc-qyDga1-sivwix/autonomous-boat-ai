@@ -10,7 +10,7 @@ from itertools import permutations
 from math import exp, isfinite
 from typing import Mapping
 
-VERSION = "interaction-scenarios-v0.1-shadow-untrained"
+VERSION = "interaction-scenarios-v0.2-inside-failure-untrained"
 ALLOWED = {"lane", "strength", "start_mean", "exhibition_time"}
 PROHIBITED = {"result", "finish", "rank", "payout", "trifecta", "odds", "actual_start"}
 
@@ -80,7 +80,7 @@ def evaluate(racers, *, captured_at_utc: str, cutoff_at_utc: str):
     for lane, r in rows.items():
         # Relative strength is a *research input*, NOT a trained probability.
         base = __import__("math").log(float(r["strength"]))
-        base += [0.36, 0.20, 0.07, -0.06, -0.17, -0.27][lane - 1]
+        # Upstream strength already contains course advantage; avoid double count.
         if r.get("start_mean") is not None:
             base += max(-.22, min(.22, (.16 - r["start_mean"]) * 1.8))
         if r.get("exhibition_time") is not None:
@@ -92,21 +92,27 @@ def evaluate(racers, *, captured_at_utc: str, cutoff_at_utc: str):
     defender = max(1, attack - 1)
     follower = min(6, attack + 1) if attack < 6 else 5
     paths = [
-        ("no_major_attack", .42, {}, "No decisive outer attack; inside lines retain space"),
-        ("outer_attack_succeeds", .25,
-         {attack: .65, follower: .29, 1: -.25},
-         "Outer attack creates a following lane"),
-        ("attack_contested", .20,
+        ("no_major_attack", .30, {}, "No decisive outside attack"),
+        ("outer_attack_succeeds", .28,
+         {attack: .75, follower: .40, 1: -.70},
+         "Outside attack may push the inside boat out of a paid position"),
+        ("attack_contested", .17,
          {attack: -.44, defender: .27, 1: .20, follower: .12},
-         "Defender contests the attacking path"),
-        ("attack_overruns", .13,
-         {attack: -.68, follower: .50, 1: .11},
-         "Attacker runs wide, follower may capitalize"),
+         "Inside boat defends an outside challenge"),
+        ("attack_overruns", .15,
+         {attack: -.68, follower: .50, 1: -.25},
+         "Attacker overruns 1M; follower may capitalize"),
+        ("inside_displaced", .10,
+         {attack: 1.10, follower: .65, 1: -1.80},
+         "Inside boat loses position and may finish outside top three"),
     ]
     mixture = {}
     details = []
+    exclusion_by_path = {}
     for label, prior, delta, reason in paths:
         scenario = _ordered_three({i: baseline[i] + delta.get(i, 0) for i in baseline})
+        exclusion_by_path[label] = round(sum(p for k, p in scenario.items()
+            if "1" not in k.split("-")), 8)
         details.append({"scenario": label, "assumed_share": prior,
                         "attack_lane": attack, "defender_lane": defender,
                         "follower_lane": follower, "reason": reason,
@@ -117,6 +123,9 @@ def evaluate(racers, *, captured_at_utc: str, cutoff_at_utc: str):
             "eligible_for_formal_forecast": False, "bets_generated": 0,
             "captured_at_utc": captured.isoformat(), "cutoff_at_utc": cutoff.isoformat(),
             "scenario_assumptions": details,
+            "course1_outside_top3_relative_mass": round(sum(p for k, p in mixture.items()
+                if "1" not in k.split("-")), 8),
+            "course1_outside_top3_by_path": exclusion_by_path,
             "top_combinations": [{"combination": key, "relative_score": round(value, 8)}
                                  for key, value in sorted(mixture.items(),
                                  key=lambda item: (-item[1], item[0]))[:120]],

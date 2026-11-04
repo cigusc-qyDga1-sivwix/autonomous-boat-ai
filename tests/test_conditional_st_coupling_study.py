@@ -87,7 +87,7 @@ def test_pairwise_historical_counts_are_conditional_not_mark_labels():
     assert comparison["other_races"] == 20
     assert comparison["inner_top3_given_head_rate"] == 0.0
     assert comparison["inner_top3_given_other_head_rate"] == 1.0
-    assert comparison["meaning"] == "finish correlation, not observed marking or attack"
+    assert "control excludes the inner boat winning" in comparison["meaning"]
 
 
 def test_unknown_does_not_count_as_inside_lead():

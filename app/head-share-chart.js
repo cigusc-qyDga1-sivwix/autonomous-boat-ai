@@ -8,7 +8,20 @@
  const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  function data(r){
   if(!r||!(/^[a-f0-9]{64}$/i.test(r.sha256||'')))return null;
-  const source=r.head_course_shares,boats=r.racers;
+  let source=r.head_course_shares;
+  const boats=r.racers;
+  // New primary evaluations and the pie must use the same frozen marginals.
+  // A contradictory saved source is unavailable, not a reason to rerun a model.
+  if(r.model_role==='main'&&r.interaction_primary){
+   const meta=r.interaction_primary,roles=meta.main_role_shares;
+   if(meta.role_evaluation_source!=='same_final_ranked_120_as_primary_bets'||!roles||
+      !Array.isArray(source)||source.length!==6)return null;
+   if(source.some(x=>!x||typeof x.relative_share!=='number'||
+      typeof roles[String(x.lane)]?.first!=='number'||
+      !Number.isFinite(roles[String(x.lane)].first)||
+      Math.abs(x.relative_share-roles[String(x.lane)].first)>.00011))return null;
+   source=source.map(x=>({...x,relative_share:roles[String(x.lane)].first}));
+  }
   if(!Array.isArray(source)||source.length!==6||!Array.isArray(boats)||boats.length!==6||
      source.some(x=>!x||typeof x!=='object')||boats.some(x=>!x||typeof x!=='object'))return null;
   const rows=[...source].sort((a,b)=>a.lane-b.lane);
@@ -30,11 +43,35 @@
   return rows.map((x,i)=>({lane:x.lane,course:x.course,name:String(byLane.get(x.lane).name||'選手名未取得'),
    share:x.relative_share/total,percent:units[i]/10,color:COLORS[i],ink:INK[i]}));
  }
+ function ticketSummary(r){
+  const rows=data(r),bets=r?.bets;
+  if(!rows||!Array.isArray(bets)||!bets.length||
+     new Set(bets.map(b=>b?.combination)).size!==bets.length)return null;
+  const counts=Array(6).fill(0),stakes=Array(6).fill(0);
+  for(const b of bets){
+   if(!b||!/^([1-6]-){2}[1-6]$/.test(b.combination)||
+      new Set(b.combination.split('-')).size!==3||
+      !Number.isSafeInteger(b.virtual_yen)||b.virtual_yen<=0)return null;
+   const i=Number(b.combination[0])-1;counts[i]++;stakes[i]+=b.virtual_yen;
+  }
+  const total=stakes.reduce((a,b)=>a+b,0);
+  if(total!==50000)return null;
+  const saved=r.interaction_primary?.ticket_role_counts;
+  if(saved&&rows.some(x=>saved[String(x.lane)]?.first!==counts[x.lane-1]))return null;
+  const best=Math.max(...rows.map(x=>x.share)),largest=Math.max(...stakes);
+  const ratingLeaders=rows.filter(x=>Math.abs(x.share-best)<1e-10).map(x=>x.lane);
+  const stakeLeaders=rows.filter(x=>stakes[x.lane-1]===largest).map(x=>x.lane);
+  return {rows:rows.map(x=>({...x,headCount:counts[x.lane-1],stake:stakes[x.lane-1],
+     stakePercent:100*stakes[x.lane-1]/total})),total,
+    ratingLeaders,stakeLeaders,
+    leadersDiffer:!ratingLeaders.some(lane=>stakeLeaders.includes(lane))};
+ }
  function point(angle,radius=88){return [110+radius*Math.cos(angle),110+radius*Math.sin(angle)];}
  const pos=x=>x.map(n=>n.toFixed(3)).join(' ');
  function render(r){
-  const rows=data(r),heading='<h2 class="section-title">1着奪取の相対評価</h2>';
+  const rows=data(r),heading='<h2 class="section-title">1着奪取の相対評価と買い目</h2>';
   if(!rows)return '<section class="card card-pad head-share-card">'+heading+'<p class="head-share-empty">保存済みの6艇分の評価を確認できないため、円グラフは表示できません。</p></section>';
+  const summary=ticketSummary(r);
   const id='head-share-'+r.sha256.slice(0,16),exhibition=r.phase==='exhibition';
   const state=exhibition?'展示情報反映':'展示前・暫定';
   let angle=-Math.PI/2;
@@ -54,8 +91,17 @@
   const desc=rows.map(x=>x.lane+'号艇 '+x.name+' '+x.percent.toFixed(1)+'％').join('、');
   const svg='<svg class="head-share-pie" viewBox="0 0 220 220" role="img" aria-labelledby="'+id+'-title '+id+'-desc"><title id="'+id+'-title">'+esc(r.venue)+' '+esc(r.race)+'R 1着候補の相対評価</title><desc id="'+id+'-desc">'+esc(state+'。'+desc+'。実際の1着確率ではありません。')+'</desc>'+paths.join('')+'<circle cx="110" cy="110" r="88" fill="none" stroke="#8fa1b4" stroke-width="1"/>'+labels.join('')+'</svg>';
   const legend=rows.map(x=>'<li><span class="head-share-swatch head-share-lane-'+x.lane+'" aria-hidden="true">'+x.lane+'</span><span class="head-share-person"><b>'+x.lane+'号艇</b><span>'+esc(x.name)+'</span></span><strong class="head-share-percent">'+x.percent.toFixed(1)+'<small>％</small></strong></li>').join('');
-  return '<section class="card card-pad head-share-card" data-head-share-chart><div class="head-share-heading">'+heading+'<span class="head-share-state">'+state+'</span></div><p class="head-share-subtitle">1〜6号艇の評価割合 · 合計100％</p><div class="head-share-content">'+svg+'<ol class="head-share-legend" aria-label="各艇の1着相対評価">'+legend+'</ol></div><p class="head-share-note"><strong>実際の1着確率・的中率ではありません。</strong>保存した予想の相対評価を、6艇で100％に換算した試験値です。表示は小数1桁に丸めています。'+(!exhibition?'展示・実進入の確認前の暫定値です。':'')+'</p></section>';
+  const lanes=xs=>xs.map(x=>x+'号艇').join('・');
+  const comparison=summary?'<div class="head-ticket-comparison"><p class="head-ticket-leaders">評価1位：<strong>'+lanes(summary.ratingLeaders)+
+   '</strong> ／ 頭の配分最多：<strong>'+lanes(summary.stakeLeaders)+'</strong></p>'+
+   (summary.leadersDiffer?'<p class="head-ticket-difference">評価1位と頭の配分最多が異なります。下表で採用点数と配分を確認してください。</p>':'')+
+   '<div class="head-ticket-scroll"><table class="head-ticket-table"><caption>同じ保存予想の評価・採用点数・仮想配分</caption><thead><tr><th>艇</th><th>1着相対評価</th><th>頭の採用</th><th>頭の仮想配分</th></tr></thead><tbody>'+
+   summary.rows.map(x=>'<tr><th scope="row">'+x.lane+'号艇</th><td>'+x.percent.toFixed(1)+'％</td><td>'+x.headCount+
+    '点</td><td>'+x.stake.toLocaleString('ja-JP')+'円 <small>('+x.stakePercent.toFixed(1)+'％)</small></td></tr>').join('')+
+   '</tbody></table></div><p class="head-share-note">1着相対評価は全展開を合計したモデル重みです。採用点数・配分は選んだ3連単の合計で、2・3着の条件と点数制限によって異なります。配分割合は1着確率ではありません。オッズ未反映のため、収益性で裏付けた配分ではありません。</p></div>':
+   '<p class="head-share-empty">同じ予想の買い目・配分を確認できないため、評価との比較は保留しています。</p>';
+  return '<section class="card card-pad head-share-card" data-head-share-chart><div class="head-share-heading">'+heading+'<span class="head-share-state">'+state+'</span></div><p class="head-share-subtitle">全展開を合計した1着評価 · 買い目の配分割合とは別</p><div class="head-share-content">'+svg+'<ol class="head-share-legend" aria-label="各艇の1着相対評価">'+legend+'</ol></div>'+comparison+'<p class="head-share-note"><strong>実際の1着確率・的中率ではありません。</strong>保存した予想の相対評価を、6艇で100％に換算した試験値です。表示は小数1桁に丸めています。'+(!exhibition?'展示・実進入の確認前の暫定値です。':'')+'</p></section>';
  }
- root.BoatHeadShareChart={data,render};
+ root.BoatHeadShareChart={data,ticketSummary,render};
  if(typeof module!=='undefined')module.exports=root.BoatHeadShareChart;
 })(typeof window==='undefined'?globalThis:window);

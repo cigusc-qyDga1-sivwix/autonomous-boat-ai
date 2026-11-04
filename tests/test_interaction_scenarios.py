@@ -84,3 +84,16 @@ def test_upstream_course_strength_is_not_applied_twice():
     calm = next(p for p in x["scenario_assumptions"] if p["scenario"] == "no_major_attack")
     # With equal upstream inputs there is no *additional* lane premium.
     assert calm["top_3"][0][1] == pytest.approx(1 / 120, rel=1e-6)
+
+def test_start_and_exhibition_are_not_scored_twice():
+    rows = [{"lane": i, "strength": 20, "start_mean": .11 + i*.02,
+             "exhibition_time": 6.65 + i*.05} for i in range(1, 7)]
+    a = run(rows)
+    # After upstream feature calculation the scenario layer must not apply
+    # another ST/exhibition premium on the same six relative strengths.
+    for row in rows:
+        row["start_mean"] = .16
+        row["exhibition_time"] = 6.8
+    b = run(rows)
+    assert a["top_combinations"] == b["top_combinations"]
+    assert a["course1_outside_top3_relative_mass"] == b["course1_outside_top3_relative_mass"]

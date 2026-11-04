@@ -128,7 +128,7 @@ def test_v18_main_adapts_points_without_following_old_model():
     assert sum(b["virtual_yen"] for b in result["bets"]) == 50000
     assert all(b["virtual_yen"] % 100 == 0 and b["virtual_yen"] >= 100
                for b in result["bets"])
-    assert "可変" in result["point_reason"]
+    assert "自動増減" in result["point_reason"]
     assert result["sha256"] == stable_hash({k:v for k,v in result.items() if k != "sha256"})
 
 

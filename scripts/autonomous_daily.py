@@ -26,6 +26,7 @@ if __package__:
     from .entry_exhibition_gate import validated_preview, summarize_gate
     from .venue_profiles import get_profile, adjust_weights as adjust_venue_weights
     from .interaction_scenarios import evaluate as evaluate_interactions, VERSION as INTERACTION_VERSION
+    from .racer_course_tactics import profile as validate_tactics_profile, pairwise_note as tactic_pair
 else:
     from racer_context import collect as collect_racer_context, validated as validate_racer_context
     from official_pay import fetch_official_pay
@@ -34,6 +35,7 @@ else:
     from entry_exhibition_gate import validated_preview, summarize_gate
     from venue_profiles import get_profile, adjust_weights as adjust_venue_weights
     from interaction_scenarios import evaluate as evaluate_interactions, VERSION as INTERACTION_VERSION
+    from racer_course_tactics import profile as validate_tactics_profile, pairwise_note as tactic_pair
 
 JST = ZoneInfo("Asia/Tokyo")
 UTC = timezone.utc
@@ -597,7 +599,8 @@ def head_coverage_eligible(record: dict, key: str, now: datetime, cutoff: dateti
 
 
 
-def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cutoff: datetime) -> tuple[list[dict], dict]:
+def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cutoff: datetime,
+                        tactics: dict | None = None) -> tuple[list[dict], dict]:
     """Forward-only main tickets. Existing main forecast is an A/B control."""
     supplied = []
     for r in racers:
@@ -612,7 +615,74 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
     count = len(previous["bets"])
     if not (4 <= count <= 20):
         raise ValueError("Unsupported previous main point count")
-    selected = result["top_combinations"][:count]
+    # This option is engaged ONLY with independently validated, historical
+    # course-by-racer evidence. No data => exactly the prior primary model.
+    tactics_report = {"status": "UNAVAILABLE", "applied": False}
+    ranked = result["top_combinations"]
+    if tactics is not None:
+        try:
+            if not isinstance(tactics, dict) or set(tactics) != {"profiles", "reference"}:
+                raise ValueError("Invalid tactics envelope")
+            reference = tactics["reference"]
+            # Training reference rates must also be frozen before this race.
+            if not isinstance(reference, dict) or not isinstance(reference.get("observed_until_utc"), str):
+                raise ValueError("Missing historical reference provenance")
+            reference_stamp = datetime.fromisoformat(reference["observed_until_utc"].replace("Z", "+00:00"))
+            if reference_stamp.tzinfo is None or reference_stamp >= cutoff:
+                raise ValueError("Reference rates include post-cutoff observations")
+            ref_sha = reference.get("source_sha256")
+            if not isinstance(ref_sha, str) or len(ref_sha) != 64 or any(ch not in "0123456789abcdef" for ch in ref_sha):
+                raise ValueError("Invalid historical reference source SHA")
+            rows = tactics["profiles"]
+            if not isinstance(rows, dict) or set(rows) != set(str(i) for i in range(1, 7)):
+                raise ValueError("Incomplete six-racer tactics data")
+            validated = {}
+            for racer in racers:
+                ident = racer.get("racer_id")
+                course = racer.get("course")
+                if type(ident) is not int or type(course) is not int:
+                    raise ValueError("Missing racer ID or actual course")
+                validated[racer["lane"]] = validate_tactics_profile(
+                    rows[str(racer["lane"])], tactics["reference"],
+                    target_racer_id=ident, course=course,
+                    cutoff_at_utc=cutoff.isoformat())
+            if not all(p["status"] == "RESEARCH_READY" for p in validated.values()):
+                raise ValueError("Insufficient past starts")
+            # A bounded tie-breaker for ranked combinations, not a measured
+            # probability. Explicitly retain identical point-count comparison.
+            rescored = []
+            for entry in ranked:
+                first, second, third = (int(i) for i in entry["combination"].split("-"))
+                attack = validated[first]
+                if first == 1:
+                    candidate = attack["technique_per_start"]["escape"]
+                else:
+                    candidate = max(attack["technique_per_start"][k] for k in ("makuri", "makurizashi", "sashi"))
+                # Distinguish attack skill from the inside defender's demonstrated
+                # vulnerability. "Marking" intent cannot be read from these stats.
+                defender_delta = 0.0
+                if first != 1:
+                    inner_course = attack["course"] - 1
+                    inside = next((v for v in validated.values() if v["course"] == inner_course), None)
+                    tactic = max(("makuri", "makurizashi", "sashi"),
+                                key=lambda k: attack["technique_per_start"][k])
+                    exposure = "makurare" if tactic == "makuri" else "sasare"
+                    if inside and inside["defense_opportunities"].get(exposure, 0) >= 20:
+                        baseline_rate = tactics["reference"]["defense"][exposure]
+                        defender_delta = inside["defense_per_opportunity"][exposure] - baseline_rate
+                # Bounded uncalibrated change; unchanged if historical data missing.
+                adjustment = max(-.12, min(.12, (candidate - .10) * .4 + defender_delta * .1))
+                rescored.append({"combination": entry["combination"],
+                                 "relative_score": entry["relative_score"] * (1 + adjustment)})
+            ranked = sorted(rescored, key=lambda x: (-x["relative_score"], x["combination"]))
+            tactics_report = {"status": "APPLIED_UNCALIBRATED", "applied": True,
+                              "source_sha256": {str(k): v["source_sha256"] for k, v in validated.items()},
+                              "racer_courses": {str(k): v["course"] for k, v in validated.items()},
+                              "max_abs_weight_change": .12,
+                              "method": "bounded_pre_cutoff_tactic_tiebreaker"}
+        except (KeyError, TypeError, ValueError) as exc:
+            tactics_report = {"status": "REJECTED", "applied": False, "reason": str(exc)}
+    selected = ranked[:count]
     if len(selected) != count:
         raise ValueError("Insufficient scenarios")
     units = 50 - count
@@ -630,6 +700,7 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
     if sum(x["virtual_yen"] for x in bets) != VIRTUAL_BUDGET_YEN:
         raise ValueError("Scenario stake allocation failed")
     meta = {"version": INTERACTION_VERSION, "uncalibrated": True,
+            "racer_course_tactics": tactics_report,
             "scenario_assumptions": result["scenario_assumptions"],
             "old_main_model_version": previous["model_version"],
             "old_main_bets": previous["bets"],
@@ -730,7 +801,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
                           and cutoff.astimezone(UTC) > INTERACTION_MAIN_ACTIVATION_UTC)
     interaction_meta = None
     if interaction_active:
-        bets, interaction_meta = interaction_primary(promoted, racers, frozen_at, cutoff)
+        bets, interaction_meta = interaction_primary(promoted, racers, frozen_at, cutoff,
+                                                      tactics=race.get("_course_tactics"))
         chosen_model = INTERACTION_MAIN_MODEL
     count = len(bets)
     shares = promoted["head_course_shares"]
@@ -865,7 +937,8 @@ def safe_to_append_pre_cutoff(snapshot: dict, cutoff: datetime, margin_seconds: 
 
 def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
           weather_by_venue: dict | None = None, exhibition_rows: dict | None = None,
-          enforce_wall_clock: bool = False, racer_context_rows: dict | None = None) -> tuple[dict, dict, dict]:
+          enforce_wall_clock: bool = False, racer_context_rows: dict | None = None,
+          tactics_rows: dict | None = None) -> tuple[dict, dict, dict]:
     if now.tzinfo is None:
         raise ValueError("Timezone-aware now is mandatory")
     local_day = now.astimezone(JST).date().isoformat()
@@ -920,7 +993,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
             postrace_active = cutoff.date() >= FOUR_FACTOR_DATE and runtime_now.astimezone(UTC) >= POSTRACE_ACTIVATION_UTC
             venue_active = postrace_active and VENUES[venue_code] != '江戸川' and runtime_now.astimezone(UTC) >= VENUE_TACTICS_ACTIVATION_UTC
             coverage_active = head_coverage_eligible(record, key, runtime_now, cutoff) and not postrace_active
-            race = {**race, "_head_coverage_trial": coverage_active}
+            race = {**race, "_head_coverage_trial": coverage_active,
+                    "_course_tactics": (tactics_rows or {}).get(f"{local_day.replace('-', '')}{int(venue_code):02d}{n:02d}")}
             point_free_active = cutoff.date() == POINT_FREE_DATE and runtime_now.astimezone(JST).date() == POINT_FREE_DATE
             interaction_active = (cutoff.date() >= FOUR_FACTOR_DATE and VENUES[venue_code] != "江戸川"
                                   and runtime_now.astimezone(UTC) >= INTERACTION_MAIN_ACTIVATION_UTC
@@ -1439,6 +1513,7 @@ def main():
     parser.add_argument("--input-json", type=Path, help="Local fixture; no network")
     parser.add_argument("--now-iso", help="Clock override (test only)")
     parser.add_argument("--out-dir", type=Path, default=APP_DATA)
+    parser.add_argument("--tactics-json", type=Path, help="Licensed past-only course/technique profiles, keyed by race code")
     args = parser.parse_args()
     now = datetime.fromisoformat(args.now_iso) if args.now_iso else datetime.now(UTC)
     day = now.astimezone(JST).date().isoformat()
@@ -1474,9 +1549,17 @@ def main():
             contexts = collect_racer_context(now.astimezone(JST).date())
         except Exception:
             contexts = {}  # Missing sources stay neutral, never fabricate player history.
+    # Explicit opt-in source; never automatically scrape a restricted site.
+    # Each racer row is individually checked against its future cutoff.
+    tactics_rows = {}
+    if args.tactics_json:
+        raw_tactics = json.loads(args.tactics_json.read_text(encoding='utf-8'))
+        if raw_tactics.get('event_date') != day or not isinstance(raw_tactics.get('races'), dict):
+            raise ValueError('Tactics file date or race map mismatch')
+        tactics_rows = raw_tactics['races']
     ledger, webapp, summary = build(previous, source, now, source_url, nearby_forecasts,
                                      exhibition_rows=research, enforce_wall_clock=not bool(args.input_json),
-                                     racer_context_rows=contexts)
+                                     racer_context_rows=contexts, tactics_rows=tactics_rows)
     if weather_error:
         summary["weather_error"] = weather_error
         webapp["weather_fetch_status"] = "UNAVAILABLE"

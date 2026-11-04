@@ -114,6 +114,6 @@ def test_inconsistent_finish_refused():
     with pytest.raises(ValueError):
         label(r)
     r = raw()
-    r["1着_艇番"] = "6"
+    r["1着_艇番"] = "7"
     with pytest.raises(ValueError):
         label(r)

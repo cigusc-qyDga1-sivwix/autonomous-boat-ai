@@ -73,6 +73,8 @@ INTERACTION_MAIN_MODEL = 'four-factor-v1.7-interaction-inside-failure-untrained'
 INTERACTION_MAIN_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T03:30:00+00:00')
 INTERACTION_ADAPTIVE_MODEL = 'four-factor-v1.8-adaptive-points-primary-untrained'
 INTERACTION_ADAPTIVE_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T09:02:00+00:00')
+INTERACTION_ALIGNED_MODEL = 'four-factor-v1.9-aligned-primary-untrained'
+INTERACTION_ALIGNED_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T10:25:00+00:00')
 VIRTUAL_BUDGET_YEN = 50_000
 MIN_POINTS, MAX_POINTS = 4, 12
 STAKE_UNIT_YEN = 1_000
@@ -903,13 +905,16 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
                           and cutoff.astimezone(UTC) > INTERACTION_MAIN_ACTIVATION_UTC)
     adaptive_active = (interaction_active and now.astimezone(UTC) >= INTERACTION_ADAPTIVE_ACTIVATION_UTC
                        and cutoff.astimezone(UTC) > INTERACTION_ADAPTIVE_ACTIVATION_UTC)
+    aligned_active = (adaptive_active and now.astimezone(UTC) >= INTERACTION_ALIGNED_ACTIVATION_UTC
+                      and cutoff.astimezone(UTC) > INTERACTION_ALIGNED_ACTIVATION_UTC)
     interaction_meta = None
     if interaction_active:
         bets, interaction_meta = interaction_primary(promoted, racers, frozen_at, cutoff,
                                                       tactics=race.get("_course_tactics"),
                                                       scored_weights=weathered,
                                                       adaptive_points=adaptive_active)
-        chosen_model = INTERACTION_ADAPTIVE_MODEL if adaptive_active else INTERACTION_MAIN_MODEL
+        chosen_model = (INTERACTION_ALIGNED_MODEL if aligned_active else
+                        INTERACTION_ADAPTIVE_MODEL if adaptive_active else INTERACTION_MAIN_MODEL)
     count = len(bets)
     shares = interaction_meta["new_head_course_shares"] if interaction_meta else promoted["head_course_shares"]
     concentration = max(x["relative_share"] for x in shares)
@@ -933,7 +938,10 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
             reason += "／展示タイム突出・外枠追走・内残りの条件付き試験（確率未校正）"
         if chosen_model == VENUE_TACTICS_MODEL:
             reason += "／23場別の決まり手構成と実進入・合法STに基づく着順連動v1.4（未校正）"
-        if adaptive_active:
+        if aligned_active:
+            reason = ("艇間連動v1.9：選手評価・1〜3着評価・買い目を同一120展開で連動、"
+                      "点数も自動増減（未校正）")
+        elif adaptive_active:
             reason = ("艇間連動v1.8：展開の相対評価から点数を自動増減／"
                       "100円単位で仮想5万円を配分（未校正）")
         elif interaction_active:
@@ -962,7 +970,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         "start_v07": promoted["start_v07"],
         **({"wake_v09": promoted["wake_v09"],
             "primary_promotion_date_jst": (FOUR_FACTOR_DATE if four_factor else WAKE_PROMOTION_DATE).isoformat(),
-            "primary_model_ab": ("v1.8 adaptive primary, independent point count, 50000 yen, older model audit only" if adaptive_active else "v1.7 corrected inside-survival scenario vs previous main, same pre-cutoff inputs, point count and 50000 yen" if interaction_active else "v1.5 point-free selection vs same-input previous primary; same 50000 budget" if point_free_active else "v1.4 venue-aware trial vs same-input v1.3 control and no-tactics ablation" if venue_active else
+            "primary_model_ab": ("v1.9 main ratings + tickets same scored 120; forward-only, 50000 yen" if aligned_active else "v1.8 adaptive primary, independent point count, 50000 yen, older model audit only" if adaptive_active else "v1.7 corrected inside-survival scenario vs previous main, same pre-cutoff inputs, point count and 50000 yen" if interaction_active else "v1.5 point-free selection vs same-input previous primary; same 50000 budget" if point_free_active else "v1.4 venue-aware trial vs same-input v1.3 control and no-tactics ablation" if venue_active else
                                   "v1.3 forward trial vs v1.2 matched same-input control, with v0.9 legacy" if postrace_active else
                                  "four-factor primary vs same-time frozen v0.9 control") if four_factor else "v0.9 primary vs same-time frozen v0.7 control"}
            if new_primary else {}),
@@ -1114,7 +1122,10 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                                   and cutoff.astimezone(UTC) > INTERACTION_MAIN_ACTIVATION_UTC)
             adaptive_active = (interaction_active and runtime_now.astimezone(UTC) >= INTERACTION_ADAPTIVE_ACTIVATION_UTC
                                and cutoff.astimezone(UTC) > INTERACTION_ADAPTIVE_ACTIVATION_UTC)
-            expected_main = (INTERACTION_ADAPTIVE_MODEL if adaptive_active else INTERACTION_MAIN_MODEL if interaction_active else
+            aligned_active = (adaptive_active and runtime_now.astimezone(UTC) >= INTERACTION_ALIGNED_ACTIVATION_UTC
+                              and cutoff.astimezone(UTC) > INTERACTION_ALIGNED_ACTIVATION_UTC)
+            expected_main = (INTERACTION_ALIGNED_MODEL if aligned_active else
+                             INTERACTION_ADAPTIVE_MODEL if adaptive_active else INTERACTION_MAIN_MODEL if interaction_active else
                              POINT_FREE_MODEL if point_free_active else VENUE_TACTICS_MODEL if venue_active else
                              POSTRACE_CONDITIONAL_MODEL if postrace_active else
                              HEAD_COVERAGE_MODEL if coverage_active else

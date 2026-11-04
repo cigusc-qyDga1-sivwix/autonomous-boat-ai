@@ -831,7 +831,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
               if new_primary else
               "6艇連動＋平均ST／展示STと内艇の先行差による着順分岐")
     reason += "（4〜12点・未訓練・確率未校正）"
-     top_combo = bets[0]["combination"].split("-")
+    top_combo = bets[0]["combination"].split("-")
     leader = racers[int(top_combo[0]) - 1]
     follower = racers[int(top_combo[1]) - 1]
     weather = observed

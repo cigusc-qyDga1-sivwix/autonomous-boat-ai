@@ -37,15 +37,17 @@ def allocate_dynamic(ranked: Sequence[dict], *, budget_yen=BUDGET_YEN,
             raise ValueError("invalid entry")
         combo = entry.get("combination")
         score = entry.get("relative_score")
-        if combo not in VALID or combo in seen or isinstance(score, bool) or not isinstance(score, (float, int)) or not isfinite(score) or score <= 0:
+        if combo not in VALID or combo in seen or isinstance(score, bool) or not isinstance(score, (float, int)) or not isfinite(score) or score < 0:
             raise ValueError("invalid, duplicate or nonpositive combination score")
         seen.add(combo)
         pairs.append((combo, float(score)))
     # Do not trust caller ordering; tie-break lexicographically.
     pairs.sort(key=lambda item: (-item[1], item[0]))
     total = sum(s for _, s in pairs)
+    if total <= 0:
+        raise ValueError("all scenario scores are zero")
     probabilities = [s/total for _, s in pairs]
-    entropy = -sum(p*log(p) for p in probabilities) / log(len(pairs))
+    entropy = -sum(p*log(p) for p in probabilities if p > 0) / log(len(pairs))
     peakedness = max(0.0, min(1.0, 1.0 - entropy))
     # Working heuristics, not statistically fitted. Select when additional
     # score mass is relevant AND the next option is not negligible vs #1.
@@ -94,12 +96,14 @@ def stake_dynamic(selected: Sequence[dict], *, budget_yen=BUDGET_YEN,
         combo, score = item.get("combination"), item.get("relative_score")
         if (combo not in VALID or combo in seen or isinstance(score, bool)
                 or not isinstance(score, (int, float)) or not isfinite(score)
-                or score <= 0):
+                or score < 0):
             raise ValueError("invalid candidate score")
         seen.add(combo)
         scores.append(float(score))
     leftover = budget_yen // unit_yen - len(selected)
     mass = sum(scores)
+    if mass <= 0:
+        raise ValueError("all selected scores are zero")
     ideal = [leftover * weight / mass for weight in scores]
     whole = [int(value) for value in ideal]
     remainder = leftover - sum(whole)

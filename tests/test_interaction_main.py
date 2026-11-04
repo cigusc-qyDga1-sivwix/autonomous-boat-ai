@@ -61,3 +61,35 @@ def test_no_backdated_main_creation():
     with pytest.raises(ValueError):
         prediction(entry(), "徳山", 1, "baseline",
                    datetime(2026, 11, 4, 11, 0, tzinfo=JST), "fixture")
+
+def test_formal_scenario_can_include_one_outside_top3():
+    from scripts.autonomous_daily import interaction_primary
+    racers = [{"lane": i, "course": i, "relative_weight": w,
+               "average_start_timing": .16, "exhibition_time": None}
+              for i, w in enumerate((1.75, 1.27, 1.05, .90, .79, .69), 1)]
+    older = {"model_version": "prior", "bets": [
+        {"combination": f"1-2-{i}", "virtual_yen": 10000} for i in (3, 4, 5, 6)]}
+    tickets, meta = interaction_primary(
+        older, racers, "2026-11-04T00:01:00+00:00",
+        datetime(2026, 11, 4, 1, 0, tzinfo=ZoneInfo("UTC")))
+    assert 0 < meta["course1_outside_top3_relative_mass"] < 1
+    assert meta["course1_outside_top3_selected"] >= 1
+    assert any("1" not in b["combination"].split("-") for b in tickets)
+    assert sum(b["virtual_yen"] for b in tickets) == 50000
+    assert len(tickets) == len(older["bets"])
+
+
+def test_formal_scenario_is_not_forced_to_exclude_one_with_tiny_risk():
+    from scripts.autonomous_daily import interaction_primary
+    racers = [{"lane": i, "course": i,
+               "relative_weight": 80.0 if i == 1 else .01,
+               "average_start_timing": None, "exhibition_time": None}
+              for i in range(1, 7)]
+    older = {"model_version": "prior", "bets": [
+        {"combination": f"1-2-{i}", "virtual_yen": 10000} for i in (3, 4, 5, 6)]}
+    tickets, meta = interaction_primary(
+        older, racers, "2026-11-04T00:01:00+00:00",
+        datetime(2026, 11, 4, 1, 0, tzinfo=ZoneInfo("UTC")))
+    assert meta["course1_outside_top3_relative_mass"] < .25
+    assert not meta["conditional_coverage_applied"]
+    assert all("1" in b["combination"].split("-") for b in tickets)

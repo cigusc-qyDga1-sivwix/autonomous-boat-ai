@@ -219,3 +219,25 @@ def test_bad_exhibition_time_zero_not_used_as_fastest_boat():
     assert not preview_complete(invalid)
     _, detail = features(invalid, "baseline")
     assert detail[0]["exhibition_time"] is None
+
+
+def test_compact_daily_ledger_preserves_all_versions_and_sha(tmp_path):
+    import json
+    from scripts.autonomous_daily import write_json, stable_hash
+    source={"event_date":"2026-11-04","race_records":{
+        "18-1":{"versions":[{"lane":i,"scenario":"展開"*60,
+                             "details":{"long":["予想と履歴"]*25},
+                             "sha256":stable_hash({"lane":i,"scenario":"展開"*60,
+                                                   "details":{"long":["予想と履歴"]*25}})}
+                            for i in range(1,20)]}}}
+    daily=tmp_path/"live"/"2026-11-04.json"
+    write_json(daily,source)
+    compact=daily.read_text(encoding="utf-8")
+    pretty=json.dumps(source,ensure_ascii=False,indent=2,sort_keys=True)+"\\n"
+    assert json.loads(compact)==source
+    assert len(compact.encode("utf-8"))<len(pretty.encode("utf-8"))*.75
+    assert all(v["sha256"]==stable_hash({k:x for k,x in v.items() if k!="sha256"})
+               for v in json.loads(compact)["race_records"]["18-1"]["versions"])
+    ordinary=tmp_path/"live"/"audit-latest.json"
+    write_json(ordinary,{"keep":"readable"})
+    assert chr(10) + "  " in ordinary.read_text()

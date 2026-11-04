@@ -115,3 +115,26 @@ def test_prospective_audit_unresolved_not_a_loss_and_source_integrity(tmp_path):
     shadow['race_records']['徳山-1'][0]['bets'][0]['virtual_yen']+=1000
     sp.write_text(json.dumps(shadow));result=audit(data,exp)
     assert result['rejected']==1 and result['learned']['n']==0
+
+
+@pytest.mark.parametrize("version",[
+    "four-factor-v1.8-adaptive-points-primary-untrained",
+    "four-factor-v1.9-aligned-primary-untrained",
+])
+def test_adaptive_shadow_keeps_same_large_point_count_and_100_yen(version):
+    import itertools
+    day="2026-11-04"
+    r=snapshot(day)
+    combos=['-'.join(map(str,p)) for p in itertools.permutations(range(1,7),3)]
+    r["bets"]=[{"combination":combo,"virtual_yen":100} for combo in combos]
+    r["bets"][-1]["virtual_yen"]=50000-100*(len(combos)-1)
+    r["model_version"]=version
+    r["sha256"]=digest({k:x for k,x in r.items() if k!="sha256"})
+    latest={"event_date":day,"forecast_races":[{**r,"_immutable_source":r}]}
+    result,n=freeze(latest,zero_model(),None,
+                    datetime.fromisoformat(day+"T08:30:00+09:00"))
+    assert n==1
+    bets=result["race_records"]["徳山-1"][0]["bets"]
+    assert len(bets)==120
+    assert sum(x["virtual_yen"] for x in bets)==50000
+    assert all(x["virtual_yen"]>=100 and x["virtual_yen"]%100==0 for x in bets)

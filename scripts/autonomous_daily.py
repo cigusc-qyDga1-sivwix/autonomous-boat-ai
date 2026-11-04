@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import math
 import subprocess
 from datetime import date, datetime, timedelta, timezone
@@ -1628,9 +1629,21 @@ def retrieve(day: str) -> tuple[dict, str]:
 
 
 def write_json(path: Path, value: dict):
+    """Persist exact JSON values; compact immutable day ledgers to avoid GitHub's 100 MB cap.
+
+    Internal snapshot SHA256 hashes are computed from canonical JSON values,
+    never this human-readable file layout. This changes whitespace only.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True)
-                    + "\n", encoding="utf-8")
+    # Daily ledger holds every pre-cutoff version and may grow quickly.
+    # Keep all historical snapshots, with no pruning, overwrite or SHA change.
+    daily_ledger = bool(re.fullmatch(r"20[0-9]{2}-[0-9]{2}-[0-9]{2}[.]json", path.name)) and path.parent.name == "live"
+    options = {"ensure_ascii": False, "sort_keys": True}
+    if daily_ledger:
+        options["separators"] = (",", ":")
+    else:
+        options["indent"] = 2
+    path.write_text(json.dumps(value, **options) + "\n", encoding="utf-8")
 
 
 def main():

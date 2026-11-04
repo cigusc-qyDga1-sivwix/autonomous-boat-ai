@@ -117,3 +117,27 @@ def test_inconsistent_finish_refused():
     r["1着_艇番"] = "7"
     with pytest.raises(ValueError):
         label(r)
+
+def test_cli_multiple_historical_days_preserves_sha(monkeypatch, tmp_path):
+    import csv
+    import json
+    import sys
+    from scripts.conditional_st_coupling_study import main
+    inputs = []
+    for compact, day in (("20261102", "2026-11-02"), ("20261103", "2026-11-03")):
+        path = tmp_path / f"{compact}.csv"
+        row = raw(compact + "2101")
+        with path.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=list(row))
+            writer.writeheader()
+            writer.writerow(row)
+        inputs.extend(["--input", str(path), "--event-date", day])
+    output = tmp_path / "summary.json"
+    monkeypatch.setattr(sys, "argv", [
+        "conditional_st_coupling_study", *inputs,
+        "--before-date", "2026-11-04", "--out", str(output)])
+    main()
+    result = json.loads(output.read_text(encoding="utf-8"))
+    assert result["included_races"] == 2
+    assert result["venues"]["21"]["races"] == 2
+    assert len(result["source_file_sha256"]) == 2

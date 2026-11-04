@@ -1356,6 +1356,29 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                     completed_at = datetime.now(UTC) if enforce_wall_clock else now
                     if not safe_to_append_pre_cutoff(upgrade, cutoff, margin, completed_at):
                         continue  # No delayed upgrade, regardless of the initial clock.
+                    if phase_to_promote == "exhibition":
+                        # A model/context upgrade must pass the SAME six-boat
+                        # input-to-snapshot check as an initial exhibition freeze.
+                        # Otherwise the newest version can appear final while
+                        # silently losing or misapplying the preview measurements.
+                        if not preview_ready or not numeric_exhibition_matches_snapshot(candidate_now, upgrade):
+                            rejected_exhibition_input_mismatch += 1
+                            continue
+                        upgrade["exhibition_input_check"] = {
+                            "verified_before_freeze": True,
+                            "six_boats_matched": 6,
+                            "matched_fields": ["course", "exhibition_time", "exhibition_st"],
+                            "original_metrics_matched": sorted(
+                                (candidate_now.get("_exhibition_original") or {}).keys()),
+                            "source": selected_source,
+                            "no_result_or_payout_used": True,
+                            "verification_stage": "model_upgrade",
+                        }
+                        # Never copy historical input evidence: verify current
+                        # values independently. Keep the prior immutable
+                        # exhibition-change comparison for UI continuity only.
+                        if latest_before.get("exhibition_change"):
+                            upgrade["exhibition_change"] = latest_before["exhibition_change"]
                     # Unique immutable record, not a rewrite of earlier SHA.
                     upgrade["model_upgrade"] = {
                         "previous_sha256": latest_before["sha256"],

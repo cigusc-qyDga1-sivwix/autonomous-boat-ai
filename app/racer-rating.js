@@ -113,7 +113,7 @@ function rate(r,opts={}){
    raws[x.lane]=.55*number(z.first)+.30*number(z.second)+.15*number(z.third);
   }
  }
- const best=validShares?Math.max(...Object.values(raws)):null;
+ const best=(primary?.status==='ready'||validShares)&&!blocked(r)?Math.max(...Object.values(raws)):null;
  for(const x of racers){
   const lane=x.lane,course=courseOrder[lane-1];
   const win=number(x.national_win_rate),motor=number(x.motor_top_2_percent);
@@ -134,7 +134,7 @@ function rate(r,opts={}){
   const fitScore=confirmed?fixed(BASE_COURSE[course-1]+ownStartEdge+expoEdge+turnEdge):null;
   const composite=racerScore!==null&&motorScore!==null&&fitScore!==null?
    fixed(WEIGHTS.racer*racerScore+WEIGHTS.motor*motorScore+WEIGHTS.course_fit*fitScore):null;
-  const role=primary?.status==='ready'?primary.byLane[lane]:(validShares?shares[lane]:null);
+  const role=primary?.status==='ready'&&!blocked(r)?primary.byLane[lane]:(validShares?shares[lane]:null);
   const expected=!blocked(r)&&best!==null&&best>0?fixed(100*raws[lane]/best):null;
   const fourRow=r.model_version?.startsWith('four-factor-')?r.four_factor?.rows?.find(z=>z.lane===lane):null;
   const fourPlayer=fourRow?.factors?.athlete?.raw_multiplier;

@@ -18,7 +18,11 @@
    if(r?.entry_exhibition_gate?.entry_watch&&!r.entry_exhibition_gate.final_eligible)
      return {status:'hold',reason:'前付け警戒・展示進入未確認のため順位を保留'};
    try{
-     const forecast=window.BoatRacerRating?.forecastForRace?.(r)||window.BoatTacticalModel?.forecastRoleAware?.(r)||window.BoatTacticalModel?.forecast(r);
+     const primary=r?.model_role==='main'&&/^four-factor-v1\.(?:[678])\b/.test(r.model_version||'');
+     // Main prediction: render only the frozen primary model's shares.
+     // Never silently substitute a separate browser/shadow forecast.
+     const forecast=primary?r:(window.BoatRacerRating?.forecastForRace?.(r)||
+       window.BoatTacticalModel?.forecastRoleAware?.(r)||window.BoatTacticalModel?.forecast(r));
      const values=forecast?.head_course_shares;
      if(!Array.isArray(values)||values.length!==6)return {status:'unknown',reason:'評価に必要なデータがありません'};
      const candidates=values.map(v=>({lane:Number(v.lane),share:Number(v.relative_share)}));
@@ -31,8 +35,9 @@
      const ranks={};
      candidates.forEach((v,i)=>ranks[v.lane]={rank:i+1,mark:ADVANTAGE_MARKS[i],share:v.share});
      const ready=!!r?.entry_exhibition_gate?.final_eligible;
-     return {status:'trial',ranks,
-       reason:ready?'展示確認後の保存データに基づく試験順位':'展示・実進入未確認のため暫定順位'};
+     return {status:primary?'main':'trial',ranks,
+       reason:primary?(ready?'正式メイン保存済み1着評価':'メインの展示前・暫定1着評価'):
+        (ready?'展示確認後の保存データに基づく試験順位':'展示・実進入未確認のため暫定順位')};
    }catch{return {status:'unknown',reason:'試験モデルによる順位評価ができません'};}
  }
  function entryHTML(r){
@@ -50,7 +55,7 @@
        '<span class="boat-entry-rank-pending">保留</span>';
      html+='<tr'+(value?.rank===1?' class="boat-entry-top-advantage"':'')+'><th scope="row"><span class="boat-entry-lane boat-entry-'+(i+1)+'">'+(i+1)+'</span></th><td>'+rankHtml+'</td><td class="boat-entry-name">'+esc(x.name||'未取得')+'</td><td class="boat-entry-num">'+(win===null?'—':win.toFixed(2))+'</td><td class="boat-entry-num">'+(motor===null?'—':motor.toFixed(1)+'%')+'</td></tr>';
    });
-   return html+'</tbody></table></div><p class="boat-entry-rank-note"><strong>AIの1着候補順位：</strong>◎1位・○2位・▲3位・△4位・☆5位・－6位。'+esc(ranking.reason)+'。<strong>全国勝率順でも的中確率でもありません。</strong>1マーク戦法の試験モデルが出走・モーター・ST・取得済み展示値を総合評価。結果・オッズは使わず、発走前固定予想の買い目・SHAは変更しません。2・3着の順位は別評価です。</p><p class="boat-sim-disclaimer">全国勝率は得点ベースの指標。モーターは1着率ではなく<strong>2連対率</strong>（1・2着に入った割合）です。</p></section>';
+   return html+'</tbody></table></div><p class="boat-entry-rank-note"><strong>AIの1着候補順位：</strong>◎1位・○2位・▲3位・△4位・☆5位・－6位。'+esc(ranking.reason)+'。<strong>全国勝率順でも的中確率でもありません。</strong>正式メインの場合は買い目と同じ保存済み120展開から1着評価を表示。旧予想では戦法試験モデルの参考順位を表示します。結果・オッズを使わず、保存済み買い目・SHAは変更しません。2・3着は別評価です。</p><p class="boat-sim-disclaimer">全国勝率は得点ベースの指標。モーターは1着率ではなく<strong>2連対率</strong>（1・2着に入った割合）です。</p></section>';
  }
  function options(r){
    const s=new Set(),out=[];

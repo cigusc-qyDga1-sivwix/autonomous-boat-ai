@@ -82,6 +82,8 @@ INTERACTION_JUSTIFIED_MODEL = 'four-factor-v2.0-justified-points-primary-untrain
 INTERACTION_JUSTIFIED_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T12:10:00+00:00')
 INTERACTION_ENTRY_MODEL = 'four-factor-v2.1-actual-entry-primary-untrained'
 INTERACTION_ENTRY_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T15:00:00+00:00')
+LINKED_MAIN_MODEL = 'four-factor-v2.2-linked-primary-untrained'
+LINKED_MAIN_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T23:15:00+00:00')
 VIRTUAL_BUDGET_YEN = 50_000
 MIN_POINTS, MAX_POINTS = 4, 12
 STAKE_UNIT_YEN = 1_000
@@ -543,10 +545,11 @@ def promoted_v09(venue: str, phase: str, racers: list[dict],
                  postrace_conditional: bool = False, venue_tactics: bool = False, point_free: bool = False,
                  role_skill_trial: bool = False,
                  role_skill_preserve_heads: bool = False,
-                 venue_motor_exhibition_trial: bool = False) -> dict:
+                 venue_motor_exhibition_trial: bool = False, linked_primary: bool = False) -> dict:
     """Invoke one explicit model identity; never fall back on bridge failure."""
     inputs = {
         "venue": venue, "phase": phase,
+        "linked_primary_trial": linked_primary,
         "racers": [{key: r.get(key) for key in (
             "lane", "course", "national_win_rate", "motor_top_2_percent",
             "average_start_timing", "exhibition_st", "exhibition_time",
@@ -619,7 +622,7 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
                         justified_points: bool = False,
                         exhibition_verified: bool = False,
                         site_weather_verified: bool = False,
-                        entry_aware: bool = False) -> tuple[list[dict], dict]:
+                        entry_aware: bool = False, linked_ranked: list[dict] | None = None) -> tuple[list[dict], dict]:
     """Forward-only main tickets. Existing main forecast is an A/B control."""
     if scored_weights is not None and (len(scored_weights) != 6 or
             any(number(value) is None or value <= 0 for value in scored_weights)):
@@ -633,8 +636,46 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
         supplied.append({"lane": r["lane"], **({"course": r.get("course")} if entry_aware else {}), "strength": min(100., max(.01, relative * 20)),
                          "start_mean": r.get("average_start_timing"),
                          "exhibition_time": r.get("exhibition_time")})
-    result = evaluate_interactions(supplied, captured_at_utc=frozen_at,
-                                   cutoff_at_utc=cutoff.isoformat(), entry_aware=entry_aware)
+    if linked_ranked is None:
+        result = evaluate_interactions(supplied, captured_at_utc=frozen_at,
+                                       cutoff_at_utc=cutoff.isoformat(), entry_aware=entry_aware)
+    else:
+        # One canonical 120-outcome engine. Do NOT multiply in the old fixed
+        # five-path mixture or Python feature weights a second time.
+        valid = {"-".join(map(str, p)) for p in permutations(range(1, 7), 3)}
+        if (len(linked_ranked) != 120 or {x.get("combination") for x in linked_ranked} != valid
+                or any(type(x.get("relative_score")) not in (int, float)
+                       or not math.isfinite(x["relative_score"]) or x["relative_score"] <= 0 for x in linked_ranked)):
+            raise ValueError("Missing/invalid canonical linked 120 outcomes; no fallback")
+        ranked_input = sorted(linked_ranked, key=lambda x: (-x["relative_score"], x["combination"]))
+        total = sum(x["relative_score"] for x in ranked_input)
+        if abs(total - 1) > 1e-6:
+            raise ValueError("Canonical linked outcomes must sum to one")
+        courses = {r["course"]: r["lane"] for r in racers}
+        if set(courses) != set(range(1, 7)):
+            raise ValueError("Six unique actual courses required")
+        inside = courses[1]
+        paths = []
+        outside_by_path = {}
+        for course in range(1, 7):
+            lane = courses[course]
+            subset = [x for x in ranked_input if x["combination"].split("-")[0] == str(lane)]
+            mass = sum(x["relative_score"] for x in subset)
+            label = "head_course_" + str(course)
+            paths.append({"scenario": label, "assumed_share": mass,
+                "share_kind": "canonical_head_marginal_not_observed_probability",
+                "attack_lane": lane, "attack_course": course,
+                "defender_lane": courses.get(course - 1), "defender_course": course - 1 if course > 1 else None,
+                "follower_lane": courses.get(course + 1), "follower_course": course + 1 if course < 6 else None,
+                "inside_lane": inside, "reason": "実コース別の頭条件。攻め成功や牽制の観測事実ではない",
+                "top_3": [(x["combination"], x["relative_score"]/mass) for x in subset[:3]]})
+            outside_by_path[label] = sum(x["relative_score"] for x in subset
+                if str(inside) not in x["combination"].split("-"))/mass
+        result = {"version": "linked-canonical-120-v2.2", "inside_lane": inside,
+            "top_combinations": ranked_input, "scenario_assumptions": paths,
+            "course1_outside_top3_relative_mass": sum(x["relative_score"] for x in ranked_input
+                if str(inside) not in x["combination"].split("-")),
+            "course1_outside_top3_by_path": outside_by_path}
     inside_lane = result.get("inside_lane", 1)
     count = len(previous["bets"])
     if not (4 <= count <= 20):
@@ -716,7 +757,7 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
         selected, dynamic_meta = justified_selection(
             ranked, result["scenario_assumptions"],
             exhibition_verified=exhibition_verified,
-            independent_sources=independent)
+            independent_sources=independent, expected_paths=6 if linked_ranked is not None else 5)
         count = len(selected)
     elif adaptive_points:
         selected, dynamic_meta = allocate_dynamic(ranked)
@@ -830,6 +871,10 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
             "course1_outside_top3_relative_mass": inside_out_mass,
             "course1_outside_top3_by_path": result["course1_outside_top3_by_path"],
             "uses_venue_weather_adjusted_base": scored_weights is not None,
+            **({"canonical_source": "linked-four-factor-venue-st-wake-120",
+                "canonical_ranked_sha256": stable_hash({"ranked": linked_ranked}),
+                "fixed_five_path_mixture_used": False,
+                "ranked_outcomes": ranked} if linked_ranked is not None else {}),
             "course1_outside_top3_selected": sum(str(inside_lane) not in b["combination"].split("-") for b in bets),
             "conditional_coverage_applied": conditional_coverage,
             "conditional_coverage_rule": "relative_mass>=.25, candidate>=.55*last_selected",
@@ -858,6 +903,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         raise ValueError("Missing six confirmed entrants")
     if phase == "exhibition" and not preview_complete(race):
         raise ValueError("Incomplete exhibition readings")
+    linked_active = (venue != "江戸川" and now.astimezone(UTC) >= LINKED_MAIN_ACTIVATION_UTC
+                     and cutoff.astimezone(UTC) > LINKED_MAIN_ACTIVATION_UTC)
     weights, racers = features(race, phase)
     observed, selected_weather = weather_for_prediction(race, nearby_weather)
     # Historical venue rates are weak trial priors, not fixed win probabilities.
@@ -928,7 +975,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
                                 role_skill_preserve_heads=(role_skill_active
                                     and cutoff.date() >= date(2026, 11, 2)
                                     and now.astimezone(JST).date() >= date(2026, 11, 2)),
-                                venue_motor_exhibition_trial=motor_exhibition_shadow_active)
+                                venue_motor_exhibition_trial=motor_exhibition_shadow_active, linked_primary=linked_active)
         chosen_model = promoted["model_version"]
     else:
         promoted = promoted_v07(venue, phase, racers, profile, selected_weather, frozen_at)
@@ -958,13 +1005,16 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         bets, interaction_meta = interaction_primary(
             promoted, racers, frozen_at, cutoff,
             tactics=race.get("_course_tactics"),
-            scored_weights=weathered,
+            scored_weights=None if linked_active else weathered,
             adaptive_points=adaptive_active,
             justified_points=justified_active,
             exhibition_verified=bool(point_gate["final_eligible"]),
             site_weather_verified=bool(selected_weather and selected_weather.get("site_observed")),
-            entry_aware=entry_active)
-        chosen_model = (INTERACTION_ENTRY_MODEL if entry_active else INTERACTION_JUSTIFIED_MODEL if justified_active else
+            entry_aware=entry_active,
+            linked_ranked=promoted.get("ranked_outcomes") if linked_active else None)
+        if linked_active and promoted.get("ranked_source") != "linked-four-factor-venue-st-wake-120":
+            raise ValueError("Linked primary source missing; no simplified fallback")
+        chosen_model = (LINKED_MAIN_MODEL if linked_active else INTERACTION_ENTRY_MODEL if entry_active else INTERACTION_JUSTIFIED_MODEL if justified_active else
                         INTERACTION_ALIGNED_MODEL if aligned_active else
                         INTERACTION_ADAPTIVE_MODEL if adaptive_active else INTERACTION_MAIN_MODEL)
     count = len(bets)
@@ -1005,6 +1055,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         elif interaction_active:
             reason = ("艇間連動v1.7：コース・ST・展示の二重計上を除去し、"
                       "攻め成功・抵抗・攻め流れ・1号艇着外の5展開を評価（未校正）")
+    if linked_active:
+        reason = "統合v2.2：選手・枠別・当地・モーター・展示・実進入・場別条件・ST・引き波仮説を同一120組で評価／根拠別採用" + str(len(bets)) + "点・仮想5万円・未校正"
     body = {
         "model_version": chosen_model,
         **({"interaction_primary": interaction_meta} if interaction_meta else {}),
@@ -1016,10 +1068,10 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         **({"head_coverage_control": promoted["head_coverage_control"]} if promoted.get("head_coverage_control") else {}),
         **({"venue_tactics_v2": promoted["venue_tactics_v2"],
             "venue_tactics_ab": promoted["venue_tactics_ab"]}
-           if chosen_model in (VENUE_TACTICS_MODEL, POINT_FREE_MODEL) else {}),
+           if chosen_model in (LINKED_MAIN_MODEL, VENUE_TACTICS_MODEL, POINT_FREE_MODEL) else {}),
         **({"postrace_conditional_v13": promoted["postrace_conditional_v13"],
             "postrace_conditional_control": promoted["postrace_conditional_control"]}
-           if chosen_model in (POSTRACE_CONDITIONAL_MODEL, VENUE_TACTICS_MODEL, POINT_FREE_MODEL) else {}),
+           if chosen_model in (LINKED_MAIN_MODEL, POSTRACE_CONDITIONAL_MODEL, VENUE_TACTICS_MODEL, POINT_FREE_MODEL) else {}),
         **({"four_factor": promoted["four_factor"],
             "venue_surface_v1": promoted.get("venue_surface_v1"),
             "venue_surface_ab": promoted.get("venue_surface_ab")} if four_factor else {}),
@@ -1028,14 +1080,14 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         "start_v07": promoted["start_v07"],
         **({"wake_v09": promoted["wake_v09"],
             "primary_promotion_date_jst": (FOUR_FACTOR_DATE if four_factor else WAKE_PROMOTION_DATE).isoformat(),
-            "primary_model_ab": ("v2.1 actual-entry geometry; no phantom follower for course 6; forward only" if entry_active else "v2.0 conservative selection: 120 analyzed, max 24 tickets, evidence-gated" if justified_active else "v1.9 main ratings + tickets same scored 120; forward-only, 50000 yen" if aligned_active else "v1.8 adaptive primary, independent point count, 50000 yen, older model audit only" if adaptive_active else "v1.7 corrected inside-survival scenario vs previous main, same pre-cutoff inputs, point count and 50000 yen" if interaction_active else "v1.5 point-free selection vs same-input previous primary; same 50000 budget" if point_free_active else "v1.4 venue-aware trial vs same-input v1.3 control and no-tactics ablation" if venue_active else
+            "primary_model_ab": ("v2.2 one canonical four-factor/venue/ST/wake ranking; no fixed mixture" if linked_active else "v2.1 actual-entry geometry; no phantom follower for course 6; forward only" if entry_active else "v2.0 conservative selection: 120 analyzed, max 24 tickets, evidence-gated" if justified_active else "v1.9 main ratings + tickets same scored 120; forward-only, 50000 yen" if aligned_active else "v1.8 adaptive primary, independent point count, 50000 yen, older model audit only" if adaptive_active else "v1.7 corrected inside-survival scenario vs previous main, same pre-cutoff inputs, point count and 50000 yen" if interaction_active else "v1.5 point-free selection vs same-input previous primary; same 50000 budget" if point_free_active else "v1.4 venue-aware trial vs same-input v1.3 control and no-tactics ablation" if venue_active else
                                   "v1.3 forward trial vs v1.2 matched same-input control, with v0.9 legacy" if postrace_active else
                                  "four-factor primary vs same-time frozen v0.9 control") if four_factor else "v0.9 primary vs same-time frozen v0.7 control"}
            if new_primary else {}),
         "coupled_v06": promoted["coupled_v06"],
         "head_course_shares": shares,
-        "role_coverage": promoted["role_coverage"],
-        "role_changes": promoted["role_changes"],
+        "role_coverage": interaction_meta["main_role_shares"] if linked_active else promoted["role_coverage"],
+        "role_changes": [] if linked_active else promoted["role_changes"],
         "relative_scores_uncalibrated": True,
         "exhibition_origin": race.get("_exhibition_origin") if phase == "exhibition" else None,
         "data_quality": {
@@ -1140,11 +1192,13 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         races = stadium.get("races") or {}
         if not isinstance(races, dict):
             continue
-        if races:
+        if races and not (venue_code == "3" and now.astimezone(UTC) >= LINKED_MAIN_ACTIVATION_UTC):
             venues_seen.add(venue_code)
         for n_str, race in races.items():
             if not n_str.isdigit() or not 1 <= int(n_str) <= 12 or not isinstance(race, dict):
                 continue
+            if venue_code == "3" and now.astimezone(UTC) >= LINKED_MAIN_ACTIVATION_UTC:
+                continue  # Excluded future target; keep archived records intact.
             n = int(n_str)
             cutoff = cutoff_of(race)
             if not cutoff or cutoff.date() != now.astimezone(JST).date():
@@ -1187,7 +1241,9 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                                 and cutoff.astimezone(UTC) > INTERACTION_JUSTIFIED_ACTIVATION_UTC)
             entry_active = (justified_active and runtime_now.astimezone(UTC) >= INTERACTION_ENTRY_ACTIVATION_UTC
                             and cutoff.astimezone(UTC) > INTERACTION_ENTRY_ACTIVATION_UTC)
-            expected_main = (INTERACTION_ENTRY_MODEL if entry_active else INTERACTION_JUSTIFIED_MODEL if justified_active else
+            linked_active = (entry_active and runtime_now.astimezone(UTC) >= LINKED_MAIN_ACTIVATION_UTC
+                             and cutoff.astimezone(UTC) > LINKED_MAIN_ACTIVATION_UTC)
+            expected_main = (LINKED_MAIN_MODEL if linked_active else INTERACTION_ENTRY_MODEL if entry_active else INTERACTION_JUSTIFIED_MODEL if justified_active else
                              INTERACTION_ALIGNED_MODEL if aligned_active else
                              INTERACTION_ADAPTIVE_MODEL if adaptive_active else INTERACTION_MAIN_MODEL if interaction_active else
                              POINT_FREE_MODEL if point_free_active else VENUE_TACTICS_MODEL if venue_active else
@@ -1329,6 +1385,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
     ledger["venues_with_races"] = len(venues_seen)
     latest_races, official_results, unavailable = [], {}, []
     for record in records.values():
+        if record["venue"] == "江戸川" and now.astimezone(UTC) >= LINKED_MAIN_ACTIVATION_UTC:
+            continue  # Archive retained; exclude from current prediction view.
         versions = record["versions"]
         if not versions:
             unavailable.append({"venue": record["venue"], "race": record["race"],
@@ -1380,8 +1438,9 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         "forecast_races": latest_races,
         "official_results": official_results,
         "unforecast_races": sorted(unavailable, key=lambda r: (r["cutoff_jst"], r["venue"])),
-        "listed_races": sum(len(s.get("races", {})) for s in race_source.values()
-                            if isinstance(s, dict)),
+        "listed_races": sum(len(s.get("races", {})) for code, s in race_source.items()
+                            if isinstance(s, dict) and not (code == "3" and now.astimezone(UTC) >= LINKED_MAIN_ACTIVATION_UTC)),
+        "excluded_venues": ["江戸川"] if now.astimezone(UTC) >= LINKED_MAIN_ACTIVATION_UTC else [],
         "venues_with_races": len(venues_seen),
         "weather_venue_count": len(set(weather_by_venue)&venues_seen),
         "weather_fixed_race_count": sum(bool(r.get("weather_used")) for r in latest_races),

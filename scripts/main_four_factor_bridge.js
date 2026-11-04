@@ -37,6 +37,7 @@ function run(input){
    coverage?model.forecastFourFactorCoverage:model.forecastFourFactorOpen;
  const result=forecast({
   venue:input.venue,phase:input.phase,racers:input.racers,
+  linked_primary_trial:input.linked_primary_trial===true,
   weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
   frozen_at_utc:input.frozen_at_utc,
   surface_trial_disabled:input.surface_trial_disabled===true,
@@ -49,6 +50,7 @@ function run(input){
   throw Error('Missing prospective venue surface diagnostics');
  const surfaceControl=surface.applied?forecast({
   venue:input.venue,phase:input.phase,racers:input.racers,
+  linked_primary_trial:input.linked_primary_trial===true,
   weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
   frozen_at_utc:input.frozen_at_utc,surface_trial_disabled:true,
   venue_tactics_disabled:input.venue_tactics_disabled===true
@@ -90,6 +92,7 @@ function run(input){
   try{
    const shadow=forecast({
      venue:input.venue,phase:input.phase,racers:input.racers,
+  linked_primary_trial:input.linked_primary_trial===true,
      weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
      frozen_at_utc:input.frozen_at_utc,
      surface_trial_disabled:input.surface_trial_disabled===true,
@@ -122,6 +125,8 @@ function run(input){
  }
  return {
   model_version:result.model,
+  ...(input.linked_primary_trial===true?{ranked_outcomes:result.ranked_outcomes,ranked_source:result.ranked_source}:{}),
+
   ...(motorExhibitionShadow?{venue_motor_exhibition_shadow:motorExhibitionShadow}:{}),
   ...(roleSkillShadow?{role_skill_shadow:roleSkillShadow}:{}),
   venue_tactics_v2:venueMeta,

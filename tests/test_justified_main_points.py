@@ -39,16 +39,20 @@ def test_evidence_gates_not_120_spread():
     paths5=paths(rows)
     base,m0=justified_selection(rows,paths5,exhibition_verified=False)
     exhibition,m1=justified_selection(rows,paths5,exhibition_verified=True)
-    supported,m2=justified_selection(rows,paths5,exhibition_verified=True,
+    weather_only,weather_meta=justified_selection(rows,paths5,exhibition_verified=True,
                                 independent_sources=["site_observed_weather"])
+    supported,m2=justified_selection(rows,paths5,exhibition_verified=True,
+                                independent_sources=["past_racer_course_tactics"])
     assert 4<=len(base)<=8
     assert len(base)<=len(exhibition)<=12
+    assert len(weather_only)==len(exhibition)
+    assert weather_meta["signal_quality"]=="EXHIBITION_ONLY"
     assert len(exhibition)<=len(supported)<=SAFETY_MAX_POINTS
     assert m2["candidate_outcomes_analyzed"]==120
     assert m2["max_issued_ticket_points"]==24
     assert "ticket_reasons" in m2
     assert m0["independent_sources"]==[]
-    for picks in (base,exhibition,supported):
+    for picks in (base,exhibition,weather_only,supported):
         stakes=justified_stakes(picks)
         assert len(stakes)==len(picks)
         assert sum(x["virtual_yen"] for x in stakes)==50000

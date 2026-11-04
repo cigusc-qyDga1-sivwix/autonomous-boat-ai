@@ -9,7 +9,7 @@ from scripts.autonomous_daily import (
 JST = ZoneInfo("Asia/Tokyo")
 
 
-def entry(cutoff="2026-11-04 11:00:00", preview=False):
+def entry(cutoff="2026-11-04 15:00:00", preview=False):
     racers = {str(i): {"name": f"racer{i}", "national_win_rate": 5.1 + .1*i,
                        "motor_top_2_percent": 30 + i,
                        "average_start_timing": .15 + i*.001} for i in range(1, 7)}
@@ -24,7 +24,7 @@ def entry(cutoff="2026-11-04 11:00:00", preview=False):
 
 
 def test_promoted_baseline_is_primary_and_control_is_preserved():
-    now = datetime(2026, 11, 4, 9, 30, tzinfo=JST)
+    now = datetime(2026, 11, 4, 13, 0, tzinfo=JST)
     result = prediction(entry(), "徳山", 1, "baseline", now, "fixture")
     assert result["model_version"] == INTERACTION_MAIN_MODEL
     assert result["model_role"] == "main"
@@ -42,14 +42,14 @@ def test_promoted_baseline_is_primary_and_control_is_preserved():
 
 def test_exhibition_stays_main_and_uses_frozen_input():
     result = prediction(entry(preview=True), "徳山", 1, "exhibition",
-                        datetime(2026, 11, 4, 9, 30, tzinfo=JST), "fixture")
+                        datetime(2026, 11, 4, 13, 0, tzinfo=JST), "fixture")
     assert result["model_version"] == INTERACTION_MAIN_MODEL
     assert result["phase"] == "exhibition"
     assert len(result["bets"]) == len(result["interaction_primary"]["old_main_bets"])
 
 
 def test_old_snapshot_is_not_rewritten_during_forward_upgrade():
-    now = datetime(2026, 11, 4, 9, 30, tzinfo=JST)
+    now = datetime(2026, 11, 4, 13, 0, tzinfo=JST)
     race = entry()
     source = {"programs": {"stadiums": {"18": {"races": {"1": race}}}}}
     ledger, app, _ = build(None, source, now, "fixture")

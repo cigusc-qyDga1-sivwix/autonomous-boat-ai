@@ -97,3 +97,19 @@ def test_start_and_exhibition_are_not_scored_twice():
     b = run(rows)
     assert a["top_combinations"] == b["top_combinations"]
     assert a["course1_outside_top3_relative_mass"] == b["course1_outside_top3_relative_mass"]
+
+def test_all_head_conditionals_normalize_without_forcing_first_boat():
+    x = run()
+    conditional = x["conditional_places_by_head"]
+    assert len(conditional) == 6
+    assert sum(h["relative_head_share"] for h in conditional) == pytest.approx(1, abs=1e-6)
+    for h in conditional:
+        head = str(h["head_lane"])
+        assert sum(h["second_given_head"].values()) == pytest.approx(1, abs=1e-6)
+        assert sum(h["third_given_head"].values()) == pytest.approx(1, abs=1e-6)
+        assert h["second_given_head"][head] == 0
+        assert h["third_given_head"][head] == 0
+        assert h["top3_partner_given_head"][head] == 0
+        assert sum(h["top3_partner_given_head"].values()) == pytest.approx(2, abs=1e-6)
+    # These are distinct conditional distributions, not one fixed trailing order.
+    assert conditional[2]["top3_partner_given_head"] != conditional[0]["top3_partner_given_head"]

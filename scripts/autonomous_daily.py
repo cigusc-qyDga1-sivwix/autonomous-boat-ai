@@ -730,25 +730,68 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
                 for i, x in enumerate(selected)]
     if sum(x["virtual_yen"] for x in bets) != VIRTUAL_BUDGET_YEN:
         raise ValueError("Scenario stake allocation failed")
-    # The old bridge's head shares describe old bets, not this mixture.
-    # Recompute all six first-place shares from the 120 ordered outcomes.
-    head_mass = {lane: 0.0 for lane in range(1, 7)}
-    for entry in result["top_combinations"]:
-        head_mass[int(entry["combination"].split("-")[0])] += entry["relative_score"]
-    total_mass = sum(head_mass.values())
+    # Formal buy tickets, head chart and 1/2/3 ratings must derive from the
+    # SAME final 120 scored combinations, including any eligible tactic blend.
+    # Never reuse the older bridge's role_coverage or pre-blend marginals.
+    role_mass = {lane: [0., 0., 0.] for lane in range(1, 7)}
+    head_second = {head: {lane: 0. for lane in range(1, 7)}
+                   for head in range(1, 7)}
+    head_third = {head: {lane: 0. for lane in range(1, 7)}
+                  for head in range(1, 7)}
+    for entry in ranked:
+        a, b, c = (int(x) for x in entry["combination"].split("-"))
+        weight = entry["relative_score"]
+        for role, lane in enumerate((a, b, c)):
+            role_mass[lane][role] += weight
+        head_second[a][b] += weight
+        head_third[a][c] += weight
+    total_mass = sum(x[0] for x in role_mass.values())
     if total_mass <= 0:
-        raise ValueError("Invalid first-place marginal")
+        raise ValueError("Invalid total scenario marginal")
     new_head_shares = [
         {"course": r["course"], "lane": r["lane"],
-         "relative_share": round(head_mass[r["lane"]] / total_mass, 4),
-         "tactic": "条件付き5展開・未校正"}
+         "relative_share": round(role_mass[r["lane"]][0] / total_mass, 4),
+         "tactic": "同一120展開・未校正"}
         for r in racers
     ]
+    main_role_shares = {
+        str(lane): {
+            "first": round(role_mass[lane][0] / total_mass, 8),
+            "second": round(role_mass[lane][1] / total_mass, 8),
+            "third": round(role_mass[lane][2] / total_mass, 8),
+        } for lane in range(1, 7)
+    }
+    conditional_places = []
+    for head in range(1, 7):
+        mass = role_mass[head][0]
+        if mass <= 0:
+            raise ValueError("Invalid head-conditional marginal")
+        conditional_places.append({
+            "head_lane": head,
+            "relative_head_share": round(mass / total_mass, 8),
+            "second_given_head": {str(j): round(head_second[head][j] / mass, 8)
+                                  for j in range(1, 7)},
+            "third_given_head": {str(j): round(head_third[head][j] / mass, 8)
+                                 for j in range(1, 7)},
+            "top3_partner_given_head": {
+                str(j): round((head_second[head][j] + head_third[head][j]) / mass, 8)
+                for j in range(1, 7)},
+        })
+    ticket_role_counts = {
+        str(lane): {
+            "first": sum(b["combination"].split("-")[0] == str(lane) for b in bets),
+            "second": sum(b["combination"].split("-")[1] == str(lane) for b in bets),
+            "third": sum(b["combination"].split("-")[2] == str(lane) for b in bets),
+        } for lane in range(1, 7)
+    }
     meta = {"version": INTERACTION_VERSION, "uncalibrated": True,
             "point_policy": dynamic_meta if adaptive_points else {"status": "legacy_point_count"},
             "point_count_independent_of_prior": bool(adaptive_points),
             "stake_unit_yen": 100 if adaptive_points else 1000,
             "new_head_course_shares": new_head_shares,
+            "main_role_shares": main_role_shares,
+            "ticket_role_counts": ticket_role_counts,
+            "role_evaluation_source": "same_final_ranked_120_as_primary_bets",
             "previous_head_course_shares": previous.get("head_course_shares"),
             "course1_outside_top3_relative_mass": inside_out_mass,
             "course1_outside_top3_by_path": result["course1_outside_top3_by_path"],
@@ -758,7 +801,7 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
             "conditional_coverage_rule": "relative_mass>=.25, candidate>=.55*last_selected",
             "racer_course_tactics": tactics_report,
             "scenario_assumptions": result["scenario_assumptions"],
-            "conditional_places_by_head": result["conditional_places_by_head"],
+            "conditional_places_by_head": conditional_places,
             "conditional_places_are_uncalibrated": True,
             "old_main_model_version": previous["model_version"],
             "old_main_bets": previous["bets"],

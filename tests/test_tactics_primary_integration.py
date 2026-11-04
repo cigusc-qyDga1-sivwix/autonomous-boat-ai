@@ -2,7 +2,9 @@
 from datetime import datetime, timezone
 from scripts.autonomous_daily import interaction_primary
 
-REF = {"technique": {k: .1 for k in
+REF = {"observed_until_utc": "2026-11-03T12:00:00+00:00",
+       "source_sha256": "b" * 64,
+       "technique": {k: .1 for k in
        ("escape", "sashi", "makuri", "makurizashi", "nuki", "megumare")},
        "defense": {"makurare": .2, "sasare": .2, "nigasashi": .2}}
 NOW = "2026-11-04T01:00:00+00:00"
@@ -73,4 +75,13 @@ def test_insufficient_history_neutral():
     sparse["profiles"]["4"]["wins_by_technique"]["makuri"] = 3
     after, meta = interaction_primary(prior(), riders(), NOW, CUT, sparse)
     assert after == baseline
+    assert meta["racer_course_tactics"]["status"] == "REJECTED"
+
+
+def test_future_reference_neutral():
+    baseline, _ = interaction_primary(prior(), riders(), NOW, CUT)
+    bad = evidence()
+    bad["reference"] = {**REF, "observed_until_utc": CUT.isoformat()}
+    actual, meta = interaction_primary(prior(), riders(), NOW, CUT, bad)
+    assert actual == baseline
     assert meta["racer_course_tactics"]["status"] == "REJECTED"

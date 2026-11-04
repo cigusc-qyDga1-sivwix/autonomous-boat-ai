@@ -648,8 +648,20 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
                     candidate = attack["technique_per_start"]["escape"]
                 else:
                     candidate = max(attack["technique_per_start"][k] for k in ("makuri", "makurizashi", "sashi"))
-                # Modest bounded adjustment anchored to observed per-start tactic frequency.
-                adjustment = max(-.12, min(.12, (candidate - .10) * .4))
+                # Distinguish attack skill from the inside defender's demonstrated
+                # vulnerability. "Marking" intent cannot be read from these stats.
+                defender_delta = 0.0
+                if first != 1:
+                    inner_course = attack["course"] - 1
+                    inside = next((v for v in validated.values() if v["course"] == inner_course), None)
+                    tactic = max(("makuri", "makurizashi", "sashi"),
+                                key=lambda k: attack["technique_per_start"][k])
+                    exposure = "makurare" if tactic == "makuri" else "sasare"
+                    if inside and inside["defense_opportunities"].get(exposure, 0) >= 20:
+                        baseline_rate = tactics["reference"]["defense"][exposure]
+                        defender_delta = inside["defense_per_opportunity"][exposure] - baseline_rate
+                # Bounded uncalibrated change; unchanged if historical data missing.
+                adjustment = max(-.12, min(.12, (candidate - .10) * .4 + defender_delta * .1))
                 rescored.append({"combination": entry["combination"],
                                  "relative_score": entry["relative_score"] * (1 + adjustment)})
             ranked = sorted(rescored, key=lambda x: (-x["relative_score"], x["combination"]))

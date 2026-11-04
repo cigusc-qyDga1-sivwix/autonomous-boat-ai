@@ -347,7 +347,7 @@
       '<th>戦法試験買い目<br>1着/2着/3着</th><th>点検</th></tr></thead><tbody>'+
       rows+'</tbody></table></div>'+
       (warning?'<div class="notice warn">⚠ 1着上位3艇の中に、正式固定の買い目では1・2着の両方に登場しない艇があります。別モデル間の不整合候補として記録し、無条件の追加はしません。</div>':'')+
-      '<p class="help">相対評価は120通りの条件付き展開を着順ごとに合算した未校正のモデル重みで、実測的中確率ではありません。v2.0では120通りは内部分析専用。採用は進入・展示・場内気象や過去実績の根拠で審査し最大24点（通常はそれより少ない）。過去モデルの買い目は保存済み。2着候補は別途攻め・追走・差しの成立条件を要します。固定買い目や正式収支は変更しません。</p>'+
+      '<p class="help">相対評価は120通りの条件付き展開を着順ごとに合算した未校正のモデル重みで、実測的中確率ではありません。v2.0では120通りは内部分析専用。採用は進入・展示と過去の選手戦法実績の根拠で審査し最大24点（通常はそれより少ない）。過去モデルの買い目は保存済み。2着候補は別途攻め・追走・差しの成立条件を要します。固定買い目や正式収支は変更しません。</p>'+
       '</div>';
   }
   // Read-only research-only exterior conditional model, separate from official tickets.
@@ -585,7 +585,17 @@
       </div>` : ''}
       <p class="external-footnote">BOATERSが掲載する独自展示指標は、元の競艇場公式でも公開されることがあります。データ利用条件を確認し、許可された提供元から取り込む方針です。<strong>この機能はBOATERSから自動取得したものではありません。</strong>この端末内の手動再評価では、固定済み買い目を変更しません。</p>
     </section>`;
-    const mainTicketSection = `<section class="card card-pad"><div class="section-head"><h2 class="section-title">${escape(ticketLabel(r))}／3連単フォーメーション</h2>${pill(`${r.bets.length}点 / 仮想`,'pending')}</div><div class="feature-card"><span class="feature-label">SCENARIO / 展開の中心</span><strong>${escape(r.scenario)}</strong><p>着順連動型の仮説。1着の勝ち筋と2・3着の残り方を検証する。</p></div><table class="bets-table"><thead><tr><th>評価</th><th>3連単</th><th>仮想金額</th></tr></thead><tbody>${r.bets.map((b,i)=>`<tr class="${i<3?'top-bet':''}"><td>${i<3?'本線':i<6?'対抗':'穴'}</td><td>${escape(b.combination)}</td><td class="amount">${money(b.virtual_yen)}</td></tr>`).join('')}</tbody></table><div class="detail-total"><span>合計 / ${r.bets.length}点</span><strong>${money(c.stake)}</strong></div><div class="notice warn">実際の購入は0円。${r.phase==='exhibition'?'展示は取得時点の値を反映。':'展示は未反映。'} オッズは未反映。この金額は精度比較用の仮想配分です。</div></section>`;
+    const proof=r.model_version==='four-factor-v2.0-justified-points-primary-untrained'?
+      r.interaction_primary?.point_policy:null;
+    const claimLabels={
+      MINIMUM_MODEL_RANK_ONLY_NOT_OBSERVED_EVIDENCE:'モデル順位のみ（裏付け未確認）',
+      SUPPORTED_PAIR_IN_HYPOTHETICAL_PATH:'展開仮説の1・2着ペア',
+      VERIFIED_EXHIBITION_AND_SUPPORTED_PAIR:'展示確認＋展開仮説',
+      EXHIBITION_AND_HISTORICAL_COURSE_TACTICS_AND_SUPPORTED_PAIR:'展示＋過去戦法実績＋展開仮説'
+    };
+    const mainTicketSection = `<section class="card card-pad"><div class="section-head"><h2 class="section-title">${escape(ticketLabel(r))}／3連単フォーメーション</h2>${pill(`${r.bets.length}点 / 仮想`,'pending')}</div><div class="feature-card"><span class="feature-label">SCENARIO / 展開の中心</span><strong>${escape(r.scenario)}</strong><p>着順連動型の仮説。1着の勝ち筋と2・3着の残り方を検証する。</p></div>
+      ${proof?'<div class="notice"><strong>v2.0 増点の根拠審査：</strong>'+escape(proof.signal_quality)+'。内部120通りは比較だけに使用。採用'+r.bets.length+'点、暫定安全上限24点。<strong>展開仮説は実際の攻防を観測した証拠ではありません。</strong></div>':''}
+      <table class="bets-table"><thead><tr><th>評価</th><th>3連単</th>${proof?'<th>採用根拠（未校正）</th>':''}<th>仮想金額</th></tr></thead><tbody>${r.bets.map((b,i)=>`<tr class="${i<3?'top-bet':''}"><td>${i<3?'本線':i<6?'対抗':'穴'}</td><td>${escape(b.combination)}</td>${proof?'<td>'+escape(claimLabels[proof.ticket_reasons?.[b.combination]?.basis]||'根拠未確認')+'</td>':''}<td class="amount">${money(b.virtual_yen)}</td></tr>`).join('')}</tbody></table><div class="detail-total"><span>合計 / ${r.bets.length}点</span><strong>${money(c.stake)}</strong></div><div class="notice warn">実際の購入は0円。${r.phase==='exhibition'?'展示は取得時点の値を反映。':'展示は未反映。'} オッズは未反映。この金額は精度比較用の仮想配分です。</div></section>`;
     const ticketBlock=isFormalTicket(r)?mainTicketSection:`<details class="ticket-provisional"><summary>暫定買い目を参考表示する（正式買い目ではありません）</summary>${mainTicketSection}</details>`;
     return `<button class="back-btn" data-action="back-races">← レース一覧へ戻る</button>
      ${window.BoatMobileRaceNav?.racePicker(r.venue,r.race,data.forecast_races,data.unforecast_races)||''}

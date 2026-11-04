@@ -32,7 +32,7 @@ def test_promoted_baseline_is_primary_and_control_is_preserved():
     assert result["interaction_primary"]["old_main_model_version"] != result["model_version"]
     assert result["interaction_primary"]["old_main_bets"]
     assert result["head_course_shares"] == result["interaction_primary"]["new_head_course_shares"]
-    assert "イン着外" in result["point_reason"]
+    assert "1号艇着外" in result["point_reason"]
     assert "イン着外" in result["scenario"]
     assert len(result["bets"]) == len(result["interaction_primary"]["old_main_bets"])
     assert sum(b["virtual_yen"] for b in result["bets"]) == 50000

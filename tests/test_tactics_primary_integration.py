@@ -1,5 +1,6 @@
 """Precutoff course tactics integration; no evidence means unchanged tickets."""
 from datetime import datetime, timezone
+import pytest
 from scripts.autonomous_daily import interaction_primary
 
 REF = {"observed_until_utc": "2026-11-03T12:00:00+00:00",

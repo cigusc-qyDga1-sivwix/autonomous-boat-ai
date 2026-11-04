@@ -733,7 +733,7 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
     ]
     meta = {"version": INTERACTION_VERSION, "uncalibrated": True,
             "new_head_course_shares": new_head_shares,
-            "previous_head_course_shares": previous["head_course_shares"],
+            "previous_head_course_shares": previous.get("head_course_shares"),
             "course1_outside_top3_relative_mass": inside_out_mass,
             "course1_outside_top3_by_path": result["course1_outside_top3_by_path"],
             "uses_venue_weather_adjusted_base": scored_weights is not None,

@@ -26,6 +26,7 @@ if __package__:
     from .entry_exhibition_gate import validated_preview, summarize_gate
     from .venue_profiles import get_profile, adjust_weights as adjust_venue_weights
     from .interaction_scenarios import evaluate as evaluate_interactions, VERSION as INTERACTION_VERSION
+    from .racer_course_tactics import profile as validate_tactics_profile, pairwise_note as tactic_pair
 else:
     from racer_context import collect as collect_racer_context, validated as validate_racer_context
     from official_pay import fetch_official_pay
@@ -34,6 +35,7 @@ else:
     from entry_exhibition_gate import validated_preview, summarize_gate
     from venue_profiles import get_profile, adjust_weights as adjust_venue_weights
     from interaction_scenarios import evaluate as evaluate_interactions, VERSION as INTERACTION_VERSION
+    from racer_course_tactics import profile as validate_tactics_profile, pairwise_note as tactic_pair
 
 JST = ZoneInfo("Asia/Tokyo")
 UTC = timezone.utc
@@ -597,7 +599,8 @@ def head_coverage_eligible(record: dict, key: str, now: datetime, cutoff: dateti
 
 
 
-def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cutoff: datetime) -> tuple[list[dict], dict]:
+def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cutoff: datetime,
+                        tactics: dict | None = None) -> tuple[list[dict], dict]:
     """Forward-only main tickets. Existing main forecast is an A/B control."""
     supplied = []
     for r in racers:
@@ -612,7 +615,53 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
     count = len(previous["bets"])
     if not (4 <= count <= 20):
         raise ValueError("Unsupported previous main point count")
-    selected = result["top_combinations"][:count]
+    # This option is engaged ONLY with independently validated, historical
+    # course-by-racer evidence. No data => exactly the prior primary model.
+    tactics_report = {"status": "UNAVAILABLE", "applied": False}
+    ranked = result["top_combinations"]
+    if tactics is not None:
+        try:
+            if not isinstance(tactics, dict) or set(tactics) != {"profiles", "reference"}:
+                raise ValueError("Invalid tactics envelope")
+            rows = tactics["profiles"]
+            if not isinstance(rows, dict) or set(rows) != set(str(i) for i in range(1, 7)):
+                raise ValueError("Incomplete six-racer tactics data")
+            validated = {}
+            for racer in racers:
+                ident = racer.get("racer_id")
+                course = racer.get("course")
+                if type(ident) is not int or type(course) is not int:
+                    raise ValueError("Missing racer ID or actual course")
+                validated[racer["lane"]] = validate_tactics_profile(
+                    rows[str(racer["lane"])], tactics["reference"],
+                    target_racer_id=ident, course=course,
+                    cutoff_at_utc=cutoff.isoformat())
+            if not all(p["status"] == "RESEARCH_READY" for p in validated.values()):
+                raise ValueError("Insufficient past starts")
+            # A bounded tie-breaker for ranked combinations, not a measured
+            # probability. Explicitly retain identical point-count comparison.
+            rescored = []
+            for entry in ranked:
+                first, second, third = (int(i) for i in entry["combination"].split("-"))
+                attack = validated[first]
+                defender = validated[1 if first != 1 else 2]
+                if first == 1:
+                    candidate = attack["technique_per_start"]["escape"]
+                else:
+                    candidate = max(attack["technique_per_start"][k] for k in ("makuri", "makurizashi", "sashi"))
+                # Modest bounded adjustment anchored to observed per-start tactic frequency.
+                adjustment = max(-.12, min(.12, (candidate - .10) * .4))
+                rescored.append({"combination": entry["combination"],
+                                 "relative_score": entry["relative_score"] * (1 + adjustment)})
+            ranked = sorted(rescored, key=lambda x: (-x["relative_score"], x["combination"]))
+            tactics_report = {"status": "APPLIED_UNCALIBRATED", "applied": True,
+                              "source_sha256": {str(k): v["source_sha256"] for k, v in validated.items()},
+                              "racer_courses": {str(k): v["course"] for k, v in validated.items()},
+                              "max_abs_weight_change": .12,
+                              "method": "bounded_pre_cutoff_tactic_tiebreaker"}
+        except (KeyError, TypeError, ValueError) as exc:
+            tactics_report = {"status": "REJECTED", "applied": False, "reason": str(exc)}
+    selected = ranked[:count]
     if len(selected) != count:
         raise ValueError("Insufficient scenarios")
     units = 50 - count
@@ -630,6 +679,7 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
     if sum(x["virtual_yen"] for x in bets) != VIRTUAL_BUDGET_YEN:
         raise ValueError("Scenario stake allocation failed")
     meta = {"version": INTERACTION_VERSION, "uncalibrated": True,
+            "racer_course_tactics": tactics_report,
             "scenario_assumptions": result["scenario_assumptions"],
             "old_main_model_version": previous["model_version"],
             "old_main_bets": previous["bets"],
@@ -730,7 +780,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
                           and cutoff.astimezone(UTC) > INTERACTION_MAIN_ACTIVATION_UTC)
     interaction_meta = None
     if interaction_active:
-        bets, interaction_meta = interaction_primary(promoted, racers, frozen_at, cutoff)
+        bets, interaction_meta = interaction_primary(promoted, racers, frozen_at, cutoff,
+                                                      tactics=race.get("_course_tactics"))
         chosen_model = INTERACTION_MAIN_MODEL
     count = len(bets)
     shares = promoted["head_course_shares"]

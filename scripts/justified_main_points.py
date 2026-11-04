@@ -24,7 +24,7 @@ MIN_POINTS = 4
 
 def justified_selection(ranked: Sequence[dict], scenarios: Sequence[dict], *,
                         exhibition_verified: bool,
-                        independent_sources: Sequence[str] = ()):
+                        independent_sources: Sequence[str] = (), expected_paths: int = 5):
     """Apply evidence gates before selecting any extra ticket.
 
     The number 24 is a provisional harm-limiting ceiling, NOT a desired count.
@@ -45,8 +45,8 @@ def justified_selection(ranked: Sequence[dict], scenarios: Sequence[dict], *,
     ordered.sort(key=lambda x: (-x[1], x[0]))
     if ordered[0][1] <= 0 or sum(v > 0 for _, v in ordered) < MIN_POINTS:
         raise ValueError("Not enough positive scenario support")
-    if not isinstance(scenarios, (list, tuple)) or len(scenarios) != 5:
-        raise ValueError("Expected five distinct pre-race paths")
+    if expected_paths not in (5, 6) or not isinstance(scenarios, (list, tuple)) or len(scenarios) != expected_paths:
+        raise ValueError("Expected distinct pre-race paths matching the explicit model contract")
     pair_support = {}
     heads = set()
     distinct_paths = set()

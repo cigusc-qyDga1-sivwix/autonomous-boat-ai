@@ -422,7 +422,8 @@ function forecast(input){
   const leader=move[byCourse[(phase==='second'?h:s)-1]].overall;
   const prior=(phase==='second'?[1.10,1.10,1.06,1.02,.98,.94]:[1.04,1.04,1.03,1.02,1,.98])[c-1];
   const interaction=clamp(1+.05*(own/leader-1),.95,1.05);
-  return prior*Math.pow(own,phase==='second'?1.15:.95)*interaction;
+  const wake=input.linked_primary_trial===true?followingWakeFactor(phase==='second'?h:s,c,phase):1;
+  return prior*Math.pow(own,phase==='second'?1.15:.95)*interaction*wake;
  }
  function secondWeight(headCourse,secondCourse){
   if(openChasers){
@@ -777,6 +778,7 @@ function forecast(input){
      roleAwareTrial?'tactical-role-consistency-v0.4-untrained':
      wakeTrial?'tactical-wake-attrition-v0.3-untrained':
      outsideTrial?'tactical-outside-makuri-v0.2-untrained':'tactical-1m-conditional-v0.1-untrained',
+   ...(input.linked_primary_trial===true?{ranked_outcomes:candidates.map(c=>({combination:c.combination,relative_score:c.pseudo})),ranked_source:'linked-four-factor-venue-st-wake-120'}:{}),
    basis:'保存済み発走前選手情報と場別参考値のみ。結果・払戻・オッズ不使用。',
    venue:input.venue,head_course_shares:shares.map((s,i)=>({course:i+1,lane:v[byCourse[i]].lane,relative_share:+s.toFixed(4),tactic:openChasers?'攻め方未確定':nameTactic[i+1]})),
    metadata:{...(fourFactor?{four_factor:{...factorModel,...(!pointFree&&ticketMaxPoints(input)===20?{ticket_bounds:{min:4,max:20,effective_from_jst:'2026-10-29'}}:{}),...(coverage?{ticket_policy:coverage.policy}:{}),...(openChasers?{chaser_policy:{
@@ -794,7 +796,7 @@ function forecast(input){
         }))
       }}:{})}}:{}),venue_reference_rate:rate,wind_speed:wind,validMetrics,exhibition_used:validMetrics.length>0,
       ...(wakeIntegrated?{wake_v09:{
-        pre_cutoff_only:true,...(openChasers?{applied_to_chaser_scores:false}:{}),calibrated:false,studied_phases:['1M','2M+'],
+        pre_cutoff_only:true,...(openChasers?{applied_to_chaser_scores:input.linked_primary_trial===true}:{}),calibrated:false,studied_phases:['1M','2M+'],
         applies_to_all_head_courses:true,
         note:'No measured wake crossings or speed loss. Bounded pre-race hypothetical scenario factors.',
         head_course_exposure:[1,2,3,4,5,6].map(course=>({

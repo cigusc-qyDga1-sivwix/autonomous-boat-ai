@@ -67,8 +67,9 @@ def _verify_race(r: dict, p: dict, day: str) -> tuple[bool, str]:
         "four-factor-v1.9-aligned-primary-untrained",
         "four-factor-v2.0-justified-points-primary-untrained",
         "four-factor-v2.1-actual-entry-primary-untrained",
+        "four-factor-v2.2-linked-primary-untrained",
     )
-    if r.get("model_version") == "four-factor-v2.1-actual-entry-primary-untrained":
+    if r.get("model_version") in ("four-factor-v2.1-actual-entry-primary-untrained", "four-factor-v2.2-linked-primary-untrained"):
         if not 4 <= len(bets) <= 24:
             return False, "bets_count_invalid"
         if any(type(b.get("virtual_yen")) is not int or b["virtual_yen"] < 1000

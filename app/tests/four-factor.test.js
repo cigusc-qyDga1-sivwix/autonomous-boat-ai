@@ -46,3 +46,23 @@ const changedMotor=JSON.parse(JSON.stringify(saved));changedMotor.racers[0].moto
 assert.deepEqual(globalThis.BoatRacerRating.rate(changedMotor).rows.map(x=>x.ability),ability,'pure player ability display excludes motor');
 assert.match(globalThis.BoatRacerRatingPanel.render(saved),/選手基礎/);
 assert.match(globalThis.BoatRacerRatingPanel.render(saved),/モーター・展示・気象は含めません/);
+
+// New primary explicitly exports the complete canonical ranking. Default
+// archived models must not quietly enable the prospective chaser-wake branch.
+const linkedInput={...strong,linked_primary_trial:true,venue_tactics_trial:true};
+const linked=bridge.run(linkedInput);
+assert.equal(linked.ranked_source,'linked-four-factor-venue-st-wake-120');
+assert.equal(linked.ranked_outcomes.length,120);
+assert.equal(new Set(linked.ranked_outcomes.map(x=>x.combination)).size,120);
+assert.ok(Math.abs(linked.ranked_outcomes.reduce((s,x)=>s+x.relative_score,0)-1)<1e-10);
+assert.equal(linked.wake_v09.applied_to_chaser_scores,true);
+assert.equal(result.wake_v09.applied_to_chaser_scores,false);
+assert.equal(result.ranked_outcomes,undefined);
+const linkedEngine=globalThis.BoatTacticalModel.forecastFourFactorVenueAware(linkedInput);
+const noWakeEngine=globalThis.BoatTacticalModel.forecastFourFactorVenueAware({...linkedInput,linked_primary_trial:false});
+assert.deepEqual(linkedEngine.head_course_shares,noWakeEngine.head_course_shares);
+assert.notDeepEqual(linkedEngine.role_coverage,noWakeEngine.role_coverage,'conditional chaser wake must reach second/third scores');
+const linkedPanel=F.panel({...strong,model_role:'main',model_version:'four-factor-v2.2-linked-primary-untrained',four_factor:linked.four_factor});
+assert.match(linkedPanel,/統合v2.2の基礎入力/);
+assert.doesNotMatch(linkedPanel,/参考：旧4要素/);
+console.log('v2.2 canonical 120, conditional wake and primary source panel PASS');

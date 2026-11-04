@@ -717,7 +717,23 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
             for i, x in enumerate(selected)]
     if sum(x["virtual_yen"] for x in bets) != VIRTUAL_BUDGET_YEN:
         raise ValueError("Scenario stake allocation failed")
+    # The old bridge's head shares describe old bets, not this mixture.
+    # Recompute all six first-place shares from the 120 ordered outcomes.
+    head_mass = {lane: 0.0 for lane in range(1, 7)}
+    for entry in result["top_combinations"]:
+        head_mass[int(entry["combination"].split("-")[0])] += entry["relative_score"]
+    total_mass = sum(head_mass.values())
+    if total_mass <= 0:
+        raise ValueError("Invalid first-place marginal")
+    new_head_shares = [
+        {"course": r["course"], "lane": r["lane"],
+         "relative_share": round(head_mass[r["lane"]] / total_mass, 4),
+         "tactic": "条件付き5展開・未校正"}
+        for r in racers
+    ]
     meta = {"version": INTERACTION_VERSION, "uncalibrated": True,
+            "new_head_course_shares": new_head_shares,
+            "previous_head_course_shares": previous["head_course_shares"],
             "course1_outside_top3_relative_mass": inside_out_mass,
             "course1_outside_top3_by_path": result["course1_outside_top3_by_path"],
             "uses_venue_weather_adjusted_base": scored_weights is not None,
@@ -830,7 +846,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
                                                       scored_weights=weathered)
         chosen_model = INTERACTION_MAIN_MODEL
     count = len(bets)
-    shares = promoted["head_course_shares"]
+    shares = interaction_meta["new_head_course_shares"] if interaction_meta else promoted["head_course_shares"]
     concentration = max(x["relative_share"] for x in shares)
     top_two = sorted((x["relative_share"] for x in shares), reverse=True)
     gap = top_two[0] - top_two[1]
@@ -883,7 +899,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
                                  "four-factor primary vs same-time frozen v0.9 control") if four_factor else "v0.9 primary vs same-time frozen v0.7 control"}
            if new_primary else {}),
         "coupled_v06": promoted["coupled_v06"],
-        "head_course_shares": promoted["head_course_shares"],
+        "head_course_shares": shares,
         "role_coverage": promoted["role_coverage"],
         "role_changes": promoted["role_changes"],
         "relative_scores_uncalibrated": True,

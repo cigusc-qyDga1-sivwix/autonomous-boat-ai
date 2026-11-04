@@ -600,11 +600,16 @@ def head_coverage_eligible(record: dict, key: str, now: datetime, cutoff: dateti
 
 
 def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cutoff: datetime,
-                        tactics: dict | None = None) -> tuple[list[dict], dict]:
+                        tactics: dict | None = None,
+                        scored_weights: list[float] | None = None) -> tuple[list[dict], dict]:
     """Forward-only main tickets. Existing main forecast is an A/B control."""
+    if scored_weights is not None and (len(scored_weights) != 6 or
+            any(number(value) is None or value <= 0 for value in scored_weights)):
+        raise ValueError("Need six positive venue/weather adjusted weights")
     supplied = []
     for r in racers:
-        relative = number(r.get("relative_weight"))
+        relative = number(scored_weights[r["lane"] - 1] if scored_weights is not None
+                          else r.get("relative_weight"))
         if relative is None or relative <= 0:
             raise ValueError("Missing pre-cutoff racer weight")
         supplied.append({"lane": r["lane"], "strength": min(100., max(.01, relative * 20)),
@@ -715,6 +720,7 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
     meta = {"version": INTERACTION_VERSION, "uncalibrated": True,
             "course1_outside_top3_relative_mass": inside_out_mass,
             "course1_outside_top3_by_path": result["course1_outside_top3_by_path"],
+            "uses_venue_weather_adjusted_base": scored_weights is not None,
             "course1_outside_top3_selected": sum("1" not in b["combination"].split("-") for b in bets),
             "conditional_coverage_applied": conditional_coverage,
             "conditional_coverage_rule": "relative_mass>=.25, candidate>=.55*last_selected",
@@ -820,7 +826,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     interaction_meta = None
     if interaction_active:
         bets, interaction_meta = interaction_primary(promoted, racers, frozen_at, cutoff,
-                                                      tactics=race.get("_course_tactics"))
+                                                      tactics=race.get("_course_tactics"),
+                                                      scored_weights=weathered)
         chosen_model = INTERACTION_MAIN_MODEL
     count = len(bets)
     shares = promoted["head_course_shares"]

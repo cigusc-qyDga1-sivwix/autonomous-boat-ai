@@ -1637,7 +1637,7 @@ def write_json(path: Path, value: dict):
     path.parent.mkdir(parents=True, exist_ok=True)
     # Daily ledger holds every pre-cutoff version and may grow quickly.
     # Keep all historical snapshots, with no pruning, overwrite or SHA change.
-    daily_ledger = bool(re.fullmatch(r"20\\d{2}-\\d{2}-\\d{2}\\.json", path.name)) and path.parent.name == "live"
+    daily_ledger = bool(re.fullmatch(r"20[0-9]{2}-[0-9]{2}-[0-9]{2}[.]json", path.name)) and path.parent.name == "live"
     options = {"ensure_ascii": False, "sort_keys": True}
     if daily_ledger:
         options["separators"] = (",", ":")

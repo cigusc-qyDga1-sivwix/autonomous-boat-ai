@@ -67,8 +67,8 @@ FOUR_FACTOR_BRIDGE = Path(__file__).resolve().parent / 'main_four_factor_bridge.
 POINT_FREE_DATE = date(2026, 10, 28)
 POINT_FREE_MODEL = 'four-factor-v1.5-point-free-untrained'
 POINT_FREE_BRIDGE = Path(__file__).resolve().parent / 'main_point_free_bridge.js'
-INTERACTION_MAIN_MODEL = 'four-factor-v1.6-interaction-primary-untrained'
-INTERACTION_MAIN_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T00:00:00+00:00')
+INTERACTION_MAIN_MODEL = 'four-factor-v1.7-interaction-inside-failure-untrained'
+INTERACTION_MAIN_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T03:30:00+00:00')
 VIRTUAL_BUDGET_YEN = 50_000
 MIN_POINTS, MAX_POINTS = 4, 12
 STAKE_UNIT_YEN = 1_000
@@ -869,7 +869,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         if chosen_model == VENUE_TACTICS_MODEL:
             reason += "／23場別の決まり手構成と実進入・合法STに基づく着順連動v1.4（未校正）"
         if interaction_active:
-            reason = ("艇間連動v1.6修正版：コース優位の二重計上を除去し、"
+            reason = ("艇間連動v1.7：コース・ST・展示の二重計上を除去し、"
                       "攻め成功・抵抗・攻め流れ・1号艇着外の5展開を評価（未校正）")
     body = {
         "model_version": chosen_model,
@@ -894,7 +894,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         "start_v07": promoted["start_v07"],
         **({"wake_v09": promoted["wake_v09"],
             "primary_promotion_date_jst": (FOUR_FACTOR_DATE if four_factor else WAKE_PROMOTION_DATE).isoformat(),
-            "primary_model_ab": ("v1.5 point-free selection vs same-input previous primary; same 50000 budget" if point_free_active else "v1.4 venue-aware trial vs same-input v1.3 control and no-tactics ablation" if venue_active else
+            "primary_model_ab": ("v1.7 corrected inside-survival scenario vs previous main, same pre-cutoff inputs, point count and 50000 yen" if interaction_active else "v1.5 point-free selection vs same-input previous primary; same 50000 budget" if point_free_active else "v1.4 venue-aware trial vs same-input v1.3 control and no-tactics ablation" if venue_active else
                                   "v1.3 forward trial vs v1.2 matched same-input control, with v0.9 legacy" if postrace_active else
                                  "four-factor primary vs same-time frozen v0.9 control") if four_factor else "v0.9 primary vs same-time frozen v0.7 control"}
            if new_primary else {}),

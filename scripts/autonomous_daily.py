@@ -27,6 +27,7 @@ if __package__:
     from .venue_profiles import get_profile, adjust_weights as adjust_venue_weights
     from .interaction_scenarios import evaluate as evaluate_interactions, VERSION as INTERACTION_VERSION
     from .racer_course_tactics import profile as validate_tactics_profile, pairwise_note as tactic_pair
+    from .adaptive_main_points import allocate_dynamic, stake_dynamic, VERSION as ADAPTIVE_POINTS_VERSION
 else:
     from racer_context import collect as collect_racer_context, validated as validate_racer_context
     from official_pay import fetch_official_pay
@@ -36,6 +37,7 @@ else:
     from venue_profiles import get_profile, adjust_weights as adjust_venue_weights
     from interaction_scenarios import evaluate as evaluate_interactions, VERSION as INTERACTION_VERSION
     from racer_course_tactics import profile as validate_tactics_profile, pairwise_note as tactic_pair
+    from adaptive_main_points import allocate_dynamic, stake_dynamic, VERSION as ADAPTIVE_POINTS_VERSION
 
 JST = ZoneInfo("Asia/Tokyo")
 UTC = timezone.utc
@@ -69,6 +71,8 @@ POINT_FREE_MODEL = 'four-factor-v1.5-point-free-untrained'
 POINT_FREE_BRIDGE = Path(__file__).resolve().parent / 'main_point_free_bridge.js'
 INTERACTION_MAIN_MODEL = 'four-factor-v1.7-interaction-inside-failure-untrained'
 INTERACTION_MAIN_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T03:30:00+00:00')
+INTERACTION_ADAPTIVE_MODEL = 'four-factor-v1.8-adaptive-points-primary-untrained'
+INTERACTION_ADAPTIVE_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T09:02:00+00:00')
 VIRTUAL_BUDGET_YEN = 50_000
 MIN_POINTS, MAX_POINTS = 4, 12
 STAKE_UNIT_YEN = 1_000
@@ -601,7 +605,8 @@ def head_coverage_eligible(record: dict, key: str, now: datetime, cutoff: dateti
 
 def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cutoff: datetime,
                         tactics: dict | None = None,
-                        scored_weights: list[float] | None = None) -> tuple[list[dict], dict]:
+                        scored_weights: list[float] | None = None,
+                        adaptive_points: bool = False) -> tuple[list[dict], dict]:
     """Forward-only main tickets. Existing main forecast is an A/B control."""
     if scored_weights is not None and (len(scored_weights) != 6 or
             any(number(value) is None or value <= 0 for value in scored_weights)):
@@ -687,7 +692,12 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
                               "method": "bounded_pre_cutoff_tactic_tiebreaker"}
         except (KeyError, TypeError, ValueError) as exc:
             tactics_report = {"status": "REJECTED", "applied": False, "reason": str(exc)}
-    selected = list(ranked[:count])
+    dynamic_meta = None
+    if adaptive_points:
+        selected, dynamic_meta = allocate_dynamic(ranked)
+        count = len(selected)
+    else:
+        selected = list(ranked[:count])
     # A single mixture ranking can erase a plausible 1-outside-top3 path
     # even when its aggregate relative mass is material. Preserve ONE
     # candidate only if it is not dramatically weaker than the cutoff bet.
@@ -703,18 +713,21 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
         selected.sort(key=lambda x: (-x["relative_score"], x["combination"]))
     if len(selected) != count:
         raise ValueError("Insufficient scenarios")
-    units = 50 - count
-    scores = [max(0., x["relative_score"]) for x in selected]
-    total = sum(scores)
-    if total <= 0:
-        raise ValueError("Invalid scenario weights")
-    quotas = [units * x / total for x in scores]
-    base = [int(x) for x in quotas]
-    remain = units - sum(base)
-    for i in sorted(range(count), key=lambda i: (-(quotas[i] - base[i]), i))[:remain]:
-        base[i] += 1
-    bets = [{"combination": x["combination"], "virtual_yen": 1000 * (1 + base[i])}
-            for i, x in enumerate(selected)]
+    if adaptive_points:
+        bets = stake_dynamic(selected)
+    else:
+        units = 50 - count
+        scores = [max(0., x["relative_score"]) for x in selected]
+        total = sum(scores)
+        if total <= 0:
+            raise ValueError("Invalid scenario weights")
+        quotas = [units * x / total for x in scores]
+        base = [int(x) for x in quotas]
+        remain = units - sum(base)
+        for i in sorted(range(count), key=lambda i: (-(quotas[i] - base[i]), i))[:remain]:
+            base[i] += 1
+        bets = [{"combination": x["combination"], "virtual_yen": 1000 * (1 + base[i])}
+                for i, x in enumerate(selected)]
     if sum(x["virtual_yen"] for x in bets) != VIRTUAL_BUDGET_YEN:
         raise ValueError("Scenario stake allocation failed")
     # The old bridge's head shares describe old bets, not this mixture.
@@ -732,6 +745,9 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
         for r in racers
     ]
     meta = {"version": INTERACTION_VERSION, "uncalibrated": True,
+            "point_policy": dynamic_meta if adaptive_points else {"status": "legacy_point_count"},
+            "point_count_independent_of_prior": bool(adaptive_points),
+            "stake_unit_yen": 100 if adaptive_points else 1000,
             "new_head_course_shares": new_head_shares,
             "previous_head_course_shares": previous.get("head_course_shares"),
             "course1_outside_top3_relative_mass": inside_out_mass,
@@ -746,7 +762,8 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
             "conditional_places_are_uncalibrated": True,
             "old_main_model_version": previous["model_version"],
             "old_main_bets": previous["bets"],
-            "comparison": "same input, point count, 50000 virtual yen",
+            "comparison": ("prior frozen as audit only; adaptive main picks its own points; same 50000 virtual yen"
+                           if adaptive_points else "same input, point count, 50000 virtual yen"),
             "result_data_used": False}
     return bets, meta
 
@@ -841,12 +858,15 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     interaction_active = (four_factor and venue != "江戸川"
                           and now.astimezone(UTC) >= INTERACTION_MAIN_ACTIVATION_UTC
                           and cutoff.astimezone(UTC) > INTERACTION_MAIN_ACTIVATION_UTC)
+    adaptive_active = (interaction_active and now.astimezone(UTC) >= INTERACTION_ADAPTIVE_ACTIVATION_UTC
+                       and cutoff.astimezone(UTC) > INTERACTION_ADAPTIVE_ACTIVATION_UTC)
     interaction_meta = None
     if interaction_active:
         bets, interaction_meta = interaction_primary(promoted, racers, frozen_at, cutoff,
                                                       tactics=race.get("_course_tactics"),
-                                                      scored_weights=weathered)
-        chosen_model = INTERACTION_MAIN_MODEL
+                                                      scored_weights=weathered,
+                                                      adaptive_points=adaptive_active)
+        chosen_model = INTERACTION_ADAPTIVE_MODEL if adaptive_active else INTERACTION_MAIN_MODEL
     count = len(bets)
     shares = interaction_meta["new_head_course_shares"] if interaction_meta else promoted["head_course_shares"]
     concentration = max(x["relative_share"] for x in shares)
@@ -870,7 +890,10 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
             reason += "／展示タイム突出・外枠追走・内残りの条件付き試験（確率未校正）"
         if chosen_model == VENUE_TACTICS_MODEL:
             reason += "／23場別の決まり手構成と実進入・合法STに基づく着順連動v1.4（未校正）"
-        if interaction_active:
+        if adaptive_active:
+            reason = ("艇間連動v1.8：展開の相対評価から点数を自動増減／"
+                      "100円単位で仮想5万円を配分（未校正）")
+        elif interaction_active:
             reason = ("艇間連動v1.7：コース・ST・展示の二重計上を除去し、"
                       "攻め成功・抵抗・攻め流れ・1号艇着外の5展開を評価（未校正）")
     body = {
@@ -896,7 +919,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         "start_v07": promoted["start_v07"],
         **({"wake_v09": promoted["wake_v09"],
             "primary_promotion_date_jst": (FOUR_FACTOR_DATE if four_factor else WAKE_PROMOTION_DATE).isoformat(),
-            "primary_model_ab": ("v1.7 corrected inside-survival scenario vs previous main, same pre-cutoff inputs, point count and 50000 yen" if interaction_active else "v1.5 point-free selection vs same-input previous primary; same 50000 budget" if point_free_active else "v1.4 venue-aware trial vs same-input v1.3 control and no-tactics ablation" if venue_active else
+            "primary_model_ab": ("v1.8 adaptive primary, independent point count, 50000 yen, older model audit only" if adaptive_active else "v1.7 corrected inside-survival scenario vs previous main, same pre-cutoff inputs, point count and 50000 yen" if interaction_active else "v1.5 point-free selection vs same-input previous primary; same 50000 budget" if point_free_active else "v1.4 venue-aware trial vs same-input v1.3 control and no-tactics ablation" if venue_active else
                                   "v1.3 forward trial vs v1.2 matched same-input control, with v0.9 legacy" if postrace_active else
                                  "four-factor primary vs same-time frozen v0.9 control") if four_factor else "v0.9 primary vs same-time frozen v0.7 control"}
            if new_primary else {}),
@@ -1046,7 +1069,9 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
             interaction_active = (cutoff.date() >= FOUR_FACTOR_DATE and VENUES[venue_code] != "江戸川"
                                   and runtime_now.astimezone(UTC) >= INTERACTION_MAIN_ACTIVATION_UTC
                                   and cutoff.astimezone(UTC) > INTERACTION_MAIN_ACTIVATION_UTC)
-            expected_main = (INTERACTION_MAIN_MODEL if interaction_active else
+            adaptive_active = (interaction_active and runtime_now.astimezone(UTC) >= INTERACTION_ADAPTIVE_ACTIVATION_UTC
+                               and cutoff.astimezone(UTC) > INTERACTION_ADAPTIVE_ACTIVATION_UTC)
+            expected_main = (INTERACTION_ADAPTIVE_MODEL if adaptive_active else INTERACTION_MAIN_MODEL if interaction_active else
                              POINT_FREE_MODEL if point_free_active else VENUE_TACTICS_MODEL if venue_active else
                              POSTRACE_CONDITIONAL_MODEL if postrace_active else
                              HEAD_COVERAGE_MODEL if coverage_active else

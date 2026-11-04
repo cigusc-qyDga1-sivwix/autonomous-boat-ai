@@ -5,6 +5,7 @@ on:
       - 'scripts/interaction_scenarios.py'
       - 'tests/test_interaction_scenarios.py'
       - 'tests/test_interaction_main.py'
+      - 'tests/test_actual_entry_primary.py'
       - 'scripts/autonomous_daily.py'
       - '.github/workflows/interaction-shadow-test.yml'
   workflow_dispatch:
@@ -19,5 +20,5 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m pip install -e '.[test]'
-      - run: python -m pytest -q tests/test_interaction_scenarios.py tests/test_interaction_main.py
+      - run: python -m pytest -q tests/test_interaction_scenarios.py tests/test_interaction_main.py tests/test_actual_entry_primary.py
       - run: python -m pytest -q

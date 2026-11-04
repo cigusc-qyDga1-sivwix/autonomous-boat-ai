@@ -180,3 +180,26 @@ def test_primary_rating_marginals_and_selected_ticket_counts_share_one_source():
     assert sum(v["third"] for v in counts.values()) == len(result["bets"])
     assert result["sha256"] == stable_hash(
         {k: v for k, v in result.items() if k != "sha256"})
+    assert result["interaction_primary"]["main_role_shares"]
+
+
+def test_v19_aligned_main_upgrades_only_open_races_without_rewriting_v18():
+    source = {"programs": {"stadiums": {"18": {"races": {
+        "2": entry(cutoff="2026-11-04 21:00:00")}}}}}
+    before = datetime(2026, 11, 4, 19, 15, tzinfo=JST)
+    ledger, _, _ = build(None, source, before, "fixture")
+    previous = ledger["race_records"]["18-2"]["versions"][0]
+    assert previous["model_version"] == "four-factor-v1.8-adaptive-points-primary-untrained"
+    revised, _, status = build(
+        ledger, source, datetime(2026, 11, 4, 19, 35, tzinfo=JST), "fixture")
+    versions = revised["race_records"]["18-2"]["versions"]
+    assert versions[0] == previous
+    assert versions[-1]["model_version"] == "four-factor-v1.9-aligned-primary-untrained"
+    assert versions[-1]["model_upgrade"]["previous_sha256"] == previous["sha256"]
+    assert versions[-1]["interaction_primary"]["role_evaluation_source"] == "same_final_ranked_120_as_primary_bets"
+    assert versions[-1]["interaction_primary"]["point_count_independent_of_prior"]
+    assert status["new_model_upgrades"] >= 1
+    assert sum(b["virtual_yen"] for b in versions[-1]["bets"]) == 50000
+    after_cutoff = prediction(entry(cutoff="2026-11-04 21:00:00"), "徳山", 2, "baseline",
+        datetime(2026, 11, 4, 19, 35, tzinfo=JST), "fixture")
+    assert after_cutoff["model_version"] == "four-factor-v1.9-aligned-primary-untrained"

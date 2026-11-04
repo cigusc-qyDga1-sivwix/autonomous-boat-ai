@@ -61,7 +61,10 @@ def _verify_race(r: dict, p: dict, day: str) -> tuple[bool, str]:
     if not isinstance(p.get("payout_per_100"), int) or p["payout_per_100"] < 100:
         return False, "payout_invalid"
     bets = r.get("bets") or []
-    point_free = r.get("model_version") == "four-factor-v1.5-point-free-untrained"
+    point_free = r.get("model_version") in (
+        "four-factor-v1.5-point-free-untrained",
+        "four-factor-v1.8-adaptive-points-primary-untrained",
+    )
     max_points = 20 if day >= '2026-10-29' and r.get('model_version', '').startswith('four-factor-') else 12
     if not (1 <= len(bets) <= 120 if point_free else 4 <= len(bets) <= max_points):
         return False, "bets_count_invalid"

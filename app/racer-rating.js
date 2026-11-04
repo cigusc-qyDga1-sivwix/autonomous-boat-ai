@@ -36,7 +36,7 @@ function forecastForRace(r){
 // Use the exact role marginals frozen by the PRIMARY prediction pipeline.
 // Deliberately do not replay the older browser tactical model here.
 function primaryRole(r){
- if(r?.model_role!=='main'||!/^four-factor-v1\.(?:[678])\b/.test(r.model_version||''))
+ if(r?.model_role!=='main'||!/^four-factor-v1\.(?:[6789])\b/.test(r.model_version||''))
   return null;
  const rows=r?.interaction_primary?.main_role_shares;
  const heads=r?.head_course_shares;

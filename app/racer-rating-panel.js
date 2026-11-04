@@ -22,7 +22,9 @@ function render(r){
   (four?'選手基礎トップ：':'総合能力トップ：')+names(scored.filter(x=>x.ability===topAbility))+
   (primary?' ／ 正式メインの1着評価トップ：':' ／ このレースの活躍期待トップ：')+
   names(expected.filter(x=>x.race_expectation===topExpected)):
-  (rating.status==='hold'?'展示進入確認待ちのため期待指数を保留':'未取得・進入未確認の項目は評価保留');
+  (rating.status==='hold'?'展示進入確認待ちのため期待指数を保留':
+   r?.model_version?.startsWith('four-factor-v1.8-')?'旧保存予想に正式メインの着順別評価がないため表示保留':
+   '未取得・進入未確認の項目は評価保留');
  const rows=rating.rows.map(x=>{
   const ability=shown(x.ability),expectation=shown(x.race_expectation);
   const bestAbility=topAbility!==null&&x.ability===topAbility;

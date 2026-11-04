@@ -87,3 +87,22 @@ def test_read_only_does_not_mutate_inputs_or_fixed_picks():
     original = deepcopy(payload)
     analyze(payload)
     assert payload == original
+
+
+def test_v21_audit_supports_24_justified_points_but_not_25_or_subunit_stakes():
+    from itertools import permutations
+    from scripts.forecast_audit import _verify_race
+    payload=make_example()
+    race=payload['forecast_races'][0]
+    race['model_version']='four-factor-v2.1-actual-entry-primary-untrained'
+    names=['-'.join(map(str,p)) for p in permutations(range(1,7),3)]
+    race['bets']=[{'combination':name,'virtual_yen':4000 if i==0 else 2000}
+                  for i,name in enumerate(names[:24])]
+    pay=payload['official_results']['2026-10-22|徳山|1']
+    assert _verify_race(race,pay,'2026-10-22')[0]
+    race['bets'].append({'combination':names[24],'virtual_yen':1000})
+    assert _verify_race(race,pay,'2026-10-22')==(False,'bets_count_invalid')
+    race['bets'].pop()
+    race['bets'][0]['virtual_yen']=3900
+    race['bets'][1]['virtual_yen']=2100
+    assert _verify_race(race,pay,'2026-10-22')==(False,'stake_invalid')

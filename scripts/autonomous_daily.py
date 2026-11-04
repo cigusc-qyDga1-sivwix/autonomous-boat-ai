@@ -80,6 +80,8 @@ INTERACTION_ALIGNED_MODEL = 'four-factor-v1.9-aligned-primary-untrained'
 INTERACTION_ALIGNED_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T10:25:00+00:00')
 INTERACTION_JUSTIFIED_MODEL = 'four-factor-v2.0-justified-points-primary-untrained'
 INTERACTION_JUSTIFIED_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T12:10:00+00:00')
+INTERACTION_ENTRY_MODEL = 'four-factor-v2.1-actual-entry-primary-untrained'
+INTERACTION_ENTRY_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T15:00:00+00:00')
 VIRTUAL_BUDGET_YEN = 50_000
 MIN_POINTS, MAX_POINTS = 4, 12
 STAKE_UNIT_YEN = 1_000
@@ -616,7 +618,8 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
                         adaptive_points: bool = False,
                         justified_points: bool = False,
                         exhibition_verified: bool = False,
-                        site_weather_verified: bool = False) -> tuple[list[dict], dict]:
+                        site_weather_verified: bool = False,
+                        entry_aware: bool = False) -> tuple[list[dict], dict]:
     """Forward-only main tickets. Existing main forecast is an A/B control."""
     if scored_weights is not None and (len(scored_weights) != 6 or
             any(number(value) is None or value <= 0 for value in scored_weights)):
@@ -627,11 +630,12 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
                           else r.get("relative_weight"))
         if relative is None or relative <= 0:
             raise ValueError("Missing pre-cutoff racer weight")
-        supplied.append({"lane": r["lane"], "strength": min(100., max(.01, relative * 20)),
+        supplied.append({"lane": r["lane"], **({"course": r.get("course")} if entry_aware else {}), "strength": min(100., max(.01, relative * 20)),
                          "start_mean": r.get("average_start_timing"),
                          "exhibition_time": r.get("exhibition_time")})
     result = evaluate_interactions(supplied, captured_at_utc=frozen_at,
-                                   cutoff_at_utc=cutoff.isoformat())
+                                   cutoff_at_utc=cutoff.isoformat(), entry_aware=entry_aware)
+    inside_lane = result.get("inside_lane", 1)
     count = len(previous["bets"])
     if not (4 <= count <= 20):
         raise ValueError("Unsupported previous main point count")
@@ -674,14 +678,14 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
             for entry in ranked:
                 first, second, third = (int(i) for i in entry["combination"].split("-"))
                 attack = validated[first]
-                if first == 1:
+                if (attack["course"] == 1 if entry_aware else first == 1):
                     candidate = attack["technique_per_start"]["escape"]
                 else:
                     candidate = max(attack["technique_per_start"][k] for k in ("makuri", "makurizashi", "sashi"))
                 # Distinguish attack skill from the inside defender's demonstrated
                 # vulnerability. "Marking" intent cannot be read from these stats.
                 defender_delta = 0.0
-                if first != 1:
+                if (attack["course"] != 1 if entry_aware else first != 1):
                     inner_course = attack["course"] - 1
                     inside = next((v for v in validated.values() if v["course"] == inner_course), None)
                     tactic = max(("makuri", "makurizashi", "sashi"),
@@ -724,8 +728,8 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
     # candidate only if it is not dramatically weaker than the cutoff bet.
     # These are research coverage thresholds, not calibrated probabilities.
     inside_out_mass = result["course1_outside_top3_relative_mass"]
-    selected_without_one = sum("1" not in x["combination"].split("-") for x in selected)
-    excluded_candidates = [x for x in ranked if "1" not in x["combination"].split("-")]
+    selected_without_one = sum(str(inside_lane) not in x["combination"].split("-") for x in selected)
+    excluded_candidates = [x for x in ranked if str(inside_lane) not in x["combination"].split("-")]
     conditional_coverage = bool(
         inside_out_mass >= .25 and selected_without_one == 0 and excluded_candidates
         and excluded_candidates[0]["relative_score"] >= .55 * selected[-1]["relative_score"])
@@ -811,7 +815,10 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
             "third": sum(b["combination"].split("-")[2] == str(lane) for b in bets),
         } for lane in range(1, 7)
     }
-    meta = {"version": INTERACTION_VERSION, "uncalibrated": True,
+    meta = {"version": result["version"],
+            **({"entry_aware": True, "inside_lane": inside_lane,
+                "entry_evidence_status": "verified_exhibition" if exhibition_verified else "provisional_unverified"}
+               if entry_aware else {}), "uncalibrated": True,
             "point_policy": dynamic_meta if (adaptive_points or justified_points) else {"status": "legacy_point_count"},
             "point_count_independent_of_prior": bool(adaptive_points or justified_points),
             "stake_unit_yen": 1000 if justified_points else 100 if adaptive_points else 1000,
@@ -823,7 +830,7 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
             "course1_outside_top3_relative_mass": inside_out_mass,
             "course1_outside_top3_by_path": result["course1_outside_top3_by_path"],
             "uses_venue_weather_adjusted_base": scored_weights is not None,
-            "course1_outside_top3_selected": sum("1" not in b["combination"].split("-") for b in bets),
+            "course1_outside_top3_selected": sum(str(inside_lane) not in b["combination"].split("-") for b in bets),
             "conditional_coverage_applied": conditional_coverage,
             "conditional_coverage_rule": "relative_mass>=.25, candidate>=.55*last_selected",
             "racer_course_tactics": tactics_report,
@@ -936,6 +943,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
                       and cutoff.astimezone(UTC) > INTERACTION_ALIGNED_ACTIVATION_UTC)
     justified_active = (aligned_active and now.astimezone(UTC) >= INTERACTION_JUSTIFIED_ACTIVATION_UTC
                         and cutoff.astimezone(UTC) > INTERACTION_JUSTIFIED_ACTIVATION_UTC)
+    entry_active = (justified_active and now.astimezone(UTC) >= INTERACTION_ENTRY_ACTIVATION_UTC
+                    and cutoff.astimezone(UTC) > INTERACTION_ENTRY_ACTIVATION_UTC)
     interaction_meta = None
     if interaction_active:
         # The same strict six-boat exhibition/entry pre-cutoff gate controls
@@ -953,8 +962,9 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
             adaptive_points=adaptive_active,
             justified_points=justified_active,
             exhibition_verified=bool(point_gate["final_eligible"]),
-            site_weather_verified=bool(selected_weather and selected_weather.get("site_observed")))
-        chosen_model = (INTERACTION_JUSTIFIED_MODEL if justified_active else
+            site_weather_verified=bool(selected_weather and selected_weather.get("site_observed")),
+            entry_aware=entry_active)
+        chosen_model = (INTERACTION_ENTRY_MODEL if entry_active else INTERACTION_JUSTIFIED_MODEL if justified_active else
                         INTERACTION_ALIGNED_MODEL if aligned_active else
                         INTERACTION_ADAPTIVE_MODEL if adaptive_active else INTERACTION_MAIN_MODEL)
     count = len(bets)
@@ -982,7 +992,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
             reason += "／23場別の決まり手構成と実進入・合法STに基づく着順連動v1.4（未校正）"
         if justified_active:
             policy = interaction_meta["point_policy"]
-            reason = ("艇間連動v2.0：内部120展開は分析のみ、採用"
+            reason = (("艇間連動v2.1：実進入で攻め・抵抗・追走を対応、採用" if entry_active else "艇間連動v2.0：内部120展開は分析のみ、採用")
                       + str(len(bets)) + "点。根拠区分="
                       + policy["signal_quality"] +
                       "／暫定安全上限24点・仮想5万円・未校正")
@@ -1018,7 +1028,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         "start_v07": promoted["start_v07"],
         **({"wake_v09": promoted["wake_v09"],
             "primary_promotion_date_jst": (FOUR_FACTOR_DATE if four_factor else WAKE_PROMOTION_DATE).isoformat(),
-            "primary_model_ab": ("v2.0 conservative selection: 120 analyzed, max 24 tickets, evidence-gated" if justified_active else "v1.9 main ratings + tickets same scored 120; forward-only, 50000 yen" if aligned_active else "v1.8 adaptive primary, independent point count, 50000 yen, older model audit only" if adaptive_active else "v1.7 corrected inside-survival scenario vs previous main, same pre-cutoff inputs, point count and 50000 yen" if interaction_active else "v1.5 point-free selection vs same-input previous primary; same 50000 budget" if point_free_active else "v1.4 venue-aware trial vs same-input v1.3 control and no-tactics ablation" if venue_active else
+            "primary_model_ab": ("v2.1 actual-entry geometry; no phantom follower for course 6; forward only" if entry_active else "v2.0 conservative selection: 120 analyzed, max 24 tickets, evidence-gated" if justified_active else "v1.9 main ratings + tickets same scored 120; forward-only, 50000 yen" if aligned_active else "v1.8 adaptive primary, independent point count, 50000 yen, older model audit only" if adaptive_active else "v1.7 corrected inside-survival scenario vs previous main, same pre-cutoff inputs, point count and 50000 yen" if interaction_active else "v1.5 point-free selection vs same-input previous primary; same 50000 budget" if point_free_active else "v1.4 venue-aware trial vs same-input v1.3 control and no-tactics ablation" if venue_active else
                                   "v1.3 forward trial vs v1.2 matched same-input control, with v0.9 legacy" if postrace_active else
                                  "four-factor primary vs same-time frozen v0.9 control") if four_factor else "v0.9 primary vs same-time frozen v0.7 control"}
            if new_primary else {}),
@@ -1175,7 +1185,9 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                               and cutoff.astimezone(UTC) > INTERACTION_ALIGNED_ACTIVATION_UTC)
             justified_active = (aligned_active and runtime_now.astimezone(UTC) >= INTERACTION_JUSTIFIED_ACTIVATION_UTC
                                 and cutoff.astimezone(UTC) > INTERACTION_JUSTIFIED_ACTIVATION_UTC)
-            expected_main = (INTERACTION_JUSTIFIED_MODEL if justified_active else
+            entry_active = (justified_active and runtime_now.astimezone(UTC) >= INTERACTION_ENTRY_ACTIVATION_UTC
+                            and cutoff.astimezone(UTC) > INTERACTION_ENTRY_ACTIVATION_UTC)
+            expected_main = (INTERACTION_ENTRY_MODEL if entry_active else INTERACTION_JUSTIFIED_MODEL if justified_active else
                              INTERACTION_ALIGNED_MODEL if aligned_active else
                              INTERACTION_ADAPTIVE_MODEL if adaptive_active else INTERACTION_MAIN_MODEL if interaction_active else
                              POINT_FREE_MODEL if point_free_active else VENUE_TACTICS_MODEL if venue_active else

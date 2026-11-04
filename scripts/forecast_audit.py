@@ -66,7 +66,14 @@ def _verify_race(r: dict, p: dict, day: str) -> tuple[bool, str]:
         "four-factor-v1.8-adaptive-points-primary-untrained",
         "four-factor-v1.9-aligned-primary-untrained",
         "four-factor-v2.0-justified-points-primary-untrained",
+        "four-factor-v2.1-actual-entry-primary-untrained",
     )
+    if r.get("model_version") == "four-factor-v2.1-actual-entry-primary-untrained":
+        if not 4 <= len(bets) <= 24:
+            return False, "bets_count_invalid"
+        if any(type(b.get("virtual_yen")) is not int or b["virtual_yen"] < 1000
+               or b["virtual_yen"] % 1000 for b in bets):
+            return False, "stake_invalid"
     max_points = 20 if day >= '2026-10-29' and r.get('model_version', '').startswith('four-factor-') else 12
     if not (1 <= len(bets) <= 120 if point_free else 4 <= len(bets) <= max_points):
         return False, "bets_count_invalid"

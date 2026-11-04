@@ -24,6 +24,7 @@ on:
       - 'scripts/venue_profiles.py'
       - 'scripts/export_venue_profiles.py'
       - 'scripts/ingest_boatracecsv_exhibition.py'
+      - 'tests/test_exhibition_csv_retries.py'
       - 'scripts/research_outside_roles.py'
       - 'scripts/research_coupling_patterns.py'
       - 'scripts/research_wake_hypotheses.py'
@@ -95,6 +96,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python -m unittest tests.test_exhibition_csv_retries
           python scripts/test_exhibition_ingest_optional_weather.py
           python scripts/test_exhibition_rejection_audit.py
           # The former Mikuni replay test no longer exists in this repository.

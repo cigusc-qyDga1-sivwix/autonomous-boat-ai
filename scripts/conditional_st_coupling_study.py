@@ -239,20 +239,25 @@ def summarize(rows, *, before_date: str) -> dict:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", type=Path, required=True,
-                        help="Authorized historical BoatraceCSV results file")
-    parser.add_argument("--event-date", required=True,
-                        help="YYYY-MM-DD of this results file")
+    parser.add_argument("--input", type=Path, action="append", required=True,
+                        help="Authorized historical CSV; repeat for multiple dates")
+    parser.add_argument("--event-date", action="append", required=True,
+                        help="Date of the matching --input; repeat in file order")
     parser.add_argument("--before-date", required=True,
                         help="Exclusive date strictly after all input races")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
-    encoded = args.input.read_bytes()
-    sha = hashlib.sha256(encoded).hexdigest()
-    rows = list(csv.DictReader(encoded.decode("utf-8-sig").splitlines()))
-    labels = [label_result(row, event_date=args.event_date, source_sha256=sha)
-              for row in rows]
+    if len(args.input) != len(args.event_date):
+        parser.error("Each historical input needs one matching --event-date")
+    labels = []
+    for path, event_date in zip(args.input, args.event_date):
+        encoded = path.read_bytes()
+        sha = hashlib.sha256(encoded).hexdigest()
+        rows = list(csv.DictReader(encoded.decode("utf-8-sig").splitlines()))
+        labels.extend(label_result(row, event_date=event_date, source_sha256=sha)
+                      for row in rows)
     result = summarize(labels, before_date=args.before_date)
+    result["source_file_sha256"] = sorted({row["source_sha256"] for row in labels})
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
                         encoding="utf-8")

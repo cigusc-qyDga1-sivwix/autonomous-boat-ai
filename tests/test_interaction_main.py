@@ -203,3 +203,53 @@ def test_v19_aligned_main_upgrades_only_open_races_without_rewriting_v18():
     after_cutoff = prediction(entry(cutoff="2026-11-04 21:00:00"), "徳山", 2, "baseline",
         datetime(2026, 11, 4, 19, 35, tzinfo=JST), "fixture")
     assert after_cutoff["model_version"] == "four-factor-v1.9-aligned-primary-untrained"
+
+
+def test_v20_main_no_longer_expands_by_entropy_to_120():
+    from scripts.autonomous_daily import INTERACTION_JUSTIFIED_MODEL
+    when=datetime(2026,11,4,21,20,tzinfo=JST)
+    p=prediction(entry(cutoff="2026-11-04 23:00:00"),
+                 "徳山",2,"baseline",when,"fixture")
+    assert p["model_version"]==INTERACTION_JUSTIFIED_MODEL
+    assert p["model_role"]=="main"
+    assert 4<=len(p["bets"])<=8
+    assert p["point_count"]==len(p["bets"])
+    policy=p["interaction_primary"]["point_policy"]
+    assert policy["candidate_outcomes_analyzed"]==120
+    assert policy["max_issued_ticket_points"]==24
+    assert policy["selected_point_count"]==len(p["bets"])
+    assert not policy["exhibition_verified"]
+    assert not policy["independent_sources"]
+    assert sum(b["virtual_yen"] for b in p["bets"])==50000
+    assert all(b["virtual_yen"]>=1000 and b["virtual_yen"]%1000==0 for b in p["bets"])
+    assert p["classification"] in ("WATCH","SKIP")
+    assert p["sha256"]==stable_hash({k:v for k,v in p.items() if k!="sha256"})
+
+
+def test_v20_exhibition_does_not_auto_spread_to_120():
+    when=datetime(2026,11,4,21,20,tzinfo=JST)
+    p=prediction(entry(cutoff="2026-11-04 23:00:00",preview=True),
+                 "徳山",2,"exhibition",when,"fixture")
+    policy=p["interaction_primary"]["point_policy"]
+    assert p["model_version"]=="four-factor-v2.0-justified-points-primary-untrained"
+    assert 4<=len(p["bets"])<=24
+    if not policy["independent_sources"]:
+        assert len(p["bets"])<=12
+    assert sum(b["virtual_yen"] for b in p["bets"])==50000
+
+
+def test_v20_is_prospective_and_previous_frozen_sha_remains():
+    payload={"programs":{"stadiums":{"18":{"races":{
+        "2":entry(cutoff="2026-11-04 23:00:00")}}}}}
+    old=datetime(2026,11,4,21,5,tzinfo=JST)
+    new=datetime(2026,11,4,21,20,tzinfo=JST)
+    ledger,_,_=build(None,payload,old,"fixture")
+    first=ledger["race_records"]["18-2"]["versions"][0]
+    assert first["model_version"]=="four-factor-v1.9-aligned-primary-untrained"
+    updated,_,status=build(ledger,payload,new,"fixture")
+    versions=updated["race_records"]["18-2"]["versions"]
+    assert versions[0]==first
+    assert versions[-1]["model_version"]=="four-factor-v2.0-justified-points-primary-untrained"
+    assert versions[-1]["model_upgrade"]["previous_sha256"]==first["sha256"]
+    assert len(versions[-1]["bets"])<=24
+    assert status["new_model_upgrades"]>=1

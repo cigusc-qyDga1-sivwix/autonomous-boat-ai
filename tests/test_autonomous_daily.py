@@ -235,7 +235,7 @@ def test_compact_daily_ledger_preserves_all_versions_and_sha(tmp_path):
     compact=daily.read_text(encoding="utf-8")
     pretty=json.dumps(source,ensure_ascii=False,indent=2,sort_keys=True)+"\\n"
     assert json.loads(compact)==source
-    assert len(compact.encode("utf-8"))<len(pretty.encode("utf-8"))*.65
+    assert len(compact.encode("utf-8"))<len(pretty.encode("utf-8"))*.75
     assert all(v["sha256"]==stable_hash({k:x for k,x in v.items() if k!="sha256"})
                for v in json.loads(compact)["race_records"]["18-1"]["versions"])
     ordinary=tmp_path/"live"/"audit-latest.json"

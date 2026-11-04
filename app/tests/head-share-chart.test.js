@@ -40,3 +40,40 @@ const app=fs.readFileSync('app/app.js','utf8');
 assert.ok(app.indexOf('BoatHeadShareChart?.render(r)')<app.indexOf('    ${ticketBlock}'),'chart immediately above main tickets');
 const index=fs.readFileSync('app/index.html','utf8');assert.match(index,/head-share-chart\.css/);assert.match(index,/head-share-chart\.js/);
 console.log('Head share pie: immutable saved values, 100% rounding, lane/course mapping, zero/missing guards, escaping and ticket placement: PASS');
+const mismatched=fixture();
+mismatched.bets=[{combination:'5-1-2',virtual_yen:30000},{combination:'1-5-2',virtual_yen:20000}];
+const saved=JSON.stringify(mismatched),summary=chart.ticketSummary(mismatched);
+assert.equal(summary.leadersDiffer,true);
+assert.deepEqual(summary.ratingLeaders,[1]);assert.deepEqual(summary.stakeLeaders,[5]);
+assert.equal(summary.rows[0].percent,54.1,'raw rating must never be rewritten as 40% stake');
+assert.equal(summary.rows[0].headCount,1);assert.equal(summary.rows[0].stake,20000);
+assert.equal(summary.rows[0].stakePercent,40);assert.equal(summary.rows[4].stakePercent,60);
+const compared=chart.render(mismatched);
+for(const text of ['評価1位','頭の配分最多','同じ保存予想','54.1％','20,000円','40.0％','30,000円','60.0％','2・3着の条件と点数制限'])assert.ok(compared.includes(text),text);
+assert.equal(JSON.stringify(mismatched),saved);
+const tied=structuredClone(mismatched);tied.bets.forEach(b=>b.virtual_yen=25000);
+assert.equal(chart.ticketSummary(tied).leadersDiffer,false,'equal top stakes do not count as an inversion');
+for(const mutate of [r=>r.bets[0].virtual_yen=NaN,r=>r.bets[0].virtual_yen=30001,
+ r=>r.bets[0].combination='5-5-2',r=>r.bets.push({...r.bets[0]}),r=>delete r.bets]){
+ const bad=structuredClone(mismatched);mutate(bad);
+ assert.equal(chart.ticketSummary(bad),null);assert.match(chart.render(bad),/比較は保留/);
+}
+const primary=structuredClone(mismatched);primary.model_role='main';
+primary.interaction_primary={role_evaluation_source:'same_final_ranked_120_as_primary_bets',
+ main_role_shares:Object.fromEntries(primary.head_course_shares.map(x=>[x.lane,{first:x.relative_share}])),
+ ticket_role_counts:Object.fromEntries(Array.from({length:6},(_,i)=>[i+1,{first:[1,0,0,0,1,0][i]}]))};
+assert.equal(chart.data(primary)[0].percent,54.1);assert.ok(chart.ticketSummary(primary));
+const contradictory=structuredClone(primary);contradictory.interaction_primary.main_role_shares['1'].first=.9;
+assert.equal(chart.data(contradictory),null,'contradictory primary source must not silently display');
+const absentRole=structuredClone(primary);delete absentRole.interaction_primary.main_role_shares;
+assert.equal(chart.data(absentRole),null);
+const staleCounts=structuredClone(primary);staleCounts.interaction_primary.ticket_role_counts['1'].first=8;
+assert.equal(chart.ticketSummary(staleCounts),null,'do not display stale saved ticket counts');
+let inversions=0;
+for(const race of live.forecast_races){
+ const actual=chart.ticketSummary(race);assert.ok(actual,'valid live comparison: '+race.venue+race.race);
+ if(actual.leadersDiffer)inversions++;
+ assert.equal(actual.rows.reduce((s,x)=>s+x.headCount,0),race.bets.length);
+ assert.equal(actual.rows.reduce((s,x)=>s+x.stake,0),50000);
+}
+console.log('Head chart comparison: distinct rating/stake, ties, primary-source conflicts and actual ticket totals PASS; live inversions='+inversions);

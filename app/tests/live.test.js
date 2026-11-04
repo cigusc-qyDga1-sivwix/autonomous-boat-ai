@@ -7,11 +7,24 @@ assert.ok(raw.forecast_races.length>0);
 assert.ok(raw.forecast_races.length<=288);
 for(const r of raw.forecast_races){
   assert.ok(r.sha256 && r.frozen_at_utc);
-  // 2026-10-28 point-free main v1.5 explicitly permits 1–120 tickets.
-  // Other snapshots use 4–20 after the JST 29 Oct rollout, 4–12 before it.
-  const pointFree=r.model_version==='four-factor-v1.5-point-free-untrained';
+  // Old saved v1.5/v1.8/v1.9 forecasts are immutable and may contain
+  // 120 tickets. That is historical READ compatibility, not a new policy.
+  // From v2.0 onward, the main is forbidden to issue >24 tickets.
+  const historicWide=new Set([
+    'four-factor-v1.5-point-free-untrained',
+    'four-factor-v1.8-adaptive-points-primary-untrained',
+    'four-factor-v1.9-aligned-primary-untrained'
+  ]).has(r.model_version);
+  const conservative=r.model_version==='four-factor-v2.0-justified-points-primary-untrained';
   const expanded=Date.parse(r.frozen_at_utc)>=Date.parse('2026-10-29T00:00:00+09:00');
-  assert.ok(r.bets.length>=(pointFree?1:4)&&r.bets.length<=(pointFree?120:expanded?20:12));
+  const maximum=conservative?24:historicWide?120:expanded?20:12;
+  assert.ok(r.bets.length>=(historicWide?1:4)&&r.bets.length<=maximum);
+  if(conservative){
+    const policy=r.interaction_primary?.point_policy;
+    assert.ok(policy&&policy.max_issued_ticket_points===24);
+    assert.ok(policy.selected_point_count<=24);
+    assert.ok(r.bets.every(b=>b.virtual_yen%1000===0&&b.virtual_yen>=1000));
+  }
   if(r.point_count!==undefined)assert.equal(r.point_count,r.bets.length);
   assert.equal(r.bets.reduce((a,b)=>a+b.virtual_yen,0),50000);
   assert.ok(['baseline','exhibition'].includes(r.phase));

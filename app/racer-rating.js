@@ -90,7 +90,7 @@ function rate(r,opts={}){
  const turnMean=allTurn?turnValues.reduce((a,b)=>a+b,0)/6:null;
  const result={status:blocked(r)?'hold':'ready',model:null,provisional:!confirmed,weights:{...WEIGHTS},
   byLane:{},rows:[],explanation:'全国勝率、モーター2連対率、実進入コースと平均ST・取得済み展示タイムの相対差から作る未校正指数'};
- const isPrimary=r?.model_role==='main'&&/^four-factor-v1\.(?:[678])\b/.test(r.model_version||'');
+ const isPrimary=r?.model_role==='main'&&/^four-factor-v1\.(?:[6789])\b/.test(r.model_version||'');
  const primary=isPrimary?primaryRole(r):null;
  const snapshot=blocked(r)||isPrimary?null:
    (opts.forecast===undefined?forecastForRace(r):opts.forecast);

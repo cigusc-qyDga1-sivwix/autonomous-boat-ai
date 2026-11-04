@@ -1,5 +1,5 @@
 """Read-only BoatraceCSV exhibition backfill. NEVER modifies pre-cutoff forecasts."""
-import argparse, csv, hashlib, io, json, math
+import argparse, csv, hashlib, io, json, math, time
 from concurrent.futures import ThreadPoolExecutor
 from collections import Counter
 from datetime import date, datetime, timezone
@@ -20,13 +20,33 @@ def url(name, day):
     return f"{ROOT}{SOURCES[name]}/{day:%Y/%m/%d}.csv"
 
 def fetch(name, day):
-    try:
-        request = Request(url(name,day),headers={"User-Agent":"boat-lab-research-import/1.0"})
-        with urlopen(request,timeout=12) as response:
-            return list(csv.DictReader(io.StringIO(response.read().decode("utf-8-sig"))))
-    except (HTTPError,URLError,TimeoutError,UnicodeError) as exc:
-        print(f"[research] {name}: unavailable ({type(exc).__name__})")
-        return []
+    """Retry transient transport failures; never treat a missing feed as complete.
+
+    404 is normally a feed that has not been published yet and must not be
+    disguised as a successful empty preview. Each request remains bounded.
+    """
+    request = Request(url(name,day),headers={"User-Agent":"boat-lab-research-import/1.0"})
+    for attempt in range(3):
+        try:
+            with urlopen(request, timeout=12) as response:
+                rows = list(csv.DictReader(io.StringIO(response.read().decode("utf-8-sig"))))
+            if rows:
+                return rows
+            # A temporary empty response may be a partially published feed.
+            if attempt == 2:
+                print(f"[research] {name}: empty after 3 attempts")
+                return []
+        except HTTPError as exc:
+            if exc.code not in (408, 429, 500, 502, 503, 504) or attempt == 2:
+                print(f"[research] {name}: HTTP {exc.code}; unavailable")
+                return []
+        except (URLError, TimeoutError, UnicodeError, OSError) as exc:
+            if attempt == 2:
+                print(f"[research] {name}: unavailable ({type(exc).__name__})")
+                return []
+        if attempt < 2:
+            time.sleep(0.5 * (attempt + 1))
+    return []
 
 def numeric(value):
     if value is None or value == "":
@@ -199,6 +219,8 @@ def main():
         "event_date":day.isoformat(),
         "collected_at_utc":datetime.now(timezone.utc).isoformat(),
         "complete_sources":has_essential,
+        "missing_required_sources":[name for name in ("stt", "tkz") if not sources[name]],
+        "source_health":"READY" if has_essential else "DEGRADED_MISSING_PREVIEW",
         "weather_source_available":bool(sources["sui"]),
         "fetch_counts":{k:len(rows) for k,rows in sources.items()},
         "rejected_rows":current.get("rejected_rows",{}),

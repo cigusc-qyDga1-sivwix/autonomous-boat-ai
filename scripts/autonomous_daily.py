@@ -67,8 +67,8 @@ FOUR_FACTOR_BRIDGE = Path(__file__).resolve().parent / 'main_four_factor_bridge.
 POINT_FREE_DATE = date(2026, 10, 28)
 POINT_FREE_MODEL = 'four-factor-v1.5-point-free-untrained'
 POINT_FREE_BRIDGE = Path(__file__).resolve().parent / 'main_point_free_bridge.js'
-INTERACTION_MAIN_MODEL = 'four-factor-v1.6-interaction-primary-untrained'
-INTERACTION_MAIN_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T00:00:00+00:00')
+INTERACTION_MAIN_MODEL = 'four-factor-v1.7-interaction-inside-failure-untrained'
+INTERACTION_MAIN_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T03:30:00+00:00')
 VIRTUAL_BUDGET_YEN = 50_000
 MIN_POINTS, MAX_POINTS = 4, 12
 STAKE_UNIT_YEN = 1_000
@@ -600,11 +600,16 @@ def head_coverage_eligible(record: dict, key: str, now: datetime, cutoff: dateti
 
 
 def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cutoff: datetime,
-                        tactics: dict | None = None) -> tuple[list[dict], dict]:
+                        tactics: dict | None = None,
+                        scored_weights: list[float] | None = None) -> tuple[list[dict], dict]:
     """Forward-only main tickets. Existing main forecast is an A/B control."""
+    if scored_weights is not None and (len(scored_weights) != 6 or
+            any(number(value) is None or value <= 0 for value in scored_weights)):
+        raise ValueError("Need six positive venue/weather adjusted weights")
     supplied = []
     for r in racers:
-        relative = number(r.get("relative_weight"))
+        relative = number(scored_weights[r["lane"] - 1] if scored_weights is not None
+                          else r.get("relative_weight"))
         if relative is None or relative <= 0:
             raise ValueError("Missing pre-cutoff racer weight")
         supplied.append({"lane": r["lane"], "strength": min(100., max(.01, relative * 20)),
@@ -682,7 +687,20 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
                               "method": "bounded_pre_cutoff_tactic_tiebreaker"}
         except (KeyError, TypeError, ValueError) as exc:
             tactics_report = {"status": "REJECTED", "applied": False, "reason": str(exc)}
-    selected = ranked[:count]
+    selected = list(ranked[:count])
+    # A single mixture ranking can erase a plausible 1-outside-top3 path
+    # even when its aggregate relative mass is material. Preserve ONE
+    # candidate only if it is not dramatically weaker than the cutoff bet.
+    # These are research coverage thresholds, not calibrated probabilities.
+    inside_out_mass = result["course1_outside_top3_relative_mass"]
+    selected_without_one = sum("1" not in x["combination"].split("-") for x in selected)
+    excluded_candidates = [x for x in ranked if "1" not in x["combination"].split("-")]
+    conditional_coverage = bool(
+        inside_out_mass >= .25 and selected_without_one == 0 and excluded_candidates
+        and excluded_candidates[0]["relative_score"] >= .55 * selected[-1]["relative_score"])
+    if conditional_coverage:
+        selected[-1] = excluded_candidates[0]
+        selected.sort(key=lambda x: (-x["relative_score"], x["combination"]))
     if len(selected) != count:
         raise ValueError("Insufficient scenarios")
     units = 50 - count
@@ -699,7 +717,29 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
             for i, x in enumerate(selected)]
     if sum(x["virtual_yen"] for x in bets) != VIRTUAL_BUDGET_YEN:
         raise ValueError("Scenario stake allocation failed")
+    # The old bridge's head shares describe old bets, not this mixture.
+    # Recompute all six first-place shares from the 120 ordered outcomes.
+    head_mass = {lane: 0.0 for lane in range(1, 7)}
+    for entry in result["top_combinations"]:
+        head_mass[int(entry["combination"].split("-")[0])] += entry["relative_score"]
+    total_mass = sum(head_mass.values())
+    if total_mass <= 0:
+        raise ValueError("Invalid first-place marginal")
+    new_head_shares = [
+        {"course": r["course"], "lane": r["lane"],
+         "relative_share": round(head_mass[r["lane"]] / total_mass, 4),
+         "tactic": "条件付き5展開・未校正"}
+        for r in racers
+    ]
     meta = {"version": INTERACTION_VERSION, "uncalibrated": True,
+            "new_head_course_shares": new_head_shares,
+            "previous_head_course_shares": previous.get("head_course_shares"),
+            "course1_outside_top3_relative_mass": inside_out_mass,
+            "course1_outside_top3_by_path": result["course1_outside_top3_by_path"],
+            "uses_venue_weather_adjusted_base": scored_weights is not None,
+            "course1_outside_top3_selected": sum("1" not in b["combination"].split("-") for b in bets),
+            "conditional_coverage_applied": conditional_coverage,
+            "conditional_coverage_rule": "relative_mass>=.25, candidate>=.55*last_selected",
             "racer_course_tactics": tactics_report,
             "scenario_assumptions": result["scenario_assumptions"],
             "old_main_model_version": previous["model_version"],
@@ -802,10 +842,11 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     interaction_meta = None
     if interaction_active:
         bets, interaction_meta = interaction_primary(promoted, racers, frozen_at, cutoff,
-                                                      tactics=race.get("_course_tactics"))
+                                                      tactics=race.get("_course_tactics"),
+                                                      scored_weights=weathered)
         chosen_model = INTERACTION_MAIN_MODEL
     count = len(bets)
-    shares = promoted["head_course_shares"]
+    shares = interaction_meta["new_head_course_shares"] if interaction_meta else promoted["head_course_shares"]
     concentration = max(x["relative_share"] for x in shares)
     top_two = sorted((x["relative_share"] for x in shares), reverse=True)
     gap = top_two[0] - top_two[1]
@@ -813,8 +854,6 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
               if new_primary else
               "6艇連動＋平均ST／展示STと内艇の先行差による着順分岐")
     reason += "（4〜12点・未訓練・確率未校正）"
-    if interaction_active:
-        reason = "艇間連動v1.6：外攻め成功・内側牽制・攻め流れ・追走浮上の4展開（未学習・未校正）"
     top_combo = bets[0]["combination"].split("-")
     leader = racers[int(top_combo[0]) - 1]
     follower = racers[int(top_combo[1]) - 1]
@@ -829,6 +868,9 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
             reason += "／展示タイム突出・外枠追走・内残りの条件付き試験（確率未校正）"
         if chosen_model == VENUE_TACTICS_MODEL:
             reason += "／23場別の決まり手構成と実進入・合法STに基づく着順連動v1.4（未校正）"
+        if interaction_active:
+            reason = ("艇間連動v1.7：コース・ST・展示の二重計上を除去し、"
+                      "攻め成功・抵抗・攻め流れ・1号艇着外の5展開を評価（未校正）")
     body = {
         "model_version": chosen_model,
         **({"interaction_primary": interaction_meta} if interaction_meta else {}),
@@ -852,12 +894,12 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         "start_v07": promoted["start_v07"],
         **({"wake_v09": promoted["wake_v09"],
             "primary_promotion_date_jst": (FOUR_FACTOR_DATE if four_factor else WAKE_PROMOTION_DATE).isoformat(),
-            "primary_model_ab": ("v1.5 point-free selection vs same-input previous primary; same 50000 budget" if point_free_active else "v1.4 venue-aware trial vs same-input v1.3 control and no-tactics ablation" if venue_active else
+            "primary_model_ab": ("v1.7 corrected inside-survival scenario vs previous main, same pre-cutoff inputs, point count and 50000 yen" if interaction_active else "v1.5 point-free selection vs same-input previous primary; same 50000 budget" if point_free_active else "v1.4 venue-aware trial vs same-input v1.3 control and no-tactics ablation" if venue_active else
                                   "v1.3 forward trial vs v1.2 matched same-input control, with v0.9 legacy" if postrace_active else
                                  "four-factor primary vs same-time frozen v0.9 control") if four_factor else "v0.9 primary vs same-time frozen v0.7 control"}
            if new_primary else {}),
         "coupled_v06": promoted["coupled_v06"],
-        "head_course_shares": promoted["head_course_shares"],
+        "head_course_shares": shares,
         "role_coverage": promoted["role_coverage"],
         "role_changes": promoted["role_changes"],
         "relative_scores_uncalibrated": True,
@@ -888,9 +930,12 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         "cutoff_iso_jst": cutoff.isoformat(),
         "frozen_at_utc": frozen_at,
         "source_url": source_url,
-        "scenario": f"{leader['lane']}号艇{leader['name']}中心・"
-                    f"{follower['lane']}号艇{follower['name']}の残存を検証"
-                    + ("（展示数値を参照）" if phase == "exhibition" else "（展示前仮説）"),
+        "scenario": (("イン残存／イン着外の両分岐を評価：先頭候補"
+                      + str(leader["lane"]) + "号艇、対抗" + str(follower["lane"]) + "号艇")
+                     if interaction_active else
+                     f"{leader['lane']}号艇{leader['name']}中心・"
+                     f"{follower['lane']}号艇{follower['name']}の残存を検証"
+                     + ("（展示数値を参照）" if phase == "exhibition" else "（展示前仮説）")),
         "bets": bets,
         "racers": racers,
         "weather_observed": weather,

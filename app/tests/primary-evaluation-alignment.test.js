@@ -15,7 +15,7 @@ const ctx=vm.createContext({window,Number,Intl,console});
 for(const file of ['app/racer-rating.js','app/racer-rating-panel.js','app/race-visual.js'])
  vm.runInContext(fs.readFileSync(file,'utf8'),ctx,{filename:file});
 const r={
- model_role:'main',model_version:'four-factor-v1.8-adaptive-points-primary-untrained',
+ model_role:'main',model_version:'four-factor-v1.9-aligned-primary-untrained',
  phase:'exhibition',
  entry_exhibition_gate:{final_eligible:true,entry_watch:false},
  racers:Array.from({length:6},(_,i)=>({

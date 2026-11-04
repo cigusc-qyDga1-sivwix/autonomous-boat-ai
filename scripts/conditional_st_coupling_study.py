@@ -187,10 +187,14 @@ def summarize(rows, *, before_date: str) -> dict:
             head = d["by_winner"][str(head_course)]
             n_head = head["races"]
             head_inner_top3 = head["top3_partner_courses"][str(inner)]
-            n_other = d["races"] - n_head
+            # Both groups must exclude races where the inner boat wins:
+            # otherwise the control's "2nd/3rd" rate is mechanically lower.
+            # Compare outer-head wins with wins by a THIRD course.
+            n_other = d["races"] - n_head - d["by_winner"][str(inner)]["races"]
             inner_other_top3 = sum(
                 h["top3_partner_courses"][str(inner)]
-                for label, h in d["by_winner"].items() if label != str(head_course))
+                for label, h in d["by_winner"].items()
+                if label not in (str(head_course), str(inner)))
             enough = n_head >= MIN_PAIR_RACES and n_other >= MIN_PAIR_RACES
             neighbor_comparisons[f"{head_course}head_{inner}partner"] = {
                 "head_races": n_head, "other_races": n_other,
@@ -199,7 +203,7 @@ def summarize(rows, *, before_date: str) -> dict:
                 "inner_top3_given_head_rate": (head_inner_top3/n_head if enough else None),
                 "inner_top3_given_other_head_rate": (inner_other_top3/n_other if enough else None),
                 "status": "DESCRIPTIVE" if enough else "INSUFFICIENT",
-                "meaning": "finish correlation, not observed marking or attack",
+                "meaning": "2nd/3rd finish conditional on head; control excludes the inner boat winning; not observed marking or attack",
             }
 
         report[venue] = {

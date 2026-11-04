@@ -111,3 +111,48 @@ def test_new_primary_respects_venue_weather_adjusted_scores():
     assert a["new_head_course_shares"] != b["new_head_course_shares"]
     assert b["uses_venue_weather_adjusted_base"]
     assert abs(sum(x["relative_share"] for x in b["new_head_course_shares"]) - 1) <= .001
+
+
+def test_v18_main_adapts_points_without_following_old_model():
+    result = prediction(
+        entry(cutoff="2026-11-04 20:00:00"), "徳山", 2, "baseline",
+        datetime(2026, 11, 4, 18, 10, tzinfo=JST), "fixture")
+    assert result["model_version"] == "four-factor-v1.8-adaptive-points-primary-untrained"
+    assert result["model_role"] == "main"
+    policy = result["interaction_primary"]["point_policy"]
+    assert result["interaction_primary"]["point_count_independent_of_prior"]
+    assert policy["point_selection"] == "entropy_and_relative_score_mass"
+    assert policy["candidate_count"] == 120
+    assert result["point_count"] == policy["selected_point_count"]
+    assert 4 <= result["point_count"] <= 120
+    assert sum(b["virtual_yen"] for b in result["bets"]) == 50000
+    assert all(b["virtual_yen"] % 100 == 0 and b["virtual_yen"] >= 100
+               for b in result["bets"])
+    assert "自動増減" in result["point_reason"]
+    assert result["sha256"] == stable_hash({k:v for k,v in result.items() if k != "sha256"})
+
+
+def test_v18_upgrades_only_before_cutoff_and_preserves_old_sha():
+    source = {"programs": {"stadiums": {"18": {"races": {
+        "2": entry(cutoff="2026-11-04 20:00:00")}}}}}
+    old_now = datetime(2026, 11, 4, 17, 55, tzinfo=JST)
+    ledger, _, _ = build(None, source, old_now, "fixture")
+    first = ledger["race_records"]["18-2"]["versions"][0]
+    assert first["model_version"] == "four-factor-v1.7-interaction-inside-failure-untrained"
+    revised, _, status = build(
+        ledger, source, datetime(2026, 11, 4, 18, 12, tzinfo=JST), "fixture")
+    versions = revised["race_records"]["18-2"]["versions"]
+    assert versions[0] == first
+    assert versions[-1]["model_version"] == "four-factor-v1.8-adaptive-points-primary-untrained"
+    assert versions[-1]["model_upgrade"]["previous_sha256"] == first["sha256"]
+    assert status["new_model_upgrades"] >= 1
+
+
+def test_v18_not_backdated_to_previous_activation_or_past_cutoff():
+    old = prediction(
+        entry(cutoff="2026-11-04 20:00:00"), "徳山", 2, "baseline",
+        datetime(2026, 11, 4, 17, 55, tzinfo=JST), "fixture")
+    assert old["model_version"] == "four-factor-v1.7-interaction-inside-failure-untrained"
+    with pytest.raises(ValueError):
+        prediction(entry(cutoff="2026-11-04 18:00:00"), "徳山", 2, "baseline",
+                   datetime(2026, 11, 4, 18, 10, tzinfo=JST), "fixture")

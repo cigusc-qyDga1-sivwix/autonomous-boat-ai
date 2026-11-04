@@ -623,6 +623,16 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
         try:
             if not isinstance(tactics, dict) or set(tactics) != {"profiles", "reference"}:
                 raise ValueError("Invalid tactics envelope")
+            reference = tactics["reference"]
+            # Training reference rates must also be frozen before this race.
+            if not isinstance(reference, dict) or not isinstance(reference.get("observed_until_utc"), str):
+                raise ValueError("Missing historical reference provenance")
+            reference_stamp = datetime.fromisoformat(reference["observed_until_utc"].replace("Z", "+00:00"))
+            if reference_stamp.tzinfo is None or reference_stamp >= cutoff:
+                raise ValueError("Reference rates include post-cutoff observations")
+            ref_sha = reference.get("source_sha256")
+            if not isinstance(ref_sha, str) or len(ref_sha) != 64 or any(ch not in "0123456789abcdef" for ch in ref_sha):
+                raise ValueError("Invalid historical reference source SHA")
             rows = tactics["profiles"]
             if not isinstance(rows, dict) or set(rows) != set(str(i) for i in range(1, 7)):
                 raise ValueError("Incomplete six-racer tactics data")

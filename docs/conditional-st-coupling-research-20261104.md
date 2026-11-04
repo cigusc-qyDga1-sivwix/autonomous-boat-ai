@@ -38,3 +38,5 @@ python -m pytest -q tests/test_conditional_st_coupling_study.py tests/test_inter
 ```
 
 **状態**：研究と診断コードは追加済み。実データの自動収集、統計の実数値、正式予想係数の更新、精度向上は未検証。既存の正式買い目・収支・過去保存データは変更しない。
+
+複数日のCSVは `--input path --event-date YYYY-MM-DD` の組を繰り返して指定。出力に各入力ファイルのSHA-256一覧を保存する。

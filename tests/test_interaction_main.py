@@ -62,7 +62,7 @@ def test_old_snapshot_is_not_rewritten_during_forward_upgrade():
 
 def test_no_backdated_main_creation():
     with pytest.raises(ValueError):
-        prediction(entry(), "徳山", 1, "baseline",
+        prediction(entry(cutoff="2026-11-04 11:00:00"), "徳山", 1, "baseline",
                    datetime(2026, 11, 4, 11, 0, tzinfo=JST), "fixture")
 
 def test_formal_scenario_can_include_one_outside_top3():

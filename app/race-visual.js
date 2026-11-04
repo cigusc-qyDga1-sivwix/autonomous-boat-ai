@@ -18,7 +18,11 @@
    if(r?.entry_exhibition_gate?.entry_watch&&!r.entry_exhibition_gate.final_eligible)
      return {status:'hold',reason:'前付け警戒・展示進入未確認のため順位を保留'};
    try{
-     const forecast=window.BoatRacerRating?.forecastForRace?.(r)||window.BoatTacticalModel?.forecastRoleAware?.(r)||window.BoatTacticalModel?.forecast(r);
+     const primary=r?.model_role==='main'&&/^four-factor-v1\.(?:[6789])\b/.test(r.model_version||'');
+     // Main prediction: render only the frozen primary model's shares.
+     // Never silently substitute a separate browser/shadow forecast.
+     const forecast=primary?r:(window.BoatRacerRating?.forecastForRace?.(r)||
+       window.BoatTacticalModel?.forecastRoleAware?.(r)||window.BoatTacticalModel?.forecast(r));
      const values=forecast?.head_course_shares;
      if(!Array.isArray(values)||values.length!==6)return {status:'unknown',reason:'評価に必要なデータがありません'};
      const candidates=values.map(v=>({lane:Number(v.lane),share:Number(v.relative_share)}));
@@ -31,8 +35,9 @@
      const ranks={};
      candidates.forEach((v,i)=>ranks[v.lane]={rank:i+1,mark:ADVANTAGE_MARKS[i],share:v.share});
      const ready=!!r?.entry_exhibition_gate?.final_eligible;
-     return {status:'trial',ranks,
-       reason:ready?'展示確認後の保存データに基づく試験順位':'展示・実進入未確認のため暫定順位'};
+     return {status:primary?'main':'trial',ranks,
+       reason:primary?(ready?'正式メイン保存済み1着評価':'メインの展示前・暫定1着評価'):
+        (ready?'展示確認後の保存データに基づく試験順位':'展示・実進入未確認のため暫定順位')};
    }catch{return {status:'unknown',reason:'試験モデルによる順位評価ができません'};}
  }
  function entryHTML(r){
@@ -50,7 +55,7 @@
        '<span class="boat-entry-rank-pending">保留</span>';
      html+='<tr'+(value?.rank===1?' class="boat-entry-top-advantage"':'')+'><th scope="row"><span class="boat-entry-lane boat-entry-'+(i+1)+'">'+(i+1)+'</span></th><td>'+rankHtml+'</td><td class="boat-entry-name">'+esc(x.name||'未取得')+'</td><td class="boat-entry-num">'+(win===null?'—':win.toFixed(2))+'</td><td class="boat-entry-num">'+(motor===null?'—':motor.toFixed(1)+'%')+'</td></tr>';
    });
-   return html+'</tbody></table></div><p class="boat-entry-rank-note"><strong>AIの1着候補順位：</strong>◎1位・○2位・▲3位・△4位・☆5位・－6位。'+esc(ranking.reason)+'。<strong>全国勝率順でも的中確率でもありません。</strong>1マーク戦法の試験モデルが出走・モーター・ST・取得済み展示値を総合評価。結果・オッズは使わず、発走前固定予想の買い目・SHAは変更しません。2・3着の順位は別評価です。</p><p class="boat-sim-disclaimer">全国勝率は得点ベースの指標。モーターは1着率ではなく<strong>2連対率</strong>（1・2着に入った割合）です。</p></section>';
+   return html+'</tbody></table></div><p class="boat-entry-rank-note"><strong>AIの1着候補順位：</strong>◎1位・○2位・▲3位・△4位・☆5位・－6位。'+esc(ranking.reason)+'。<strong>全国勝率順でも的中確率でもありません。</strong>正式メインの場合は買い目と同じ保存済み120展開から1着評価を表示。旧予想では戦法試験モデルの参考順位を表示します。結果・オッズを使わず、保存済み買い目・SHAは変更しません。2・3着は別評価です。</p><p class="boat-sim-disclaimer">全国勝率は得点ベースの指標。モーターは1着率ではなく<strong>2連対率</strong>（1・2着に入った割合）です。</p></section>';
  }
  function options(r){
    const s=new Set(),out=[];
@@ -220,7 +225,7 @@
    const combo=r?.model_role==='main'?picks[0]:(tacticCases[0]?.combo||picks[0]),order=ranks(combo),tactic=tacticFor(combo,r),roles=rolesFor(combo,r);
    let html='<section class="card card-pad boat-sim boat-sim-v3 boat-sim-v4" data-boat-sim aria-label="予想展開アニメーション">'+
      '<div class="section-head"><div><h2 class="section-title">🎬 展開予想アニメ</h2><p class="boat-sim-mini">スタート → 第1ターンマーク → バックストレッチ</p></div><span class="boat-sim-tag">戦法別 v5 / 自動再生</span></div>'+
-     '<div class="boat-sim-narrative"><span>想定する攻め方 <b data-sim-tactic>'+tactic.label+'</b></span><strong data-sim-forecast>'+(r?.model_role==='main'?'メイン'+(r.model_version==='four-factor-v1.8-adaptive-points-primary-untrained'?'艇間連動v1.8可変点数':r.model_version==='four-factor-v1.7-interaction-inside-failure-untrained'?'艇間連動v1.7':r.model_version==='four-factor-v1.6-interaction-primary-untrained'?'艇間連動v1.6':r.model_version==='four-factor-v1.1-untrained'?'四要素v1.1'+(r.four_factor?.chaser_policy?' 追走固定解除':''):r.model_version==='four-factor-v1.0-untrained'?'四要素v1.0':r.model_version?.includes('v0.9')?'v0.9':'v0.7')+' 発走前固定 ':tacticCases.length?'戦法研究（未固定） ':'元の予想 ')+combo+'</strong></div>'+
+     '<div class="boat-sim-narrative"><span>想定する攻め方 <b data-sim-tactic>'+tactic.label+'</b></span><strong data-sim-forecast>'+(r?.model_role==='main'?'メイン'+(r.model_version==='four-factor-v1.9-aligned-primary-untrained'?'艇間連動v1.9評価整合':r.model_version==='four-factor-v1.8-adaptive-points-primary-untrained'?'艇間連動v1.8可変点数':r.model_version==='four-factor-v1.7-interaction-inside-failure-untrained'?'艇間連動v1.7':r.model_version==='four-factor-v1.6-interaction-primary-untrained'?'艇間連動v1.6':r.model_version==='four-factor-v1.1-untrained'?'四要素v1.1'+(r.four_factor?.chaser_policy?' 追走固定解除':''):r.model_version==='four-factor-v1.0-untrained'?'四要素v1.0':r.model_version?.includes('v0.9')?'v0.9':'v0.7')+' 発走前固定 ':tacticCases.length?'戦法研究（未固定） ':'元の予想 ')+combo+'</strong></div>'+
      '<p class="boat-sim-disclaimer">本線・対抗の買い目に加え、非購入の比較用展開も切り替えられるよ。各艇が独立して先マイ／差し／まくり／まくり差しを狙う仮説を描く。実際の進入や艇間の航跡・速度を再現したものではありません。艇の戦法と、1Mの外を回る位置関係を比較する模式図です。</p>'+
      '<div class="boat-sim-roles" data-sim-roles aria-label="各艇の攻め方の仮説">'+roles.map(x=>'<span>'+x.lane+'号艇('+x.course+'コース)：'+esc(x.label)+'</span>').join('')+'</div>'+
      '<div class="boat-sim-picks" role="group" aria-label="再現する買い目">';

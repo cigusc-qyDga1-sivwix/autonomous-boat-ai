@@ -33,6 +33,40 @@ function forecastForRace(r){
   return null;
  }
 }
+// Use the exact role marginals frozen by the PRIMARY prediction pipeline.
+// Deliberately do not replay the older browser tactical model here.
+function primaryRole(r){
+ if(r?.model_role!=='main'||!/^four-factor-v1\.(?:[6789])\b/.test(r.model_version||''))
+  return null;
+ const rows=r?.interaction_primary?.main_role_shares;
+ const heads=r?.head_course_shares;
+ if(!rows||typeof rows!=='object'||!Array.isArray(heads)||heads.length!==6)
+  return {status:'unavailable',byLane:{}};
+ const normalized={};
+ const sums={first:0,second:0,third:0};
+ const lanes=new Set();
+ for(const x of heads){
+  const lane=number(x?.lane),head=number(x?.relative_share);
+  if(!Number.isInteger(lane)||lane<1||lane>6||lanes.has(lane)||
+     head===null||head<0||head>1)return {status:'unavailable',byLane:{}};
+  lanes.add(lane);
+  const role=rows[String(lane)];
+  if(!role)return {status:'unavailable',byLane:{}};
+  const vals={};
+  for(const key of ['first','second','third']){
+   const value=number(role[key]);
+   if(value===null||value<0||value>1)return {status:'unavailable',byLane:{}};
+   vals[key]=value;
+   sums[key]+=value;
+  }
+  if(Math.abs(vals.first-head)>.003)return {status:'unavailable',byLane:{}};
+  normalized[lane]=vals;
+ }
+ if(lanes.size!==6||Object.values(sums).some(x=>Math.abs(x-1)>.003))
+  return {status:'unavailable',byLane:{}};
+ return {status:'ready',byLane:normalized,model:r.model_version,
+         source:'saved_primary_ranked_120'};
+}
 function rate(r,opts={}){
  const racers=Array.isArray(r?.racers)?[...r.racers].sort((a,b)=>number(a.lane)-number(b.lane)):[];
  if(racers.length!==6||racers.some((x,i)=>number(x.lane)!==i+1)){
@@ -56,23 +90,30 @@ function rate(r,opts={}){
  const turnMean=allTurn?turnValues.reduce((a,b)=>a+b,0)/6:null;
  const result={status:blocked(r)?'hold':'ready',model:null,provisional:!confirmed,weights:{...WEIGHTS},
   byLane:{},rows:[],explanation:'全国勝率、モーター2連対率、実進入コースと平均ST・取得済み展示タイムの相対差から作る未校正指数'};
- const snapshot=blocked(r)?null:(opts.forecast===undefined?forecastForRace(r):opts.forecast);
+ const isPrimary=r?.model_role==='main'&&/^four-factor-v1\.(?:[6789])\b/.test(r.model_version||'');
+ const primary=isPrimary?primaryRole(r):null;
+ const snapshot=blocked(r)||isPrimary?null:
+   (opts.forecast===undefined?forecastForRace(r):opts.forecast);
  const shares=snapshot?.role_coverage;
  const heads=snapshot?.head_course_shares;
- const validShares=Array.isArray(heads)&&heads.length===6&&shares&&
+ const validShares=!isPrimary&&Array.isArray(heads)&&heads.length===6&&shares&&
   racers.every(x=>{
    const l=x.lane,a=shares[l];
    return a&&['first','second','third'].every(k=>Number.isFinite(number(a[k]))&&number(a[k])>=0&&number(a[k])<=1);
   })&&['first','second','third'].every(k=>Math.abs(racers.reduce((sum,x)=>sum+number(shares[x.lane][k]),0)-1)<.025);
  const raws={};
- if(validShares){
+ if(primary?.status==='ready'&&!blocked(r)){
+  result.model=primary.model;
+  result.explanation='正式メインの保存済み120展開から算出した1着・2着・3着の相対評価';
+  for(const x of racers)raws[x.lane]=primary.byLane[x.lane].first;
+ }else if(validShares){
   result.model=snapshot.model||'tactical-research-unknown';
   for(const x of racers){
    const z=shares[x.lane];
    raws[x.lane]=.55*number(z.first)+.30*number(z.second)+.15*number(z.third);
   }
  }
- const best=validShares?Math.max(...Object.values(raws)):null;
+ const best=(primary?.status==='ready'||validShares)&&!blocked(r)?Math.max(...Object.values(raws)):null;
  for(const x of racers){
   const lane=x.lane,course=courseOrder[lane-1];
   const win=number(x.national_win_rate),motor=number(x.motor_top_2_percent);
@@ -93,7 +134,7 @@ function rate(r,opts={}){
   const fitScore=confirmed?fixed(BASE_COURSE[course-1]+ownStartEdge+expoEdge+turnEdge):null;
   const composite=racerScore!==null&&motorScore!==null&&fitScore!==null?
    fixed(WEIGHTS.racer*racerScore+WEIGHTS.motor*motorScore+WEIGHTS.course_fit*fitScore):null;
-  const role=validShares?shares[lane]:null;
+  const role=primary?.status==='ready'&&!blocked(r)?primary.byLane[lane]:(validShares?shares[lane]:null);
   const expected=!blocked(r)&&best!==null&&best>0?fixed(100*raws[lane]/best):null;
   const fourRow=r.model_version?.startsWith('four-factor-')?r.four_factor?.rows?.find(z=>z.lane===lane):null;
   const fourPlayer=fourRow?.factors?.athlete?.raw_multiplier;
@@ -102,7 +143,10 @@ function rate(r,opts={}){
   const isFour=r.model_version?.startsWith('four-factor-');
   const record={lane,course,course_confirmed:confirmed,name:String(x.name||'未取得'),
    athlete:isFour?playerOnly:racerScore,motor:motorScore,course_fit:fitScore,ability:isFour?playerOnly:composite,
-   race_expectation:expected,role_weights:role?{
+   race_expectation:expected,primary_aligned:primary?.status==='ready',
+   ticket_role_counts:primary?.status==='ready'?
+    (r.interaction_primary?.ticket_role_counts?.[String(lane)]||null):null,
+   role_weights:role?{
     first:+number(role.first).toFixed(4),
     second:+number(role.second).toFixed(4),
     third:+number(role.third).toFixed(4)}:null,
@@ -116,5 +160,5 @@ function rate(r,opts={}){
  }
  return result;
 }
-global.BoatRacerRating={rate,forecastForRace,BASE_COURSE,WEIGHTS,version:'athlete-motor-course-race-index-v1-untrained'};
+global.BoatRacerRating={rate,forecastForRace,primaryRole,BASE_COURSE,WEIGHTS,version:'athlete-motor-course-race-index-v1-untrained'};
 })(typeof window!=='undefined'?window:globalThis);

@@ -1,5 +1,6 @@
 """Precutoff course tactics integration; no evidence means unchanged tickets."""
 from datetime import datetime, timezone
+import pytest
 from scripts.autonomous_daily import interaction_primary
 
 REF = {"observed_until_utc": "2026-11-03T12:00:00+00:00",
@@ -85,3 +86,17 @@ def test_future_reference_neutral():
     actual, meta = interaction_primary(prior(), riders(), NOW, CUT, bad)
     assert actual == baseline
     assert meta["racer_course_tactics"]["status"] == "REJECTED"
+
+
+def test_tactics_reweighting_keeps_rank_marginals_synchronized():
+    _, neutral = interaction_primary(prior(), riders(), NOW, CUT)
+    _, adjusted = interaction_primary(prior(), riders(), NOW, CUT, evidence())
+    assert adjusted["racer_course_tactics"]["applied"]
+    assert adjusted["main_role_shares"] != neutral["main_role_shares"]
+    assert adjusted["role_evaluation_source"] == "same_final_ranked_120_as_primary_bets"
+    for share in adjusted["new_head_course_shares"]:
+        assert adjusted["main_role_shares"][str(share["lane"])]["first"] == pytest.approx(
+            share["relative_share"], abs=.0001)
+    for key in ("first", "second", "third"):
+        assert sum(v[key] for v in adjusted["main_role_shares"].values()) == pytest.approx(
+            1, abs=1e-6)

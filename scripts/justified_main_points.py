@@ -82,7 +82,7 @@ def justified_selection(ranked: Sequence[dict], scenarios: Sequence[dict], *,
         tier="SKIP_FLAT_UNCALIBRATED"
     elif exhibition_verified and "past_racer_course_tactics" in sources and diverse_paths:
         cap=SAFETY_MAX_POINTS
-        tier="EXHIBITION_AND_INDEPENDENT_CONTEXT"
+        tier="EXHIBITION_AND_HISTORICAL_COURSE_TACTICS"
     elif exhibition_verified:
         cap=12
         tier="EXHIBITION_ONLY"

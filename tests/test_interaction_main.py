@@ -31,6 +31,9 @@ def test_promoted_baseline_is_primary_and_control_is_preserved():
     assert result["interaction_primary"]["uncalibrated"] is True
     assert result["interaction_primary"]["old_main_model_version"] != result["model_version"]
     assert result["interaction_primary"]["old_main_bets"]
+    assert result["head_course_shares"] == result["interaction_primary"]["new_head_course_shares"]
+    assert "イン着外" in result["point_reason"]
+    assert "イン着外" in result["scenario"]
     assert len(result["bets"]) == len(result["interaction_primary"]["old_main_bets"])
     assert sum(b["virtual_yen"] for b in result["bets"]) == 50000
     assert sum(b["virtual_yen"] for b in result["interaction_primary"]["old_main_bets"]) == 50000
@@ -93,3 +96,18 @@ def test_formal_scenario_is_not_forced_to_exclude_one_with_tiny_risk():
     assert meta["course1_outside_top3_relative_mass"] < .25
     assert not meta["conditional_coverage_applied"]
     assert all("1" in b["combination"].split("-") for b in tickets)
+
+def test_new_primary_respects_venue_weather_adjusted_scores():
+    from scripts.autonomous_daily import interaction_primary
+    people = [{"lane": i, "course": i, "relative_weight": 1.0,
+               "average_start_timing": None, "exhibition_time": None}
+              for i in range(1, 7)]
+    older = {"model_version": "old", "bets": [
+        {"combination": f"1-2-{i}", "virtual_yen": 10000} for i in range(3, 7)]}
+    cutoff = datetime(2026, 11, 4, 1, 0, tzinfo=ZoneInfo("UTC"))
+    _, a = interaction_primary(older, people, "2026-11-04T00:01:00+00:00", cutoff)
+    _, b = interaction_primary(older, people, "2026-11-04T00:01:00+00:00",
+                               cutoff, scored_weights=[3, 1, 1, 1, 1, 1])
+    assert a["new_head_course_shares"] != b["new_head_course_shares"]
+    assert b["uses_venue_weather_adjusted_base"]
+    assert abs(sum(x["relative_share"] for x in b["new_head_course_shares"]) - 1) <= .001

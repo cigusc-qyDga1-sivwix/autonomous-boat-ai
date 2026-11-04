@@ -24,3 +24,16 @@
 python -m pytest -q tests/test_racer_course_tactics.py
 python -m pytest -q
 ```
+
+## 接続実装（同日追記）
+
+- `scripts/autonomous_daily.py::interaction_primary` にオプションの `tactics` 入力を追加。
+- 発走前6艇の選手ID・進入コース・過去観測時刻・証拠SHAを厳格に照合。全艇20走以上を満たす場合のみシナリオ順位を最大±12%の未校正係数で再順位付けする。
+- まくり・まくり差し・差しに加え、内側の競争相手の被まくられ・被差され率（該当機会20件以上）を小さく補正する。これは防御行動や相手の意図を測定したものではない。
+- 正式5万円の買い目・旧正式同点数対照は維持。過去の予想は再計算しない。
+- `--tactics-json /path/to/licensed-tactics.json` で許可済み集計データを明示入力できる。JSONは `{"event_date":"YYYY-MM-DD","races":{"YYYYMMDDVVNN":{"reference":...,"profiles":{"1":...,"2":...,"3":...,"4":...,"5":...,"6":...}}}}` の形式。
+- データ未提供・欠損・古いタイムスタンプ・ID違いは `interaction_primary.racer_course_tactics.status` に記録し、追加補正を採用しない。
+- **実データ収集APIの自動接続は未実装**。したがって通常の定期予想では現時点で新戦法補正は無効のまま。新規入手データを仮造して予想へ反映することはしない。
+- テスト: `tests/test_tactics_primary_integration.py` を追加。CI成功確認まで本番統合しない。
+
+なお元設計文書の「正式予想には未接続」は、今回の追加で「入力連携口まで実装、実データ未接続」に更新された。校正済み戦法確率ではないため、実際の優位性は前向き評価が必要。

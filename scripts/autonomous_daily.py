@@ -682,7 +682,20 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
                               "method": "bounded_pre_cutoff_tactic_tiebreaker"}
         except (KeyError, TypeError, ValueError) as exc:
             tactics_report = {"status": "REJECTED", "applied": False, "reason": str(exc)}
-    selected = ranked[:count]
+    selected = list(ranked[:count])
+    # A single mixture ranking can erase a plausible 1-outside-top3 path
+    # even when its aggregate relative mass is material. Preserve ONE
+    # candidate only if it is not dramatically weaker than the cutoff bet.
+    # These are research coverage thresholds, not calibrated probabilities.
+    inside_out_mass = result["course1_outside_top3_relative_mass"]
+    selected_without_one = sum("1" not in x["combination"].split("-") for x in selected)
+    excluded_candidates = [x for x in ranked if "1" not in x["combination"].split("-")]
+    conditional_coverage = bool(
+        inside_out_mass >= .25 and selected_without_one == 0 and excluded_candidates
+        and excluded_candidates[0]["relative_score"] >= .55 * selected[-1]["relative_score"])
+    if conditional_coverage:
+        selected[-1] = excluded_candidates[0]
+        selected.sort(key=lambda x: (-x["relative_score"], x["combination"]))
     if len(selected) != count:
         raise ValueError("Insufficient scenarios")
     units = 50 - count
@@ -700,6 +713,11 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
     if sum(x["virtual_yen"] for x in bets) != VIRTUAL_BUDGET_YEN:
         raise ValueError("Scenario stake allocation failed")
     meta = {"version": INTERACTION_VERSION, "uncalibrated": True,
+            "course1_outside_top3_relative_mass": inside_out_mass,
+            "course1_outside_top3_by_path": result["course1_outside_top3_by_path"],
+            "course1_outside_top3_selected": sum("1" not in b["combination"].split("-") for b in bets),
+            "conditional_coverage_applied": conditional_coverage,
+            "conditional_coverage_rule": "relative_mass>=.25, candidate>=.55*last_selected",
             "racer_course_tactics": tactics_report,
             "scenario_assumptions": result["scenario_assumptions"],
             "old_main_model_version": previous["model_version"],
@@ -813,9 +831,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
               if new_primary else
               "6艇連動＋平均ST／展示STと内艇の先行差による着順分岐")
     reason += "（4〜12点・未訓練・確率未校正）"
-    if interaction_active:
-        reason = "艇間連動v1.6：外攻め成功・内側牽制・攻め流れ・追走浮上の4展開（未学習・未校正）"
-    top_combo = bets[0]["combination"].split("-")
+     top_combo = bets[0]["combination"].split("-")
     leader = racers[int(top_combo[0]) - 1]
     follower = racers[int(top_combo[1]) - 1]
     weather = observed
@@ -829,6 +845,9 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
             reason += "／展示タイム突出・外枠追走・内残りの条件付き試験（確率未校正）"
         if chosen_model == VENUE_TACTICS_MODEL:
             reason += "／23場別の決まり手構成と実進入・合法STに基づく着順連動v1.4（未校正）"
+        if interaction_active:
+            reason = ("艇間連動v1.6修正版：コース優位の二重計上を除去し、"
+                      "攻め成功・抵抗・攻め流れ・1号艇着外の5展開を評価（未校正）")
     body = {
         "model_version": chosen_model,
         **({"interaction_primary": interaction_meta} if interaction_meta else {}),
@@ -888,9 +907,12 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         "cutoff_iso_jst": cutoff.isoformat(),
         "frozen_at_utc": frozen_at,
         "source_url": source_url,
-        "scenario": f"{leader['lane']}号艇{leader['name']}中心・"
-                    f"{follower['lane']}号艇{follower['name']}の残存を検証"
-                    + ("（展示数値を参照）" if phase == "exhibition" else "（展示前仮説）"),
+        "scenario": (("イン残存／イン着外の両分岐を評価：先頭候補"
+                      + str(leader["lane"]) + "号艇、対抗" + str(follower["lane"]) + "号艇")
+                     if interaction_active else
+                     f"{leader['lane']}号艇{leader['name']}中心・"
+                     f"{follower['lane']}号艇{follower['name']}の残存を検証"
+                     + ("（展示数値を参照）" if phase == "exhibition" else "（展示前仮説）")),
         "bets": bets,
         "racers": racers,
         "weather_observed": weather,

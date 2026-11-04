@@ -240,4 +240,4 @@ def test_compact_daily_ledger_preserves_all_versions_and_sha(tmp_path):
                for v in json.loads(compact)["race_records"]["18-1"]["versions"])
     ordinary=tmp_path/"live"/"audit-latest.json"
     write_json(ordinary,{"keep":"readable"})
-    assert "\\n  " in ordinary.read_text()
+    assert chr(10) + "  " in ordinary.read_text()

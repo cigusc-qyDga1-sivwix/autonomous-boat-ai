@@ -241,3 +241,31 @@ def test_compact_daily_ledger_preserves_all_versions_and_sha(tmp_path):
     ordinary=tmp_path/"live"/"audit-latest.json"
     write_json(ordinary,{"keep":"readable"})
     assert chr(10) + "  " in ordinary.read_text()
+
+
+def test_exhibition_model_upgrade_rechecks_and_records_six_boat_inputs():
+    """A promoted model must not shed the exhibition input proof."""
+    now = datetime(2026, 11, 5, 8, 0, tzinfo=JST)
+    r = race(cutoff="2026-11-05 10:00:00", show_preview=True)
+    ledger, _, metrics = build(None, data(r), now, "fixture")
+    assert metrics["new_exhibition"] == 1
+    versions = ledger["race_records"]["18-1"]["versions"]
+    first = next(v for v in versions if v["phase"] == "exhibition")
+    assert first["exhibition_input_check"]["verified_before_freeze"]
+    # Force only the model-upgrade path. The displayed preview stays unchanged.
+    versions[-1]["model_version"] = "legacy-model-needs-upgrade"
+    updated, _, metrics2 = build(
+        ledger, data(r), datetime(2026, 11, 5, 8, 10, tzinfo=JST), "fixture")
+    latest = updated["race_records"]["18-1"]["versions"][-1]
+    assert metrics2["new_model_upgrades"] >= 1
+    assert latest["phase"] == "exhibition"
+    assert latest["exhibition_input_check"]["verified_before_freeze"] is True
+    assert latest["exhibition_input_check"]["six_boats_matched"] == 6
+    assert latest["exhibition_input_check"]["verification_stage"] == "model_upgrade"
+    assert latest["exhibition_origin"]["source"] == "BoatraceOpenAPI"
+    for i in range(1, 7):
+        saved = latest["racers"][i-1]
+        observed = r["preview"]["racers"][str(i)]
+        assert saved["course"] == observed["course_number"]
+        assert saved["exhibition_st"] == observed["start_timing"]
+        assert saved["exhibition_time"] == observed["exhibition_time"]

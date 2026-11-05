@@ -135,8 +135,10 @@
     $("stat-races").textContent=stats?stats.races:"—";
     $("stat-fresh").textContent=stats?stats.fresh:"—";
     const regionalCount=VENUES.reduce((n,_,i)=>n+(regionalEntry(state.regional,String(i+1).padStart(2,"0"),now)?1:0),0);
-    $("stat-regional").textContent=regionalCount||"—";
-    $("stat-regional-note").textContent=regionalCount?
+    const modelCountNode=$("stat-regional"),modelNoteNode=$("stat-regional-note");
+    // An older installed PWA shell can temporarily coexist with new JS.
+    if(modelCountNode)modelCountNode.textContent=regionalCount||"—";
+    if(modelNoteNode)modelNoteNode.textContent=regionalCount?
       "取得 "+shortTime(state.regional.retrieved_at_utc)+"（近隣モデル予報）":
       state.regionalError?"通信・提供元を確認":"広域予報の取得待ち";
     $("stat-venue-note").textContent=stats?stats.day+"の記録":"本日の記録";

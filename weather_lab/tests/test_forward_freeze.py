@@ -78,7 +78,7 @@ class ForwardFreezeTests(unittest.TestCase):
 
     def test_old_day_with_new_collection_time_rejected(self):
         with self.assertRaises(ValueError):
-            freeze(snapshot(collection="2026-11-05T23:50:00+00:00"))
+            freeze(snapshot(collection="2026-11-05T14:50:00+00:00"))
 
 
 if __name__ == "__main__":

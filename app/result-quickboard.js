@@ -139,9 +139,10 @@ function render(races,ctx,opt={}){
    html+='<button type="button" class="quick-results-race '+statusCls+' '+x.status+
     (active?' active':'')+
     '" data-result-quick="'+esc(r.venue)+'|'+r.race+'" aria-pressed="'+String(active)+'">'+
-    '<span class="quick-results-racehead"><b>'+esc(r.venue)+' '+r.race+'R</b>'+
+    '<span class="quick-results-racehead"><span class="quick-results-racename"><b>'+
+       esc(r.venue)+' '+r.race+'R</b><span class="quick-results-racestatus">'+
+       (verified?(x.hit?'✓ ':'× '):'')+esc(label(x))+'</span></span>'+
     '<small>'+esc(r.cutoff_jst)+' 締切</small></span>'+
-    '<span class="quick-results-racestatus">'+(verified?(x.hit?'✓ ':'× '):'')+esc(label(x))+'</span>'+
     '<span class="quick-results-forecast">固定予想（上位2点）：'+
        esc((r.bets||[]).slice(0,2).map(b=>b.combination).join(' / '))+'</span>'+
     '<span class="quick-results-outcome">'+result+'</span></button>';

@@ -1,0 +1,53 @@
+name: WEATHER LAB regional model context
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'weather_lab/regional_jma.py'
+      - '.github/workflows/weather-lab-regional.yml'
+  schedule:
+    - cron: '7,37 * * * *'
+permissions:
+  contents: write
+concurrency:
+  group: weather-lab-independent-collector
+  cancel-in-progress: false
+jobs:
+  regional:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test independent model parser
+        run: python -m unittest weather_lab.tests.test_regional_jma -v
+      - name: Fetch JMA MSM/GSM model forecast via Open-Meteo
+        run: python -m weather_lab.regional_jma --out "$RUNNER_TEMP/regional-latest.json"
+      - name: Publish separate model data without modifying forecast history
+        shell: bash
+        run: |
+          set -euo pipefail
+          DAY="$(TZ=Asia/Tokyo date +%F)"
+          FILE_DAY="$(python -c 'import json,os;print(json.load(open(os.environ["RUNNER_TEMP"]+"/regional-latest.json"))["event_date"])')"
+          [ "$DAY" = "$FILE_DAY" ] || exit 0
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for attempt in 1 2 3; do
+            git fetch origin weather-lab-data
+            git checkout -q -B weather-lab-data FETCH_HEAD
+            mkdir -p weather_lab/data/regional
+            cp "$RUNNER_TEMP/regional-latest.json" weather_lab/data/regional/latest.json
+            cp "$RUNNER_TEMP/regional-latest.json" "weather_lab/data/regional/$DAY.json"
+            git add weather_lab/data/regional/
+            if git diff --cached --quiet; then exit 0; fi
+            git commit -m "weather: refresh 24-site regional model context"
+            if git push origin HEAD:refs/heads/weather-lab-data; then exit 0; fi
+            [ "$attempt" -lt 3 ] || exit 1
+            sleep 2
+          done

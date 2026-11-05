@@ -1,6 +1,9 @@
 name: Tests
 on:
   push:
+    # Branch-only WEATHER LAB snapshots should not trigger large BOAT LAB tests.
+    paths-ignore:
+      - 'weather_lab/data/**'
   pull_request:
   workflow_dispatch:
 jobs:

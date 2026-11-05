@@ -81,7 +81,7 @@ def _row(record, day, now, invalid):
         invalid["mismatched_race_identity_columns"] += 1
         return None
     cutoff = record.get("締切時刻")
-    if not isinstance(cutoff, str) or not re.fullmatch(r"(?:[01]\\d|2[0-3]):[0-5]\\d", cutoff):
+    if not isinstance(cutoff, str) or not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", cutoff):
         invalid["invalid_cutoff_clock"] += 1
         return None
     source_at = _iso_datetime(record.get("取得日時"))

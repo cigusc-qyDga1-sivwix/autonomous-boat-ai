@@ -1,0 +1,50 @@
+name: BOAT LAB fast checkout smoke
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/boat-lab-auto.yml'
+      - '.github/workflows/boat-lab-fast-checkout-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-archive-safe-partial-clone:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read-only blobless partial clone
+        shell: bash
+        run: |
+          set -euo pipefail
+          DAY="$(TZ=Asia/Tokyo date +%F)"
+          echo "JST day: $DAY"
+          started_at=$(date +%s)
+          git init -q -b main
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          printf '/*\n!/app/data/live/20??-??-??.json\n/app/data/live/%s.json\n' "$DAY" \
+            | git sparse-checkout set --no-cone --stdin
+          git -c protocol.version=2 fetch --no-tags --depth=1 --filter=blob:none origin main
+          git checkout -q -B main FETCH_HEAD
+          elapsed=$(( $(date +%s) - started_at ))
+          echo "Blobless checkout elapsed seconds: $elapsed"
+          test -f scripts/autonomous_daily.py
+          test -f scripts/ingest_boatracecsv_exhibition.py
+          test -f app/data/live/latest.json
+          test -f app/data/exhibition/status-latest.json
+          if git ls-files --error-unmatch "app/data/live/$DAY.json" >/dev/null 2>&1; then
+            test -f "app/data/live/$DAY.json"
+          fi
+          if git status --porcelain | grep -q '^ D app/data/live/'; then
+            echo "Sparse checkout staged or removed archived ledgers" >&2
+            exit 1
+          fi
+          git diff --exit-code
+          python -m json.tool app/data/live/latest.json > /dev/null
+          python -m json.tool app/data/exhibition/status-latest.json > /dev/null
+          python -m compileall -q scripts/autonomous_daily.py
+          python scripts/test_exhibition_ingest_optional_weather.py
+          python scripts/test_exhibition_rejection_audit.py
+          echo "PASS: sparse checkout keeps today's forecast inputs; historical ledger remains tracked."

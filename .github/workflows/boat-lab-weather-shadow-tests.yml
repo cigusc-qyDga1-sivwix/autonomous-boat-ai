@@ -1,0 +1,34 @@
+name: BOAT LAB conditional weather shadow verification
+on:
+  pull_request:
+    paths:
+      - 'scripts/autonomous_daily.py'
+      - 'scripts/venue_weather_special_shadow.py'
+      - 'tests/test_venue_weather_special_shadow.py'
+      - 'tests/test_venue_weather_shadow_integration.py'
+      - '.github/workflows/boat-lab-weather-shadow-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/venue_weather_special_shadow.py'
+      - 'tests/test_venue_weather_special_shadow.py'
+      - 'tests/test_venue_weather_shadow_integration.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pre-cutoff-weather:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Deterministic 120-outcome shadow guards and main integration
+        run: python -m unittest -v tests.test_venue_weather_special_shadow tests.test_venue_weather_shadow_integration
+      - name: Python syntax safety
+        run: python -m py_compile scripts/venue_weather_special_shadow.py scripts/autonomous_daily.py

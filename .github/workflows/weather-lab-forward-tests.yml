@@ -1,0 +1,33 @@
+name: WEATHER LAB forward weather evidence tests
+on:
+  pull_request:
+    paths:
+      - 'weather_lab/**'
+      - '.github/workflows/weather-lab-monitor.yml'
+      - '.github/workflows/weather-lab-forward-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'weather_lab/forward_freeze.py'
+      - 'weather_lab/tests/test_forward_freeze.py'
+      - '.github/workflows/weather-lab-forward-tests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-weather-guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /weather_lab/
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check immutable collection, cutoff, and observation freshness
+        run: python -m unittest discover -s weather_lab/tests -p 'test_*.py' -v
+      - name: Check research-only weather collector syntax
+        run: python -m py_compile weather_lab/forward_freeze.py weather_lab/monitor.py weather_lab/venue_advisory.py

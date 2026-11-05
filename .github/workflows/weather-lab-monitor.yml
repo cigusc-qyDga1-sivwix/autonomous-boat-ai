@@ -59,6 +59,7 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          cp weather_lab/forward_freeze.py "$RUNNER_TEMP/weather-forward-freeze.py"
           for attempt in 1 2 3; do
             if git ls-remote --exit-code --heads origin weather-lab-data >/dev/null 2>&1; then
               git fetch origin +refs/heads/weather-lab-data:refs/remotes/origin/weather-lab-data
@@ -73,6 +74,19 @@ jobs:
             if [ -f "$RUNNER_TEMP/weather-lab-data/$DAY.json" ]; then
               cp "$RUNNER_TEMP/weather-lab-data/$DAY.json" "weather_lab/data/$DAY.json"
             fi
+            # The weather archive is append-only: first trustworthy pre-cutoff capture wins.
+            # Recalculate against the latest remote branch on every push retry.
+            mkdir -p weather_lab/data/forward "$RUNNER_TEMP/weather-lab-data/forward"
+            PREVIOUS="$RUNNER_TEMP/weather-existing-forward-$DAY.json"
+            rm -f "$PREVIOUS"
+            if [ -s "weather_lab/data/forward/$DAY.json" ]; then
+              cp "weather_lab/data/forward/$DAY.json" "$PREVIOUS"
+            fi
+            python "$RUNNER_TEMP/weather-forward-freeze.py" \
+              --snapshot "$RUNNER_TEMP/weather-lab-data/latest.json" \
+              --previous "$PREVIOUS" \
+              --out "$RUNNER_TEMP/weather-lab-data/forward/$DAY.json"
+            cp "$RUNNER_TEMP/weather-lab-data/forward/$DAY.json" "weather_lab/data/forward/$DAY.json"
             git add weather_lab/data/
             if git diff --cached --quiet; then
               echo 'WEATHER LAB data already current'

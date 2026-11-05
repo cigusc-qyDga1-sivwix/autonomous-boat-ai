@@ -197,9 +197,10 @@ def main(argv=None):
                           "tide_unavailable": sum(r["tide"]["status"] != "research_valid_not_current" for r in rows)}}
     payload = json.dumps(result, ensure_ascii=False, indent=2)
     if args.output:
-        target = Path(args.output)
-        if target.as_posix().startswith("app/data/live") or target.as_posix().startswith("app/data/exhibition"):
-            parser.error("cannot write formal or source directories")
+        target = Path(args.output).resolve()
+        forbidden_root = Path("app/data").resolve()
+        if target == archive.resolve() or target.is_relative_to(forbidden_root):
+            parser.error("cannot overwrite source archives or anything under app/data")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(payload + "\n", encoding="utf-8")
     else:

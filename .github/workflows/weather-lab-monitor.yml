@@ -1,0 +1,94 @@
+name: WEATHER LAB independent water-surface monitor
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'weather_lab/**'
+      - '.github/workflows/weather-lab-monitor.yml'
+  schedule:
+    # JST 06:00–23:59, 5-minute best effort. Source is race snapshots,
+    # not a continuously reporting weather station.
+    - cron: '3-58/5 21-23 * * *'
+    - cron: '3-58/5 0-14 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weather-lab-independent-collector
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Read only this project's code; bypass BOAT LAB's large race ledgers.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /weather_lab/
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Offline schema, date and source-safety checks
+        run: python -m unittest discover -s weather_lab/tests -p 'test_*.py' -v
+      - name: Collect public race-based weather snapshots
+        id: capture
+        shell: bash
+        run: |
+          set -euo pipefail
+          DAY="$(TZ=Asia/Tokyo date +%F)"
+          echo "day=$DAY" >> "$GITHUB_OUTPUT"
+          mkdir -p "$RUNNER_TEMP/weather-lab-data"
+          python -m weather_lab.monitor --date "$DAY" --out-dir "$RUNNER_TEMP/weather-lab-data"
+          python -m json.tool "$RUNNER_TEMP/weather-lab-data/latest.json" > /dev/null
+      - name: Commit only WEATHER LAB data to its independent data branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          DAY="${{ steps.capture.outputs.day }}"
+          if [ "$(TZ=Asia/Tokyo date +%F)" != "$DAY" ]; then
+            echo '::warning::JST day changed during collection; skip outdated publication'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for attempt in 1 2 3; do
+            if git ls-remote --exit-code --heads origin weather-lab-data >/dev/null 2>&1; then
+              git fetch origin +refs/heads/weather-lab-data:refs/remotes/origin/weather-lab-data
+              git checkout -q -B weather-lab-data origin/weather-lab-data
+            else
+              # Created from main only once; avoids a dependency on a new
+              # GitHub repository creation permission.
+              git checkout -q -B weather-lab-data origin/main
+            fi
+            mkdir -p weather_lab/data
+            cp "$RUNNER_TEMP/weather-lab-data/latest.json" weather_lab/data/latest.json
+            if [ -f "$RUNNER_TEMP/weather-lab-data/$DAY.json" ]; then
+              cp "$RUNNER_TEMP/weather-lab-data/$DAY.json" "weather_lab/data/$DAY.json"
+            fi
+            git add weather_lab/data/
+            if git diff --cached --quiet; then
+              echo 'WEATHER LAB data already current'
+              break
+            fi
+            git commit -m "weather: independent 24-venue source freshness snapshot $DAY"
+            if git push origin HEAD:refs/heads/weather-lab-data; then
+              echo 'WEATHER LAB published; BOAT LAB main unchanged'
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo '::error::WEATHER LAB data branch update failed after retry'
+              exit 1
+            fi
+            # No force push, no modifications to BOAT LAB predictions.
+            git fetch origin +refs/heads/weather-lab-data:refs/remotes/origin/weather-lab-data
+            git reset --hard origin/weather-lab-data
+            sleep 2
+          done

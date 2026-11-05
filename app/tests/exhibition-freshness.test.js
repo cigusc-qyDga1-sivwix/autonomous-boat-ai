@@ -17,7 +17,8 @@ assert.match(index,/app\.js\?v=20261105-linked-v22/);
 assert.match(index,/tactical-1m\.js\?v=20261027-venue-v14/);
 assert.match(index,/venue-tactics-v2\.js\?v=20261027-venue23/);
 assert.match(venue,/four-factor-v1\.3-conditional-scenarios-untrained/);
-assert.match(sw,/boat-lab-static-v63/);
+const swCache=sw.match(/const CACHE='boat-lab-static-v(\d+)'/);
+assert.ok(swCache&&Number(swCache[1])>=63,'PWA cache version must not regress');
 const listeners={};
 const fetchCalls=[],cacheCalls=[];
 const self={

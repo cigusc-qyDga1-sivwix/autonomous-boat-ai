@@ -23,6 +23,7 @@ if __package__:
     from .racer_context import collect as collect_racer_context, validated as validate_racer_context
     from .official_pay import fetch_official_pay
     from .venue_weather import fetch_weather, weather_at, VENUE_POINTS
+    from .venue_weather_special_shadow import rescore as rescore_site_weather_shadow
     from .exhibition_bridge import available_rows, inject
     from .entry_exhibition_gate import validated_preview, summarize_gate
     from .venue_profiles import get_profile, adjust_weights as adjust_venue_weights
@@ -34,6 +35,7 @@ else:
     from racer_context import collect as collect_racer_context, validated as validate_racer_context
     from official_pay import fetch_official_pay
     from venue_weather import fetch_weather, weather_at, VENUE_POINTS
+    from venue_weather_special_shadow import rescore as rescore_site_weather_shadow
     from exhibition_bridge import available_rows, inject
     from entry_exhibition_gate import validated_preview, summarize_gate
     from venue_profiles import get_profile, adjust_weights as adjust_venue_weights
@@ -1017,6 +1019,36 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         chosen_model = (LINKED_MAIN_MODEL if linked_active else INTERACTION_ENTRY_MODEL if entry_active else INTERACTION_JUSTIFIED_MODEL if justified_active else
                         INTERACTION_ALIGNED_MODEL if aligned_active else
                         INTERACTION_ADAPTIVE_MODEL if adaptive_active else INTERACTION_MAIN_MODEL)
+    # An independent venue-specific weather comparison ONLY, never official.
+    # Keep the same canonical 120 pre-cutoff rows and selection policy.
+    weather_special_shadow = None
+    if linked_active and interaction_active and selected_weather and selected_weather.get("site_observed") is True:
+        special = rescore_site_weather_shadow(promoted.get("ranked_outcomes"), venue, selected_weather)
+        if special is not None:
+            alt_bets, alt_meta = interaction_primary(
+                promoted, racers, frozen_at, cutoff, tactics=race.get("_course_tactics"),
+                scored_weights=None,
+                adaptive_points=adaptive_active,
+                justified_points=justified_active,
+                exhibition_verified=bool(point_gate["final_eligible"]),
+                site_weather_verified=True,
+                entry_aware=entry_active,
+                linked_ranked=special["outcomes"])
+            weather_special_shadow = {
+                "model_version": special["version"],
+                "condition": special["condition"],
+                "alpha": special["alpha"],
+                "max_pre_normalization_relative_change": special["max_pre_normalization_relative_change"],
+                "main_bets_unchanged": True,
+                "forecast_alternative_bets": alt_bets,
+                "alternative_point_count": len(alt_bets),
+                "alternative_head_course_shares": alt_meta["new_head_course_shares"],
+                "same_time_pre_cutoff_source_sha256": stable_hash({"ranked": promoted["ranked_outcomes"]}),
+                "forward_comparison_only": True,
+                "not_part_of_formal_performance": True,
+                "result_data_used": False,
+                "calibrated": False,
+            }
     count = len(bets)
     shares = interaction_meta["new_head_course_shares"] if interaction_meta else promoted["head_course_shares"]
     concentration = max(x["relative_share"] for x in shares)
@@ -1075,6 +1107,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         **({"four_factor": promoted["four_factor"],
             "venue_surface_v1": promoted.get("venue_surface_v1"),
             "venue_surface_ab": promoted.get("venue_surface_ab")} if four_factor else {}),
+        **({"weather_special_shadow": weather_special_shadow} if weather_special_shadow else {}),
         "model_role": "main",
         "legacy_control": legacy_control,
         "start_v07": promoted["start_v07"],

@@ -3,6 +3,8 @@
   "use strict";
   const DATA_URL="https://raw.githubusercontent.com/cigusc-qyDga1-sivwix/autonomous-boat-ai/weather-lab-data/weather_lab/data/latest.json";
   const SCHEMA="weather_lab.water_surface_monitor.v1";
+  const REGIONAL_SCHEMA="weather_lab.regional_jma_forecast.v1";
+  const REGIONAL_URL="https://raw.githubusercontent.com/cigusc-qyDga1-sivwix/autonomous-boat-ai/weather-lab-data/weather_lab/data/regional/latest.json";
   const VENUES=["桐生","戸田","江戸川","平和島","多摩川","浜名湖","蒲郡","常滑",
    "津","三国","びわこ","住之江","尼崎","鳴門","丸亀","児島",
    "宮島","徳山","下関","若松","芦屋","福岡","唐津","大村"];
@@ -37,6 +39,14 @@
       age:ageMinutes(doc.collected_at_utc,now)};
   }
   const UNIT_VALUE=(value,unit)=>num(value)===null?"—":String(value)+unit;
+  function regionalEntry(doc,code,now=Date.now()){
+    if(doc?.schema!==REGIONAL_SCHEMA||doc.event_date!==dayJST(now))return null;
+    const age=ageMinutes(doc.retrieved_at_utc,now);
+    if(age===null||age < -5||age > 180||!Array.isArray(doc.venues)||doc.venues.length!==24)return null;
+    const row=doc.venues.find(v=>v.code===code),model=row?.model_current;
+    if(!row||num(model?.wind_mps)===null||!Number.isFinite(Date.parse(model?.valid_at_jst||"")))return null;
+    return {row,model,age};
+  }
   function venueRows(doc,code){return (doc?.races||[]).filter(r=>r.venue_code===code);}
   function venueView(v,doc,now){
     const rows=venueRows(doc,v.code);
@@ -58,6 +68,8 @@
       '<span class="venue-metric"><small>波高</small><strong>'+esc(wave)+'<span>cm</span></strong></span></span>'+
       '<span class="card-foot"><span>'+esc(note)+'</span><strong>'+item.rows.length+'R</strong></span>'+
       (v.code==="03"?'<span class="scope-note">BOAT LABの予想対象外</span>':'')+
+      (item.regional?'<span class="scope-note">近隣JMAモデル予報：風'+esc(UNIT_VALUE(item.regional.model.wind_mps,"m/s"))+
+        '／気温'+esc(UNIT_VALUE(item.regional.model.air_c,"℃"))+'（場内観測ではない）</span>':'')+
       '</button>';
   }
   function renderRace(row,now){
@@ -86,20 +98,28 @@
     if(!item)return '<div class="detail-empty"><span aria-hidden="true">↗</span><h2>レース場を選択</h2><p>場をタップすると、1〜12Rの風・波・観測時刻を確認できます。</p></div>';
     const v=item.venue,rows=[...item.rows].sort((a,b)=>Number(b.race)-Number(a.race));
     const count='<b>'+rows.length+'R</b>';
+    const regional=item.regional;
+    const regionalHTML=regional?'<article class="race-card"><strong>近隣JMA数値モデル予報（Open-Meteo配信）</strong>'+
+      '<div class="race-time">予報対象時刻 '+esc(shortTime(regional.model.valid_at_jst))+
+      '／風速 '+esc(UNIT_VALUE(regional.model.wind_mps,"m/s"))+
+      '／気温 '+esc(UNIT_VALUE(regional.model.air_c,"℃"))+
+      '／取得から '+esc(regional.age)+'分</div>'+
+      '<p>これはレース場の実測ではありません。波高・潮位は未取得で、正式買い目への自動反映はありません。</p></article>':'';
     const notes= v.code==="03"?"江戸川は収集監査のみ。BOAT LABの正式予想対象外。":"WEATHER LABは監視専用。正式予想に自動適用しません。";
     return '<div class="detail-heading"><div><span class="section-kicker">RACE DETAILS ・ VENUE '+esc(v.code)+'</span><h2>'+esc(v.name)+' の気象記録</h2>'+
       '<p class="detail-meta">'+esc(doc.event_date)+' の記録 '+count+' ／ '+esc(notes)+
       '<br>潮位・潮流：<b>未取得</b>（ゼロではありません）</p></div><span class="status-chip '+esc(displayLabel(item.quality)[1])+'">'+esc(displayLabel(item.quality)[0])+'</span></div>'+
+      regionalHTML+
       (rows.length?'<div class="detail-list">'+rows.map(r=>renderRace(r,now)).join("")+'</div>':
         '<div class="no-results">この日のレース別気象記録はありません。未開催・公開前・提供元欠損は区別して監査中です。</div>');
   }
-  const api={quality,ageMinutes,dayJST,summary,venueView,latestRow,renderVenueCard,renderRace,renderDetail,esc};
+  const api={quality,ageMinutes,dayJST,summary,venueView,regionalEntry,latestRow,renderVenueCard,renderRace,renderDetail,esc};
   if(typeof module!=="undefined"&&module.exports)module.exports=api;
   if(!root.document)return;
 
   const D=root.document;
   const $=id=>D.getElementById(id);
-  const state={doc:null,filter:"all",search:"",selected:null,loading:false,error:null};
+  const state={doc:null,regional:null,regionalError:null,filter:"all",search:"",selected:null,loading:false,error:null};
   function setToast(msg){
     const toast=$("toast");
     toast.textContent=msg;toast.classList.add("show");
@@ -120,7 +140,7 @@
     if(state.error||!doc||stats?.source_ok===false){
       alert.classList.add("is-error");health.classList.add("is-error");
       health.textContent="取得元・通信エラー";
-      alert.textContent="データを取得できませんでした。数字を推測で補いません。「更新」で再取得できます。";
+      alert.textContent=state.regional?"場内気象は取得元エラー。近隣のJMAモデル予報は別表示しています（場内実測ではありません）。":"場内の気象を取得できませんでした。数字を推測で補いません。";
     }else if(stats.age===null||stats.age>15||stats.fresh===0){
       alert.classList.add("is-warn");health.classList.add("is-stale");
       health.textContent="過去の観測データ";
@@ -130,8 +150,9 @@
       health.textContent="観測データを取得";
       alert.textContent="鮮度基準内の気象記録が "+stats.fresh+"件あります。ただしレース別のスナップショットであり、連続実況ではありません。";
     }
-    const items=doc?doc.venues.map(v=>venueView(v,doc,now)):VENUES.map((name,i)=>
-      venueView({name,code:String(i+1).padStart(2,"0"),race_snapshots:0},{provider:{fetch_status:state.error?"unavailable":"ok"},races:[]},now));
+    const items=(doc?doc.venues.map(v=>venueView(v,doc,now)):VENUES.map((name,i)=>
+      venueView({name,code:String(i+1).padStart(2,"0"),race_snapshots:0},{provider:{fetch_status:state.error?"unavailable":"ok"},races:[]},now)))
+      .map(item=>({...item,regional:regionalEntry(state.regional,item.venue.code,now)}));
     const filtered=items.filter(it=>{
       const q=it.quality;
       if(state.filter==="available"&&!it.rows.length)return false;
@@ -162,6 +183,16 @@
       // Keep only a previous real snapshot, and display an explicit error.
       if(manual)setToast("データ更新に失敗しました");
     }finally{
+      try{
+        const response=await root.fetch(REGIONAL_URL+"?ts="+Date.now(),{cache:"no-store"});
+        if(!response.ok)throw new Error("JMA model HTTP "+response.status);
+        const regional=await response.json();
+        if(regional?.schema!==REGIONAL_SCHEMA||!Array.isArray(regional.venues)||regional.venues.length!==24)
+          throw new Error("広域予報JSONの形式が一致しません");
+        state.regional=regional;state.regionalError=null;
+      }catch(err){
+        state.regionalError=String(err?.message||err);
+      }
       state.loading=false;$("refresh").disabled=false;render();
     }
   }

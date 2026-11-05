@@ -93,6 +93,17 @@ class WeatherTideShadowTests(unittest.TestCase):
             self.assertEqual(result["summary"]["stale_weather"], 1)
             self.assertEqual(result["summary"]["tide_unavailable"], 1)
 
+    def test_cannot_overwrite_source_archive(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive = Path(temp)/"source.json"
+            original = json.dumps({"event_date": "2026-11-05",
+                                   "records": [mikuni_three()]}, ensure_ascii=False)
+            archive.write_text(original, encoding="utf-8")
+            with self.assertRaises(SystemExit):
+                main(["--date", "2026-11-05", "--archive", str(archive),
+                      "--output", str(archive)])
+            self.assertEqual(archive.read_text(encoding="utf-8"), original)
+
 
 if __name__ == "__main__":
     unittest.main()

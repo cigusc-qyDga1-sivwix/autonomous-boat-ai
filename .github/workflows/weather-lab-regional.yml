@@ -1,5 +1,10 @@
 name: WEATHER LAB regional model context
 on:
+  pull_request:
+    paths:
+      - 'weather_lab/regional_jma.py'
+      - 'weather_lab/tests/test_regional_jma.py'
+      - '.github/workflows/weather-lab-regional.yml'
   workflow_dispatch:
   push:
     branches: [main]
@@ -15,7 +20,6 @@ concurrency:
   cancel-in-progress: false
 jobs:
   regional:
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
@@ -30,6 +34,7 @@ jobs:
       - name: Fetch JMA MSM/GSM model forecast via Open-Meteo
         run: python -m weather_lab.regional_jma --out "$RUNNER_TEMP/regional-latest.json"
       - name: Publish separate model data without modifying forecast history
+        if: github.ref == 'refs/heads/main'
         shell: bash
         run: |
           set -euo pipefail

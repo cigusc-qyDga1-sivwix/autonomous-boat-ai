@@ -38,8 +38,20 @@ class WeatherLabTests(unittest.TestCase):
         self.assertEqual(rec["source_age_minutes"], 5)
         self.assertEqual(rec["weather_age_minutes"], 45)
         self.assertEqual(rec["freshness_status"], "stale_observation")
+        self.assertTrue(rec["weather_observation_stale"])
+        self.assertFalse(rec["source_capture_stale"])
         self.assertFalse(rec["forecast_eligible"])
         self.assertTrue(rec["weather_date_inferred_from_race_day"])
+
+    def test_late_night_archival_rows_count_both_types_of_staleness(self):
+        night = datetime.fromisoformat("2026-11-05T12:51:00+00:00")
+        doc = build(HEADER + csv_row(), night, DAY)
+        self.assertEqual(doc["summary"]["race_snapshots"], 1)
+        self.assertEqual(doc["summary"]["stale_weather_races"], 1)
+        self.assertEqual(doc["summary"]["stale_capture_races"], 1)
+        self.assertEqual(doc["races"][0]["freshness_status"], "stale_observation")
+        self.assertTrue(doc["races"][0]["source_capture_stale"])
+        self.assertTrue(doc["races"][0]["weather_observation_stale"])
 
     def test_fresh_snapshot_with_observed_time(self):
         rec = build(HEADER + csv_row(clock="0930"), NOW, DAY)["races"][0]

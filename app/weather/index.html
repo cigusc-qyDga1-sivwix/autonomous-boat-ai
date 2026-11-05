@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0a2635">
+  <meta name="description" content="WEATHER LAB｜全国24ボートレース場の風・波・気象観測時刻を独立監視">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="WEATHER LAB">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="./icon.svg">
+  <link rel="stylesheet" href="./weather.css?v=1">
+  <title>WEATHER LAB｜全国24場の水面気象監視</title>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="WEATHER LAB ホーム">
+        <span class="brand-icon" aria-hidden="true">◌</span>
+        <span class="brand-name">WEATHER <strong>LAB</strong><small>WATER SURFACE INTELLIGENCE</small></span>
+      </a>
+      <div class="top-actions">
+        <span class="mode-label"><span class="status-dot"></span>INDEPENDENT MONITOR</span>
+        <button class="refresh-button" id="refresh" type="button" title="現在の保存データを再取得" aria-label="保存データを更新">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.7 9A7 7 0 0 1 18.5 7l1.5 5M4 12l1.5 5A7 7 0 0 0 18.3 15"/></svg>
+          更新
+        </button>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="hero-background" aria-hidden="true"><span class="wave w1"></span><span class="wave w2"></span></div>
+        <div class="hero-content">
+          <span class="eyebrow">BOAT RACE WEATHER OBSERVATORY</span>
+          <h1>全国24場の<br><em>水面コンディション</em>をひと目で。</h1>
+          <p>風・波・観測時刻を独立監視。予想ではなく、確認済みのデータと鮮度を見える化します。</p>
+          <div class="hero-meta">
+            <span id="source-health" class="hero-tag">データ確認中</span>
+            <span id="updated-label">最終取得：確認中</span>
+          </div>
+        </div>
+        <div class="hero-weather-icon" aria-hidden="true">
+          <svg viewBox="0 0 180 165"><circle cx="114" cy="40" r="24" fill="#E7F7A7"/><path d="M59 118a32 32 0 0 1 6-63 41 41 0 0 1 77 18 25 25 0 0 1-4 49H59" fill="#BCE5F0" stroke="#F4FFFF" stroke-width="3"/><path d="M25 139q22-13 44 0t44 0 44 0M25 154q22-13 44 0t44 0 44 0" stroke="#58C8CE" stroke-linecap="round" stroke-width="6" fill="none"/></svg>
+        </div>
+      </section>
+
+      <section class="stats" aria-label="気象データの取得状況">
+        <div class="stat-card"><div class="stat-label">監視対象</div><div class="stat-value" id="stat-monitored">24<small>場</small></div><span class="stat-note">江戸川も監視対象</span></div>
+        <div class="stat-card"><div class="stat-label">データがある場</div><div class="stat-value" id="stat-venues">—</div><span class="stat-note" id="stat-venue-note">本日の記録</span></div>
+        <div class="stat-card"><div class="stat-label">取得レース</div><div class="stat-value" id="stat-races">—</div><span class="stat-note">スナップショット</span></div>
+        <div class="stat-card accent"><div class="stat-label">現在も新鮮な観測</div><div class="stat-value" id="stat-fresh">—</div><span class="stat-note">風・波の観測時刻から判定</span></div>
+      </section>
+
+      <section class="alert" id="data-alert" role="status" aria-live="polite">取得元への接続状況を確認しています。</section>
+
+      <section class="main-panel">
+        <div class="panel-heading"><div><span class="section-kicker">VENUE MONITOR</span><h2>全国の水面状況</h2><p>開催していない場や未公開の場は「データなし」。取得失敗とは区別しています。</p></div><span class="update-frequency">約5分ごとに収集を試行</span></div>
+        <div class="toolbar">
+          <div class="filters" id="filters" role="group" aria-label="場の表示を絞り込む">
+            <button type="button" data-filter="all" class="active" aria-pressed="true">全24場</button>
+            <button type="button" data-filter="available" aria-pressed="false">データあり</button>
+            <button type="button" data-filter="fresh" aria-pressed="false">新鮮</button>
+            <button type="button" data-filter="stale" aria-pressed="false">要注意</button>
+            <button type="button" data-filter="missing" aria-pressed="false">未取得</button>
+          </div>
+          <label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.3"/><path d="m16 16 4.4 4.4"/></svg><input id="venue-search" placeholder="レース場を検索" autocomplete="off" aria-label="レース場を検索"></label>
+        </div>
+        <div id="venues" class="venue-grid" aria-live="polite"><div class="skeleton">観測データを取得しています…</div></div>
+      </section>
+
+      <section class="detail-panel" id="detail" aria-live="polite">
+        <div class="detail-empty"><span aria-hidden="true">↗</span><h2>レース場を選択</h2><p>場をタップすると、1〜12Rの風・波・観測時刻を確認できます。</p></div>
+      </section>
+
+      <section class="info-panel">
+        <div><span class="section-kicker">READ THE DATA</span><h2>データの見方</h2></div>
+        <div class="info-grid">
+          <div><strong>風・波</strong><p>BOATRACE由来のレース別記録。風向は未検証の生コードで、向かい風・追い風の判定は行いません。</p></div>
+          <div><strong>鮮度</strong><p>観測後20分・元データ取得後15分を超えた場合は注意表示。閾値は研究用の暫定値です。</p></div>
+          <div><strong>潮位・潮流</strong><p>現在は未接続。潮位ゼロや潮流ゼロとは扱わず、観測地点を検証できるまで「未取得」です。</p></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>WEATHER LAB v0.1 ・ 独立監視 / 予想への自動反映なし</span>
+      <div><span>iPhone：Safariの共有メニュー →「ホーム画面に追加」</span><a href="../index.html">BOAT LABに戻る</a></div>
+    </footer>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="./weather.js?v=1" defer></script>
+</body>
+</html>

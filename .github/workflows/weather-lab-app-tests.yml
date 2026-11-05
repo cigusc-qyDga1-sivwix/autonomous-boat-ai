@@ -1,0 +1,41 @@
+name: WEATHER LAB app smoke tests
+
+on:
+  pull_request:
+    paths:
+      - 'app/weather/**'
+      - 'app/tests/weather-lab-pwa.test.js'
+      - '.github/workflows/weather-lab-app-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'app/weather/**'
+      - 'app/tests/weather-lab-pwa.test.js'
+      - '.github/workflows/weather-lab-app-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ui-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /app/weather/
+            /app/tests/weather-lab-pwa.test.js
+      - name: Check WEATHER LAB PWA, UI semantics and dynamic weather freshness
+        run: node app/tests/weather-lab-pwa.test.js
+      - name: Ensure installable application assets are present
+        run: |
+          set -euo pipefail
+          test -s app/weather/index.html
+          test -s app/weather/weather.css
+          test -s app/weather/weather.js
+          test -s app/weather/icon.svg
+          test -s app/weather/manifest.webmanifest
+          test -s app/weather/service-worker.js

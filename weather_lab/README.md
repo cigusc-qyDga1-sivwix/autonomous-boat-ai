@@ -78,3 +78,37 @@ https://raw.githubusercontent.com/cigusc-qyDga1-sivwix/autonomous-boat-ai/weathe
 3. 風向コード変換とレースコース方位の一次資料照合。
 4. 潮位は鳴門・徳山・宮島などの水理的影響場から観測地点を検証。
 5. BOAT LABとは別に、条件付き展開影響の独立シャドー分析・前向き検証を開始。
+
+
+## 専用スマホWebアプリ（PWA）
+
+WEATHER LAB v0.2では、既存のBOAT LAB公開サイト内に**別のホーム画面アプリとしてインストールできるPWA**を追加。予想モデル・正式買い目へのアクセスや書き込みは不要。
+
+公開ページ（GitHub Pagesのデプロイ成功後）：
+
+```
+https://cigusc-qydga1-sivwix.github.io/autonomous-boat-ai/weather/
+```
+
+アプリのソースは `app/weather/index.html`, `weather.css`, `weather.js`, `manifest.webmanifest`, `service-worker.js`, `icon.svg`。GitHub Pagesは既存の `app/` 公開処理を利用するが、PWAのスコープ・キャッシュ・独立データの読み込み元は `/weather/` 専用。
+
+### 表示機能
+
+- 全国24場の取得状況をカードで表示。江戸川も監視するが予想対象外。
+- 実データがある場・新鮮・要注意・未取得フィルター、レース場検索。
+- 1〜12Rの風速、波高、風向の**生コード**、気温・水温、観測時刻、元データ取得時刻。
+- 観測から20分、元データ取得から15分超で、**閲覧時刻を基準に再判定**する。保存当時「新鮮」だった値も時間経過後は「古い」と表示。
+- 潮位/潮流は未取得と表示。風向コードは向かい風・追い風に勝手に変換しない。
+- 60秒ごとに保存済みJSONを再取得。元の収集ジョブは5分間隔の**ベストエフォート**であり、アプリ側の更新操作が新たな気象観測を強制するわけではない。
+- 通知・実投票なし。
+
+iPhoneのSafariで開き、共有メニューから**「ホーム画面に追加」**すると、WEATHER LABをBOAT LABとは別のアイコン・別画面として開ける。WebアプリはネイティブApp Store配信ではない。
+
+保存データは `weather-lab-data` ブランチの `weather_lab/data/latest.json` をHTTPSで**読み取り専用**取得。通信に失敗した場合は成功を偽装せず警告を出す。静的画面はオフラインキャッシュ可能だが、外部の気象JSONはキャッシュしない。
+
+UIテスト：
+```bash
+node app/tests/weather-lab-pwa.test.js
+```
+
+UI専用のGitHub Actions `WEATHER LAB app smoke tests` で、BOAT LABの巨大な日別予想台帳を展開せずに検証する。

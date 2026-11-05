@@ -112,3 +112,7 @@ node app/tests/weather-lab-pwa.test.js
 ```
 
 UI専用のGitHub Actions `WEATHER LAB app smoke tests` で、BOAT LABの巨大な日別予想台帳を展開せずに検証する。
+
+## 2026-11-06からの前向き気象エビデンス固定
+
+`forward_freeze.py` を監視ジョブに追加し、取得できたレース別気象のうち**監視ジョブ自体の取得完了時刻が締切3分前より前**のものだけ、独立データブランチの `weather_lab/data/forward/YYYY-MM-DD.json` に初回固定する。過去の予想SHA・買い目・結果は変更しない。気象記録は予想ではなく、2026-11-06以降に同一Rの比較に使う独立した事前証拠。sourceの取得時刻と監視ジョブ取得時刻を区別し、後から取り寄せた情報で発走前取得を装わない。風向生コードと潮流未接続は継続。

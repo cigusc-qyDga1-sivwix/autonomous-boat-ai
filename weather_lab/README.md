@@ -1,0 +1,80 @@
+# WEATHER LAB v0.1 — 全国24場の水面気象データ監視
+
+## 目的
+
+BOAT LABの予想計算から独立し、レース場の **風速・風向の生コード・波高・気温・水温** を監視する軽量なデータ収集サービス。収集・鮮度監査・保存を最優先する。
+
+**v0.1は学習済みAIではない。** 外部LLMに毎回推定させる仕組みではなく、定義済みの規則で欠損・時刻・新鮮度を監査する。AIによる場別展開分析は、前向き検証データと風向の真方位情報が整ってから別モジュールで開発する。
+
+## プロジェクト境界
+
+- 予想モデルや展示データ、正式予想SHA、買い目、結果・収支は一切変更しない。
+- **専用スクリプト**：`weather_lab/monitor.py`
+- **専用GitHub Actions**：`.github/workflows/weather-lab-monitor.yml`
+- **専用データ保存先**：同一リポジトリの独立ブランチ `weather-lab-data` の `weather_lab/data/latest.json` と日別JSON。 `main` への5分ごとのデータコミットは行わない。BOAT LABの予想更新とのGit競合を抑制するため。
+- 現接続では新しいGitHubリポジトリの新規作成操作が利用できないため、コードと実行を独立させた構成で先行実装。将来別リポジトリへ `weather_lab/` と専用workflowを移植可能。
+- 通知はOFF。スマホへのプッシュ通知や実投票は行わない。
+
+## データソースの範囲
+
+- 第一段階：BoatraceCSV `data/previews/sui/YYYY/MM/DD.csv`。
+- これは**締切5分前を目安に記録された競走別スナップショット**。固定の連続気象計測ではなく、開催のない場や公開前はデータなしのままとする。
+- 資料：https://boatracecsv.github.io/docs/data/previews.html
+- 風向はプロバイダーの数値生コードとして保存する。向かい風／追い風／横風の分類は**風向の定義と場別コース真方位の検証後**。
+- 水面気象と展示は別データ。気象の `気象観測時刻`（HHMM）を元に観測時刻を再構成するが、日付はレース日から推定したものと明示する。
+- BOAT LABで従来除外する江戸川も**取得可否監視**には含めるが、予想対象外フラグを持つ。
+
+### 鮮度判定（仮の研究閾値）
+
+- `fresh_snapshot`：取得日時から15分以内かつ観測時刻から20分以内。
+- `stale_source_capture`：取得元が15分より古い。
+- `stale_observation`：実測時刻の再構成値が20分より古い。
+- `observation_time_unverified`：時刻が無効／未来のため検証不可。
+- `incomplete_values`：風速または波高が欠けている。
+- `provider_unavailable`：取得元自体が応答しない。
+- `no_race_snapshot`：対象場のレースデータがまだない。**取得失敗とは区別**。
+- 風速0m/sで風向が未設定の場合は `calm_undefined` とし、障害として誤計上しない。
+
+> 15分／20分は監視の初期設定であり、正式予想への安全条件でも予想精度が実証された閾値でもない。
+
+## 潮位・潮流の取扱い
+
+v0.1では**未取得**。すべての場の `tide` は `not_integrated`、高さ・潮流方向は `null`。
+
+次の段階で、気象庁の天文潮位表・実測潮位と場公式の潮見表を確認する。場ごとに検潮所の対応、水路の接続、測定時刻、データ基準面（潮位の0cmの基準）を検証するまで連携しない。**潮位の増減から潮流の速度や向きを推測で生成しない**。
+
+- 気象庁： https://www.data.jma.go.jp/kaiyou/db/tide/suisan/index.php
+- BOATRACE水面解説： https://www.boatrace.jp/owpc/pc/extra/enjoy/guide/level2/l2_01_05_01.html
+
+## 実行
+
+Python 3.11、外部Python依存パッケージ不要。
+
+```bash
+python -m unittest discover -s weather_lab/tests -p 'test_*.py' -v
+python -m weather_lab.monitor
+```
+
+通常の出力は `weather_lab/data/latest.json` と、公開CSVが成功した日に限り `weather_lab/data/YYYY-MM-DD.json`。本番CIでは一時ディレクトリに出力し、**独立データブランチだけ**に記録する。HTTPエラー時は `latest.json` に障害を残し、日別の最後の成功記録を消さない。
+
+ローカル・CIのオフラインテストでは `--fixture` と `--now-iso` を指定できる。実ネットワーク取得時は現在のJST日付から変更できない。
+
+## BOAT LAB向けインターフェース（まだ接続しない）
+
+`weather-lab-data` ブランチに最初の成功・失敗監視が記録されると、読み取り用JSONを取得できる。
+
+```
+https://raw.githubusercontent.com/cigusc-qyDga1-sivwix/autonomous-boat-ai/weather-lab-data/weather_lab/data/latest.json
+```
+
+`schema = weather_lab.water_surface_monitor.v1`、`collected_at_utc`、`provider.fetch_status`、`venues[24]`、`races[]`を持つ。
+
+**単にリンクが存在するだけでは正式予想に使わない。** 将来のBOAT LAB連携には、6艇展示と同様に締切前取得・測定の鮮度・時刻の証明・バックテストと前向き比較が必要。
+
+## 優先する次工程
+
+1. 全24場について開催日にデータが揃うか日別監査（未開催は母数から除外）。
+2. 収集失敗率、観測値の古さ、提供元更新間隔、GitHub Actionsの遅延を計測。
+3. 風向コード変換とレースコース方位の一次資料照合。
+4. 潮位は鳴門・徳山・宮島などの水理的影響場から観測地点を検証。
+5. BOAT LABとは別に、条件付き展開影響の独立シャドー分析・前向き検証を開始。

@@ -71,9 +71,40 @@ jobs:
     environment:
       name: github-pages
     steps:
+      # Generate the local calendar day before checkout. The single required
+      # dated ledger must be materialized even on the first race of the day.
+      - name: Resolve JST archive date
+        id: jst_day
+        shell: bash
+        run: echo "day=$(TZ=Asia/Tokyo date +%F)" >> "$GITHUB_OUTPUT"
+      # actions/checkout v4 automatically uses a blobless partial fetch for
+      # sparse-checkout. Preserve default token authentication and all history
+      # in Git; only omit old daily forecast blobs from this runner workspace.
       - uses: actions/checkout@v4
         with:
           ref: main
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/app/data/live/20??-??-??.json
+            /app/data/live/${{ steps.jst_day.outputs.day }}.json
+      - name: Verify sparse checkout retained today's immutable forecast
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f scripts/autonomous_daily.py
+          test -f scripts/ingest_boatracecsv_exhibition.py
+          test -f app/data/live/latest.json
+          test -f app/data/exhibition/status-latest.json
+          DAY="${{ steps.jst_day.outputs.day }}"
+          if git ls-files --error-unmatch "app/data/live/$DAY.json" >/dev/null 2>&1; then
+            test -f "app/data/live/$DAY.json" || { echo "Today's ledger was not checked out" >&2; exit 1; }
+          fi
+          if git status --porcelain | grep -q '^ D app/data/live/'; then
+            echo "Archive files must not be deleted or staged as missing" >&2
+            exit 1
+          fi
+          git config --get remote.origin.promisor || echo '::warning::Git partial clone disabled'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -102,6 +133,10 @@ jobs:
       - name: Collect exhibition measurements before forecasting
         continue-on-error: true
         run: |
+          if [ "$(TZ=Asia/Tokyo date +%F)" != "${{ steps.jst_day.outputs.day }}" ]; then
+            echo "::error::JST day rolled over during checkout; refuse stale daily ledger"
+            exit 1
+          fi
           python scripts/ingest_boatracecsv_exhibition.py --previews-only
           python -m json.tool app/data/exhibition/status-latest.json > /dev/null
           # No results here can revise an immutable forecast or official settlement.
@@ -125,6 +160,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [ "$(TZ=Asia/Tokyo date +%F)" != "${{ steps.jst_day.outputs.day }}" ]; then
+            echo "::error::JST day rolled over; do not publish an unmaterialized daily ledger"
+            exit 1
+          fi
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git config user.name 'github-actions[bot]'
           git add app/data/live/ app/data/exhibition/ app/data/venue-profiles.json
@@ -199,7 +238,9 @@ jobs:
         continue-on-error: true
         run: |
           python -m scripts.freeze_statistical_shadow
-          python -m scripts.audit_statistical_shadow
+          # Historical statistical audits require all prior daily ledgers,
+          # which this critical-path checkout intentionally omits. The
+          # independent boat-lab-statistical workflow retains full archives.
       # Background-value research runs only after the primary ledger has
       # reached main. Never retry a formal forecast from this stage.
       - name: Persist independent shadow and retrospective research
@@ -232,7 +273,8 @@ jobs:
               node scripts/freeze_coupling_trials.js
               node scripts/freeze_start_trials.js
               python -m scripts.freeze_statistical_shadow || echo '::warning::Statistical research unavailable'
-              python -m scripts.audit_statistical_shadow || echo '::warning::Statistical audit unavailable'
+              # The full-history statistical audit is maintained by the
+              # separate boat-lab-statistical workflow.
               git add app/data/experiments/ app/data/exhibition/ app/data/statistical/prospective-audit.json
               if git diff --cached --quiet; then
                 echo 'No new shadow trial evidence'

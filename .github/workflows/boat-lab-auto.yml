@@ -117,6 +117,46 @@ jobs:
           python -m json.tool app/data/live/audit-latest.json > /dev/null
           DAY=$(TZ=Asia/Tokyo date +%F)
           python scripts/exhibition_rejection_audit.py --date "$DAY" || echo "::warning::Exhibition gap audit failed; forecast publishing remains enabled"
+      # CRITICAL PATH: save immutable forecast and six-boat exhibition evidence
+      # BEFORE slower retrospective research, shadow freezes and model audits.
+      # This reduces the chance that a pre-cutoff fixed forecast only exists
+      # on a runner when the next result writer commits to main.
+      - name: Publish pre-cutoff exhibition forecasts immediately
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.name 'github-actions[bot]'
+          git add app/data/live/ app/data/exhibition/ app/data/venue-profiles.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'forecast: publish pre-cutoff exhibition snapshots first'
+            for attempt in 1 2 3; do
+              if git push origin HEAD:main; then
+                echo 'Forecast-first publication succeeded'
+                break
+              fi
+              if [ "$attempt" = 3 ]; then
+                echo 'Forecast-first save retry exhausted' >&2
+                exit 1
+              fi
+              # Another trusted result writer won the race. Rebuild from its
+              # latest immutable ledger; NEVER force push or backdate forecasts.
+              git fetch origin main
+              git reset --hard origin/main
+              python scripts/ingest_boatracecsv_exhibition.py --previews-only
+              python scripts/export_venue_profiles.py
+              python scripts/autonomous_daily.py | tee boat-lab-daily-status.json
+              python scripts/forecast_audit.py --input app/data/live/latest.json --out app/data/live/audit-latest.json
+              DAY=$(TZ=Asia/Tokyo date +%F)
+              python scripts/exhibition_rejection_audit.py --date "$DAY" || echo '::warning::Exhibition gap audit unavailable'
+              git add app/data/live/ app/data/exhibition/ app/data/venue-profiles.json
+              if git diff --cached --quiet; then
+                echo 'No new immutable forecast after safe rebase'
+                break
+              fi
+              git commit -m 'forecast: rebuild from latest immutable ledger before cutoff'
+            done
+          fi
       - name: Analyze research only after primary pre-cutoff revisions are frozen
         continue-on-error: true
         run: |
@@ -160,42 +200,45 @@ jobs:
         run: |
           python -m scripts.freeze_statistical_shadow
           python -m scripts.audit_statistical_shadow
-      - name: Persist predictions and immutable version history
+      # Background-value research runs only after the primary ledger has
+      # reached main. Never retry a formal forecast from this stage.
+      - name: Persist independent shadow and retrospective research
         shell: bash
         run: |
           set -euo pipefail
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git config user.name 'github-actions[bot]'
-          git add app/data/live/ app/data/exhibition/ app/data/experiments/ app/data/venue-profiles.json app/data/statistical/prospective-audit.json
+          git add app/data/experiments/ app/data/exhibition/ app/data/statistical/prospective-audit.json
           if ! git diff --cached --quiet; then
-            git commit -m 'data: automatic nationwide forecast snapshots and results'
-            # Retry on latest immutable ledger, never overwrite competing records.
+            git commit -m 'research: publish separate post-forecast trial evidence'
             for attempt in 1 2 3; do
               if git push origin HEAD:main; then
+                echo 'Shadow research publication succeeded'
                 break
               fi
               if [ "$attempt" = 3 ]; then
-                echo "Forecast save retry exhausted" >&2
-                exit 1
+                # A research publish failure must not invalidate a successfully
+                # frozen forecast already persisted in main.
+                echo '::warning::Shadow research save retry exhausted'
+                break
               fi
               git fetch origin main
               git reset --hard origin/main
-              python scripts/ingest_boatracecsv_exhibition.py --previews-only
-              python scripts/autonomous_daily.py | tee boat-lab-daily-status.json
-              python scripts/forecast_audit.py --input app/data/live/latest.json --out app/data/live/audit-latest.json
-              DAY=$(TZ=Asia/Tokyo date +%F)
-              python scripts/exhibition_rejection_audit.py --date "$DAY" || echo "::warning::Exhibition gap audit failed; forecast publishing remains enabled"
+              python scripts/ingest_boatracecsv_exhibition.py
+              python scripts/research_outside_roles.py
+              python -m scripts.research_coupling_patterns
+              python -m scripts.research_wake_hypotheses
+              python -m scripts.research_start_gap
               node scripts/freeze_tactical_trials.js
               node scripts/freeze_outside_trials.js
               node scripts/freeze_coupling_trials.js
               node scripts/freeze_start_trials.js
-              python -m scripts.freeze_statistical_shadow || echo "::warning::Statistical shadow unavailable"
-              python -m scripts.audit_statistical_shadow || echo "::warning::Statistical audit unavailable"
-              git add app/data/live/ app/data/exhibition/ app/data/experiments/ app/data/venue-profiles.json app/data/statistical/prospective-audit.json
+              python -m scripts.freeze_statistical_shadow || echo '::warning::Statistical research unavailable'
+              python -m scripts.audit_statistical_shadow || echo '::warning::Statistical audit unavailable'
+              git add app/data/experiments/ app/data/exhibition/ app/data/statistical/prospective-audit.json
               if git diff --cached --quiet; then
+                echo 'No new shadow trial evidence'
                 break
               fi
-              git commit -m 'data: retry fresh pre-cutoff forecasts on latest ledger'
+              git commit -m 'research: re-evaluate trials on newest immutable ledger'
             done
           fi
       # The single Pages publisher reads fresh main after this workflow succeeds.

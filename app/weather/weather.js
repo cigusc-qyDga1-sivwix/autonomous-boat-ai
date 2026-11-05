@@ -63,13 +63,15 @@
       q==="failed"?"取得元への接続を確認":"対象日の記録なし";
     return '<button type="button" class="venue-card is-'+esc(q)+(selected===v.code?' selected':'')+'" data-venue="'+esc(v.code)+'" aria-pressed="'+String(selected===v.code)+'">'+
       '<span class="card-head"><span><span class="venue-id">VENUE '+esc(v.code)+'</span><h3>'+esc(v.name)+'</h3></span>'+
-      '<span class="status-chip '+esc(chip[1])+'">'+esc(chip[0])+'</span></span>'+
+      '<span class="status-chip '+esc(chip[1])+'">場内 '+esc(chip[0])+'</span></span>'+
       '<span class="venue-metrics"><span class="venue-metric"><small>風速</small><strong>'+esc(wind)+'<span>m/s</span></strong></span>'+
       '<span class="venue-metric"><small>波高</small><strong>'+esc(wave)+'<span>cm</span></strong></span></span>'+
       '<span class="card-foot"><span>'+esc(note)+'</span><strong>'+item.rows.length+'R</strong></span>'+
       (v.code==="03"?'<span class="scope-note">BOAT LABの予想対象外</span>':'')+
-      (item.regional?'<span class="scope-note">近隣JMAモデル予報：風'+esc(UNIT_VALUE(item.regional.model.wind_mps,"m/s"))+
-        '／気温'+esc(UNIT_VALUE(item.regional.model.air_c,"℃"))+'（場内観測ではない）</span>':'')+
+      (item.regional?'<span class="regional-forecast"><span class="regional-caption">近隣JMAモデル予報（場内実測ではない）</span>'+
+        '<strong>風 '+esc(UNIT_VALUE(item.regional.model.wind_mps,"m/s"))+
+        ' ／ 気温 '+esc(UNIT_VALUE(item.regional.model.air_c,"℃"))+'</strong>'+
+        '<small>予報対象 '+esc(shortTime(item.regional.model.valid_at_jst))+'</small></span>':'')+
       '</button>';
   }
   function renderRace(row,now){
@@ -155,7 +157,7 @@
       .map(item=>({...item,regional:regionalEntry(state.regional,item.venue.code,now)}));
     const filtered=items.filter(it=>{
       const q=it.quality;
-      if(state.filter==="available"&&!it.rows.length)return false;
+      if(state.filter==="available"&&!it.rows.length&&!it.regional)return false;
       if(state.filter==="fresh"&&q!=="fresh")return false;
       if(state.filter==="stale"&&!["stale","incomplete","unknown"].includes(q))return false;
       if(state.filter==="missing"&&!["missing","failed"].includes(q))return false;

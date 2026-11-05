@@ -56,7 +56,7 @@
       '<span class="status-chip '+esc(chip[1])+'">'+esc(chip[0])+'</span></span>'+
       '<span class="venue-metrics"><span class="venue-metric"><small>風速</small><strong>'+esc(wind)+'<span>m/s</span></strong></span>'+
       '<span class="venue-metric"><small>波高</small><strong>'+esc(wave)+'<span>cm</span></strong></span></span>'+
-      '<span class="card-foot"><span>'+esc(note)+'</span><strong>'+rows.length+'R</strong></span>'+
+      '<span class="card-foot"><span>'+esc(note)+'</span><strong>'+item.rows.length+'R</strong></span>'+
       (v.code==="03"?'<span class="scope-note">BOAT LABの予想対象外</span>':'')+
       '</button>';
   }

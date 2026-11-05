@@ -225,7 +225,7 @@
   D.addEventListener("visibilitychange",()=>{if(!D.hidden)reload();});
   root.setInterval(()=>{if(!D.hidden)reload();},60_000);
   if("serviceWorker" in root.navigator)root.addEventListener("load",()=>{
-    root.navigator.serviceWorker.register("./service-worker.js",{scope:"./"}).catch(()=>{});
+    root.navigator.serviceWorker.register("./service-worker.js?v=2",{scope:"./",updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{});
   });
   reload();
 })(typeof window!=="undefined"?window:globalThis);

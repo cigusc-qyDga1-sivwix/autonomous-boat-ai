@@ -16,7 +16,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: weather-lab-independent-collector
+  group: ${{ github.event_name == 'pull_request' && format('weather-lab-regional-pr-{0}', github.run_id) || 'weather-lab-independent-collector' }}
   cancel-in-progress: false
 jobs:
   regional:

@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-title" content="WEATHER LAB">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="./icon.svg">
-  <link rel="stylesheet" href="./weather.css?v=1">
+  <link rel="stylesheet" href="./weather.css?v=2">
   <title>WEATHER LAB｜全国24場の水面気象監視</title>
 </head>
 <body>
@@ -48,6 +48,7 @@
 
       <section class="stats" aria-label="気象データの取得状況">
         <div class="stat-card"><div class="stat-label">監視対象</div><div class="stat-value" id="stat-monitored">24<small>場</small></div><span class="stat-note">江戸川も監視対象</span></div>
+        <div class="stat-card accent"><div class="stat-label">近隣JMAモデル予報</div><div class="stat-value" id="stat-regional">—</div><span class="stat-note" id="stat-regional-note">広域予報の取得待ち</span></div>
         <div class="stat-card"><div class="stat-label">データがある場</div><div class="stat-value" id="stat-venues">—</div><span class="stat-note" id="stat-venue-note">本日の記録</span></div>
         <div class="stat-card"><div class="stat-label">取得レース</div><div class="stat-value" id="stat-races">—</div><span class="stat-note">スナップショット</span></div>
         <div class="stat-card accent"><div class="stat-label">現在も新鮮な観測</div><div class="stat-value" id="stat-fresh">—</div><span class="stat-note">風・波の観測時刻から判定</span></div>
@@ -56,11 +57,11 @@
       <section class="alert" id="data-alert" role="status" aria-live="polite">取得元への接続状況を確認しています。</section>
 
       <section class="main-panel">
-        <div class="panel-heading"><div><span class="section-kicker">VENUE MONITOR</span><h2>全国の水面状況</h2><p>開催していない場や未公開の場は「データなし」。取得失敗とは区別しています。</p></div><span class="update-frequency">約5分ごとに収集を試行</span></div>
+        <div class="panel-heading"><div><span class="section-kicker">VENUE MONITOR</span><h2>全国の水面状況</h2><p>各カードで「近隣JMAモデル予報」と「レース場内実測」を区別。場内実測が0件でも近隣予報を表示します。</p></div><span class="update-frequency">約5分ごとに収集を試行</span></div>
         <div class="toolbar">
           <div class="filters" id="filters" role="group" aria-label="場の表示を絞り込む">
             <button type="button" data-filter="all" class="active" aria-pressed="true">全24場</button>
-            <button type="button" data-filter="available" aria-pressed="false">データあり</button>
+            <button type="button" data-filter="available" aria-pressed="false">実測・予報あり</button>
             <button type="button" data-filter="fresh" aria-pressed="false">新鮮</button>
             <button type="button" data-filter="stale" aria-pressed="false">要注意</button>
             <button type="button" data-filter="missing" aria-pressed="false">未取得</button>
@@ -85,11 +86,11 @@
     </main>
 
     <footer class="footer">
-      <span>WEATHER LAB v0.1 ・ 独立監視 / 予想への自動反映なし</span>
+      <span>WEATHER LAB v0.3 ・ 独立監視 / 予想への自動反映なし</span>
       <div><span>iPhone：Safariの共有メニュー →「ホーム画面に追加」</span><a href="../index.html">BOAT LABに戻る</a></div>
     </footer>
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="./weather.js?v=1" defer></script>
+  <script src="./weather.js?v=2" defer></script>
 </body>
 </html>

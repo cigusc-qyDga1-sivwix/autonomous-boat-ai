@@ -101,6 +101,9 @@ def _row(record, day, now, invalid):
     captured_age = round((now - source_at).total_seconds() / 60, 1)
     observed_age = (round((now - observation.astimezone(UTC)).total_seconds() / 60, 1)
                     if observation else None)
+    source_capture_stale = captured_age > SOURCE_AGE_ALERT_MINUTES
+    weather_observation_stale = (observed_age is not None and
+                                  observed_age > WEATHER_AGE_ALERT_MINUTES)
     if wind is None or wave is None:
         status = "incomplete_values"
     elif observation is None or observed_age is None or observed_age < -0.5:
@@ -128,6 +131,8 @@ def _row(record, day, now, invalid):
         "weather_date_inferred_from_race_day": observation is not None,
         "source_age_minutes": captured_age,
         "weather_age_minutes": observed_age,
+        "source_capture_stale": source_capture_stale,
+        "weather_observation_stale": weather_observation_stale,
         "freshness_status": status,
         "forecast_eligible": False,
     }
@@ -192,8 +197,9 @@ def build(csv_text, at, day, *, source_url=None, fetch_error=None):
             "race_snapshots": len(races),
             "venues_with_snapshots": sum(v["race_snapshots"] > 0 for v in venues),
             "fresh_races": status_counts["fresh_snapshot"],
-            "stale_weather_races": status_counts["stale_observation"],
-            "stale_capture_races": status_counts["stale_source_capture"],
+            # Independent flags can both be true for the same row.
+            "stale_weather_races": sum(r["weather_observation_stale"] for r in races),
+            "stale_capture_races": sum(r["source_capture_stale"] for r in races),
             "incomplete_races": status_counts["incomplete_values"],
             "time_unverified_races": status_counts["observation_time_unverified"],
             "calm_without_direction": sum(r["weather"]["wind_direction_status"] == "calm_undefined"

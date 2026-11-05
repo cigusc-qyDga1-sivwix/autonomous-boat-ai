@@ -75,6 +75,15 @@ def _row(record, day, now, invalid):
     if not 1 <= venue <= 24 or not 1 <= race <= 12:
         invalid["out_of_range_venue_or_race"] += 1
         return None
+    if (record.get("レース日") != day.isoformat()
+            or record.get("レース場") != f"{venue:02d}"
+            or record.get("レース回") != f"{race:02d}R"):
+        invalid["mismatched_race_identity_columns"] += 1
+        return None
+    cutoff = record.get("締切時刻")
+    if not isinstance(cutoff, str) or not re.fullmatch(r"(?:[01]\\d|2[0-3]):[0-5]\\d", cutoff):
+        invalid["invalid_cutoff_clock"] += 1
+        return None
     source_at = _iso_datetime(record.get("取得日時"))
     if not source_at or source_at.astimezone(JST).date() != day:
         invalid["invalid_or_wrong_day_capture_timestamp"] += 1

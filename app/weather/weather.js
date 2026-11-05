@@ -67,6 +67,7 @@
       q==="fresh"?'<span class="flag good">暫定鮮度基準内</span>':'<span class="flag">古い記録は現在の状況を示しません</span>',
       row.weather?.wind_direction_status==="calm_undefined"?'<span class="flag">無風：風向未設定</span>':'',
       row.weather?.wind_direction_status==="missing_noncalm"?'<span class="flag">風向コード欠損</span>':'',
+      q==="fresh"&&row.weather_advisory?.status==="attention"?'<span class="flag">気象注意・研究用：'+esc((row.weather_advisory.alerts||[]).join("／"))+'</span>':'',
     ].join("");
     return '<article class="race-card"><div class="race-row"><strong>'+esc(row.race)+'R</strong>'+
       '<span class="status-chip '+esc(chip[1])+'">'+esc(chip[0])+'</span><small>締切 '+esc(row.cutoff_jst||"不明")+'</small></div>'+

@@ -30,7 +30,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Test independent model parser
-        run: python -m unittest weather_lab.tests.test_regional_jma -v
+        run: python -m unittest discover -s weather_lab/tests -p 'test_regional_jma.py' -v
       - name: Fetch JMA MSM/GSM model forecast via Open-Meteo
         run: python -m weather_lab.regional_jma --out "$RUNNER_TEMP/regional-latest.json"
       - name: Publish separate model data without modifying forecast history

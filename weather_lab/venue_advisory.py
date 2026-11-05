@@ -7,6 +7,8 @@ Never infer tide stage/current from a nearby tide table without site mapping.
 """
 from __future__ import annotations
 
+from .venue_special_conditions import evaluate as evaluate_special_conditions
+
 VENUES = {
     "01": {"name": "桐生", "focus": "冬春の赤城おろし／強風と水面荒れ", "water": "wind", "official_url": "https://www.kiryu-kyotei.com/modules/datafile/?page=index_suimen", "forecast_scope": True},
     "02": {"name": "戸田", "focus": "狭い1マーク・風によるスタート／旋回の乱れ", "water": "wind", "official_url": "https://www.boatrace-toda.jp/data/suimen_guide.html", "forecast_scope": True},
@@ -41,7 +43,9 @@ WAVE_NOTICE_CM = 5.0
 WAVE_STRONG_CM = 10.0
 
 
-def assess_venue(code: str, wind_mps, wave_cm, freshness_status: str) -> dict:
+def assess_venue(code: str, wind_mps, wave_cm, freshness_status: str, *,
+                 relative_wind=None, relative_wind_verified=False,
+                 tide_stage=None, tide_verified=False) -> dict:
     """Non-directional advisory; no probabilities, payouts or formal picks."""
     profile = VENUES.get(str(code).zfill(2))
     if profile is None:
@@ -80,6 +84,11 @@ def assess_venue(code: str, wind_mps, wave_cm, freshness_status: str) -> dict:
         candidate = "caution"
     else:
         candidate = "baseline"
+    special = evaluate_special_conditions(
+        code, wind_mps, wave_cm, freshness_status,
+        relative_wind=relative_wind, relative_wind_verified=relative_wind_verified,
+        tide_stage=tide_stage, tide_verified=tide_verified,
+    )
     return {
         "schema": "weather_lab.venue_advisory.v1",
         "status": "unavailable" if not fresh else "attention" if signals else "monitor",
@@ -93,6 +102,7 @@ def assess_venue(code: str, wind_mps, wave_cm, freshness_status: str) -> dict:
         "wind_direction_source_unmapped": True,
         "prediction_scope": profile["forecast_scope"],
         "official_context_url": profile["official_url"],
+        "venue_special_conditions": special,
         "prediction_effect": "none",
         "correction_policy": {
             "role": "supplement_only",

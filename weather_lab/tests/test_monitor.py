@@ -60,6 +60,23 @@ class WeatherLabTests(unittest.TestCase):
         self.assertEqual(summary["race_snapshots"], 0)
         self.assertEqual(sum(summary["rejected_rows"].values()), 2)
 
+    def test_mismatched_metadata_and_invalid_cutoff_do_not_enter_monitor(self):
+        wrong = csv_row(venue="09") + csv_row(race="04R")
+        doc = build(HEADER + wrong, NOW, DAY)
+        self.assertEqual(doc["summary"]["race_snapshots"], 0)
+        self.assertEqual(doc["summary"]["rejected_rows"]["mismatched_race_identity_columns"], 2)
+        invalid = csv_row().replace(",09:39,", ",29:99,")
+        bad = build(HEADER + invalid, NOW, DAY)
+        self.assertEqual(bad["summary"]["rejected_rows"]["invalid_cutoff_clock"], 1)
+
+    def test_latest_valid_source_capture_wins_without_fabricating_weather(self):
+        older = csv_row(clock="0850", captured="2026-11-05T09:28:00+09:00")
+        newer = csv_row(clock="0931", captured="2026-11-05T09:31:00+09:00")
+        doc = build(HEADER + older + newer, NOW, DAY)
+        self.assertEqual(doc["summary"]["race_snapshots"], 1)
+        self.assertEqual(doc["races"][0]["weather_age_minutes"], 4.0)
+        self.assertEqual(doc["races"][0]["freshness_status"], "fresh_snapshot")
+
     def test_source_timestamp_in_future_cannot_be_accepted(self):
         future = csv_row(captured="2026-11-05T09:50:00+09:00")
         doc = build(HEADER + future, NOW, DAY)

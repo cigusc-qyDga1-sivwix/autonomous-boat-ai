@@ -134,23 +134,33 @@
     $("stat-venues").textContent=stats?stats.venues:"—";
     $("stat-races").textContent=stats?stats.races:"—";
     $("stat-fresh").textContent=stats?stats.fresh:"—";
+    const regionalCount=VENUES.reduce((n,_,i)=>n+(regionalEntry(state.regional,String(i+1).padStart(2,"0"),now)?1:0),0);
+    $("stat-regional").textContent=regionalCount||"—";
+    $("stat-regional-note").textContent=regionalCount?
+      "取得 "+shortTime(state.regional.retrieved_at_utc)+"（近隣モデル予報）":
+      state.regionalError?"通信・提供元を確認":"広域予報の取得待ち";
     $("stat-venue-note").textContent=stats?stats.day+"の記録":"本日の記録";
     const when=doc?.collected_at_utc?japaneseDate(new Date(doc.collected_at_utc)):"未取得";
     $("updated-label").textContent="最終取得： "+when+" JST";
     const alert=$("data-alert"),health=$("source-health");
     alert.className="alert";health.className="hero-tag";
     if(state.error||!doc||stats?.source_ok===false){
-      alert.classList.add("is-error");health.classList.add("is-error");
-      health.textContent="取得元・通信エラー";
-      alert.textContent=state.regional?"場内気象は取得元エラー。近隣のJMAモデル予報は別表示しています（場内実測ではありません）。":"場内の気象を取得できませんでした。数字を推測で補いません。";
+      alert.classList.add(regionalCount?"is-warn":"is-error");
+      health.classList.add(regionalCount?"is-stale":"is-error");
+      health.textContent=regionalCount?"広域予報 "+regionalCount+"場取得":"取得元・通信エラー";
+      alert.textContent=regionalCount?
+        "場内の風・波は未取得ですが、近隣JMAモデル予報を"+regionalCount+"場で表示しています。カードの予報は場内実測ではありません。":
+        "場内実測と広域予報を確認できません。推測で補いません。"+
+          (state.regionalError?" 広域予報："+state.regionalError:"");
     }else if(stats.age===null||stats.age>15||stats.fresh===0){
       alert.classList.add("is-warn");health.classList.add("is-stale");
-      health.textContent="過去の観測データ";
-      alert.textContent="最新保存から "+(stats.age===null?"時刻不明":stats.age+"分")+"。現在も新鮮な観測は"+
-        stats.fresh+"件です。古いレース別記録を現在の風・波として使用しないでください。";
+      health.textContent=regionalCount?"広域予報 "+regionalCount+"場取得":"過去の観測データ";
+      alert.textContent="場内の新鮮な実測は"+stats.fresh+"件。"+
+        (regionalCount?"近隣JMAモデル予報は"+regionalCount+"場で確認できます（場内実測ではありません）。":
+        "古いレース別記録を現在の風・波として使用しないでください。");
     }else{
-      health.textContent="観測データを取得";
-      alert.textContent="鮮度基準内の気象記録が "+stats.fresh+"件あります。ただしレース別のスナップショットであり、連続実況ではありません。";
+      health.textContent="場内観測 "+stats.fresh+"件";
+      alert.textContent="場内の新鮮な観測"+stats.fresh+"件／近隣モデル予報"+regionalCount+"場。実測と予報は別のデータです。";
     }
     const items=(doc?doc.venues.map(v=>venueView(v,doc,now)):VENUES.map((name,i)=>
       venueView({name,code:String(i+1).padStart(2,"0"),race_snapshots:0},{provider:{fetch_status:state.error?"unavailable":"ok"},races:[]},now)))

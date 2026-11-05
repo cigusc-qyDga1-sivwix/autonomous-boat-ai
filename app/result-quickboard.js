@@ -112,7 +112,7 @@ function render(races,ctx,opt={}){
    (isFinancial?(finance.returnRate*100).toFixed(1)+'%':'—')+'</strong></div></div></div>'+
    '<p class="quick-results-fresh">公式照合データ確認：'+esc(freshness)+
    ' JST ／ 公式未取得 '+number(stats.awaiting)+'件 ／ 要確認 '+number(stats.issues)+'件 ／ 仮入力 '+
-   number(stats.drafts)+'件 ／ 締切前 '+number(stats.upcoming)+'件。<b>未取得と仮入力は成績に含めません。</b></p>'+
+   number(stats.drafts)+'件 ／ 締切前 '+number(stats.upcoming)+'件。<b>公式未取得は不的中として数えません。仮入力も公式成績に含めません。</b></p>'+
    '<div class="quick-results-filters" role="group" aria-label="結果を絞り込む">'+
    filterDefs.map(x=>'<button type="button" data-result-filter="'+x.id+
        '" aria-pressed="'+String(x.id===filter)+'" class="'+(x.id===filter?'active':'')+'">'+

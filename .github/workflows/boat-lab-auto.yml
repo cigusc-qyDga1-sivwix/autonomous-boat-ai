@@ -71,9 +71,33 @@ jobs:
     environment:
       name: github-pages
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
+      # Repository is public. Avoid downloading 450MB+ of archived race ledgers
+      # before obtaining the new exhibition measurements for today's races.
+      - name: Fast read-only partial checkout of forecast sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          DAY="$(TZ=Asia/Tokyo date +%F)"
+          echo "FAST_LANE_DAY=$DAY" >> "$GITHUB_ENV"
+          git init -q -b main
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          printf '/*\n!/app/data/live/20??-??-??.json\n/app/data/live/%s.json\n' "$DAY" \
+            | git sparse-checkout set --no-cone --stdin
+          git -c protocol.version=2 fetch --no-tags --depth=1 --filter=blob:none origin main
+          git checkout -q -B main FETCH_HEAD
+          test -f scripts/autonomous_daily.py
+          test -f app/data/live/latest.json
+          if git ls-files --error-unmatch "app/data/live/$DAY.json" >/dev/null 2>&1; then
+            test -f "app/data/live/$DAY.json"
+          fi
+          if git status --porcelain | grep -q '^ D app/data/live/'; then
+            echo "Unexpected archived-ledger deletion" >&2
+            exit 1
+          fi
+      - name: Configure GitHub Actions credential for guarded data commits
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh auth setup-git
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'

@@ -55,4 +55,9 @@ assert.match(sw,/weather-lab-shell-/);
 assert.match(sw,/url\.origin!==self\.location\.origin\)return/);
 assert.match(js,/weather-lab-data\/weather_lab\/data\/latest\.json/);
 assert.doesNotMatch(js,/boatlabs\.forecast|localStorage|autonomous_daily|BUY|10000000/);
+const model={schema:'weather_lab.regional_jma_forecast.v1',event_date:'2026-11-05',
+retrieved_at_utc:'2026-11-05T00:35:00Z',
+venues:Array.from({length:24},(_,i)=>({code:String(i+1).padStart(2,'0'),model_current:{wind_mps:7,valid_at_jst:'2026-11-05T09:30:00+09:00'}}))};
+assert.equal(UI.regionalEntry(model,'10',at).model.wind_mps,7);
+assert.match(UI.renderVenueCard({...UI.venueView(venue,doc,at),regional:UI.regionalEntry(model,'10',at)},null),/場内観測ではない/);
 console.log('WEATHER LAB PWA UI tests passed (dynamic freshness, 24 sites, no fabricated values, independent installation)');

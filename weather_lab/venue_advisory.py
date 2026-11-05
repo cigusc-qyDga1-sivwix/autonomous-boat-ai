@@ -63,6 +63,23 @@ def assess_venue(code: str, wind_mps, wave_cm, freshness_status: str) -> dict:
         if wave_cm >= WAVE_STRONG_CM:
             signals.append("wave_ge_10cm")
             alerts.append("高波帯：実際の展示と安定板情報を確認")
+    # Monitoring only. A large *candidate* impact never changes formal model,
+    # official bets or calibration without pre-cutoff comparative validation.
+    # Combined moderate wind and wave may matter even below either severe limit.
+    if not fresh:
+        candidate = "unavailable"
+    elif (isinstance(wind_mps, (int, float)) and not isinstance(wind_mps, bool)
+          and wind_mps >= WIND_STRONG_MPS) or (
+          isinstance(wave_cm, (int, float)) and not isinstance(wave_cm, bool)
+          and wave_cm >= WAVE_STRONG_CM) or (
+          isinstance(wind_mps, (int, float)) and not isinstance(wind_mps, bool)
+          and isinstance(wave_cm, (int, float)) and not isinstance(wave_cm, bool)
+          and wind_mps >= WIND_NOTICE_MPS and wave_cm >= WAVE_NOTICE_CM):
+        candidate = "materiality_review"
+    elif signals:
+        candidate = "caution"
+    else:
+        candidate = "baseline"
     return {
         "schema": "weather_lab.venue_advisory.v1",
         "status": "unavailable" if not fresh else "attention" if signals else "monitor",
@@ -77,5 +94,15 @@ def assess_venue(code: str, wind_mps, wave_cm, freshness_status: str) -> dict:
         "prediction_scope": profile["forecast_scope"],
         "official_context_url": profile["official_url"],
         "prediction_effect": "none",
+        "correction_policy": {
+            "role": "supplement_only",
+            "model_priority": "athlete_motor_exhibition_entry_tactics_first",
+            "candidate_impact": candidate,
+            "materiality_is_trained": False,
+            "formal_weight_modified": False,
+            "automatic_ticket_change": False,
+            "needs_mechanism_and_forward_validation": candidate == "materiality_review",
+            "note": "気象は選手・機力・展示・艇間展開の補正候補。複合荒水面の大きな影響は検証課題で、現時点では買い目不変。",
+        },
         "reason": "研究用の場別監視。勝率や正式買い目には未反映。"
     }

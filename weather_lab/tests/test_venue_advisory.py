@@ -31,6 +31,26 @@ class VenueAdviceTests(unittest.TestCase):
         self.assertEqual(x["prediction_effect"], "none")
         self.assertFalse(x["tide_data_needed"])
 
+    def test_weather_is_a_supplement_not_a_formal_forecast_override(self):
+        for code in VENUES:
+            for w, h, q, tier in [
+                (1, 1, "fresh_snapshot", "baseline"),
+                (5, 1, "fresh_snapshot", "caution"),
+                (5, 5, "fresh_snapshot", "materiality_review"),
+                (8, 0, "fresh_snapshot", "materiality_review"),
+                (0, 10, "fresh_snapshot", "materiality_review"),
+                (10, 10, "stale_source_capture", "unavailable"),
+            ]:
+                x = assess_venue(code, w, h, q)
+                policy = x["correction_policy"]
+                self.assertEqual(policy["role"], "supplement_only")
+                self.assertEqual(policy["candidate_impact"], tier)
+                self.assertFalse(policy["automatic_ticket_change"])
+                self.assertFalse(policy["formal_weight_modified"])
+                self.assertFalse(policy["materiality_is_trained"])
+                self.assertEqual(x["prediction_effect"], "none")
+                self.assertIsNone(x["relative_wind_direction"])
+
     def test_tides_are_never_invented_or_assumed_for_gated_pools(self):
         self.assertTrue(assess_venue("16", 2, 2, "fresh_snapshot")["tide_data_needed"])
         self.assertTrue(assess_venue("17", 2, 2, "fresh_snapshot")["tide_data_needed"])

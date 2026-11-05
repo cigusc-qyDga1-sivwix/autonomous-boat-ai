@@ -18,6 +18,8 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
+from .venue_advisory import assess_venue
+
 JST = ZoneInfo("Asia/Tokyo")
 UTC = timezone.utc
 SCHEMA = "weather_lab.water_surface_monitor.v1"
@@ -135,6 +137,7 @@ def _row(record, day, now, invalid):
         "weather_observation_stale": weather_observation_stale,
         "freshness_status": status,
         "forecast_eligible": False,
+        "weather_advisory": assess_venue(f"{venue:02d}", wind, wave, status),
     }
 
 

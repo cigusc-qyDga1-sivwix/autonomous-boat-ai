@@ -1,0 +1,52 @@
+name: BOAT LAB sparse exhibition checkout smoke
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/boat-lab-auto.yml'
+      - '.github/workflows/boat-lab-sparse-checkout-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-dated-forecast-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Resolve JST day
+        id: jst_day
+        run: echo "day=$(TZ=Asia/Tokyo date +%F)" >> "$GITHUB_OUTPUT"
+      - name: Blobless checkout (same settings as production)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/app/data/live/20??-??-??.json
+            /app/data/live/${{ steps.jst_day.outputs.day }}.json
+      - name: Verify historical ledgers remain tracked and are not materialized
+        shell: bash
+        run: |
+          set -euo pipefail
+          DAY="${{ steps.jst_day.outputs.day }}"
+          test -f scripts/autonomous_daily.py
+          test -f app/data/live/latest.json
+          test -f app/data/exhibition/status-latest.json
+          test -f app/data/statistical/latest-model.json
+          python -m json.tool app/data/live/latest.json > /dev/null
+          test "$(git config --get remote.origin.promisor)" = true
+          if git ls-files --error-unmatch "app/data/live/$DAY.json" >/dev/null 2>&1; then
+            test -f "app/data/live/$DAY.json"
+          fi
+          if git ls-files --error-unmatch app/data/live/2026-10-27.json >/dev/null 2>&1; then
+            test ! -f app/data/live/2026-10-27.json
+          fi
+          if git status --porcelain | grep -q '^ D app/data/live/'; then
+            echo "Sparse checkout staged deletion of historical ledgers" >&2
+            exit 1
+          fi
+          git diff --exit-code
+          echo "SUCCESS: today materialized, previous days preserved in Git, blobless remote"

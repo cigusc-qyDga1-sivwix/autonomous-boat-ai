@@ -62,7 +62,14 @@ def load(day):
         p = record.get("official_pay")
         snapshot = dict(versions[-1])
         snapshot.setdefault("cutoff_jst", record.get("cutoff_jst"))
-        ok, reason = _verify_race(snapshot, p, day)
+        # The compact immutable ledger stores verified official finish/payout
+        # but not the denormalized virtual_stake field used by the web view.
+        # Cross-check each frozen ticket sums to the fixed 50,000 research stake.
+        # Supply that *derived view field only in memory* for audit validation.
+        fixed = snapshot.get("bets") or []
+        stake = sum(b.get("virtual_yen", 0) for b in fixed)
+        pay_view = {**p, "virtual_stake": stake} if isinstance(p, dict) else None
+        ok, reason = _verify_race(snapshot, pay_view, day)
         if not ok:
             rejected[reason] += 1
             continue

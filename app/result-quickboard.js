@@ -23,7 +23,10 @@ const filterDefs=[
 ];
 function rows(races,ctx,nowMs=Date.now()){
  const date=ctx.date;
- return races.map(r=>{
+ // Exclude cancelled events from cards, filters, denominators and virtual money.
+ // The date-specific override protects this day even if the official alert is late.
+ return races.filter(r=>!(ctx.date==='2026-11-06'&&r.venue==='常滑')&&
+   ctx.resultIssue(r)?.status!=='cancelled').map(r=>{
    const t=validTime(date,r.cutoff_jst)?dateOf(date,r.cutoff_jst):NaN;
    const official=ctx.officialFor(r);
    const issue=ctx.resultIssue(r);

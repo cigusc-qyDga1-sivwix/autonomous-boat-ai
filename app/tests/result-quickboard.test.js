@@ -79,4 +79,20 @@ const noOfficial=Q.render([raw[2]],ctx,{nowMs:at});
 assert.match(noOfficial,/仮想収支<\/span><strong>—<\/strong>/);
 assert.doesNotMatch(noOfficial,/1,150,000円/);
 assert.equal(JSON.stringify(raw),original,'rendering must not change immutable forecast records');
+// A fully cancelled venue must disappear only on the affected day and never
+// change another venue's officially verified financial record.
+const tokoname={...raw[0],venue:'常滑'};
+const mikuni={...raw[1],venue:'三国'};
+const cancelledCtx={...ctx,date:'2026-11-06'};
+const cancelledRows=Q.rows([tokoname,mikuni],cancelledCtx,at);
+assert.equal(cancelledRows.length,1);
+assert.equal(cancelledRows[0].race.venue,'三国');
+assert.equal(Q.summary(cancelledRows).official,1);
+assert.equal(Q.financials(cancelledRows).invested,50000);
+const cancelledHtml=Q.render([tokoname,mikuni],cancelledCtx,{nowMs:at});
+assert.doesNotMatch(cancelledHtml,/常滑 1R/);
+assert.match(cancelledHtml,/三国 2R/);
+assert.equal(Q.rows([tokoname],{...ctx,date:'2026-11-05'},at).length,1);
+assert.equal(Q.rows([tokoname],{...ctx,date:'2026-11-07'},at).length,1);
+assert.equal(Q.rows([mikuni],{...ctx,date:'2026-11-07',resultIssue:()=>({status:'cancelled'})},at).length,0);
 console.log('BOAT LAB quick official result status, filter and payout rendering: PASS');

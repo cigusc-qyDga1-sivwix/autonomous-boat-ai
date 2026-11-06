@@ -5,12 +5,20 @@ on:
     paths:
       - 'app/weather/**'
       - 'app/tests/weather-lab-pwa.test.js'
+      - 'app/weather-lab-link.js'
+      - 'app/tests/weather-lab-link.test.js'
+      - 'app/app.js'
+      - 'app/index.html'
       - '.github/workflows/weather-lab-app-tests.yml'
   push:
     branches: [main]
     paths:
       - 'app/weather/**'
       - 'app/tests/weather-lab-pwa.test.js'
+      - 'app/weather-lab-link.js'
+      - 'app/tests/weather-lab-link.test.js'
+      - 'app/app.js'
+      - 'app/index.html'
       - '.github/workflows/weather-lab-app-tests.yml'
   workflow_dispatch:
 
@@ -28,8 +36,14 @@ jobs:
           sparse-checkout: |
             /app/weather/
             /app/tests/weather-lab-pwa.test.js
+            /app/tests/weather-lab-link.test.js
+            /app/weather-lab-link.js
+            /app/app.js
+            /app/index.html
       - name: Check WEATHER LAB PWA, UI semantics and dynamic weather freshness
-        run: node app/tests/weather-lab-pwa.test.js
+        run: |
+          node app/tests/weather-lab-pwa.test.js
+          node app/tests/weather-lab-link.test.js
       - name: Ensure installable application assets are present
         run: |
           set -euo pipefail

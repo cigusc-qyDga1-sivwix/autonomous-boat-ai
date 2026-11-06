@@ -1,0 +1,46 @@
+name: BOAT LAB one-time public numeric endpoint connectivity check
+
+# This workflow is deliberately *one-shot*: it only runs when this file is
+# introduced on its exact research branch. It never schedules or crawls data.
+on:
+  push:
+    branches:
+      - feat/isolated-exhibition-direct-probe-20261106
+    paths:
+      - .github/workflows/boat-lab-direct-once.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: One known past race, two numeric files, no retries
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from urllib.request import urlopen, Request
+          from urllib.error import HTTPError, URLError
+          # 2026-11-06 唐津6R was observed in the existing CSV research archive.
+          # Probe already-published numeric files; do not claim live timeliness.
+          day, venue, race = '20261106', '23', '06'
+          for kind in ('stt', 'tkz'):
+              url = f'https://race.boatcast.jp/hp_txt/{venue}/bc_j_{kind}_{day}_{venue}_{race}.txt'
+              try:
+                  req = Request(url, headers={'User-Agent':'BOAT-LAB-Exhibition-Bridge-Probe/0.1 (one-shot research)'})
+                  with urlopen(req, timeout=8) as response:
+                      data = response.read(64_001)
+                      text = data.decode('utf-8-sig', errors='replace')
+                      summary = {'type':kind, 'http_status':response.status,
+                                 'bytes':len(data), 'not_html':not text.lstrip().startswith('<'),
+                                 'has_data_header':text.splitlines()[0].strip() == 'data=' if text.splitlines() else False,
+                                 'lines':len(text.splitlines())}
+              except HTTPError as e:
+                  summary={'type':kind,'http_status':e.code,'blocked_or_not_found':True}
+              except (URLError, TimeoutError) as e:
+                  summary={'type':kind,'network_error':type(e).__name__}
+              print(json.dumps(summary))
+          PY

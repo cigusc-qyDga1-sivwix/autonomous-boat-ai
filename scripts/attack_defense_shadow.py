@@ -80,6 +80,15 @@ def _evidence(racer, defender):
         signals.append("exhibition_time_advantage")
     if not signals:
         return 0., []
+    # Do not treat the ordinary sixth boat's 0.05s display-time spread as
+    # evidence of a decisive attack. Require two independent pre-race edges,
+    # or one clearly large edge confirmed by a legal exhibition start.
+    strong_independent = (
+        len(signals) >= 2
+        or (show_confirm and (start_edge >= .045 or time_edge >= .10))
+    )
+    if not strong_independent:
+        return 0., []
     # Confirmation increases the response marginally; no huge adjustment
     # from one flattering display or raw racer rank.
     pressure = min(1., max(0., start_edge) / .07 * .52 + max(0., time_edge) / .13 * .48)

@@ -53,7 +53,8 @@ def eligible_new_previews(before, after, now):
             captured = datetime.fromisoformat(row["preview_captured_at_utc"])
         except (KeyError, ValueError, TypeError):
             continue
-        if observed.tzinfo is None or captured.tzinfo is None:
+        if (observed.tzinfo is None or captured.tzinfo is None
+                or observed.astimezone(JST).date().isoformat() != day):
             continue
         deadline = cutoff - timedelta(seconds=SAFE_LEAD_SECONDS)
         if (now >= deadline or observed >= deadline or captured >= deadline

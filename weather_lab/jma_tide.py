@@ -137,7 +137,7 @@ def main(argv=None):
     args.out.write_text(json.dumps(doc,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
     print(json.dumps({"source":"JMA","date":doc["event_date"],
       "station_count":len(doc["stations"]),"status":doc["provider"]["fetch_status"],
-      "current_flow_collected":False,"formal_forecasts_unchanged":True}))
+      "current_flow_collected":False,"formal_forecasts_unchanged":True,"missing_stations":doc["missing_station_codes"]}))
     if not doc["stations"]:
         raise SystemExit(2)
 

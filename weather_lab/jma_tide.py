@@ -41,7 +41,8 @@ def _events(area: str):
         text=area[j:j+7]
         if len(text)!=7:
             raise ValueError("Malformed tide event fields")
-        hhmm=text[:4].strip()
+        # JMA uses leading spaces for 0-9h (e.g. " 256" means 02:56).
+        hhmm=text[:4].replace(" ", "0")
         cm=_height(text[4:7])
         if hhmm=="9999":
             continue

@@ -30,8 +30,12 @@ def document(r):
 class SecondChanceTests(unittest.TestCase):
     def test_new_preview_before_three_minute_safety_deadline_can_trigger_rebuild(self):
         at = datetime(2026, 11, 6, 10, 42, 40, tzinfo=JST)
-        self.assertEqual(eligible_new_previews(document({**row(),
-            "preview_sha256": "older-sha"}), document(row()), at), [CODE])
+        older = row()
+        older["preview_sha256"] = "older-sha"
+        older["boats"][0]["exhibition_time"] = 6.69
+        self.assertEqual(eligible_new_previews(document(older), document(row()), at), [CODE])
+        timestamp_only = {**row(), "preview_sha256": "new-time-only"}
+        self.assertEqual(eligible_new_previews(document(row()), document(timestamp_only), at), [])
         self.assertEqual(eligible_new_previews(document(row()), document(row()), at), [])
 
     def test_previous_frozen_data_cannot_be_rewritten_after_deadline(self):

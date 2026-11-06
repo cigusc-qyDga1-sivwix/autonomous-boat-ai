@@ -13,7 +13,7 @@ assert.match(research,/setInterval\(\(\)=>\{if\(!document\.hidden/);
 assert.match(research,/最新観測/);
 assert.match(research,/以前の記録を表示中。最新情報ではありません/);
 assert.match(html,/exhibition-research\.js\?v=20261027-auto-fresh/);
-assert.match(index,/app\.js\?v=20261105-linked-v22/);
+assert.match(index,/app\.js\?v=\d{8}-[a-z0-9-]+/, 'app script should be cache-busted without pinning an old release');
 assert.match(index,/tactical-1m\.js\?v=20261027-venue-v14/);
 assert.match(index,/venue-tactics-v2\.js\?v=20261027-venue23/);
 assert.match(venue,/four-factor-v1\.3-conditional-scenarios-untrained/);

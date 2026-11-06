@@ -32,6 +32,8 @@ on:
       - 'scripts/freeze_coupling_trials.js'
       - 'scripts/exhibition_bridge.py'
       - 'scripts/exhibition_rejection_audit.py'
+      - 'scripts/exhibition_second_chance.py'
+      - 'tests/test_exhibition_second_chance.py'
       - 'scripts/test_exhibition_rejection_audit.py'
       - 'scripts/freeze_tactical_trials.js'
       - 'scripts/freeze_outside_trials.js'
@@ -128,6 +130,7 @@ jobs:
           set -euo pipefail
           python scripts/test_exhibition_ingest_optional_weather.py
           python scripts/test_exhibition_rejection_audit.py
+          python -m unittest discover -s tests -p test_exhibition_second_chance.py
           # The former Mikuni replay test no longer exists in this repository.
           python scripts/test_entry_exhibition_gate.py
       - name: Collect exhibition measurements before forecasting
@@ -194,6 +197,76 @@ jobs:
                 break
               fi
               git commit -m 'forecast: rebuild from latest immutable ledger before cutoff'
+            done
+          fi
+      # A race's exhibition may become available during the first publish.
+      # Recheck ONLY previews and run another live pre-cutoff forecast if new
+      # six-boat evidence arrives while there is still a 180-second lead.
+      - name: Second-chance capture of new six-boat exhibition previews
+        id: second_chance
+        shell: bash
+        run: |
+          set -euo pipefail
+          DAY="${{ steps.jst_day.outputs.day }}"
+          if [ "$(TZ=Asia/Tokyo date +%F)" != "$DAY" ]; then
+            echo "::warning::JST day changed; skip second-chance capture"
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          BEFORE="$RUNNER_TEMP/exhibition-before-recheck.json"
+          AFTER="app/data/exhibition/$DAY.json"
+          if [ -f "$AFTER" ]; then
+            cp "$AFTER" "$BEFORE"
+          else
+            echo '{}' > "$BEFORE"
+          fi
+          python scripts/ingest_boatracecsv_exhibition.py --previews-only
+          python scripts/exhibition_second_chance.py \
+            --before "$BEFORE" --after "$AFTER" --github-output "$GITHUB_OUTPUT"
+
+      - name: Immediately freeze and publish second-chance exhibition forecasts
+        if: steps.second_chance.outputs.eligible == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          DAY="${{ steps.jst_day.outputs.day }}"
+          if [ "$(TZ=Asia/Tokyo date +%F)" != "$DAY" ]; then
+            echo "::warning::JST day changed; no second-chance forecast"
+            exit 0
+          fi
+          # The live collector re-fetches the current OpenAPI, verifies input,
+          # and enforces the wall-clock cutoff both before and after computing.
+          # Research result/payout CSVs are NOT fetched in this step.
+          python scripts/autonomous_daily.py | tee boat-lab-second-chance-status.json
+          python scripts/forecast_audit.py --input app/data/live/latest.json --out app/data/live/audit-latest.json
+          python scripts/exhibition_rejection_audit.py --date "$DAY" || echo "::warning::Second-chance gap audit unavailable"
+          git add app/data/live/ app/data/exhibition/ app/data/venue-profiles.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'forecast: publish safe second-chance exhibition snapshots'
+            for attempt in 1 2 3; do
+              if git push origin HEAD:main; then
+                echo 'Second-chance pre-cutoff publication succeeded'
+                break
+              fi
+              if [ "$attempt" = 3 ]; then
+                echo '::error::Second-chance publication could not be saved'
+                exit 1
+              fi
+              # Concurrent trusted official-result writer: never force-push.
+              # Rebuild from the latest committed immutable ledger, using
+              # fresh capture times (no retrospective promotion).
+              git fetch origin main
+              git reset --hard origin/main
+              python scripts/ingest_boatracecsv_exhibition.py --previews-only
+              python scripts/autonomous_daily.py | tee boat-lab-second-chance-status.json
+              python scripts/forecast_audit.py --input app/data/live/latest.json --out app/data/live/audit-latest.json
+              python scripts/exhibition_rejection_audit.py --date "$DAY" || echo '::warning::Gap audit unavailable'
+              git add app/data/live/ app/data/exhibition/ app/data/venue-profiles.json
+              if git diff --cached --quiet; then
+                echo 'No new safe second-chance snapshot after rebase'
+                break
+              fi
+              git commit -m 'forecast: revalidate second-chance previews after rebase'
             done
           fi
       - name: Analyze research only after primary pre-cutoff revisions are frozen
@@ -289,6 +362,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: boat-lab-auto-status-${{ github.run_attempt }}
-          path: boat-lab-daily-status.json
+          path: |
+            boat-lab-daily-status.json
+            boat-lab-second-chance-status.json
           if-no-files-found: ignore
           retention-days: 3

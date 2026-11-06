@@ -176,12 +176,17 @@ def candidate(day: str, venue: int, race: int, cutoff_hm: str,
 def store_gcs(candidate_doc: dict, bucket_name: str):
     """Create-only GCS object; no GitHub commit and no overwrite of live ledger."""
     from google.cloud import storage
+    from google.api_core.exceptions import PreconditionFailed
     code = candidate_doc["race_code"]
     digest = candidate_doc["measurement_sha256"]
     object_name = f"exhibition-bridge/v1/{candidate_doc['event_date']}/{code}/{digest}.json"
     blob = storage.Client().bucket(bucket_name).blob(object_name)
-    blob.upload_from_string(json.dumps(candidate_doc, ensure_ascii=False, sort_keys=True),
-                            content_type="application/json", if_generation_match=0)
+    try:
+        blob.upload_from_string(json.dumps(candidate_doc, ensure_ascii=False, sort_keys=True),
+                                content_type="application/json", if_generation_match=0)
+    except PreconditionFailed:
+        # Identical immutable numeric inputs already persisted; do not overwrite.
+        pass
     return f"gs://{bucket_name}/{object_name}"
 
 
@@ -205,6 +210,8 @@ def main(argv=None) -> int:
         cutoff = datetime.fromisoformat(f"{day}T{args.cutoff}:00+09:00")
         if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", args.cutoff):
             raise ValueError("Invalid cutoff")
+        if args.gcs_bucket and not args.live:
+            raise InvalidPreview("Offline fixtures cannot be uploaded as live data")
         if args.live:
             if os.environ.get("BOATCAST_DIRECT_FETCH_APPROVED") != "1":
                 raise InvalidPreview("Direct fetch disabled pending source approval")

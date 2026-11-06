@@ -36,7 +36,7 @@ def _good_measurement(row, collection):
     if row.get("freshness_status") != "fresh_snapshot":
         return False
     w = row.get("weather") or {}
-    for key in ("wind_mps", "wave_cm"):
+    for key in ("wave_cm",):
         value = w.get(key)
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not (0 <= value < 1000):
             return False
@@ -95,9 +95,9 @@ def freeze(snapshot: dict, previous: dict | None = None) -> tuple[dict, int]:
             "collector_received_at_utc": collection.astimezone(timezone.utc).isoformat(),
             "source_captured_at_jst": row["source_captured_at_jst"],
             "weather_observed_at_jst": row["weather_observed_at_jst"],
-            "weather": {key: w.get(key) for key in (
-                "wind_mps", "wind_direction_raw_code", "wave_cm", "air_c", "water_c")},
+            "weather": {"wave_cm": w["wave_cm"]},
             "advisory_signals": ((row.get("weather_advisory") or {}).get("signals") or []),
+            "onsite_measurement_scope": "wave_height_only",
             "forecast_available_at_collection": False,
             "prediction_sha": None,
             "weather_effect_on_predictions": "not_applied",
@@ -123,6 +123,8 @@ def freeze(snapshot: dict, previous: dict | None = None) -> tuple[dict, int]:
             "historical_predictions_immutable": True,
             "prediction_recalculation": False,
             "weather_from_official_venue_observation_not_regional_forecast": True,
+            "new_records_on_site_wave_only": True,
+            "previous_legacy_records_preserved_unchanged": True,
         },
         "records": records,
     }, new

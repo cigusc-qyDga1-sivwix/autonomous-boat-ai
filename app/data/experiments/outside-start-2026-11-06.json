@@ -110865,6 +110865,473 @@
       "record_sha256": "d831ef21fc7247cb4f371a6b354b335a75100e01404cf6d7943e1bfbda34a7fd"
     },
     {
+      "id": "桐生|10|exhibition",
+      "date": "2026-11-06",
+      "venue": "桐生",
+      "race": 10,
+      "phase": "exhibition",
+      "cutoff_jst": "19:25",
+      "created_at_utc": "2026-11-06T10:13:51.302Z",
+      "original_fixed_sha256": "ea0ae0efd5ae6cd5682ac775ca380c9defe89ae048e6e4e0a0e158144da36c26",
+      "source_updated_at_utc": "2026-11-06T10:13:27.622622+00:00",
+      "minutes_before_cutoff": 11.14,
+      "source_frozen_at_utc": "2026-11-06T10:13:28.910970+00:00",
+      "is_forward_fixed": true,
+      "virtual_budget_per_model_yen": 50000,
+      "input_quality": {
+        "exhibition_confirmed_in_original": true,
+        "source_age_minutes": 0.4,
+        "scope": "pre-cutoff original racer snapshot only; no outcomes/payouts or later exhibitions",
+        "entry_confirmed_exhibition": true,
+        "note": "Exhibition course observed in pre-cutoff source",
+        "start_exhibition_is_not_race_st": true
+      },
+      "v06_control": {
+        "model": "tactical-six-boat-coupling-v0.6-untrained",
+        "bets": [
+          {
+            "combination": "1-3-2",
+            "virtual_yen": 6000,
+            "head_course": 1,
+            "conditional_reason": "1コース 最短先マイを守る（仮説） → 3コースが2着を確保 → 2コースが3着に残存",
+            "relative_score": 0.042887
+          },
+          {
+            "combination": "3-2-1",
+            "virtual_yen": 6000,
+            "head_course": 3,
+            "conditional_reason": "3コース 外からのまくり（仮説） → 2コースが2着を確保 → 1コースが3着に残存",
+            "relative_score": 0.041249
+          },
+          {
+            "combination": "3-5-1",
+            "virtual_yen": 5000,
+            "head_course": 3,
+            "conditional_reason": "3コース 外からのまくり（仮説） → 4コースが2着を確保 → 1コースが3着に残存",
+            "relative_score": 0.036563
+          },
+          {
+            "combination": "1-2-3",
+            "virtual_yen": 5000,
+            "head_course": 1,
+            "conditional_reason": "1コース 最短先マイを守る（仮説） → 2コースが2着を確保 → 3コースが3着に残存",
+            "relative_score": 0.035989
+          },
+          {
+            "combination": "3-5-2",
+            "virtual_yen": 5000,
+            "head_course": 3,
+            "conditional_reason": "3コース 外からのまくり（仮説） → 4コースが2着を確保 → 2コースが3着に残存",
+            "relative_score": 0.034198
+          },
+          {
+            "combination": "1-3-5",
+            "virtual_yen": 5000,
+            "head_course": 1,
+            "conditional_reason": "1コース 最短先マイを守る（仮説） → 3コースが2着を確保 → 4コースが3着に残存",
+            "relative_score": 0.031579
+          },
+          {
+            "combination": "3-1-2",
+            "virtual_yen": 5000,
+            "head_course": 3,
+            "conditional_reason": "3コース 外からのまくり（仮説） → 1コースが2着を確保 → 2コースが3着に残存",
+            "relative_score": 0.030683
+          },
+          {
+            "combination": "3-1-5",
+            "virtual_yen": 5000,
+            "head_course": 3,
+            "conditional_reason": "3コース 外からのまくり（仮説） → 1コースが2着を確保 → 4コースが3着に残存",
+            "relative_score": 0.02751
+          },
+          {
+            "combination": "1-3-6",
+            "virtual_yen": 4000,
+            "head_course": 1,
+            "conditional_reason": "1コース 最短先マイを守る（仮説） → 3コースが2着を確保 → 5コースが3着に残存",
+            "relative_score": 0.027251
+          },
+          {
+            "combination": "2-3-1",
+            "virtual_yen": 4000,
+            "head_course": 2,
+            "conditional_reason": "2コース 内の差し残り（仮説） → 3コースが2着を確保 → 1コースが3着に残存",
+            "relative_score": 0.024112
+          }
+        ],
+        "interaction_graph": [
+          {
+            "head_course": 1,
+            "head_lane": 1,
+            "tactic": "最短先マイを守る",
+            "pressure": 0,
+            "follower_course": 2,
+            "follower_lane": 2,
+            "follower_readiness": 0.6827,
+            "inside": []
+          },
+          {
+            "head_course": 2,
+            "head_lane": 2,
+            "tactic": "内の差し残り",
+            "pressure": 0.1645,
+            "follower_course": 3,
+            "follower_lane": 3,
+            "follower_readiness": 1,
+            "inside": [
+              {
+                "course": 1,
+                "lane": 1,
+                "risk": 0.1008
+              }
+            ]
+          },
+          {
+            "head_course": 3,
+            "head_lane": 3,
+            "tactic": "外からのまくり",
+            "pressure": 0.5673,
+            "follower_course": 4,
+            "follower_lane": 5,
+            "follower_readiness": 0.4008,
+            "inside": [
+              {
+                "course": 1,
+                "lane": 1,
+                "risk": 0.4774
+              },
+              {
+                "course": 2,
+                "lane": 2,
+                "risk": 0.505
+              }
+            ]
+          },
+          {
+            "head_course": 4,
+            "head_lane": 5,
+            "tactic": "外の残存・攻め待ち",
+            "pressure": 0,
+            "follower_course": 5,
+            "follower_lane": 6,
+            "follower_readiness": 0.6425,
+            "inside": [
+              {
+                "course": 1,
+                "lane": 1,
+                "risk": 0
+              },
+              {
+                "course": 2,
+                "lane": 2,
+                "risk": 0
+              },
+              {
+                "course": 3,
+                "lane": 3,
+                "risk": 0
+              }
+            ]
+          },
+          {
+            "head_course": 5,
+            "head_lane": 6,
+            "tactic": "まくり差し・差し場探索",
+            "pressure": 0,
+            "follower_course": 6,
+            "follower_lane": 4,
+            "follower_readiness": 0.7129,
+            "inside": [
+              {
+                "course": 1,
+                "lane": 1,
+                "risk": 0
+              },
+              {
+                "course": 2,
+                "lane": 2,
+                "risk": 0
+              },
+              {
+                "course": 3,
+                "lane": 3,
+                "risk": 0
+              },
+              {
+                "course": 4,
+                "lane": 5,
+                "risk": 0
+              }
+            ]
+          },
+          {
+            "head_course": 6,
+            "head_lane": 4,
+            "tactic": "まくり差し・差し場探索",
+            "pressure": 0,
+            "follower_course": null,
+            "follower_lane": null,
+            "follower_readiness": 0,
+            "inside": [
+              {
+                "course": 1,
+                "lane": 1,
+                "risk": 0
+              },
+              {
+                "course": 2,
+                "lane": 2,
+                "risk": 0
+              },
+              {
+                "course": 3,
+                "lane": 3,
+                "risk": 0
+              },
+              {
+                "course": 4,
+                "lane": 5,
+                "risk": 0
+              },
+              {
+                "course": 5,
+                "lane": 6,
+                "risk": 0
+              }
+            ]
+          }
+        ],
+        "relative_scores_uncalibrated": true
+      },
+      "v07_start_gap": {
+        "model": "tactical-outside-start-gap-v0.7-untrained",
+        "bets": [
+          {
+            "combination": "1-3-2",
+            "virtual_yen": 6000,
+            "head_course": 1,
+            "relative_score": 0.042887,
+            "conditional_reason": "1コース 最短先マイを守る（ST差の仮説） → 3コース2着 → 2コース3着"
+          },
+          {
+            "combination": "3-2-1",
+            "virtual_yen": 6000,
+            "head_course": 3,
+            "relative_score": 0.041249,
+            "conditional_reason": "3コース 外からのまくり（ST差の仮説） → 2コース2着 → 1コース3着"
+          },
+          {
+            "combination": "3-5-1",
+            "virtual_yen": 5000,
+            "head_course": 3,
+            "relative_score": 0.036563,
+            "conditional_reason": "3コース 外からのまくり（ST差の仮説） → 4コース2着 → 1コース3着"
+          },
+          {
+            "combination": "1-2-3",
+            "virtual_yen": 5000,
+            "head_course": 1,
+            "relative_score": 0.035989,
+            "conditional_reason": "1コース 最短先マイを守る（ST差の仮説） → 2コース2着 → 3コース3着"
+          },
+          {
+            "combination": "3-5-2",
+            "virtual_yen": 5000,
+            "head_course": 3,
+            "relative_score": 0.034198,
+            "conditional_reason": "3コース 外からのまくり（ST差の仮説） → 4コース2着 → 2コース3着"
+          },
+          {
+            "combination": "1-3-5",
+            "virtual_yen": 5000,
+            "head_course": 1,
+            "relative_score": 0.031579,
+            "conditional_reason": "1コース 最短先マイを守る（ST差の仮説） → 3コース2着 → 4コース3着"
+          },
+          {
+            "combination": "3-1-2",
+            "virtual_yen": 5000,
+            "head_course": 3,
+            "relative_score": 0.030683,
+            "conditional_reason": "3コース 外からのまくり（ST差の仮説） → 1コース2着 → 2コース3着"
+          },
+          {
+            "combination": "3-1-5",
+            "virtual_yen": 5000,
+            "head_course": 3,
+            "relative_score": 0.02751,
+            "conditional_reason": "3コース 外からのまくり（ST差の仮説） → 1コース2着 → 4コース3着"
+          },
+          {
+            "combination": "1-3-6",
+            "virtual_yen": 4000,
+            "head_course": 1,
+            "relative_score": 0.027251,
+            "conditional_reason": "1コース 最短先マイを守る（ST差の仮説） → 3コース2着 → 5コース3着"
+          },
+          {
+            "combination": "2-3-1",
+            "virtual_yen": 4000,
+            "head_course": 2,
+            "relative_score": 0.024112,
+            "conditional_reason": "2コース 内の差し残り（ST差の仮説） → 3コース2着 → 1コース3着"
+          }
+        ],
+        "st_signals": [
+          {
+            "course": 1,
+            "lane": 1,
+            "estimated_st": 0.106,
+            "nearest_gap_sec": null,
+            "inside_mean_gap_sec": null,
+            "wall_hole": false,
+            "confidence": 0,
+            "speed_ratio": 1,
+            "turn_ratio": 1,
+            "head_evidence": false,
+            "second_evidence": false,
+            "tactic_candidates": [],
+            "exhibition_f_ignored": false
+          },
+          {
+            "course": 2,
+            "lane": 2,
+            "estimated_st": 0.138,
+            "nearest_gap_sec": -0.031,
+            "inside_mean_gap_sec": -0.031,
+            "wall_hole": false,
+            "confidence": 0.88,
+            "speed_ratio": 0.923,
+            "turn_ratio": 0.98,
+            "head_evidence": false,
+            "second_evidence": false,
+            "tactic_candidates": [],
+            "exhibition_f_ignored": false
+          },
+          {
+            "course": 3,
+            "lane": 3,
+            "estimated_st": 0.1,
+            "nearest_gap_sec": 0.037,
+            "inside_mean_gap_sec": 0.022,
+            "wall_hole": true,
+            "confidence": 0.88,
+            "speed_ratio": 1.422,
+            "turn_ratio": 1.288,
+            "head_evidence": false,
+            "second_evidence": false,
+            "tactic_candidates": [],
+            "exhibition_f_ignored": false
+          },
+          {
+            "course": 4,
+            "lane": 5,
+            "estimated_st": 0.15,
+            "nearest_gap_sec": -0.05,
+            "inside_mean_gap_sec": -0.035,
+            "wall_hole": false,
+            "confidence": 0.64,
+            "speed_ratio": 0.602,
+            "turn_ratio": 0.689,
+            "head_evidence": false,
+            "second_evidence": false,
+            "tactic_candidates": [],
+            "exhibition_f_ignored": true
+          },
+          {
+            "course": 5,
+            "lane": 6,
+            "estimated_st": 0.19,
+            "nearest_gap_sec": -0.04,
+            "inside_mean_gap_sec": -0.066,
+            "wall_hole": false,
+            "confidence": 0.64,
+            "speed_ratio": 0.845,
+            "turn_ratio": 0.989,
+            "head_evidence": false,
+            "second_evidence": false,
+            "tactic_candidates": [],
+            "exhibition_f_ignored": true
+          },
+          {
+            "course": 6,
+            "lane": 4,
+            "estimated_st": 0.23,
+            "nearest_gap_sec": -0.04,
+            "inside_mean_gap_sec": -0.093,
+            "wall_hole": false,
+            "confidence": 0.64,
+            "speed_ratio": 0.947,
+            "turn_ratio": 1.028,
+            "head_evidence": false,
+            "second_evidence": false,
+            "tactic_candidates": [],
+            "exhibition_f_ignored": true
+          }
+        ],
+        "role_coverage": {
+          "1": {
+            "first": 0.308,
+            "second": 0.1652,
+            "third": 0.1772,
+            "headTickets": 4,
+            "secondTickets": 2,
+            "thirdTickets": 3,
+            "note": "展開条件別の役割評価"
+          },
+          "2": {
+            "first": 0.1839,
+            "second": 0.2072,
+            "third": 0.1843,
+            "headTickets": 1,
+            "secondTickets": 2,
+            "thirdTickets": 3,
+            "note": "展開条件別の役割評価"
+          },
+          "3": {
+            "first": 0.424,
+            "second": 0.2161,
+            "third": 0.1276,
+            "headTickets": 5,
+            "secondTickets": 4,
+            "thirdTickets": 1,
+            "note": "展開条件別の役割評価"
+          },
+          "4": {
+            "first": 0.0105,
+            "second": 0.0839,
+            "third": 0.1569,
+            "headTickets": 0,
+            "secondTickets": 0,
+            "thirdTickets": 0,
+            "note": "展開条件別の役割評価"
+          },
+          "5": {
+            "first": 0.0527,
+            "second": 0.1947,
+            "third": 0.1833,
+            "headTickets": 0,
+            "secondTickets": 2,
+            "thirdTickets": 2,
+            "note": "展開条件別の役割評価"
+          },
+          "6": {
+            "first": 0.0209,
+            "second": 0.133,
+            "third": 0.1708,
+            "headTickets": 0,
+            "secondTickets": 0,
+            "thirdTickets": 1,
+            "note": "3着のみ採用（1・2着は成立条件を再検討）"
+          }
+        },
+        "relative_scores_uncalibrated": true
+      },
+      "source_restrictions": "pre-cutoff saved racer data only; no results, payouts, actual final ST, or odds",
+      "record_sha256": "d997f62589cbf98e781c4e935c6ebadd507248508b8f590c3864e09c5e767803"
+    },
+    {
       "id": "丸亀|10|baseline",
       "date": "2026-11-06",
       "venue": "丸亀",

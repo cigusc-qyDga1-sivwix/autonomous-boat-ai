@@ -1,5 +1,10 @@
 name: WEATHER LAB independent JMA tide predictions
 on:
+  pull_request:
+    paths:
+      - 'weather_lab/jma_tide.py'
+      - 'weather_lab/tests/test_jma_tide.py'
+      - '.github/workflows/weather-lab-tide.yml'
   workflow_dispatch:
   push:
     branches: [main]
@@ -13,7 +18,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: weather-lab-independent-collector
+  group: ${{ github.event_name == 'pull_request' && format('tide-pr-{0}', github.run_id) || 'weather-lab-independent-collector' }}
   cancel-in-progress: false
 jobs:
   tide:

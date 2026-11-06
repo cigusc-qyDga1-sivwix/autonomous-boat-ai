@@ -75,5 +75,5 @@ const tideDoc={schema:'weather_lab.jma_tide_reference.v1',event_date:'2026-11-05
 assert.match(UI.tidePanel(tideDoc,at),/14:53 181cm/);
 assert.match(UI.tidePanel(tideDoc,at),/流速・流向/);
 assert.match(UI.tidePanel(null,at),/未取得/);
-assert.match(js,/data\\/tide\\/latest\\.json/);
+assert.ok(js.includes('data/tide/latest.json'));
 console.log('WEATHER LAB PWA UI tests passed (dynamic freshness, 24 sites, no fabricated values, independent installation)');

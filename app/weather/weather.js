@@ -134,6 +134,9 @@
   const D=root.document;
   const $=id=>D.getElementById(id);
   const state={doc:null,regional:null,tide:null,regionalError:null,tideError:null,filter:"all",search:"",selected:null,loading:false,error:null};
+  // Optional BOAT LAB deep link; only allow the predeclared 24 venue codes.
+  const requestedVenue=(()=>{try{const v=new URLSearchParams(root.location?.search||"").get("venue");return /^(0[1-9]|1[0-9]|2[0-4])$/.test(v||"")?v:null;}catch{return null;}})();
+  if(requestedVenue)state.selected=requestedVenue;
   function setToast(msg){
     const toast=$("toast");
     toast.textContent=msg;toast.classList.add("show");

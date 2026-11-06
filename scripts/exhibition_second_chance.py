@@ -23,6 +23,19 @@ def _read(path):
         return {}
 
 
+def _model_inputs(row):
+    """Ignore refreshed timestamps and post-race fields; watch measured inputs."""
+    return {
+        "boats": [{k: boat.get(k) for k in (
+            "course", "exhibition_st", "exhibition_time", "tilt",
+            "weight_kg", "original_exhibition")} for boat in row.get("boats", [])
+            if isinstance(boat, dict)],
+        "weather": {k: (row.get("weather") or {}).get(k) for k in (
+            "wind_mps", "wind_direction_number", "wave_cm",
+            "air_c", "water_c")},
+    }
+
+
 def eligible_new_previews(before, after, now):
     """List race codes with CHANGED, timely, actually captured six-boat previews."""
     if now.tzinfo is None:
@@ -30,7 +43,7 @@ def eligible_new_previews(before, after, now):
     day = now.astimezone(JST).date().isoformat()
     if after.get("event_date") != day:
         return []
-    old = {r.get("race_code"): r.get("preview_sha256")
+    old = {r.get("race_code"): r
            for r in before.get("records", []) if isinstance(r, dict)}
     eligible = []
     for row in after.get("records", []):
@@ -38,8 +51,12 @@ def eligible_new_previews(before, after, now):
             continue
         code, sig = row.get("race_code"), row.get("preview_sha256")
         if (not isinstance(code, str) or len(code) != 12 or not code.isdigit()
-                or code[:8] != day.replace("-", "") or not sig or old.get(code) == sig
+                or code[:8] != day.replace("-", "") or not sig
                 or row.get("source_status") != "historical_research_only_not_frozen_forecast"):
+            continue
+        prior = old.get(code)
+        if (prior and (prior.get("preview_sha256") == sig
+                       or _model_inputs(prior) == _model_inputs(row))):
             continue
         boats = row.get("boats")
         if (not isinstance(boats, list) or len(boats) != 6

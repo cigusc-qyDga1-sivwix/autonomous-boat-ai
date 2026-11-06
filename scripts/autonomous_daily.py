@@ -24,6 +24,7 @@ if __package__:
     from .official_pay import fetch_official_pay
     from .venue_weather import fetch_weather, weather_at, VENUE_POINTS
     from .venue_weather_special_shadow import rescore as rescore_site_weather_shadow
+    from .attack_defense_shadow import rescore as rescore_attack_defence_shadow
     from .exhibition_bridge import available_rows, inject
     from .entry_exhibition_gate import validated_preview, summarize_gate
     from .venue_profiles import get_profile, adjust_weights as adjust_venue_weights
@@ -36,6 +37,7 @@ else:
     from official_pay import fetch_official_pay
     from venue_weather import fetch_weather, weather_at, VENUE_POINTS
     from venue_weather_special_shadow import rescore as rescore_site_weather_shadow
+    from attack_defense_shadow import rescore as rescore_attack_defence_shadow
     from exhibition_bridge import available_rows, inject
     from entry_exhibition_gate import validated_preview, summarize_gate
     from venue_profiles import get_profile, adjust_weights as adjust_venue_weights
@@ -1049,6 +1051,54 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
                 "result_data_used": False,
                 "calibrated": False,
             }
+    # Forward-only same-time alternative: attack pressure, inside defence and
+    # the counter/follower after a contest. Main formal bets remain unchanged.
+    attack_defence_shadow = None
+    if linked_active and interaction_active and phase == "exhibition":
+        try:
+            trial = rescore_attack_defence_shadow(
+                promoted["ranked_outcomes"], racers, venue, frozen_at,
+                cutoff.isoformat(),
+                exhibition_verified=bool(point_gate["final_eligible"]))
+            if trial is not None:
+                alt_bets, _alt_metadata = interaction_primary(
+                    promoted, racers, frozen_at, cutoff,
+                    tactics=race.get("_course_tactics"),
+                    scored_weights=None,
+                    adaptive_points=adaptive_active,
+                    justified_points=justified_active,
+                    exhibition_verified=bool(point_gate["final_eligible"]),
+                    site_weather_verified=bool(selected_weather and selected_weather.get("site_observed")),
+                    entry_aware=entry_active,
+                    linked_ranked=trial["outcomes"])
+                attack_defence_shadow = {
+                    **{k: v for k, v in trial.items() if k != "outcomes"},
+                    "forecast_alternative_bets": alt_bets,
+                    "formal_point_count": len(bets),
+                    "alternative_point_count": len(alt_bets),
+                    "point_count_matched": len(alt_bets) == len(bets),
+                    "actual_ticket_or_allocation_change": sorted(
+                        (b["combination"], b["virtual_yen"]) for b in bets
+                    ) != sorted(
+                        (b["combination"], b["virtual_yen"]) for b in alt_bets
+                    ),
+                    "frozen_at_utc": frozen_at,
+                    "baseline_sha256": stable_hash({"ranked": promoted["ranked_outcomes"]}),
+                    "comparison_scope": "same_pre_cutoff_inputs; only_equal_point_count_is_strictly_matched",
+                    "not_formal": True,
+                    "no_additional_stake": True,
+                    "result_data_used": False,
+                }
+        except (ValueError, TypeError, KeyError) as exc:
+            # Isolated hypothesis must never suppress today's official predictions.
+            attack_defence_shadow = {
+                "version": "attack-defence-six-boat-shadow-v0.1-untrained",
+                "status": "UNAVAILABLE",
+                "reason": str(exc),
+                "not_formal": True,
+                "no_additional_stake": True,
+                "result_data_used": False,
+            }
     count = len(bets)
     shares = interaction_meta["new_head_course_shares"] if interaction_meta else promoted["head_course_shares"]
     concentration = max(x["relative_share"] for x in shares)
@@ -1108,6 +1158,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
             "venue_surface_v1": promoted.get("venue_surface_v1"),
             "venue_surface_ab": promoted.get("venue_surface_ab")} if four_factor else {}),
         **({"weather_special_shadow": weather_special_shadow} if weather_special_shadow else {}),
+        **({"attack_defence_shadow": attack_defence_shadow} if attack_defence_shadow else {}),
         "model_role": "main",
         "legacy_control": legacy_control,
         "start_v07": promoted["start_v07"],
@@ -1440,6 +1491,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "role_coverage", "role_changes", "head_coverage_control", "postrace_conditional_v13",
                       "postrace_conditional_control", "venue_tactics_v2", "venue_tactics_ab", "point_free_control", "point_free_provenance",
                       "role_skill_shadow", "venue_motor_exhibition_shadow", "interaction_primary",
+                      "attack_defence_shadow",
                       "exhibition_input_check", "relative_scores_uncalibrated"):
             if extra in current:
                 r[extra] = current[extra]

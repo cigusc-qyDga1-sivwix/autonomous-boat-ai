@@ -25,6 +25,7 @@ if __package__:
     from .venue_weather import fetch_weather, weather_at, VENUE_POINTS
     from .venue_weather_special_shadow import rescore as rescore_site_weather_shadow
     from .attack_defense_shadow import rescore as rescore_attack_defence_shadow
+    from .grade_competition_shadow import grade_from_program, rescore as rescore_grade_competition
     from .exhibition_bridge import available_rows, inject
     from .entry_exhibition_gate import validated_preview, summarize_gate
     from .venue_profiles import get_profile, adjust_weights as adjust_venue_weights
@@ -38,6 +39,7 @@ else:
     from venue_weather import fetch_weather, weather_at, VENUE_POINTS
     from venue_weather_special_shadow import rescore as rescore_site_weather_shadow
     from attack_defense_shadow import rescore as rescore_attack_defence_shadow
+    from grade_competition_shadow import grade_from_program, rescore as rescore_grade_competition
     from exhibition_bridge import available_rows, inject
     from entry_exhibition_gate import validated_preview, summarize_gate
     from venue_profiles import get_profile, adjust_weights as adjust_venue_weights
@@ -910,6 +912,9 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     linked_active = (venue != "江戸川" and now.astimezone(UTC) >= LINKED_MAIN_ACTIVATION_UTC
                      and cutoff.astimezone(UTC) > LINKED_MAIN_ACTIVATION_UTC)
     weights, racers = features(race, phase)
+    # Program grade comes from a named, pre-race API field. Do not infer it
+    # from the venue or retroactively enrich frozen predictions.
+    grade_context = grade_from_program(race)
     observed, selected_weather = weather_for_prediction(race, nearby_weather)
     # Historical venue rates are weak trial priors, not fixed win probabilities.
     venue_code = next((code for code, name in VENUES.items() if name == venue), None)
@@ -1099,6 +1104,54 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
                 "no_additional_stake": True,
                 "result_data_used": False,
             }
+    # G1 parity is a distinct, bounded, forward-only A/B candidate.
+    # It never replaces formal v2.2, does not reuse 11/5-11/6 results,
+    # and only activates from explicit grade_number=2 plus validated preview.
+    grade_competition_shadow = None
+    if linked_active and interaction_active and phase == "exhibition":
+        try:
+            grade_trial = rescore_grade_competition(
+                promoted["ranked_outcomes"], racers, grade_context, frozen_at,
+                cutoff.isoformat(),
+                exhibition_verified=bool(point_gate["final_eligible"]))
+            if grade_trial is not None:
+                grade_alt_bets, _grade_meta = interaction_primary(
+                    promoted, racers, frozen_at, cutoff,
+                    tactics=race.get("_course_tactics"),
+                    scored_weights=None,
+                    adaptive_points=adaptive_active,
+                    justified_points=justified_active,
+                    exhibition_verified=bool(point_gate["final_eligible"]),
+                    site_weather_verified=bool(selected_weather and selected_weather.get("site_observed")),
+                    entry_aware=entry_active,
+                    linked_ranked=grade_trial["outcomes"])
+                grade_competition_shadow = {
+                    **{k: v for k, v in grade_trial.items() if k != "outcomes"},
+                    "forecast_alternative_bets": grade_alt_bets,
+                    "formal_point_count": len(bets),
+                    "alternative_point_count": len(grade_alt_bets),
+                    "point_count_matched": len(grade_alt_bets) == len(bets),
+                    "actual_ticket_or_allocation_change": sorted(
+                        (b["combination"], b["virtual_yen"]) for b in bets
+                    ) != sorted(
+                        (b["combination"], b["virtual_yen"]) for b in grade_alt_bets
+                    ),
+                    "frozen_at_utc": frozen_at,
+                    "baseline_sha256": stable_hash({"ranked": promoted["ranked_outcomes"]}),
+                    "comparison_scope": "same_frozen_input_same_grade_same_points_only",
+                    "not_formal": True,
+                    "no_additional_stake": True,
+                    "result_data_used": False,
+                }
+        except (ValueError, TypeError, KeyError) as exc:
+            grade_competition_shadow = {
+                "version": "g1-competitive-head-shadow-v0.1-untrained",
+                "status": "UNAVAILABLE",
+                "reason": str(exc),
+                "not_formal": True,
+                "no_additional_stake": True,
+                "result_data_used": False,
+            }
     count = len(bets)
     shares = interaction_meta["new_head_course_shares"] if interaction_meta else promoted["head_course_shares"]
     concentration = max(x["relative_share"] for x in shares)
@@ -1141,6 +1194,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         reason = "統合v2.2：選手・枠別・当地・モーター・展示・実進入・場別条件・ST・引き波仮説を同一120組で評価／根拠別採用" + str(len(bets)) + "点・仮想5万円・未校正"
     body = {
         "model_version": chosen_model,
+        "grade_context": grade_context,
+        **({"grade_competition_shadow": grade_competition_shadow} if grade_competition_shadow else {}),
         **({"interaction_primary": interaction_meta} if interaction_meta else {}),
         **({"role_skill_shadow": promoted["role_skill_shadow"]} if promoted.get("role_skill_shadow") else {}),
         **({"venue_motor_exhibition_shadow": promoted["venue_motor_exhibition_shadow"]}
@@ -1491,7 +1546,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "role_coverage", "role_changes", "head_coverage_control", "postrace_conditional_v13",
                       "postrace_conditional_control", "venue_tactics_v2", "venue_tactics_ab", "point_free_control", "point_free_provenance",
                       "role_skill_shadow", "venue_motor_exhibition_shadow", "interaction_primary",
-                      "attack_defence_shadow",
+                      "attack_defence_shadow", "grade_context", "grade_competition_shadow",
                       "exhibition_input_check", "relative_scores_uncalibrated"):
             if extra in current:
                 r[extra] = current[extra]

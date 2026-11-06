@@ -1,0 +1,70 @@
+name: BOAT LAB one-time public numeric endpoint connectivity check
+
+# Only runs when this diagnostic file changes on its exact research branch.
+# It is NOT scheduled and intentionally accesses just two files for one race.
+on:
+  push:
+    branches:
+      - feat/isolated-exhibition-direct-probe-20261106
+    paths:
+      - .github/workflows/boat-lab-direct-once.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse one known past race from two numeric source files
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import importlib.util
+          import json
+          from urllib.request import urlopen, Request
+          from urllib.error import HTTPError, URLError
+          from pathlib import Path
+          # A past race only: no actual deadline availability claim.
+          day, venue, race = '20261106', '23', '06'
+          bodies = {}
+          for kind in ('stt', 'tkz'):
+              url = f'https://race.boatcast.jp/hp_txt/{venue}/bc_j_{kind}_{day}_{venue}_{race}.txt'
+              try:
+                  req = Request(url, headers={'User-Agent':'BOAT-LAB-Exhibition-Bridge-Probe/0.1 (one-race research)'})
+                  with urlopen(req, timeout=8) as response:
+                      data = response.read(64_001)
+                      body = data.decode('utf-8-sig', errors='replace')
+                      headers = body.splitlines()
+                      summary = {'type':kind, 'http_status':response.status,
+                                 'bytes':len(data), 'not_html':not body.lstrip().startswith('<'),
+                                 'has_data_header':headers[0].strip()=='data=' if headers else False,
+                                 'lines':len(headers)}
+                      if response.status == 200 and len(data) <= 64000 and summary['has_data_header']:
+                          bodies[kind] = body
+              except HTTPError as e:
+                  summary = {'type':kind,'http_status':e.code,'blocked_or_not_found':True}
+              except (URLError, TimeoutError) as e:
+                  summary = {'type':kind,'network_error':type(e).__name__}
+              print(json.dumps(summary))
+          if set(bodies) == {'stt', 'tkz'}:
+              spec = importlib.util.spec_from_file_location(
+                  'independent_probe', Path('services/exhibition-bridge/collector.py'))
+              module = importlib.util.module_from_spec(spec)
+              spec.loader.exec_module(module)
+              try:
+                  boats = module.assemble(bodies['stt'], bodies['tkz'])
+                  print(json.dumps({'parser':'success',
+                                    'boat_count':len(boats),
+                                    'unique_courses':len({b['course'] for b in boats}),
+                                    'complete_st':sum(b['exhibition_st'] is not None for b in boats),
+                                    'complete_time':sum(b['exhibition_time'] is not None for b in boats),
+                                    'f_flags':sum(b['exhibition_f'] for b in boats),
+                                    'result_payout_data_present':False}))
+              except module.InvalidPreview as exc:
+                  print(json.dumps({'parser':'rejected','reason':str(exc)}))
+          else:
+              print(json.dumps({'parser':'not_run','reason':'source_not_complete'}))
+          PY

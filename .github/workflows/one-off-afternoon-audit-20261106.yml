@@ -1,0 +1,33 @@
+name: One-shot Nov 5-6 BOAT LAB afternoon performance audit
+
+on:
+  push:
+    branches:
+      - analysis/noon-performance-20261105-06
+    paths:
+      - .github/workflows/one-off-afternoon-audit-20261106.yml
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/forecast_audit.py
+            /scripts/one_off_afternoon_audit_20261106.py
+            /app/data/live/2026-11-05.json
+            /app/data/live/2026-11-06.json
+            /.github/workflows/one-off-afternoon-audit-20261106.yml
+      - name: Audit immutable 5 Nov and 6 Nov before/after 12 JST
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s app/data/live/2026-11-05.json
+          test -s app/data/live/2026-11-06.json
+          python -m scripts.one_off_afternoon_audit_20261106

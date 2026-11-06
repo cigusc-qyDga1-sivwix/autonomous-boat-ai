@@ -1,0 +1,63 @@
+name: WEATHER LAB independent JMA tide predictions
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'weather_lab/jma_tide.py'
+      - 'weather_lab/tests/test_jma_tide.py'
+      - '.github/workflows/weather-lab-tide.yml'
+  schedule:
+    # JST 05:23 daily; astronomical tide predictions do not need five-minute polling.
+    - cron: '23 20 * * *'
+permissions:
+  contents: write
+concurrency:
+  group: weather-lab-independent-collector
+  cancel-in-progress: false
+jobs:
+  tide:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate tide text parser and current-flow provenance
+        run: python -m unittest discover -s weather_lab/tests -p 'test_jma_tide.py' -v
+      - name: Download official JMA station-specific tide predictions
+        run: python -m weather_lab.jma_tide --out "$RUNNER_TEMP/jma-tide-latest.json"
+      - name: Publish to independent WEATHER LAB data branch
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          set -euo pipefail
+          DAY="$(TZ=Asia/Tokyo date +%F)"
+          DATA_DAY="$(python -c 'import json,os;print(json.load(open(os.environ["RUNNER_TEMP"]+"/jma-tide-latest.json"))["event_date"])')"
+          if [ "$DAY" != "$DATA_DAY" ]; then
+            echo '::warning::JST date changed during tide collection; skip publication'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for attempt in 1 2 3; do
+            git fetch origin +refs/heads/weather-lab-data:refs/remotes/origin/weather-lab-data
+            git checkout -q -B weather-lab-data origin/weather-lab-data
+            mkdir -p weather_lab/data/tide
+            cp "$RUNNER_TEMP/jma-tide-latest.json" weather_lab/data/tide/latest.json
+            cp "$RUNNER_TEMP/jma-tide-latest.json" "weather_lab/data/tide/$DAY.json"
+            git add weather_lab/data/tide/
+            if git diff --cached --quiet; then
+              echo 'JMA tide reference already current'; break
+            fi
+            git commit -m "weather: JMA tide reference station predictions $DAY"
+            if git push origin HEAD:refs/heads/weather-lab-data; then
+              echo 'JMA tide predictions saved; main forecasts untouched'; break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo '::error::JMA tide reference branch update failed'
+              exit 1
+            fi
+            sleep 2
+          done

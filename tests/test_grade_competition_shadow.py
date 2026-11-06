@@ -15,7 +15,7 @@ def rows(close=True):
 
 
 def outcomes():
-    weights = {i: 1/(i**1.2) for i in range(1, 7)}
+    weights = {i: 1/(i**1.8) for i in range(1, 7)}
     triples = []
     for a,b,c in permutations(range(1, 7), 3):
         triples.append(("-".join(map(str,(a,b,c))), weights[a]*weights[b]*weights[c]))

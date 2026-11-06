@@ -126,3 +126,11 @@ Open-Meteo JMA APIは気象庁MSM/GSMモデルの第三者配信で、アメダ�
 収集頻度は30分ごと、24時間。非商用・出典表示を守る。
 WeathernewsのWxTech APIには契約時のキーが必要で、現時点は未接続。
 正式予想・買い目・結果は変更せず、あくまでも補正研究に利用する。
+
+## 場内波高のみに切り替え（2026-11-06以降）
+- BOATRACE CSVに風速・風向・気温・水温が含まれていても保存しない。場内から保存するのは **波高（cm）のみ**。
+- 風速・風向・気温は独立した近隣JMAモデル予報に一本化。場内実測と呼ばない。
+- `forward_freeze.py` は波高だけを締切前に固定。過去の記録と正式予想は不変。
+- 別系統：気象庁の公開テキスト `https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{year}/{station}.txt` を読み、東京(TK)・大阪(OS)・洲本(ST)の**参照地点の天文潮位予測**（毎時潮位・満潮・干潮）を保存。`weather_lab/data/tide/latest.json`（別ブランチ）。**レース場と検潮地点は未対応づけであり、場内水位ではない**。
+- 海上保安庁の海しるAPIには潮流推算が存在するが、サブスクリプションキーと場別の適用範囲が必要。現時点は**流速・流向未取得**、潮位の時系列から潮流を推定しない。
+- 出典：気象庁の潮位データ仕様 https://www.data.jma.go.jp/kaiyou/db/tide/suisan/readme.html 、海しるAPI https://portal.msil.go.jp/msil-api-list

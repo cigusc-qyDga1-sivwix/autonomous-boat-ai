@@ -31,6 +31,8 @@ class WeatherLabTests(unittest.TestCase):
         self.assertEqual(snapshot["venues"][9]["name"], "三国")
         self.assertEqual(snapshot["venues"][9]["monitor_status"], "stale_observation")
         self.assertTrue(all(v["tide"]["height_cm"] is None for v in snapshot["venues"]))
+        self.assertEqual(snapshot["scope"]["onsite_fields_collected"], ["wave_cm"])
+        self.assertEqual(snapshot["races"][0]["weather"], {"wave_cm": 2.0})
         self.assertTrue(snapshot["scope"]["no_formal_forecast_integration"])
 
     def test_weather_observation_age_is_not_the_source_age(self):
@@ -60,7 +62,7 @@ class WeatherLabTests(unittest.TestCase):
 
     def test_zero_wind_undefined_direction_not_outage(self):
         rec = build(HEADER + csv_row(clock="0930", wind="0", direction=""), NOW, DAY)["races"][0]
-        self.assertEqual(rec["weather"]["wind_direction_status"], "calm_undefined")
+        self.assertEqual(rec["weather"], {"wave_cm": 2.0})
         self.assertEqual(rec["freshness_status"], "fresh_snapshot")
 
     def test_invalid_venue_and_wrong_date_are_rejected(self):
@@ -108,9 +110,19 @@ class WeatherLabTests(unittest.TestCase):
 
     def test_missing_wind_not_replaced_by_guess(self):
         rec = build(HEADER + csv_row(wind="", clock="0930"), NOW, DAY)["races"][0]
+        self.assertEqual(rec["freshness_status"], "fresh_snapshot")
+        self.assertEqual(rec["weather"], {"wave_cm": 2.0})
+
+    def test_on_site_wave_only_even_when_other_csv_fields_present(self):
+        rec = build(HEADER + csv_row(clock="0930", wind="20", direction="7", wave="9"), NOW, DAY)["races"][0]
+        self.assertEqual(rec["weather"], {"wave_cm": 9.0})
+        self.assertNotIn("wind_mps", rec["weather"])
+        self.assertNotIn("air_c", rec["weather"])
+        self.assertEqual(rec["weather_advisory"]["signals"], ["wave_ge_5cm"])
+
+    def test_missing_wave_incomplete_even_when_wind_available(self):
+        rec = build(HEADER + csv_row(clock="0930", wave=""), NOW, DAY)["races"][0]
         self.assertEqual(rec["freshness_status"], "incomplete_values")
-        self.assertIsNone(rec["weather"]["wind_mps"])
-        self.assertEqual(rec["weather"]["wind_direction_status"], "present_unmapped")
 
     def test_fixture_writes_only_independent_namespace(self):
         with tempfile.TemporaryDirectory() as tmp:

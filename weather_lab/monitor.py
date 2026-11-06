@@ -1,4 +1,4 @@
-"""WEATHER LAB v0.1: independent, read-only water-surface weather monitor.
+"""WEATHER LAB: independent, read-only ON-SITE WAVE-HEIGHT monitor.
 
 This is deterministic source collection and quality monitoring, not a trained AI.
 It never imports BOAT LAB prediction code or writes to app/data/.
@@ -94,19 +94,16 @@ def _row(record, day, now, invalid):
         invalid["future_source_timestamp"] += 1
         return None
     observation = _observed_at(day, record.get("気象観測時刻", ""), source_at)
-    wind = _num(record.get("風速(m)"), 0, 70)
+    # Privacy/provenance boundary: the on-site feed is ingested for wave height ONLY.
+    # Wind/temperature come exclusively from independent regional sources.
     wave = _num(record.get("波の高さ(cm)"), 0, 150)
-    raw_direction = _num(record.get("風向"), 0, 360, integer=True)
-    air = _num(record.get("気温(℃)"), -40, 60)
-    water = _num(record.get("水温(℃)"), -10, 45)
-    weather_code = _num(record.get("天候"), 0, 100, integer=True)
     captured_age = round((now - source_at).total_seconds() / 60, 1)
     observed_age = (round((now - observation.astimezone(UTC)).total_seconds() / 60, 1)
                     if observation else None)
     source_capture_stale = captured_age > SOURCE_AGE_ALERT_MINUTES
     weather_observation_stale = (observed_age is not None and
                                   observed_age > WEATHER_AGE_ALERT_MINUTES)
-    if wind is None or wave is None:
+    if wave is None:
         status = "incomplete_values"
     elif observation is None or observed_age is None or observed_age < -0.5:
         status = "observation_time_unverified"
@@ -116,18 +113,10 @@ def _row(record, day, now, invalid):
         status = "stale_source_capture"
     else:
         status = "fresh_snapshot"
-    calm = wind == 0 and raw_direction is None
     return {
         "race_code": code, "venue_code": f"{venue:02d}", "venue": VENUES[venue - 1],
         "race": race, "cutoff_jst": record.get("締切時刻"),
-        "weather": {
-            "wind_mps": wind, "wind_direction_raw_code": raw_direction,
-            "wind_direction_status": "calm_undefined" if calm else
-                                     "present_unmapped" if raw_direction is not None else
-                                     "missing_noncalm",
-            "wave_cm": wave, "weather_raw_code": weather_code,
-            "air_c": air, "water_c": water,
-        },
+        "weather": {"wave_cm": wave},
         "source_captured_at_jst": source_at.astimezone(JST).isoformat(),
         "weather_observed_at_jst": observation.isoformat() if observation else None,
         "weather_date_inferred_from_race_day": observation is not None,
@@ -137,7 +126,7 @@ def _row(record, day, now, invalid):
         "weather_observation_stale": weather_observation_stale,
         "freshness_status": status,
         "forecast_eligible": False,
-        "weather_advisory": assess_venue(f"{venue:02d}", wind, wave, status),
+        "weather_advisory": assess_venue(f"{venue:02d}", None, wave, status),
     }
 
 
@@ -191,6 +180,9 @@ def build(csv_text, at, day, *, source_url=None, fetch_error=None):
                                             "ok" if races else "ok_empty",
                      "fetch_error_type": fetch_error},
         "scope": {"venues_monitored": 24, "forecast_scope_excludes_edogawa": True,
+                  "onsite_fields_collected": ["wave_cm"],
+                  "wind_and_temperature_from_separate_regional_provider": True,
+                  "tide_and_current_from_separate_sources": True,
                   "race_based_snapshot_not_continuous_sensor": True,
                   "no_formal_forecast_integration": True},
         "freshness_thresholds_research_only": {
@@ -205,16 +197,15 @@ def build(csv_text, at, day, *, source_url=None, fetch_error=None):
             "stale_capture_races": sum(r["source_capture_stale"] for r in races),
             "incomplete_races": status_counts["incomplete_values"],
             "time_unverified_races": status_counts["observation_time_unverified"],
-            "calm_without_direction": sum(r["weather"]["wind_direction_status"] == "calm_undefined"
-                                          for r in races),
+            "calm_without_direction": 0,  # Legacy schema field; wind is no longer collected here.
             "rejected_rows": dict(invalid),
         },
         "venues": venues, "races": races,
         "warnings": [
             "A snapshot is NOT a continuously sampled weather station. No racing venues may be open now.",
             "Observed HHMM date was inferred from the race day; never use it to backdate live acquisition.",
-            "Wind direction codes are raw source values, not headwind/tailwind.",
-            "Tide level/current not obtained. Do not infer a numeric value or stage.",
+            "On-site collection is wave height only; wind and air temperature are regional model context.",
+            "Tide level/current must come from separate coastal sources; unavailable is not zero.",
             "BOAT LAB's formal predictions, frozen hashes and settlements are unchanged.",
         ],
     }

@@ -4,6 +4,8 @@
   const DATA_URL="https://raw.githubusercontent.com/cigusc-qyDga1-sivwix/autonomous-boat-ai/weather-lab-data/weather_lab/data/latest.json";
   const SCHEMA="weather_lab.water_surface_monitor.v1";
   const REGIONAL_SCHEMA="weather_lab.regional_jma_forecast.v1";
+  const TIDE_SCHEMA="weather_lab.jma_tide_reference.v1";
+  const TIDE_URL="https://raw.githubusercontent.com/cigusc-qyDga1-sivwix/autonomous-boat-ai/weather-lab-data/weather_lab/data/tide/latest.json";
   const REGIONAL_URL="https://raw.githubusercontent.com/cigusc-qyDga1-sivwix/autonomous-boat-ai/weather-lab-data/weather_lab/data/regional/latest.json";
   const VENUES=["桐生","戸田","江戸川","平和島","多摩川","浜名湖","蒲郡","常滑",
    "津","三国","びわこ","住之江","尼崎","鳴門","丸亀","児島",
@@ -17,7 +19,7 @@
   const ageMinutes=(at,now)=>{let t=Date.parse(at||"");return Number.isFinite(t)?Math.round((now-t)/60000*10)/10:null;};
   function quality(row,now=Date.now()){
     if(!row)return "missing";
-    if(num(row.weather?.wind_mps)===null||num(row.weather?.wave_cm)===null)return "incomplete";
+    if(num(row.weather?.wave_cm)===null)return "incomplete";
     const obs=ageMinutes(row.weather_observed_at_jst,now);
     const src=ageMinutes(row.source_captured_at_jst,now);
     if(obs===null||src===null||obs < -1||src < -1)return "unknown";
@@ -57,15 +59,15 @@
   function displayLabel(q){return labels[q]||labels.unknown;}
   function renderVenueCard(item,selected){
     const v=item.venue,row=item.row,q=item.quality,chip=displayLabel(q);
-    const wind=row?UNIT_VALUE(row.weather?.wind_mps,""):"—";
+
     const wave=row?UNIT_VALUE(row.weather?.wave_cm,""):"—";
     const note=row?"最新："+row.race+"R・観測 "+shortTime(row.weather_observed_at_jst):
       q==="failed"?"取得元への接続を確認":"対象日の記録なし";
     return '<button type="button" class="venue-card is-'+esc(q)+(selected===v.code?' selected':'')+'" data-venue="'+esc(v.code)+'" aria-pressed="'+String(selected===v.code)+'">'+
       '<span class="card-head"><span><span class="venue-id">VENUE '+esc(v.code)+'</span><h3>'+esc(v.name)+'</h3></span>'+
       '<span class="status-chip '+esc(chip[1])+'">場内 '+esc(chip[0])+'</span></span>'+
-      '<span class="venue-metrics"><span class="venue-metric"><small>風速</small><strong>'+esc(wind)+'<span>m/s</span></strong></span>'+
-      '<span class="venue-metric"><small>波高</small><strong>'+esc(wave)+'<span>cm</span></strong></span></span>'+
+      '<span class="venue-metrics"><span class="venue-metric"><small>場内波高</small><strong>'+esc(wave)+'<span>cm</span></strong></span>'+
+      '</span>'+
       '<span class="card-foot"><span>'+esc(note)+'</span><strong>'+item.rows.length+'R</strong></span>'+
       (v.code==="03"?'<span class="scope-note">BOAT LABの予想対象外</span>':'')+
       (item.regional?'<span class="regional-forecast"><span class="regional-caption">近隣JMAモデル予報（場内実測ではない）</span>'+
@@ -79,22 +81,21 @@
     const sourceAge=ageMinutes(row.source_captured_at_jst,now),obsAge=ageMinutes(row.weather_observed_at_jst,now);
     const flags=[
       q==="fresh"?'<span class="flag good">暫定鮮度基準内</span>':'<span class="flag">古い記録は現在の状況を示しません</span>',
-      row.weather?.wind_direction_status==="calm_undefined"?'<span class="flag">無風：風向未設定</span>':'',
-      row.weather?.wind_direction_status==="missing_noncalm"?'<span class="flag">風向コード欠損</span>':'',
+
+
       q==="fresh"&&row.weather_advisory?.status==="attention"?'<span class="flag">気象注意・研究用：'+esc((row.weather_advisory.alerts||[]).join("／"))+'</span>':'',
     ].join("");
     return '<article class="race-card"><div class="race-row"><strong>'+esc(row.race)+'R</strong>'+
       '<span class="status-chip '+esc(chip[1])+'">'+esc(chip[0])+'</span><small>締切 '+esc(row.cutoff_jst||"不明")+'</small></div>'+
-      '<div class="race-readings"><div class="race-reading"><span>風速</span><strong>'+esc(UNIT_VALUE(row.weather?.wind_mps,""))+'<em>m/s</em></strong></div>'+
-      '<div class="race-reading"><span>波高</span><strong>'+esc(UNIT_VALUE(row.weather?.wave_cm,""))+'<em>cm</em></strong></div>'+
-      '<div class="race-reading"><span>風向コード</span><strong>'+esc(num(row.weather?.wind_direction_raw_code)??"—")+'</strong></div></div>'+
+      '<div class="race-readings">'+
+      '<div class="race-reading"><span>場内波高</span><strong>'+esc(UNIT_VALUE(row.weather?.wave_cm,""))+'<em>cm</em></strong></div>'+
+      '</div>'+
       '<div class="flags">'+flags+'</div>'+
       '<div class="race-time">気象観測：'+esc(shortTime(row.weather_observed_at_jst))+
       (obsAge!==null?'（'+esc(obsAge)+'分前）':'')+
       '<br>元データ取得：'+esc(shortTime(row.source_captured_at_jst))+
       (sourceAge!==null?'（'+esc(sourceAge)+'分前）':'')+
-      '<br>気温：'+esc(UNIT_VALUE(row.weather?.air_c,"℃"))+
-      '／水温：'+esc(UNIT_VALUE(row.weather?.water_c,"℃"))+'</div></article>';
+      '<br>場内データは波高のみ。風・気温は近隣モデル予報を参照。</div></article>';
   }
   function renderDetail(item,doc,now){
     if(!item)return '<div class="detail-empty"><span aria-hidden="true">↗</span><h2>レース場を選択</h2><p>場をタップすると、1〜12Rの風・波・観測時刻を確認できます。</p></div>';
@@ -115,13 +116,24 @@
       (rows.length?'<div class="detail-list">'+rows.map(r=>renderRace(r,now)).join("")+'</div>':
         '<div class="no-results">この日のレース別気象記録はありません。未開催・公開前・提供元欠損は区別して監査中です。</div>');
   }
-  const api={quality,ageMinutes,dayJST,summary,venueView,regionalEntry,latestRow,renderVenueCard,renderRace,renderDetail,esc};
+  function tidePanel(doc,now=Date.now()){
+    if(doc?.schema!==TIDE_SCHEMA||doc.event_date!==dayJST(now)||!Array.isArray(doc.stations)||!doc.stations.length)
+      return '<h2>潮位・潮流（独立データ）</h2><p>潮位は未取得。潮流の流速・流向は未接続です。</p>';
+    const trusted={TK:"東京",OS:"大阪",ST:"洲本"};
+    const stations=doc.stations.filter(x=>trusted[x.station_code]===x.station_name);
+    const row=x=>x.map(t=>t.time_jst+" "+t.height_cm_datum+"cm").join("・")||"未取得";
+    return '<h2>気象庁・参照地点の潮位予測</h2><p>天文潮位の予測です。レース場内の水位・潮流ではありません。</p>'+
+      '<div class="info-grid">'+stations.map(st=>'<div><strong>'+esc(st.station_name)+'（参照地点）</strong>'+
+        '<p>満潮 '+esc(row(st.high_tides||[]))+'</p><p>干潮 '+esc(row(st.low_tides||[]))+'</p></div>').join("")+'</div>'+
+      '<p>潮流の流速・流向：未取得。海上保安庁の潮流推算との地点対応・API認証を確認中。潮位から潮流を推定しません。</p>';
+  }
+  const api={quality,ageMinutes,dayJST,summary,venueView,regionalEntry,tidePanel,latestRow,renderVenueCard,renderRace,renderDetail,esc};
   if(typeof module!=="undefined"&&module.exports)module.exports=api;
   if(!root.document)return;
 
   const D=root.document;
   const $=id=>D.getElementById(id);
-  const state={doc:null,regional:null,regionalError:null,filter:"all",search:"",selected:null,loading:false,error:null};
+  const state={doc:null,regional:null,tide:null,regionalError:null,tideError:null,filter:"all",search:"",selected:null,loading:false,error:null};
   function setToast(msg){
     const toast=$("toast");
     toast.textContent=msg;toast.classList.add("show");
@@ -151,7 +163,7 @@
       health.classList.add(regionalCount?"is-stale":"is-error");
       health.textContent=regionalCount?"広域予報 "+regionalCount+"場取得":"取得元・通信エラー";
       alert.textContent=regionalCount?
-        "場内の風・波は未取得ですが、近隣JMAモデル予報を"+regionalCount+"場で表示しています。カードの予報は場内実測ではありません。":
+        "場内波高は未取得ですが、近隣JMAモデル予報を"+regionalCount+"場で表示しています。カードの予報は場内実測ではありません。":
         "場内実測と広域予報を確認できません。推測で補いません。"+
           (state.regionalError?" 広域予報："+state.regionalError:"");
     }else if(stats.age===null||stats.age>15||stats.fresh===0){
@@ -159,10 +171,10 @@
       health.textContent=regionalCount?"広域予報 "+regionalCount+"場取得":"過去の観測データ";
       alert.textContent="場内の新鮮な実測は"+stats.fresh+"件。"+
         (regionalCount?"近隣JMAモデル予報は"+regionalCount+"場で確認できます（場内実測ではありません）。":
-        "古いレース別記録を現在の風・波として使用しないでください。");
+        "古い波高記録を現在の水面状況として使用しないでください。");
     }else{
       health.textContent="場内観測 "+stats.fresh+"件";
-      alert.textContent="場内の新鮮な観測"+stats.fresh+"件／近隣モデル予報"+regionalCount+"場。実測と予報は別のデータです。";
+      alert.textContent="場内の新鮮な波高"+stats.fresh+"件／近隣モデル予報"+regionalCount+"場。実測と予報は別のデータです。";
     }
     const items=(doc?doc.venues.map(v=>venueView(v,doc,now)):VENUES.map((name,i)=>
       venueView({name,code:String(i+1).padStart(2,"0"),race_snapshots:0},{provider:{fetch_status:state.error?"unavailable":"ok"},races:[]},now)))
@@ -178,6 +190,7 @@
     $("venues").innerHTML=filtered.length?filtered.map(v=>renderVenueCard(v,state.selected)).join(""):
       '<div class="no-results">該当するレース場はありません。絞り込みを変更してください。</div>';
     $("detail").innerHTML=renderDetail(items.find(it=>it.venue.code===state.selected)||null,doc||{event_date:"—"},now);
+    if($("tide-reference"))$("tide-reference").innerHTML=tidePanel(state.tide,now);
   }
   async function reload(manual=false){
     if(state.loading)return;
@@ -207,6 +220,13 @@
       }catch(err){
         state.regionalError=String(err?.message||err);
       }
+      try{
+        const response=await root.fetch(TIDE_URL+"?ts="+Date.now(),{cache:"no-store"});
+        if(!response.ok)throw new Error("潮位HTTP "+response.status);
+        const tide=await response.json();
+        if(tide?.schema!==TIDE_SCHEMA||!Array.isArray(tide.stations))throw new Error("潮位形式不正");
+        state.tide=tide;state.tideError=null;
+      }catch(err){state.tideError=String(err?.message||err);}
       state.loading=false;$("refresh").disabled=false;render();
     }
   }
@@ -227,7 +247,7 @@
   D.addEventListener("visibilitychange",()=>{if(!D.hidden)reload();});
   root.setInterval(()=>{if(!D.hidden)reload();},60_000);
   if("serviceWorker" in root.navigator)root.addEventListener("load",()=>{
-    root.navigator.serviceWorker.register("./service-worker.js?v=2",{scope:"./",updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{});
+    root.navigator.serviceWorker.register("./service-worker.js?v=3",{scope:"./",updateViaCache:"none"}).then(reg=>reg.update()).catch(()=>{});
   });
   reload();
 })(typeof window!=="undefined"?window:globalThis);

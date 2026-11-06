@@ -1,6 +1,6 @@
 // Standalone WEATHER LAB PWA shell; never cache the cross-origin weather feed.
 const PREFIX="weather-lab-shell-";
-const CACHE=PREFIX+"v2";
+const CACHE=PREFIX+"v3";
 const SHELL=["./","./index.html","./weather.css","./weather.js","./manifest.webmanifest","./icon.svg"];
 self.addEventListener("install",event=>event.waitUntil(
  caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting())

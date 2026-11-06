@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0a2635">
-  <meta name="description" content="WEATHER LAB｜全国24ボートレース場の風・波・気象観測時刻を独立監視">
+  <meta name="description" content="WEATHER LAB｜全国24場の場内波高・周辺風・独立潮位予測を分離監視">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="WEATHER LAB">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="./icon.svg">
-  <link rel="stylesheet" href="./weather.css?v=2">
+  <link rel="stylesheet" href="./weather.css?v=3">
   <title>WEATHER LAB｜全国24場の水面気象監視</title>
 </head>
 <body>
@@ -35,7 +35,7 @@
         <div class="hero-content">
           <span class="eyebrow">BOAT RACE WEATHER OBSERVATORY</span>
           <h1>全国24場の<br><em>水面コンディション</em>をひと目で。</h1>
-          <p>風・波・観測時刻を独立監視。予想ではなく、確認済みのデータと鮮度を見える化します。</p>
+          <p>場内は波高だけ。風と気温は近隣モデル、潮位は気象庁の参照地点から別取得します。</p>
           <div class="hero-meta">
             <span id="source-health" class="hero-tag">データ確認中</span>
             <span id="updated-label">最終取得：確認中</span>
@@ -51,13 +51,13 @@
         <div class="stat-card accent"><div class="stat-label">近隣JMAモデル予報</div><div class="stat-value" id="stat-regional">—</div><span class="stat-note" id="stat-regional-note">広域予報の取得待ち</span></div>
         <div class="stat-card"><div class="stat-label">データがある場</div><div class="stat-value" id="stat-venues">—</div><span class="stat-note" id="stat-venue-note">本日の記録</span></div>
         <div class="stat-card"><div class="stat-label">取得レース</div><div class="stat-value" id="stat-races">—</div><span class="stat-note">スナップショット</span></div>
-        <div class="stat-card accent"><div class="stat-label">現在も新鮮な観測</div><div class="stat-value" id="stat-fresh">—</div><span class="stat-note">風・波の観測時刻から判定</span></div>
+        <div class="stat-card accent"><div class="stat-label">現在も新鮮な観測</div><div class="stat-value" id="stat-fresh">—</div><span class="stat-note">波高の観測時刻から判定</span></div>
       </section>
 
       <section class="alert" id="data-alert" role="status" aria-live="polite">取得元への接続状況を確認しています。</section>
 
       <section class="main-panel">
-        <div class="panel-heading"><div><span class="section-kicker">VENUE MONITOR</span><h2>全国の水面状況</h2><p>各カードで「近隣JMAモデル予報」と「レース場内実測」を区別。場内実測が0件でも近隣予報を表示します。</p></div><span class="update-frequency">約5分ごとに収集を試行</span></div>
+        <div class="panel-heading"><div><span class="section-kicker">VENUE MONITOR</span><h2>全国の水面状況</h2><p>各カードで「近隣JMAモデル予報」と「場内波高」を区別。波高が0件でも近隣予報を表示します。</p></div><span class="update-frequency">約5分ごとに収集を試行</span></div>
         <div class="toolbar">
           <div class="filters" id="filters" role="group" aria-label="場の表示を絞り込む">
             <button type="button" data-filter="all" class="active" aria-pressed="true">全24場</button>
@@ -72,25 +72,26 @@
       </section>
 
       <section class="detail-panel" id="detail" aria-live="polite">
-        <div class="detail-empty"><span aria-hidden="true">↗</span><h2>レース場を選択</h2><p>場をタップすると、1〜12Rの風・波・観測時刻を確認できます。</p></div>
+        <div class="detail-empty"><span aria-hidden="true">↗</span><h2>レース場を選択</h2><p>場をタップすると、1〜12Rの場内波高と周辺予報を確認できます。</p></div>
       </section>
 
+      <section class="info-panel" id="tide-reference" aria-label="独立した潮位・潮流データ"><h2>潮位・潮流（別情報源）</h2><p>潮位データ取得中。潮流は未接続です。</p></section>
       <section class="info-panel">
         <div><span class="section-kicker">READ THE DATA</span><h2>データの見方</h2></div>
         <div class="info-grid">
-          <div><strong>風・波</strong><p>BOATRACE由来のレース別記録。風向は未検証の生コードで、向かい風・追い風の判定は行いません。</p></div>
+          <div><strong>場内波高</strong><p>BOATRACE系から収集するのは波高だけ。風や気温は近隣JMA数値モデル予報を別表示します。</p></div>
           <div><strong>鮮度</strong><p>観測後20分・元データ取得後15分を超えた場合は注意表示。閾値は研究用の暫定値です。</p></div>
-          <div><strong>潮位・潮流</strong><p>現在は未接続。潮位ゼロや潮流ゼロとは扱わず、観測地点を検証できるまで「未取得」です。</p></div>
+          <div><strong>潮位・潮流</strong><p>潮位は気象庁の参照地点での天文潮位予測を独立取得。潮流の速さ・向きは海上保安庁データの地点対応と認証を確認するまで未取得。</p></div>
         </div>
       </section>
     </main>
 
     <footer class="footer">
-      <span>WEATHER LAB v0.3 ・ 独立監視 / 予想への自動反映なし</span>
+      <span>WEATHER LAB v0.4 ・ 独立監視 / 予想への自動反映なし</span>
       <div><span>iPhone：Safariの共有メニュー →「ホーム画面に追加」</span><a href="../index.html">BOAT LABに戻る</a></div>
     </footer>
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="./weather.js?v=2" defer></script>
+  <script src="./weather.js?v=3" defer></script>
 </body>
 </html>

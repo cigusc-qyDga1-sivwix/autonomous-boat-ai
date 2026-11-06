@@ -129,7 +129,8 @@
     const section=root.document.createElement('div');
     section.className='weather-lab-bridge-host';
     section.textContent='🌊 WEATHER LAB：波高・広域風・潮位データを照合中…';
-    main.appendChild(section);
+    // Keep the context visible near the race heading, not below a long ticket list.
+    main.insertBefore(section,main.firstElementChild?.nextSibling||null);
     const code=nameCode(race.venue);
     if(!code){section.textContent='WEATHER LAB：このレース場は未対応';return;}
     const feeds=await load(day);

@@ -804,6 +804,7 @@
     if(state.view==='races'&&state.raceDetail){
       window.BoatRaceVisual?.mount(main,state.raceDetail);
       void window.BoatStatisticalShadow?.mount(main,state.raceDetail,data.event_date);
+      void window.BoatWeatherLabLink?.mount(main,state.raceDetail,data.event_date);
     }
     else window.BoatRaceVisual?.dispose();
   }

@@ -42,6 +42,8 @@ function rows(races,ctx,nowMs=Date.now()){
      virtualProfit:official?c.profit:null,
      virtualRefund:official?c.virtualRefund||0:0,
      voidRace:official?.void_trifecta===true,
+     refundBoats:Array.isArray(official?.refunded_boats)?official.refunded_boats:[],
+     refundReasons:official?.refund_reasons||{},
      stake:c.stake,hasForecast:Array.isArray(r.bets)&&r.bets.length>0};
  }).sort((a,b)=>(a.cutoffMs||Infinity)-(b.cutoffMs||Infinity));
 }
@@ -51,7 +53,7 @@ function summary(rows){
    total:rows.length,official:done.length,
    hit:done.filter(x=>x.hit).length,
    miss:done.filter(x=>!x.hit&&!x.voidRace).length,
-   refunded:done.filter(x=>x.virtualRefund>0).length,
+   refunded:done.filter(x=>x.refundBoats.length>0).length,
    awaiting:rows.filter(x=>x.status==='awaiting').length,
    issues:rows.filter(x=>x.status==='issue').length,
    upcoming:rows.filter(x=>x.status==='upcoming').length,
@@ -66,7 +68,7 @@ function sortedFor(board,filter){
    case 'verified':return past.filter(x=>x.status==='verified');
    case 'hit':return past.filter(x=>x.status==='verified'&&x.hit);
    case 'miss':return past.filter(x=>x.status==='verified'&&!x.hit&&!x.voidRace);
-   case 'refund':return past.filter(x=>x.status==='verified'&&x.virtualRefund>0);
+   case 'refund':return past.filter(x=>x.status==='verified'&&x.refundBoats.length>0);
    case 'issue':return past.filter(x=>x.status==='issue');
    default:return past.concat(upcoming);
  }
@@ -74,7 +76,7 @@ function sortedFor(board,filter){
 function label(x){
  if(x.status==='verified'){
    if(x.voidRace)return '公式・全額返還';
-   return (x.hit?'公式的中':'公式不的中')+(x.virtualRefund>0?'＋返還':'');
+   return (x.hit?'公式的中':'公式不的中')+(x.refundBoats.length?'＋返還':'');
  }
  if(x.status==='issue')return '要確認';
  if(x.status==='draft')return '仮入力・未確定';
@@ -137,6 +139,8 @@ function render(races,ctx,opt={}){
      '<span class="quick-results-result-label">結果</span>'+
      '<strong class="quick-results-combo">'+esc(x.finish||'3連単不成立')+'</strong>'+
      moneyCell('quick-results-value',x.voidRace?'3連単不成立':'100円払戻',x.voidRace?'返還':yen(x.payout100))+
+     (x.refundBoats.length?moneyCell('quick-results-value','返還艇',
+        x.refundBoats.map(n=>String(n)+(x.refundReasons[n]||'返還')).join('・')):'')+
      (x.virtualRefund>0?moneyCell('quick-results-value','返還金',yen(x.virtualRefund)):'')+
      moneyCell('quick-results-value','仮想投資',yen(x.stake))+
      moneyCell('quick-results-profit '+(x.virtualProfit>=0?'is-positive':'is-negative'),'仮想収支',signedYen(x.virtualProfit))+
@@ -168,6 +172,7 @@ function render(races,ctx,opt={}){
    const explanation=x.status==='verified'?
      ('公式着順 '+(x.finish||'不成立')+
       (x.voidRace?' ／ 全額返還':(' ／ 3連単払戻 '+yen(x.payout100)+'/100円 ／ '+(x.hit?'🎯 的中':'不的中')))+
+      (x.refundBoats.length?' ／ 返還艇 '+x.refundBoats.map(n=>String(n)+(x.refundReasons[n]||'返還')).join('・'):'')+
       (x.virtualRefund>0?' ／ 返還金 '+yen(x.virtualRefund):'')+
       ' ／ 仮想払戻（返還込み） '+yen(x.virtualPayout)+' ／ 仮想収支 '+signedYen(x.virtualProfit)):
      x.status==='draft'?'仮入力 '+x.finish+'。公式結果としては未計上':

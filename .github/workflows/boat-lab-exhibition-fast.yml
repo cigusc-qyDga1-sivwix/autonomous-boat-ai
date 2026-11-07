@@ -1,0 +1,95 @@
+name: BOAT LAB fast exhibition numeric capture
+
+on:
+  # This second five-minute series is offset from the primary +2-minute
+  # collector. Each cron remains >= 5 minutes; extra runs use Actions quota.
+  schedule:
+    - cron: '0-59/5 21-23 * * *'
+    - cron: '0-59/5 0-14 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    # Trigger once on deployment; never recurse on data-only source commits.
+    paths:
+      - '.github/workflows/boat-lab-exhibition-fast.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: boat-lab-fast-exhibition
+  cancel-in-progress: false
+
+jobs:
+  fetch-early-six-boat-previews:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Resolve Japanese racing date
+        id: jst
+        shell: bash
+        run: echo "day=$(TZ=Asia/Tokyo date +%F)" >> "$GITHUB_OUTPUT"
+      # The big immutable daily forecast ledger is explicitly NOT checked out.
+      # This task writes early research evidence; formal predictions remain
+      # exclusively managed by the main nationwide workflow.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/ingest_boatracecsv_exhibition.py
+            /app/data/exhibition/${{ steps.jst.outputs.day }}.json
+            /app/data/exhibition/status-latest.json
+      - name: Check current day and source safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(TZ=Asia/Tokyo date +%F)" = "${{ steps.jst.outputs.day }}"
+          test -f scripts/ingest_boatracecsv_exhibition.py
+          python3 --version
+      - name: Capture four independent numeric exhibition feeds early
+        shell: bash
+        run: |
+          set -euo pipefail
+          DAY="${{ steps.jst.outputs.day }}"
+          # Previews only: ST, exhibition times, weather, and optional
+          # original exhibition times. NEVER fetch results/payouts here.
+          python3 scripts/ingest_boatracecsv_exhibition.py \
+            --previews-only --date "$DAY"
+          python3 -m json.tool app/data/exhibition/status-latest.json >/dev/null
+      - name: Publish research capture times before next forecast cycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          DAY="${{ steps.jst.outputs.day }}"
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.name 'github-actions[bot]'
+          for attempt in 1 2 3; do
+            if [ "$(TZ=Asia/Tokyo date +%F)" != "$DAY" ]; then
+              echo "::warning::JST day changed; never backdate data"
+              exit 0
+            fi
+            git add "app/data/exhibition/$DAY.json" app/data/exhibition/status-latest.json
+            if git diff --cached --quiet; then
+              echo 'No new previews; nationwide collector continues normally'
+              exit 0
+            fi
+            git commit -m 'exhibition: early six-boat numeric source capture'
+            if git push origin HEAD:main; then
+              echo 'Early pre-cutoff exhibition capture published'
+              exit 0
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo "::error::Early exhibition publication failed after three retries"
+              exit 1
+            fi
+            # Never force-push when main's official results/forecasts changed.
+            # Reload latest files, then capture fresh measurement timestamps.
+            git fetch --depth=1 origin main
+            git reset --hard origin/main
+            python3 scripts/ingest_boatracecsv_exhibition.py \
+              --previews-only --date "$DAY"
+            python3 -m json.tool app/data/exhibition/status-latest.json >/dev/null
+          done

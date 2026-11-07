@@ -59,13 +59,25 @@ assert.match(html,/公式結果照合済み/);
 assert.match(html,/aria-valuenow="33"/);
 assert.match(html,/data-race="多摩川\|1"/);
 assert.match(html,/data-race="多摩川\|2"/);
-assert.match(html,/展示待ち/);
+assert.match(html,/正式未確定/);
 assert.match(html,/展示反映/);
 assert.match(html,/実投票|正式買い目/);
 assert.equal(JSON.stringify(data),before,'UI must never mutate forecast or official result');
 
 const noPolicy=ui.summarize(data,now,null);
 assert.equal(noPolicy.formal,0,'without proof policy, fail closed');
+const falseGate={...data,forecast_races:[
+  {...base,entry_exhibition_gate:{final_eligible:false}},
+  provisional,skipped]};
+assert.equal(ui.summarize(falseGate,now,policy).formal,0,
+  'explicit entry-exhibition failure blocks the formal dashboard claim');
+const falseInput={...data,forecast_races:[
+  {...base,exhibition_input_check:{verified_before_freeze:false}},
+  provisional,skipped]};
+assert.equal(ui.summarize(falseInput,now,policy).formal,0,
+  'explicit six-boat input audit failure blocks the formal claim');
+assert.match(ui.render({...data,forecast_races:[skipped]},now,policy),
+  /SKIP・研究用/, 'SKIP must not be described as just awaiting exhibition');
 assert.doesNotMatch(ui.render(data,now,null),/bl-desk-race-state is-formal/);
 const conflict={...data,settlement_alerts:{[day+'|多摩川|1']:{reason:'correction'}}};
 assert.equal(ui.summarize(conflict,now,policy).verified,0,'reviewed official results are not verified');

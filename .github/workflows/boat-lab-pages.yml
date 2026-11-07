@@ -6,17 +6,14 @@ on:
       - 'app/**'
       - '.github/workflows/boat-lab-pages.yml'
   workflow_dispatch:
-  workflow_run:
-    # Bot data commits do not fire push workflows. Publish after their writers finish.
-    workflows:
-      - BOAT LAB nationwide auto forecasts
-      - BOAT LAB fast official result updates
-      - BOAT LAB official result backlog reconciliation
-      - BOAT LAB nationwide intelligence research
-      - BOAT LAB Mikuni authorized video research
-      - BOAT LAB statistical training and temporal audit
-      - BOAT LAB one-off retrospective exhibition replay
-    types: [completed]
+  # Bot-owned forecast/result commits never trigger another push workflow.
+  # A moderate scheduled static publication is the fallback; the PWA now
+  # checks the actual canonical GitHub ledger every visible minute.
+  # Publishing ~860MB on every 3-5 minute data run caused >10-minute
+  # Pages syncing_files jobs and deployment failures.
+  schedule:
+    - cron: '0,15,30,45 21-23 * * *'
+    - cron: '0,15,30,45 0-14 * * *'
 permissions:
   contents: read
   pages: write
@@ -26,12 +23,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deploy:
-    if: >-
-      github.ref == 'refs/heads/main' &&
-      (github.event_name != 'workflow_run' ||
-       (github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.head_branch == 'main' &&
-        github.event.workflow_run.head_repository.full_name == github.repository))
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -44,6 +36,14 @@ jobs:
           ref: main
       - name: Record published repository revision
         run: git rev-parse HEAD
+      - name: Build lightweight, archival-safe Pages artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/build_pages_site.py --app app --out "$RUNNER_TEMP/boat-lab-pages-site"
+          test -s "$RUNNER_TEMP/boat-lab-pages-site/data/live/latest.json"
+          test -s "$RUNNER_TEMP/boat-lab-pages-site/canonical-exhibition-feed.js"
+          du -sh "$RUNNER_TEMP/boat-lab-pages-site"
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
         with:
@@ -52,7 +52,7 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
-          path: './app'
+          path: ${{ runner.temp }}/boat-lab-pages-site
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

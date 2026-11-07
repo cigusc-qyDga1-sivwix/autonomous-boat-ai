@@ -71,7 +71,10 @@ jobs:
               echo "::warning::JST day changed; never backdate data"
               exit 0
             fi
-            git add "app/data/exhibition/$DAY.json" app/data/exhibition/status-latest.json
+            git add app/data/exhibition/status-latest.json
+            if [ -f "app/data/exhibition/$DAY.json" ]; then
+              git add "app/data/exhibition/$DAY.json"
+            fi
             if git diff --cached --quiet; then
               echo 'No new previews; nationwide collector continues normally'
               exit 0

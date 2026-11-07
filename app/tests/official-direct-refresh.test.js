@@ -47,6 +47,24 @@ for(const [field,value] of [
 }
 const wrong=doc();wrong.results['16-1'].payout_per_100=999;
 assert.equal(api.merge(wrong,day,races,{}, {},late).added,0);
+const ref=doc();ref.results['16-1']={
+ finish:'1-2-3',payout_per_100:790,
+ refunded_boats:[4],refund_reasons:{4:'F'},void_trifecta:false,
+ refund_source_url:'https://www.boatrace.jp/owpc/pc/race/raceresult?rno=1&jcd=16&hd=20261025'
+};
+const refunded=api.merge(ref,day,races,{},{
+ [day+'|児島|1']:{status:'review',reason:'返還待ち'}
+},late);
+assert.equal(refunded.added,1,'verified refund resolves provisional review');
+assert.equal(refunded.results[day+'|児島|1'].refunded_boats[0],4);
+assert.equal(refunded.alerts[day+'|児島|1'],undefined);
+const voidRecord=doc();voidRecord.results['16-1']={
+ ...ref.results['16-1'],finish:null,payout_per_100:0,void_trifecta:true
+};
+assert.equal(api.merge(voidRecord,day,races,{}, {},late).results[day+'|児島|1'].void_trifecta,true);
+const invalidReturn=doc();
+invalidReturn.results['16-1']={...ref.results['16-1'],refund_source_url:'https://wrong.invalid'};
+assert.equal(api.merge(invalidReturn,day,races,{}, {},late).added,0);
 const source=JSON.stringify(races);
 api.merge(doc(),day,races,{}, {},late);
 assert.equal(JSON.stringify(races),source,'never alter bets, SHA or race input');

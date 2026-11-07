@@ -1323,14 +1323,23 @@
     const before=(data?.forecast_races||[]).filter(r=>r.phase==='exhibition').length;
     try{
       const canonical=await pollCanonicalForecast();
-      await reloadLiveIfNew();
+      // Manual action must really refetch Pages even during an official
+      // result poll (the ordinary background poll can deliberately skip).
+      let pagesOkay=false;
+      try{
+        const page=await fetchLive();
+        pagesOkay=true;
+        if(liveEvidenceRevision(page)!==liveEvidenceRevision(data))
+          acceptLiveData(page);
+      }catch(error){console.warn('Manual Pages refresh unavailable:',error?.message);}
       await window.BoatExhibitionAudit?.load(data.event_date);
       render();
       const after=(data?.forecast_races||[]).filter(r=>r.phase==='exhibition').length;
+      const upstreamOkay=canonical?.state==='applied'||canonical?.state==='same';
       const message=after>before?'展示反映済みが '+before+'R → '+after+'R に更新されたよ':
-        canonical?.state==='unavailable'||canonical?.state==='not_ready'?
-        '展示の最新確認を実行したよ。GitHub直結は未確認、公開サイトの記録を表示中':
-        '最新データを確認したよ。正式展示の追加はまだないよ';
+        !upstreamOkay&&!pagesOkay?'展示の取得元へ接続できなかったよ。保存済みの予想は維持':
+        !upstreamOkay?'公開サイトのデータを確認。GitHub直結は未確認':
+        '最新予想を確認したよ。正式展示の追加はまだないよ';
       toast(message);
     }catch(error){console.warn('Manual exhibition refresh failed:',error?.message);toast('展示の再確認に失敗。既存の固定予想は保持しているよ');}
     finally{manualExhibitionBusy=false;}

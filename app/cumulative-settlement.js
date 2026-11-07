@@ -177,7 +177,7 @@ function renderFormal(){
  if(!state.range.some(day=>state.formalDays[day]))return '<section class="card card-pad"><h2>正式買い目の累積収支</h2><p>日付別の固定記録を取得できていないため、正式収支は未集計です。</p></section>';
  const total=EMPTY();
  for(const day of state.range){const s=state.formalDays[day];if(s)for(const key of Object.keys(total))total[key]+=s[key];}
- return '<section class="card card-pad" aria-label="正式買い目の累積収支"><h2>正式買い目の累積収支</h2><p>展示反映・締切前固定 '+total.eligible+'R ／ 公式照合 '+total.checked+'R ／ 的中 '+total.hits+'R</p><p>仮想投資 '+yen(total.invested)+' ／ 仮想払戻 '+yen(total.paid)+' ／ 仮想収支 '+money(total.profit)+' ／ 回収率 '+(total.invested?(100*total.paid/total.invested).toFixed(1)+'%':'—')+'</p><p>各レースの最新の展示反映固定版だけ。暫定予想・未照合・返還・中止は正式収支に含めません。欠損日は集計対象外です。</p></section>';
+ return '<section class="card card-pad" aria-label="正式買い目の累積収支"><h2>正式買い目の累積収支</h2><p>展示反映・締切前固定 '+total.eligible+'R ／ 公式照合 '+total.checked+'R ／ 的中 '+total.hits+'R</p><p>仮想投資 '+yen(total.invested)+' ／ 仮想払戻 '+yen(total.paid)+'（返還 '+yen(total.refunded)+'）／ 仮想収支 '+money(total.profit)+' ／ 回収率 '+(total.invested?(100*total.paid/total.invested).toFixed(1)+'%':'—')+'</p><p>各レースの最新の展示反映固定版だけ。公式の返還艇が確認できた分は収支に計上。暫定予想・未照合・未確認返還・中止は正式収支に含めません。</p></section>';
 }
 function render(){
  const dates=state.range.length?state.range:daysThrough(new Date());
@@ -187,7 +187,7 @@ function render(){
  for(const day of dates){
   const d=state.days[day];
   if(!d){rows+='<tr><th scope="row">'+label(day)+'</th><td colspan="5">未取得・累積に含めない</td></tr>';continue;}
-  for(const key of ['eligible','checked','hits','invested','paid','profit'])combined[key]+=d[key];
+  for(const key of ['eligible','checked','hits','invested','paid','refunded','refundRaces','voids','profit'])combined[key]+=d[key];
   running+=d.profit;
   rows+='<tr><th scope="row">'+label(day)+'</th><td>'+d.checked+' / '+d.eligible+
    'R</td><td>'+d.hits+'R</td><td>'+yen(d.invested)+'</td><td>'+yen(d.paid)+
@@ -203,7 +203,7 @@ function render(){
   (found.length?
    '<div class="cum-total"><span>'+(completed?'累積仮想収支（当日は暫定）':'取得済み日だけの暫定累積')+
    '</span><strong class="'+(running>=0?'cum-plus':'cum-minus')+'">'+money(running)+'</strong>'+
-   '<small>仮想投資累計 '+yen(combined.invested)+' ／ 仮想払戻累計 '+yen(combined.paid)+'</small>'+
+   '<small>仮想投資累計 '+yen(combined.invested)+' ／ 仮想払戻累計 '+yen(combined.paid)+'（返還 '+yen(combined.refunded)+'）</small>'+
    '<small>公式照合 '+combined.checked+'R／対象固定 '+combined.eligible+'R · 的中 '+combined.hits+
    'R · 回収率 '+(combined.invested?(combined.paid/combined.invested*100).toFixed(1)+'%':'—')+'</small></div>':
    '<p class="notice">まだ集計できる日付別の公式照合記録がありません。</p>')+
@@ -215,7 +215,7 @@ function render(){
     Object.keys(state.errors).map(day=>label(day)+'分').join('、')+
     '。欠損日は0円として扱わず、累積から除外しています。</p>':'')+
   '<p class="help">10/22以降の日別GitHub発走前固定記録について、各レースの最新の締切前固定バージョンだけを計上。'+
-  '今日を含め公式照合済みレースだけが仮想投資と払戻の集計対象です。未照合・中止・返還・矛盾・不正データは集計せず、日付欠損を0円扱いしません。'+
+  '今日を含め公式照合済みレースだけが仮想投資と払戻の集計対象です。公式返還艇が確認できた分は返還額を収支に計上し、返還だけでは的中数を増やしません。未照合・中止・未確認返還・矛盾・不正データは集計せず、日付欠損を0円扱いしません。'+
   '旧モデルと新モデルの買い目を二重計上しません。全研究予想の仮想収支であり、実際の購入成績・正式BUY収支ではありません。</p></section>';
 }
 root.BoatCumulative={summary,overlayVerifiedPays,load,render,status,needsRefresh,daysThrough,jstDay,get dates(){return daysThrough(new Date())}};

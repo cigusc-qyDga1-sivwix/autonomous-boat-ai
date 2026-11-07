@@ -4,7 +4,7 @@
 'use strict';
 const names=['桐生','戸田','江戸川','平和島','多摩川','浜名湖','蒲郡','常滑','津','三国','びわこ','住之江','尼崎','鳴門','丸亀','児島','宮島','徳山','下関','若松','芦屋','福岡','唐津','大村'];
 const esc=x=>String(x??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-const state={day:'',map:new Map(),collected:'',checked:'',sourceOkay:null,error:'',loading:false};
+const state={day:'',map:new Map(),collected:'',checked:'',sourceOkay:null,error:'',loading:false,reasons:new Map(),auditChecked:false};
 const ORIGINAL_LABELS={'一周':'lap_time','1周':'lap_time','まわり足':'turn_time','回り足':'turn_time','直線':'straight_time'};
 const ORIGINAL_LIMITS={lap_time:[30,50],turn_time:[4,15],straight_time:[5,12]};
 function approvedMetrics(rows){
@@ -24,10 +24,25 @@ async function load(day){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return;
  state.day=day;state.loading=true;
  try{
- const [res,health]=await Promise.all([
+ const [res,health,audit]=await Promise.all([
    fetch('./data/exhibition/'+day+'.json?v='+Date.now(),{cache:'no-store'}),
-   fetch('./data/exhibition/status-latest.json?v='+Date.now(),{cache:'no-store'}).catch(()=>null)
+   fetch('./data/exhibition/status-latest.json?v='+Date.now(),{cache:'no-store'}).catch(()=>null),
+   fetch('./data/exhibition/rejection-audit-latest.json?v='+Date.now(),{cache:'no-store'}).catch(()=>null)
  ]);
+ const reasons=new Map();
+ let auditChecked=false;
+ if(audit&&audit.ok){
+  try{
+   const check=await audit.json();
+   if(check.event_date===day&&check.status==='analyzed'&&
+      check.classification==='retrospective_diagnostic_not_live_eligibility'){
+    for(const item of check.race_reasons||[]){
+     if(typeof item.race_code==='string')reasons.set(item.race_code,item);
+    }
+    auditChecked=true;
+   }
+  }catch(_) {/* An unavailable diagnostic must not break source display. */}
+ }
  if(health&&health.ok){
    const info=await health.json();
    if(info.event_date===day){state.checked=info.collected_at_utc||'';state.sourceOkay=info.complete_sources;}
@@ -38,26 +53,77 @@ async function load(day){
  const map=new Map();
  for(const r of j.records||[]){
   if(r.race_code&&Array.isArray(r.boats)&&r.boats.length===6)
-   map.set(r.race_code,{observed:r.source_observed_jst,boats:r.boats.map(b=>({
+   map.set(r.race_code,{observed:r.source_observed_jst,
+    captured:r.preview_captured_at_utc||'',cutoff:r.cutoff_jst||'',
+    boats:r.boats.map(b=>({
     lane:b.lane,course:b.course,st:b.exhibition_st,time:b.exhibition_time,
     metrics:(b.original_exhibition||[]).map(v=>v.metric+': '+v.value).join(' / '),
     original:approvedMetrics(b.original_exhibition)
    }))});
  }
- if(state.day===day){state.map=map;state.collected=j.created_at_utc;state.error='';}
- }catch(e){if(state.day===day){state.error=e.message;state.map=new Map();}}
+ if(state.day===day){state.map=map;state.reasons=reasons;state.auditChecked=auditChecked;
+  state.collected=j.created_at_utc;state.error='';}
+ }catch(e){if(state.day===day){state.error=e.message;state.map=new Map();state.reasons=new Map();state.auditChecked=false;}}
  state.loading=false;
 }
+
+// Read-only comparison of archived six-boat research against immutable live forecasts.
+// Source timestamps are NOT evidence that a formal forecast was saved.
+function diagnose(r, nowMs=Date.now()){
+ if(!r||!state.day||state.loading)return {code:'unknown',label:'展示状態を確認中',actionable:false};
+ const verified=r.phase==='exhibition'&&
+  r.exhibition_input_check?.verified_before_freeze===true&&
+  r.entry_exhibition_gate?.final_eligible===true;
+ if(verified)return {code:'formal',label:'展示反映済',actionable:false};
+ if(r.phase==='exhibition')return {code:'frozen_unverified',label:'展示版・正式認定保留',
+  detail:'展示版は固定されていますが、6艇入力一致と正式判定の両方を確認できません。',
+  actionable:true};
+ const id=key(r),source=state.map.get(id),audit=state.reasons.get(id);
+ const cutoffText=r.cutoff_jst||source?.cutoff||'';
+ const cutoff=/^\d{2}:\d{2}$/.test(cutoffText)?
+  Date.parse(state.day+'T'+cutoffText+':00+09:00'):NaN;
+ const deadline=Number.isFinite(cutoff)?cutoff-180000:NaN;
+ if(!source)return {code:'not_collected',label:'研究用展示未確認',actionable:false,
+  detail:'収集元の研究記録を確認できません。正式予想の入力とは別です。'};
+ const captured=source.captured?Date.parse(source.captured):NaN;
+ const sourceInfo='展示元観測 '+(source.observed||'不明')+
+  ' ／ 実取得 '+(Number.isFinite(captured)?new Date(captured).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}):'未確認');
+ if(!Number.isFinite(deadline)||!Number.isFinite(captured))return {
+  code:'unverified_capture',label:'研究取得済・取得時刻未確認',
+  detail:sourceInfo+'。正式反映の可否は判定できません。',actionable:false};
+ if(captured>=deadline||
+    audit?.reason==='research_import_after_safe_freeze_deadline'||
+    audit?.reason==='source_timestamp_too_late_for_safe_freeze'){
+  return {code:'late',label:'研究取得済・締切前反映に間に合わず',
+   detail:sourceInfo+'。締切3分前の安全期限を超過したため、後付けで正式買い目に変更しません。',
+   actionable:false};
+ }
+ if(nowMs<deadline)return {code:'waiting',label:'研究取得済・正式反映待ち',
+  detail:sourceInfo+'。安全期限前のため、次回の発走前固定処理を待っています。',
+  actionable:false};
+ if(audit?.reason==='exhibition_snapshot_present_check_formal_gate')
+  return {code:'gap',label:'研究取得済・表示/正式判定を要確認',
+   detail:sourceInfo+'。サーバー側は展示版が存在すると記録しています。端末の表示や正式判定との不一致を調査します。',
+   actionable:true};
+ return {code:'gap',label:'⚠ 研究取得済・正式未反映',
+  detail:sourceInfo+'。安全期限より前に実取得できた記録があり、正式版が表示されません。収集・予想固定・配信を調査します。',
+  actionable:true};
+}
+
 function age(value){const t=new Date(value).getTime();return Number.isFinite(t)?Math.max(0,Math.round((Date.now()-t)/60000)):null;}
 function banner(data){
  if(data?.mode!=='auto-live')return '';
  const fore=(data.forecast_races||[]),used=fore.filter(x=>x.phase==='exhibition').length;
+ const exceptions=fore.map(r=>diagnose(r)).filter(x=>['gap','late','frozen_unverified'].includes(x.code));
+ const gaps=exceptions.filter(x=>x.actionable).length;
+ const late=exceptions.filter(x=>x.code==='late').length;
  const a=age(data.updated_at_utc),b=age(state.collected),
        checked=age(state.checked),stale=a===null||a>20||checked===null||checked>20||state.sourceOkay===false;
  return '<div class="exhibit-health '+(stale?'stale':'ready')+'" role="status"><div class="exhibit-health-heading"><strong>📡 展示の取得状況</strong><button type="button" class="exhibit-refresh-control" data-action="refresh-exhibition" aria-label="最新の展示と固定予想を確認">↻ 展示・買い目を更新</button></div>'+
   '発走前反映 '+used+'/'+fore.length+'R ／ 展示研究記録 '+state.map.size+'R ／ '+ 
   '予想更新 '+(a===null?'不明':a+'分前')+' ／ 展示収集チェック '+(checked===null?'未確認':checked+'分前')+
   ' ／ 展示研究データ更新 '+(b===null?'不明':b+'分前')+
+  (exceptions.length?' ／ ⚠ 研究取得済・正式未反映/期限超過 '+exceptions.length+'R（要調査 '+gaps+'R・期限超過 '+late+'R）':'')+
   (stale?' ／ ⚠ 公開データの更新遅延あり':'')+(state.error?' ／ '+esc(state.error):'')+
   '<p>研究記録と発走前に反映済みの展示は別です。'+
   '<a href="./exhibition.html">展示の研究記録を見る ↗</a></p></div>';
@@ -95,15 +161,18 @@ function frozenSnapshotPanel(r){
 function panel(r){
  if(!r)return '';
  const frozen=frozenSnapshotPanel(r);
+ const diagnosis=diagnose(r);
+ const healthNote=['gap','late','frozen_unverified','unverified_capture'].includes(diagnosis.code)?
+  '<div class="notice warn" role="status"><strong>'+esc(diagnosis.label)+'</strong><p>'+esc(diagnosis.detail)+'</p></div>':'';
  if(!state.day||state.loading){
   return frozen||'<div class="notice">📡 展示の研究記録を読み込み中。展示前の固定買い目は正式反映とは区別します。</div>';
  }
  const x=state.map.get(key(r));
- if(!x)return frozen||
+ if(!x)return healthNote+frozen||
    '<div class="notice warn">📋 6艇の展示は研究記録にまだありません。締切後には固定買い目を書き換えません。</div>';
  const rows=x.boats.map(b=>'<tr><td>'+esc(b.lane)+'</td><td>'+esc(b.course)+'</td><td>'+esc(b.st)+
  '</td><td>'+esc(b.time)+'</td><td>'+esc(b.metrics||'—')+'</td></tr>').join('');
- return frozen+'<section class="card card-pad bottom-margin"><h3>📋 取得済み展示（研究記録）</h3>'+
+ return healthNote+frozen+'<section class="card card-pad bottom-margin"><h3>📋 取得済み展示（研究記録）</h3>'+
   '<p><strong>'+(r.phase==='exhibition'?'発走前展示版を固定済み（研究記録とは別）':'固定予想には未反映')+'</strong>'+
   ' ／ 元の展示観測：'+esc(x.observed||'不明')+'</p>'+
   '<div class="tablewrap"><table class="bets-table"><thead><tr><th>艇</th><th>進入</th><th>展示ST</th>'+
@@ -135,5 +204,5 @@ function metricsFor(r){
    collected_at_utc:state.collected||'',
    certification:'research_or_direct_not_immutable_pre_cutoff'};
 }
-global.BoatExhibitionAudit={load,banner,panel,metricsFor,status:()=>({count:state.map.size,collected:state.collected,checked:state.checked,sourceOkay:state.sourceOkay,error:state.error})};
+global.BoatExhibitionAudit={load,banner,panel,metricsFor,diagnose,status:()=>({count:state.map.size,collected:state.collected,checked:state.checked,auditChecked:state.auditChecked,sourceOkay:state.sourceOkay,error:state.error})};
 })(typeof window!=='undefined'?window:globalThis);

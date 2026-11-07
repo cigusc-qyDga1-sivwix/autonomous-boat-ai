@@ -275,6 +275,7 @@
   function tile(r) {
     const trial=tacticalSummary(r);
     const formal=isFormalTicket(r);
+    const exhibitionGap=window.BoatExhibitionAudit?.diagnose(r);
     // Display tint only when six-boat exhibition inputs were checked before
     // immutable cutoff and the card is a formal ticket (never SKIP or trial).
     const exhibitionFormal=!!(formal&&
@@ -285,7 +286,9 @@
       '<div class="tile-top"><span class="tile-r">'+escape(r.venue)+' '+r.race+'R</span>'+pill(r.classification)+'</div>'+
       '<div class="ticket-list-status '+(formal?'ticket-status-formal':'ticket-status-pending')+'">'+(formal?'✅ 正式買い目':'⏳ 暫定・購入判断保留')+'</div>'+
       '<div class="tile-time">締切予定 '+escape(r.cutoff_jst)+' · 固定 '+r.bets.length+'点 · '+
-       (exhibitionFormal?'✅ 展示反映済':r.phase==='exhibition'?'展示版・確認中':'展示前')+'</div>'+
+       (exhibitionFormal?'✅ 展示反映済':r.phase==='exhibition'?'展示版・確認中':'展示前')+'</div>'+ 
+      (exhibitionGap&&['gap','late','frozen_unverified','unverified_capture'].includes(exhibitionGap.code)?
+       '<div class="notice warn">'+escape(exhibitionGap.label)+'</div>':'')+
       '<div class="tile-bets">'+(r.model_role==='main'?'✅ '+(r.model_version==='four-factor-v2.2-linked-primary-untrained'?'統合v2.2':r.model_version==='four-factor-v2.1-actual-entry-primary-untrained'?'艇間連動v2.1・進入対応':r.model_version==='four-factor-v2.0-justified-points-primary-untrained'?'艇間連動v2.0・根拠審査':r.model_version==='four-factor-v1.9-aligned-primary-untrained'?'艇間連動v1.9・評価整合':r.model_version==='four-factor-v1.8-adaptive-points-primary-untrained'?'艇間連動v1.8・可変点数':r.model_version==='four-factor-v1.7-interaction-inside-failure-untrained'?'艇間連動v1.7':r.model_version==='four-factor-v1.6-interaction-primary-untrained'?'艇間連動v1.6':r.model_version==='four-factor-v1.5-point-free-untrained'?'点数枠なしv1.5':r.model_version==='four-factor-v1.4-venue-aware-23-untrained'?'場別23場v1.4':r.model_version==='four-factor-v1.3-conditional-scenarios-untrained'?'四要素v1.3':r.model_version==='four-factor-v1.2-head-coverage-untrained'?'四要素v1.2・頭候補保持':r.model_version==='four-factor-v1.1-untrained'?'四要素v1.1':r.model_version==='four-factor-v1.0-untrained'?'四要素v1.0':r.model_version?.includes('v0.9')?'v0.9':'v0.7')+'メイン固定：':'🔒 旧モデル固定：')+
       (formal?escape(r.bets.slice(0,2).map(b=>b.combination).join(' / ')):'正式買い目は未確定')+'</div>'+
       (r.legacy_control||trial?'<div class="tile-tactical">🔬 比較用モデルあり・正式買い目とは別</div>':'')+
@@ -760,7 +763,13 @@
   function weaknessDiagnosis() {
     if(data.mode!=='auto-live')return '';
     const races=allRaces();
-    const verified=races.filter(r=>!!officialFor(r)&&!resultIssue(r));
+    const verified=races.filter(r=>{
+      const outcome=officialFor(r);
+      // Void trifecta: official refund may be verified with finish=null.
+      // Exclude only from finish-order metrics, not settlement or refunds.
+      return !resultIssue(r)&&typeof outcome?.finish==='string'&&
+        /^[1-6]-[1-6]-[1-6]$/.test(outcome.finish);
+    });
     const count=verified.length;
     const stages={hit:0,head_miss:0,second_miss:0,third_miss:0};
     let firstHeadOne=0,actualHeadOne=0;

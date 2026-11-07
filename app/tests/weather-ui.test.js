@@ -22,6 +22,20 @@ fixture.weather_backtest={
 };
 race.weather_used={...fixture.venue_weather[race.venue],forecast_hour_jst:fixture.event_date+'T15:00+09:00'};
 race.weather_adjustment={applied:true,why:'風速7.3m/sの試験補正'};
+// A verified full-refund result can have finish=null. Analytics must not
+// index a nonexistent finish, irrespective of the current daily source mix.
+const codes=['桐生','戸田','江戸川','平和島','多摩川','浜名湖','蒲郡','常滑',
+ '津','三国','びわこ','住之江','尼崎','鳴門','丸亀','児島','宮島','徳山',
+ '下関','若松','芦屋','福岡','唐津','大村'];
+const refundRace=fixture.forecast_races.find(r=>r.venue!=='常滑')||race;
+const code=String(codes.indexOf(refundRace.venue)+1).padStart(2,'0');
+const key=[fixture.event_date,refundRace.venue,refundRace.race].join('|');
+fixture.official_results={...(fixture.official_results||{}),[key]:{
+ source:'boatrace_official_pay',verified:true,finish:null,payout_per_100:0,
+ refunded_boats:[1,2,3,4,5,6],void_trifecta:true,
+ refund_source_url:'https://www.boatrace.jp/owpc/pc/race/raceresult?rno='+
+  refundRace.race+'&jcd='+code+'&hd='+fixture.event_date.replaceAll('-','')
+}};
 let elements=new Map();
 for(const id of ['main','breadcrumb-label','reload-btn','toast']){
  elements.set(id,{innerHTML:'',textContent:'',classList:{add(){},remove(){},toggle(){}},

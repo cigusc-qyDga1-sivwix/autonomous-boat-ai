@@ -194,6 +194,7 @@
       try{experiment=window.BoatTacticalModel.forecast(r)}catch(e){experiment=null;}
     }
     var outcome=officialForSlot(data,venue,number,r);
+    var exhibitionGap=r&&window.BoatExhibitionAudit?.diagnose(r);
     // A confirmed result badge must never obscure pre-cutoff exhibition proof.
     var exhibitionVerified=!!(r&&r.phase==='exhibition'&&
       r.entry_exhibition_gate?.final_eligible===true&&
@@ -213,7 +214,9 @@
       (displayExhibitionFormal?'formal':r?'pending':'unavailable')+'">' +
       '<div class="venue-race-top"><b>'+number+'R</b><div class="venue-race-labels">'+
       raceStatus(r,slot,now,data,venue,number)+
-      (exhibitionVerified?badge('展示入力確認済','ready'):'')+'</div></div>' +
+      (exhibitionVerified?badge('展示入力確認済','ready'):'')+
+      (exhibitionGap&&['gap','late','frozen_unverified','unverified_capture'].includes(exhibitionGap.code)?
+       badge(exhibitionGap.label,exhibitionGap.actionable?'missing':'watch'):'')+'</div></div>' +
       '<div class="venue-race-cutoff"><span>締切予定</span><strong>'+esc(cutoff||'—')+'</strong></div>' +
       (r?'<div class="ticket-list-status '+(formal?'ticket-status-formal':'ticket-status-pending')+'">'+(formal?'✅ 正式買い目':'⏳ 暫定・購入判断保留')+'</div><div class="venue-race-main">'+(r.model_role==='main'?'✅ メイン'+(r.model_version==='four-factor-v2.2-linked-primary-untrained'?'統合v2.2':r.model_version==='four-factor-v2.1-actual-entry-primary-untrained'?'艇間連動v2.1':r.model_version==='four-factor-v1.4-venue-aware-23-untrained'?'場別23場v1.4':r.model_version==='four-factor-v1.3-conditional-scenarios-untrained'?'四要素v1.3':r.model_version==='four-factor-v1.2-head-coverage-untrained'?'四要素v1.2':r.model_version==='four-factor-v1.1-untrained'?'四要素v1.1'+(r.four_factor?.chaser_policy?' 追走固定解除':''):r.model_version==='four-factor-v1.0-untrained'?'四要素v1.0':r.model_version?.includes('v0.9')?'v0.9':'v0.7')+' 固定：':'🔒 旧モデル固定：')+(formal?esc(r.bets.slice(0,2).map(function (b){return b.combination;}).join(' / ')):'暫定予想：'+esc(r.bets.slice(0,2).map(function (b){return b.combination;}).join(' / '))+'（展示後の正式買い目ではありません）')+'</div>' +
           (experiment?'<div class="venue-tactical">🔬 比較用モデルあり・正式買い目とは別</div>':'') +

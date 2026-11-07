@@ -24,21 +24,24 @@ class PagesPublicationTests(unittest.TestCase):
             self.assertEqual(owners, [PUBLISHER],
                              "Independent artifacts can publish stale result ledgers")
 
-    def test_result_writers_wake_publisher_without_a_bot_push_event(self):
+    def test_quiet_site_deploy_and_fast_canonical_data_poll(self):
         publisher = (WORKFLOWS / PUBLISHER).read_text()
-        self.assertIn("  workflow_run:", publisher)
-        self.assertIn("    types: [completed]", publisher)
-        for filename in WRITERS:
-            writer = (WORKFLOWS / filename).read_text()
-            name = re.search(r"^name:\s*(.+)$", writer, re.MULTILINE).group(1)
-            self.assertIn("      - " + name + "\n", publisher)
-        # workflow_run has write permissions: never publish a failed/fork branch.
-        for guard in (
-            "github.event.workflow_run.conclusion == 'success'",
-            "github.event.workflow_run.head_branch == 'main'",
-            "github.event.workflow_run.head_repository.full_name == github.repository",
-        ):
-            self.assertIn(guard, publisher)
+        # Bot data writers every ~3-5 min cannot each publish hundreds of MB.
+        # Pages is a 15-min fallback and a push-triggered static release.
+        self.assertIn("  schedule:", publisher)
+        self.assertIn("    - cron: '0,15,30,45 21-23 * * *'", publisher)
+        self.assertIn("    - cron: '0,15,30,45 0-14 * * *'", publisher)
+        self.assertIn("  workflow_dispatch:", publisher)
+        self.assertNotIn("  workflow_run:", publisher)
+        self.assertIn("    if: github.ref == 'refs/heads/main'", publisher)
+        self.assertIn("build_pages_site.py --app app", publisher)
+        # Current formal data is fetched directly from immutable main via a
+        # small forecast-sync marker; historical ledgers stay on GitHub.
+        app = (ROOT / "app" / "app.js").read_text()
+        feed = (ROOT / "app" / "canonical-exhibition-feed.js").read_text()
+        self.assertIn("setInterval(pollCanonicalForecast,60000)", app)
+        self.assertIn("forecast-sync-latest.json", feed)
+        self.assertIn("raw.githubusercontent.com", feed)
 
     def test_queued_publisher_checks_out_latest_main_without_cancelling_deploy(self):
         publisher = (WORKFLOWS / PUBLISHER).read_text()

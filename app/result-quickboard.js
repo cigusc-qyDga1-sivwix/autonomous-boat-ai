@@ -19,7 +19,8 @@ const filterDefs=[
  {id:'miss',name:'不的中'},
  {id:'awaiting',name:'公式未取得'},
  {id:'verified',name:'公式照合済み'},
- {id:'issue',name:'要確認'}
+ {id:'issue',name:'要確認'},
+ {id:'refund',name:'返還あり'}
 ];
 function rows(races,ctx,nowMs=Date.now()){
  const date=ctx.date;
@@ -39,6 +40,8 @@ function rows(races,ctx,nowMs=Date.now()){
      payout100:official?.payout_per_100??c.record?.payout_per_100??null,
      virtualPayout:official?c.payout:null,
      virtualProfit:official?c.profit:null,
+     virtualRefund:official?c.virtualRefund||0:0,
+     voidRace:official?.void_trifecta===true,
      stake:c.stake,hasForecast:Array.isArray(r.bets)&&r.bets.length>0};
  }).sort((a,b)=>(a.cutoffMs||Infinity)-(b.cutoffMs||Infinity));
 }
@@ -47,7 +50,8 @@ function summary(rows){
  return {
    total:rows.length,official:done.length,
    hit:done.filter(x=>x.hit).length,
-   miss:done.filter(x=>!x.hit).length,
+   miss:done.filter(x=>!x.hit&&!x.voidRace).length,
+   refunded:done.filter(x=>x.virtualRefund>0).length,
    awaiting:rows.filter(x=>x.status==='awaiting').length,
    issues:rows.filter(x=>x.status==='issue').length,
    upcoming:rows.filter(x=>x.status==='upcoming').length,
@@ -61,13 +65,17 @@ function sortedFor(board,filter){
    case 'awaiting':return past.filter(x=>x.status==='awaiting');
    case 'verified':return past.filter(x=>x.status==='verified');
    case 'hit':return past.filter(x=>x.status==='verified'&&x.hit);
-   case 'miss':return past.filter(x=>x.status==='verified'&&!x.hit);
+   case 'miss':return past.filter(x=>x.status==='verified'&&!x.hit&&!x.voidRace);
+   case 'refund':return past.filter(x=>x.status==='verified'&&x.virtualRefund>0);
    case 'issue':return past.filter(x=>x.status==='issue');
    default:return past.concat(upcoming);
  }
 }
 function label(x){
- if(x.status==='verified')return x.hit?'公式的中':'公式不的中';
+ if(x.status==='verified'){
+   if(x.voidRace)return '公式・全額返還';
+   return (x.hit?'公式的中':'公式不的中')+(x.virtualRefund>0?'＋返還':'');
+ }
  if(x.status==='issue')return '要確認';
  if(x.status==='draft')return '仮入力・未確定';
  if(x.status==='awaiting')return '公式未取得';
@@ -101,7 +109,7 @@ function render(races,ctx,opt={}){
  let html='<section class="card card-pad quick-results quick-results-v2" aria-label="結果照合と仮想収支の一覧">'+
    '<div class="quick-results-heading"><div><span class="quick-results-kicker">⚡ ワンタップ結果照合</span>'+
    '<h2>照合・精算 <span>（結果一覧）</span></h2>'+
-   '<p>的中レースを強調表示。公式照合済みの保存予想だけで仮想収支を集計します。</p></div>'+
+   '<p>的中レースを強調表示。公式確認済みのF・欠場返還も仮想収支に計上します。</p></div>'+
    (next?'<button type="button" class="btn btn-soft" data-result-next="'+esc(next.race.venue)+'|'+next.race.race+
       '">直近の公式未取得：'+esc(next.race.venue)+' '+next.race.race+'R</button>':'')+
    '</div><div class="quick-results-overview">'+
@@ -123,12 +131,13 @@ function render(races,ctx,opt={}){
    '<div class="quick-results-grid">';
  for(const x of display){
    const r=x.race,active=selected===x,verified=x.status==='verified';
-   const statusCls=verified?(x.hit?'is-hit':'is-miss'):'is-'+x.status;
+   const statusCls=verified?(x.voidRace?'is-verified':x.hit?'is-hit':'is-miss'):'is-'+x.status;
    const result=verified?
      '<span class="quick-results-result-row">'+
      '<span class="quick-results-result-label">結果</span>'+
-     '<strong class="quick-results-combo">'+esc(x.finish)+'</strong>'+
-     moneyCell('quick-results-value','100円払戻',yen(x.payout100))+
+     '<strong class="quick-results-combo">'+esc(x.finish||'3連単不成立')+'</strong>'+
+     moneyCell('quick-results-value',x.voidRace?'3連単不成立':'100円払戻',x.voidRace?'返還':yen(x.payout100))+
+     (x.virtualRefund>0?moneyCell('quick-results-value','返還金',yen(x.virtualRefund)):'')+
      moneyCell('quick-results-value','仮想投資',yen(x.stake))+
      moneyCell('quick-results-profit '+(x.virtualProfit>=0?'is-positive':'is-negative'),'仮想収支',signedYen(x.virtualProfit))+
      '</span>':
@@ -144,7 +153,7 @@ function render(races,ctx,opt={}){
     '" data-result-quick="'+esc(r.venue)+'|'+r.race+'" aria-pressed="'+String(active)+'">'+
     '<span class="quick-results-racehead"><span class="quick-results-racename"><b>'+
        esc(r.venue)+' '+r.race+'R</b><span class="quick-results-racestatus">'+
-       (verified?(x.hit?'✓ ':'× '):'')+esc(label(x))+'</span></span>'+
+       (verified?(x.voidRace?'↩ ':x.hit?'✓ ':'× '):'')+esc(label(x))+'</span></span>'+
     '<small>'+esc(r.cutoff_jst)+' 締切</small></span>'+
     '<span class="quick-results-forecast">固定予想（上位2点）：'+
        esc((r.bets||[]).slice(0,2).map(b=>b.combination).join(' / '))+'</span>'+
@@ -157,8 +166,10 @@ function render(races,ctx,opt={}){
  if(selected){
    const x=selected;
    const explanation=x.status==='verified'?
-     ('公式着順 '+x.finish+' ／ 3連単払戻 '+yen(x.payout100)+'/100円 ／ '+(x.hit?'🎯 的中':'不的中')+
-      ' ／ 仮想払戻 '+yen(x.virtualPayout)+' ／ 仮想収支 '+signedYen(x.virtualProfit)):
+     ('公式着順 '+(x.finish||'不成立')+
+      (x.voidRace?' ／ 全額返還':(' ／ 3連単払戻 '+yen(x.payout100)+'/100円 ／ '+(x.hit?'🎯 的中':'不的中')))+
+      (x.virtualRefund>0?' ／ 返還金 '+yen(x.virtualRefund):'')+
+      ' ／ 仮想払戻（返還込み） '+yen(x.virtualPayout)+' ／ 仮想収支 '+signedYen(x.virtualProfit)):
      x.status==='draft'?'仮入力 '+x.finish+'。公式結果としては未計上':
      x.status==='issue'?'公式側の返還・補正・データ不一致を要確認。仮想収支は計上しません':
      x.status==='awaiting'?'締切後ですが、検証可能な公式払戻がまだ届いていません':'締切前のため、結果は未確定';

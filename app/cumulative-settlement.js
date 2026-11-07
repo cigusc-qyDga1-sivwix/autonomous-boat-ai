@@ -19,8 +19,30 @@ const daysThrough=now=>{
  return result;
 };
 const label=day=>day.slice(5).replace('-','/');
-const EMPTY=()=>({eligible:0,checked:0,hits:0,invested:0,paid:0,profit:0,excluded:0});
+const EMPTY=()=>({eligible:0,checked:0,hits:0,invested:0,paid:0,refunded:0,refundRaces:0,voids:0,profit:0,excluded:0});
 const combo=x=>typeof x==='string'&&/^[1-6]-[1-6]-[1-6]$/.test(x)&&new Set(x.split('-')).size===3;
+// Never infer refundable boats from a bare official payoff '返' marker.
+function verifiedRefund(p,id,day){
+ if(!p)return null;
+ const boats=p.refunded_boats===undefined?[]:p.refunded_boats;
+ if(!Array.isArray(boats)||new Set(boats).size!==boats.length||
+   boats.some(n=>!Number.isInteger(n)||n<1||n>6))return null;
+ const isVoid=p.void_trifecta===true,hasRefund=boats.length>0;
+ if(isVoid){
+  if(!hasRefund||p.finish!==null||p.payout_per_100!==0)return null;
+ }else if(!combo(p.finish)||!Number.isSafeInteger(p.payout_per_100)||
+   p.payout_per_100<100||p.payout_per_100>10000000||
+   p.payout_per_100%10!==0)return null;
+ if(hasRefund){
+  const [venue,race]=id.split('-').map(Number);
+  if(!Number.isInteger(venue)||!Number.isInteger(race)||venue<1||venue>24||
+     race<1||race>12||
+     p.refund_source_url!=='https://www.boatrace.jp/owpc/pc/race/raceresult?rno='+
+      race+'&jcd='+String(venue).padStart(2,'0')+'&hd='+day.replace(/-/g,''))return null;
+  if(!isVoid&&p.finish.split('-').some(n=>boats.includes(Number(n))))return null;
+ }else if(isVoid||p.refund_source_url)return null;
+ return {boats,isVoid,hasRefund};
+}
 const money=n=>(n>=0?'+':'−')+Math.abs(n).toLocaleString('ja-JP')+'円';
 const yen=n=>n.toLocaleString('ja-JP')+'円';
 function validBets(bets,snapshot,day){
@@ -55,13 +77,16 @@ function summary(doc,day,formalOnly=false){
   if(record.official_conflict||record.official_review){out.excluded++;continue;}
   const p=record.official_pay;
   if(!p)continue;
-  if(p.source!=='boatrace_official_pay'||p.verified!==true||!combo(p.finish)||
-     !Number.isSafeInteger(p.payout_per_100)||p.payout_per_100<100||
-     p.payout_per_100>10000000||p.payout_per_100%10!==0||
+  const ref=verifiedRefund(p,id,day);
+  if(p.source!=='boatrace_official_pay'||p.verified!==true||!ref||
      (p.snapshot_sha256&&p.snapshot_sha256!==r.sha256)){out.excluded++;continue;}
-  const match=r.bets.find(b=>b.combination===p.finish);
+  const refunded=ref.isVoid?50000:r.bets.reduce((s,b)=>
+   s+(b.combination.split('-').some(n=>ref.boats.includes(Number(n)))?b.virtual_yen:0),0);
+  const match=ref.isVoid?null:r.bets.find(b=>b.combination===p.finish);
   const payout=match?Math.round(match.virtual_yen*p.payout_per_100/100):0;
-  out.checked++;out.hits+=Number(!!match);out.invested+=50000;out.paid+=payout;
+  out.checked++;out.hits+=Number(!!match);out.invested+=50000;
+  out.refunded+=refunded;out.refundRaces+=Number(ref.hasRefund);
+  out.voids+=Number(ref.isVoid);out.paid+=payout+refunded;
  }
  out.profit=out.paid-out.invested;
  return out;
@@ -77,20 +102,26 @@ function overlayVerifiedPays(ledger,doc,day){
  let added=0;
  for(const [id,rec] of Object.entries(ledger.race_records)){
   if(!rec||!Array.isArray(rec.versions)||!rec.versions.length||
-     rec.official_conflict||rec.official_review)continue;
+     rec.official_conflict||(rec.official_review&&rec.official_review!=='refund'))continue;
   const snap=rec.versions[rec.versions.length-1];
   if(!snap||!/^[a-f0-9]{64}$/i.test(snap.sha256||''))continue;
   const pay=doc.results[id];
   if(doc.reviews?.[id]||doc.cancellations?.[id]||doc.conflicts?.[id])continue;
-  if(!pay||!combo(pay.finish)||!Number.isSafeInteger(pay.payout_per_100)||
-     pay.payout_per_100<100||pay.payout_per_100>10000000||
-     pay.payout_per_100%10!==0)continue;
+  const refund=verifiedRefund(pay,id,day);
+  if(!refund)continue;
+  if(rec.official_review==='refund'&&!refund.hasRefund)continue;
   const existing=rec.official_pay;
   if(existing&&(!existing.verified||existing.finish!==pay.finish||
       existing.payout_per_100!==pay.payout_per_100))continue;
   if(existing?.verified)continue;
+  if(rec.official_review==='refund')delete rec.official_review;
   rec.official_pay={
    finish:pay.finish,payout_per_100:pay.payout_per_100,
+   ...(refund.hasRefund?{
+    refunded_boats:[...refund.boats],
+    refund_reasons:pay.refund_reasons||{},
+    void_trifecta:refund.isVoid,refund_source_url:pay.refund_source_url
+   }:{}),
    verified:true,source:'boatrace_official_pay',source_url:doc.source_url,
    recorded_at:doc.retrieved_at_utc,snapshot_sha256:snap.sha256
   };

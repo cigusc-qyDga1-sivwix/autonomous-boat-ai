@@ -143,7 +143,7 @@ async function load(force=false,fetcher=root.fetch?.bind(root),now=new Date()){
   for(const day of range){
    try{
     if(typeof fetcher!=='function')throw Error('取得機能が利用できません');
-    const response=await fetcher('./data/live/'+day+'.json',{cache:'no-store'});
+    const response=await fetcher('./data/live/settlement/'+day+'.json',{cache:'no-store'});
     if(!response?.ok)throw Error('HTTP '+(response?.status??'接続失敗'));
     const ledger=await response.json();
     if(day===range[range.length-1]){

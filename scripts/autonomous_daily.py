@@ -1656,32 +1656,73 @@ def integrate_official(ledger: dict, view: dict, pay: dict,
             }
     for key, payout in pay.get("results", {}).items():
         rec = records.get(key)
-        if not rec or not rec.get("versions") or rec.get("official_review"):
+        if not rec or not rec.get("versions") or rec.get("official_conflict"):
             continue
         cutoff = datetime.fromisoformat(rec["versions"][-1]["cutoff_iso_jst"])
         if now.astimezone(JST) < cutoff:
             continue
-        combo = payout["finish"]
-        amount = payout["payout_per_100"]
-        if not isinstance(amount, int) or amount < 100 or amount % 10 != 0:
+        combo = payout.get("finish")
+        amount = payout.get("payout_per_100")
+        is_void = payout.get("void_trifecta") is True
+        returned = payout.get("refunded_boats", [])
+        has_refund = bool(returned)
+        if not isinstance(returned, list) or len(returned) != len(set(
+                str(x) for x in returned)) or any(type(x) is not int or x not in range(1, 7)
+                                                 for x in returned):
             continue
-        if not isinstance(combo, str) or len(combo.split("-")) != 3:
+        if is_void:
+            if not has_refund or combo is not None or amount != 0:
+                continue
+        elif (type(amount) is not int or amount < 100 or amount > 100_000_000
+              or amount % 10 != 0 or not isinstance(combo, str)
+              or not re.fullmatch(r"[1-6]-[1-6]-[1-6]", combo)
+              or len(set(combo.split("-"))) != 3):
+            continue
+        if has_refund:
+            code, race = key.split("-")
+            expected_detail = (
+                "https://www.boatrace.jp/owpc/pc/race/raceresult?"
+                f"rno={int(race)}&jcd={int(code):02d}&hd={ledger['event_date'].replace('-', '')}")
+            if (payout.get("refund_source_url") != expected_detail or
+                    (not is_void and any(str(x) in combo.split("-") for x in returned))):
+                continue
+        elif is_void or payout.get("refund_source_url"):
+            continue
+        # An earlier bare "返" is only provisional. The official page/detail
+        # can now resolve it without rewriting a single pre-cutoff snapshot.
+        if rec.get("official_review") == "refund" and has_refund:
+            rec.pop("official_review", None)
+        if rec.get("official_review"):
             continue
         previous = rec.get("official_pay")
-        if previous and (previous["finish"], previous["payout_per_100"]) != (combo, amount):
+        signature = lambda x: (
+            x.get("finish"), x.get("payout_per_100"),
+            tuple(sorted(x.get("refunded_boats") or [])),
+            x.get("void_trifecta") is True,
+        )
+        candidate = {
+            "finish": combo, "payout_per_100": amount,
+            **({
+                "refunded_boats": sorted(returned),
+                "refund_reasons": payout.get("refund_reasons") or {},
+                "refund_source_url": payout["refund_source_url"],
+                "void_trifecta": is_void,
+            } if has_refund else {}),
+        }
+        if previous and signature(previous) != signature(candidate):
             rec["official_conflict"] = {
-                "previous": [previous["finish"], previous["payout_per_100"]],
-                "current": [combo, amount],
+                "previous": signature(previous),
+                "current": signature(candidate),
                 "detected_at_utc": now.astimezone(UTC).isoformat(),
             }
             alerts[f"{ledger['event_date']}|{rec['venue']}|{rec['race']}"] = {
-                "status": "conflict", "reason": "公式結果の値が以前の取得値と不一致",
+                "status": "conflict", "reason": "公式結果・返還艇の値が以前の取得値と不一致",
                 "source_url": pay["source_url"],
             }
             continue
         if not previous:
             rec["official_pay"] = {
-                "finish": combo, "payout_per_100": amount, "verified": True,
+                **candidate, "verified": True,
                 "source": "boatrace_official_pay", "source_url": pay["source_url"],
                 "recorded_at": pay["retrieved_at_utc"],
             }
@@ -1712,11 +1753,26 @@ def integrate_official(ledger: dict, view: dict, pay: dict,
             continue
         snap = rec["versions"][-1]
         stake = sum(b["virtual_yen"] for b in snap["bets"])
-        winning_bet = next((b for b in snap["bets"] if b["combination"] == p["finish"]), None)
-        paid = winning_bet["virtual_yen"] * p["payout_per_100"] // 100 if winning_bet else 0
-        first_second = any(b["combination"][:3] == p["finish"][:3] for b in snap["bets"])
-        head = any(b["combination"][0] == p["finish"][0] for b in snap["bets"])
-        baseline_control = snap.get("weather_ab")
+        refunded_boats = set(p.get("refunded_boats") or [])
+        virtual_refund = sum(
+            b["virtual_yen"] for b in snap["bets"]
+            if p.get("void_trifecta") is True or
+               any(str(n) in b["combination"].split("-") for n in refunded_boats)
+        )
+        winning_bet = next((
+            b for b in snap["bets"] if b["combination"] == p["finish"]
+            and not any(str(n) in b["combination"].split("-") for n in refunded_boats)
+        ), None) if p["finish"] else None
+        winning_payout = (winning_bet["virtual_yen"] * p["payout_per_100"] // 100
+                          if winning_bet else 0)
+        paid = winning_payout + virtual_refund
+        first_second = bool(p["finish"]) and any(
+            b["combination"][:3] == p["finish"][:3] for b in snap["bets"])
+        head = bool(p["finish"]) and any(
+            b["combination"][0] == p["finish"][0] for b in snap["bets"])
+        # Experimental controls have not been audited for refund arithmetic:
+        # keep them out of same-race comparison rather than show distorted ROI.
+        baseline_control = snap.get("weather_ab") if not virtual_refund else None
         weather_comparison = None
         if baseline_control and baseline_control.get("generated_pre_cutoff"):
             alternative = baseline_control.get("control_bets") or []
@@ -1741,7 +1797,7 @@ def integrate_official(ledger: dict, view: dict, pay: dict,
                     "weather_point_count": len(snap["bets"]),
                     "source": "pre_cutoff_shadow_frozen",
                 }
-        old_control = snap.get("legacy_control")
+        old_control = snap.get("legacy_control") if not virtual_refund else None
         old_comparison = None
         if (isinstance(old_control, dict)
                 and old_control.get("model_role") == "shadow_validation"):
@@ -1762,7 +1818,7 @@ def integrate_official(ledger: dict, view: dict, pay: dict,
                     "legacy_sha256": old_control.get("sha256"),
                 }
         role_comparison = None
-        shadow = snap.get("role_skill_shadow")
+        shadow = snap.get("role_skill_shadow") if not virtual_refund else None
         if (isinstance(shadow, dict)
                 and shadow.get("status") == "ready"
                 and shadow.get("model_role") == "shadow_validation"
@@ -1806,6 +1862,9 @@ def integrate_official(ledger: dict, view: dict, pay: dict,
                 }
         results[key] = {
             **p, "hit": bool(winning_bet), "virtual_stake": stake,
+            "virtual_refund": virtual_refund,
+            "virtual_effective_stake": stake - virtual_refund,
+            "virtual_winning_payout": winning_payout,
             "virtual_payout": paid, "virtual_profit": paid - stake,
             "head_captured": head, "first_second": first_second,
             "third_miss": bool(first_second and not winning_bet),
@@ -1874,6 +1933,8 @@ def integrate_official(ledger: dict, view: dict, pay: dict,
         "source_url": pay["source_url"],
         "retrieved_at_utc": pay["retrieved_at_utc"],
         "verified_on_page": len(pay["results"]),
+        "confirmed_refund_races": sum(bool(r.get("refunded_boats")) for r in results.values()),
+        "confirmed_virtual_refunds": sum(r.get("virtual_refund", 0) for r in results.values()),
         "confirmed_forecast_results": len(results),
         "needs_review": len(alerts),
         "pending_on_page": pay.get("pending_count", 0),

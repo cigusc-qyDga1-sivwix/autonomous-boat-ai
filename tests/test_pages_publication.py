@@ -43,10 +43,10 @@ class PagesPublicationTests(unittest.TestCase):
         self.assertIn("forecast-sync-latest.json", feed)
         self.assertIn("raw.githubusercontent.com", feed)
 
-    def test_queued_publisher_checks_out_latest_main_without_cancelling_deploy(self):
+    def test_new_compact_publisher_supersedes_stalled_old_artifacts(self):
         publisher = (WORKFLOWS / PUBLISHER).read_text()
         self.assertIn("  group: boat-lab-pages\n", publisher)
-        self.assertIn("  cancel-in-progress: false\n", publisher)
+        self.assertIn("  cancel-in-progress: true\n", publisher)
         checkout = publisher.index("uses: actions/checkout@")
         upload = publisher.index("uses: actions/upload-pages-artifact@")
         self.assertIn("          ref: main\n", publisher[checkout:upload])

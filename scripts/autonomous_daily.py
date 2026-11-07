@@ -27,6 +27,7 @@ if __package__:
     from .attack_defense_shadow import rescore as rescore_attack_defence_shadow
     from .grade_competition_shadow import grade_from_program, rescore as rescore_grade_competition
     from .exhibition_bridge import available_rows, inject
+    from .official_withdrawals import fetch_notices, match_lanes
     from .entry_exhibition_gate import validated_preview, summarize_gate
     from .venue_profiles import get_profile, adjust_weights as adjust_venue_weights
     from .interaction_scenarios import evaluate as evaluate_interactions, VERSION as INTERACTION_VERSION
@@ -41,6 +42,7 @@ else:
     from attack_defense_shadow import rescore as rescore_attack_defence_shadow
     from grade_competition_shadow import grade_from_program, rescore as rescore_grade_competition
     from exhibition_bridge import available_rows, inject
+    from official_withdrawals import fetch_notices, match_lanes
     from entry_exhibition_gate import validated_preview, summarize_gate
     from venue_profiles import get_profile, adjust_weights as adjust_venue_weights
     from interaction_scenarios import evaluate as evaluate_interactions, VERSION as INTERACTION_VERSION
@@ -1324,6 +1326,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
     rejected_exhibition_input_mismatch = 0
     new_model_upgrades = 0
     exhibition_rows = exhibition_rows or {}
+    withdrawal_notices = {}
     race_source = (payload.get("programs") or {}).get("stadiums") or {}
     for venue_code, stadium in race_source.items():
         if venue_code not in VENUES or not isinstance(stadium, dict):
@@ -1356,6 +1359,27 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
             # Synthetic test fixtures explicitly leave this safeguard disabled.
             runtime_now = datetime.now(UTC) if enforce_wall_clock else now
             margin = max(SAFE_MARGIN_SECONDS, 180) if enforce_wall_clock else SAFE_MARGIN_SECONDS
+            # Check only nearby races with incomplete live exhibitions. One
+            # official page per venue per run. Missing data alone proves nothing.
+            if (enforce_wall_clock and not record.get("official_withdrawal")
+                    and timedelta(seconds=margin) < cutoff - runtime_now <= timedelta(minutes=15)
+                    and not preview_complete(race)):
+                if venue_code not in withdrawal_notices:
+                    try:
+                        withdrawal_notices[venue_code] = fetch_notices(cutoff.date(), venue_code)
+                    except (OSError, ValueError):
+                        withdrawal_notices[venue_code] = ([], None)
+                notices, notice_url = withdrawal_notices[venue_code]
+                observed = datetime.now(UTC)
+                lanes = match_lanes(notices, n, race.get("racers") or {})
+                if lanes and observed < cutoff - timedelta(seconds=margin):
+                    record["official_withdrawal"] = {
+                        "lanes": lanes, "source_url": notice_url,
+                        "observed_at_utc": observed.isoformat(),
+                    }
+                runtime_now = observed
+            if record.get("official_withdrawal"):
+                continue
             if cutoff.date() >= FOUR_FACTOR_DATE and valid_entrants(race):
                 code = f"{local_day.replace('-', '')}{int(venue_code):02d}{n:02d}"
                 context = (racer_context_rows or {}).get(code) or {}
@@ -1527,10 +1551,16 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         if record["venue"] == "江戸川" and now.astimezone(UTC) >= LINKED_MAIN_ACTIVATION_UTC:
             continue  # Archive retained; exclude from current prediction view.
         versions = record["versions"]
+        withdrawal = record.get("official_withdrawal")
+        if withdrawal:
+            reason = "公式欠場確認：" + "・".join(str(i) + "号艇" for i in withdrawal["lanes"]) + "。予想更新保留"
+        else:
+            reason = "締切前の予想を固定できなかった"
         if not versions:
             unavailable.append({"venue": record["venue"], "race": record["race"],
                                 "cutoff_jst": record["cutoff_jst"],
-                                "reason": "締切前の予想を固定できなかった"})
+                                "reason": reason,
+                                **({"official_withdrawal": withdrawal} if withdrawal else {})})
             continue
         current = versions[-1]
         r = {k: current[k] for k in (
@@ -1555,6 +1585,10 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         # baseline/exhibition snapshot or re-create SHA with post-race facts.
         r["entry_exhibition_gate"] = summarize_gate(current, local_day)
         r["ticket_status"] = ("formal" if r["entry_exhibition_gate"]["final_eligible"] and r.get("classification") != "SKIP" else "provisional")
+        if withdrawal:
+            r["official_withdrawal"] = withdrawal
+            r["entry_exhibition_gate"].update(final_eligible=False, buy_allowed=False, reason=reason)
+            r["ticket_status"] = "provisional"
         r["formal_snapshot_sha256"] = current["sha256"] if r["ticket_status"] == "formal" else None
         latest_races.append(r)
         p = record.get("official_pay")

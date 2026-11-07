@@ -228,3 +228,56 @@ def test_changed_openapi_six_boat_values_create_new_immutable_exhibition_version
     third, _, unchanged = build(second, revised, datetime(2026, 10, 23, 11, 15, tzinfo=JST), "api")
     assert unchanged["new_exhibition"] == 0
     assert third["race_records"]["18-3"]["versions"] == versions_after
+
+
+def test_official_withdrawal_holds_update_without_rewriting_snapshot(monkeypatch):
+    from scripts import autonomous_daily as daily
+
+    before = datetime(2026, 10, 23, 11, 0, tzinfo=JST)
+    observed = datetime(2026, 10, 23, 11, 12, tzinfo=JST)
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return observed.astimezone(tz)
+
+    ledger, _, _ = build(None, source(), before, "api")
+    versions = deepcopy(ledger["race_records"]["18-3"]["versions"])
+    monkeypatch.setattr(daily, "datetime", Clock)
+    monkeypatch.setattr(daily, "fetch_notices", lambda day, venue: ([(3, "選手4")], "official"))
+    ledger, view, status = build(ledger, source(), observed, "api", enforce_wall_clock=True)
+    record = ledger["race_records"]["18-3"]
+    assert record["versions"] == versions
+    assert record["official_withdrawal"]["lanes"] == [4]
+    assert status["new_exhibition"] == 0
+    displayed = view["forecast_races"][0]
+    assert displayed["ticket_status"] == "provisional"
+    assert not displayed["entry_exhibition_gate"]["buy_allowed"]
+    assert "4号艇" in displayed["entry_exhibition_gate"]["reason"]
+
+    monkeypatch.setattr(daily, "fetch_notices", lambda day, venue: ([], "official"))
+    clean, _, status = build(None, source(), observed, "api", enforce_wall_clock=True)
+    assert "official_withdrawal" not in clean["race_records"]["18-3"]
+    assert status["new_baseline"] == 1
+
+
+def test_official_notice_requires_matching_venue_date_race_and_name():
+    from scripts.official_withdrawals import match_lanes, parse_notices
+
+    html = """
+    <img src="/static_extra/pc/images/text_place2_18.png">
+    <h3>欠場・帰郷</h3>
+    <table>
+      <tr><td>10/23</td><td>選手　４</td><td>３R欠場（公傷のため）</td></tr>
+      <tr><td>10/23</td><td>選手５</td><td>帰郷</td></tr>
+      <tr><td>10/22</td><td>選手６</td><td>3R欠場</td></tr>
+    </table>
+    """
+    day = datetime(2026, 10, 23, tzinfo=JST).date()
+    notices = parse_notices(html, day, "18")
+    assert notices == [(3, "選手4")]
+    assert parse_notices(html, day, "19") == []
+    racers = race()["racers"]
+    assert match_lanes(notices, 3, racers) == [4]
+    assert match_lanes(notices, 4, racers) == []
+    assert match_lanes(notices, 3, {**racers, "5": racers["4"]}) == []

@@ -22,6 +22,10 @@ GITHUB_ARCHIVE_BASE = (
 # All source files, live pointers, status, current predictions and HTML remain.
 DATED_JSON = re.compile(r"^data/.+/(?:[a-z][a-z0-9-]*-)?\d{4}-\d{2}-\d{2}\.json$")
 ARCHIVE_LIMIT_BYTES = 1_500_000
+# Do not include the full immutable ledger in the PWA. Publish only the
+# fields the official settlement verifier needs, beginning Nov 4 JST.
+SETTLEMENT_START_DAY = "2026-11-04"
+SETTLEMENT_LEDGER = re.compile(r"^data/live/(\d{4}-\d{2}-\d{2})\.json$")
 SITE_LIMIT_BYTES = 120_000_000
 REQUIRED = (
     "index.html",
@@ -34,6 +38,53 @@ REQUIRED = (
     "data/live/forecast-sync-latest.json",
     "data/exhibition/status-latest.json",
 )
+
+
+def compact_settlement_ledger(file: Path, day: str) -> bytes:
+    """Keep the original settlement inputs and final frozen version, not history.
+
+    No prediction, official result, stake, SHA or refund is recalculated here.
+    Same event_date/race_records interface as the audited browser summarizer.
+    """
+    with file.open(encoding="utf-8") as handle:
+        doc = json.load(handle)
+    if not isinstance(doc, dict) or doc.get("event_date") != day:
+        raise ValueError("Settlement ledger event_date mismatch: " + day)
+    records = doc.get("race_records")
+    if not isinstance(records, dict) or len(records) > 288:
+        raise ValueError("Settlement ledger race_records invalid: " + day)
+    kept = {}
+    for race_id, rec in records.items():
+        if not isinstance(rec, dict):
+            continue
+        versions = rec.get("versions")
+        final = versions[-1] if isinstance(versions, list) and versions else None
+        snap = {}
+        if isinstance(final, dict):
+            for name in (
+                "venue", "race", "sha256", "cutoff_iso_jst", "frozen_at_utc",
+                "bets", "classification", "phase", "cutoff_jst", "model_version"
+            ):
+                if name in final:
+                    snap[name] = final[name]
+            if isinstance(final.get("racers"), list):
+                snap["racers"] = [
+                    {key: row[key] for key in (
+                        "lane", "course", "exhibition_st", "exhibition_time"
+                    ) if key in row} if isinstance(row, dict) else row
+                    for row in final["racers"]
+                ]
+        minimal = {
+            "venue": rec.get("venue"),
+            "race": rec.get("race"),
+            "versions": [snap] if isinstance(final, dict) else [],
+        }
+        for name in ("official_pay", "official_conflict", "official_review"):
+            if name in rec:
+                minimal[name] = rec[name]
+        kept[race_id] = minimal
+    result = {"event_date": day, "race_records": kept}
+    return (json.dumps(result, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
 
 
 def build_site(source: Path, output: Path, *, source_root: str = "app") -> dict:
@@ -52,12 +103,21 @@ def build_site(source: Path, output: Path, *, source_root: str = "app") -> dict:
             continue
         rel = item.relative_to(source).as_posix()
         size = item.stat().st_size
+        settlement_match = SETTLEMENT_LEDGER.fullmatch(rel)
+        if settlement_match and settlement_match.group(1) >= SETTLEMENT_START_DAY:
+            day = settlement_match.group(1)
+            compact = compact_settlement_ledger(item, day)
+            compact_rel = "data/live/settlement/" + day + ".json"
+            compact_target = output / compact_rel
+            compact_target.parent.mkdir(parents=True, exist_ok=True)
+            compact_target.write_bytes(compact)
+            shipped.append((compact_rel, len(compact)))
         if DATED_JSON.fullmatch(rel) and size >= ARCHIVE_LIMIT_BYTES:
             archived.append({
                 "path": rel,
                 "bytes": size,
                 "source": GITHUB_ARCHIVE_BASE + rel,
-                "reason": "large_historical_json_not_required_for_live_pwa",
+                "reason": "large_historical_json_replaced_by_compact_settlement_for_pwa" if settlement_match and settlement_match.group(1) >= SETTLEMENT_START_DAY else "large_historical_json_not_required_for_live_pwa",
             })
             continue
         target = output / rel

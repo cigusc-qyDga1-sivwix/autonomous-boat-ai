@@ -84,14 +84,20 @@ jobs:
               echo "::warning::JST day changed; never backdate data"
               exit 0
             fi
-            git add app/data/exhibition/status-latest.json
-            if [ -f "app/data/exhibition/$DAY.json" ]; then
-              git add "app/data/exhibition/$DAY.json"
-            fi
-            if git diff --cached --quiet; then
-              echo 'No new previews; nationwide collector continues normally'
+            # Do not publish a status-only heartbeat on every successful
+            # poll. Those needless commits collide with the nationwide job's
+            # immutable forecast publication, especially after workflow_run.
+            PREVIEW_FILE="app/data/exhibition/$DAY.json"
+            if [ ! -f "$PREVIEW_FILE" ]; then
+              echo 'No dated exhibition file; nationwide collector remains authoritative'
               exit 0
             fi
+            git add "$PREVIEW_FILE"
+            if git diff --cached --quiet -- "$PREVIEW_FILE"; then
+              echo 'No new six-boat previews; skip status-only publication'
+              exit 0
+            fi
+            git add app/data/exhibition/status-latest.json
             git commit -m 'exhibition: early six-boat numeric source capture'
             if git push origin HEAD:main; then
               echo 'Early pre-cutoff exhibition capture published'

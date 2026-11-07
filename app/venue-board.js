@@ -208,7 +208,7 @@
       outcome&&outcome.review?'<div class="venue-race-result">公式結果：返還・中止などの確認待ち</div>':'';
     // Card colour represents a pre-cutoff formally verified exhibition
     // snapshot, NOT a later research CSV, an outcome or a ticket change.
-    var displayExhibitionFormal=formal&&exhibitionVerified;
+    var displayExhibitionFormal=!!(data.mode==='auto-live'&&formal&&exhibitionVerified);
     return '<div class="venue-race'+(r?' venue-race-available':' venue-race-empty')+'" data-exhibition-status="'+
       (displayExhibitionFormal?'formal':r?'pending':'unavailable')+'">' +
       '<div class="venue-race-top"><b>'+number+'R</b><div class="venue-race-labels">'+

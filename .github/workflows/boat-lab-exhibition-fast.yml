@@ -7,6 +7,14 @@ on:
     - cron: '0-59/5 21-23 * * *'
     - cron: '0-59/5 0-14 * * *'
   workflow_dispatch:
+  # Scheduled GitHub Actions may be delayed/skipped under load. Also collect
+  # immediately after each completed nationwide forecast cycle, so a source
+  # published shortly afterward can be captured before the next race cutoff.
+  # This writes research previews only; the next live forecast run remains
+  # solely responsible for safely freezing an official prediction.
+  workflow_run:
+    workflows: ['BOAT LAB nationwide auto forecasts']
+    types: [completed]
   push:
     branches: [main]
     # Trigger once on deployment; never recurse on data-only source commits.
@@ -22,7 +30,12 @@ concurrency:
 
 jobs:
   fetch-early-six-boat-previews:
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name != 'workflow_run' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:

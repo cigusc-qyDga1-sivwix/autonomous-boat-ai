@@ -483,3 +483,62 @@ body {
 .exhibit-refresh-control:hover,.exhibit-refresh-control:focus-visible{background:#daf8f0;border-color:#4fbfae}
 .exhibit-health.stale .exhibit-refresh-control{border-color:#d7a968;color:#8b5d16}
 @media(max-width:420px){.exhibit-health-heading{align-items:stretch;gap:8px}.exhibit-refresh-control{width:100%;text-align:center}}
+
+
+/* 2026-11-07 | 6-boat exhibition reflected into PRE-CUTOFF formal forecast.
+ * Colour is evidence based; never colour a provisional / research-only
+ * snapshot on its source time alone. Also visible on iPhone 2-column grids.
+ */
+.venue-race[data-exhibition-status="formal"],
+.race-tile[data-exhibition-status="formal"]{
+  background:linear-gradient(144deg,#ddf9ef 0%,#f0fffb 56%,#fff 100%);
+  border:2px solid #23a68d;
+  box-shadow:inset 5px 0 0 #07ac90,0 8px 23px rgba(5,116,98,.14);
+  color:#123e36;
+}
+.venue-race[data-exhibition-status="formal"] .venue-race-top b,
+.venue-race[data-exhibition-status="formal"] .venue-race-cutoff strong,
+.venue-race[data-exhibition-status="formal"] .venue-race-main,
+.race-tile[data-exhibition-status="formal"] .tile-r,
+.race-tile[data-exhibition-status="formal"] .tile-bets{
+  color:#075e52;
+}
+.venue-race[data-exhibition-status="formal"] .venue-badge-ready{
+  color:#fff;
+  background:#087d68;
+  box-shadow:0 2px 8px rgba(8,125,104,.15);
+}
+.venue-race[data-exhibition-status="formal"] .venue-race-action{
+  background:linear-gradient(120deg,#077763,#086b6a);
+  color:#fff;
+}
+.venue-race[data-exhibition-status="formal"] .ticket-status-formal,
+.race-tile[data-exhibition-status="formal"] .ticket-status-formal{
+  background:#d1f7e6;
+  border-color:#65cfae;
+  color:#064f3e;
+}
+.venue-race[data-exhibition-status="formal"] .venue-race-scene,
+.race-tile[data-exhibition-status="formal"] .tile-scenario{
+  color:#426c65;
+}
+/* Older and unverified snapshots keep neutral/amber surfaces, not a green
+ * visual promise of finality. A results hit badge is a separate dimension. */
+.venue-race[data-exhibition-status="pending"],
+.race-tile[data-exhibition-status="pending"]{
+  border-color:#dae5ef;
+}
+.venue-race[data-exhibition-status="unavailable"]{
+  background:#eef2f5;
+  border-color:#e0e7ec;
+  box-shadow:none;
+}
+@media(max-width:600px){
+  .venue-race[data-exhibition-status="formal"],
+  .race-tile[data-exhibition-status="formal"]{
+    box-shadow:inset 4px 0 0 #07ac90,0 5px 16px rgba(5,116,98,.12);
+  }
+  .venue-race[data-exhibition-status="formal"] .venue-badge-ready{
+    font-size:9px;
+  }
+}

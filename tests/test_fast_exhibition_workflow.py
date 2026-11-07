@@ -27,3 +27,19 @@ def test_two_nonoverlapping_5min_schedules():
     assert "2-59/5" in primary
     assert "github.ref == 'refs/heads/main'" in source
     assert "concurrency:" in source
+
+
+def test_completed_main_forecast_triggers_safe_extra_capture():
+    source = WORKFLOW.read_text(encoding="utf-8")
+    # A second trigger reduces reliance on delayed GitHub cron scheduling.
+    assert "workflow_run:" in source
+    assert "workflows: ['BOAT LAB nationwide auto forecasts']" in source
+    assert "types: [completed]" in source
+    # Never trust arbitrary fork/branch runs, cancelled or failed ancestors.
+    assert "github.event.workflow_run.conclusion == 'success'" in source
+    assert "github.event.workflow_run.head_branch == 'main'" in source
+    assert "github.event.workflow_run.head_repository.full_name == github.repository" in source
+    assert "github.ref == 'refs/heads/main'" in source
+    # No retrospective auto-promotion of newly seen exhibition previews.
+    assert "scripts/autonomous_daily.py" not in source
+    assert "--previews-only --date" in source

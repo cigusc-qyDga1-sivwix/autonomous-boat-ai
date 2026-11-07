@@ -53,7 +53,6 @@ function summary(rows){
    total:rows.length,official:done.length,
    hit:done.filter(x=>x.hit).length,
    miss:done.filter(x=>!x.hit&&!x.voidRace).length,
-   refunded:done.filter(x=>x.refundBoats.length>0).length,
    awaiting:rows.filter(x=>x.status==='awaiting').length,
    issues:rows.filter(x=>x.status==='issue').length,
    upcoming:rows.filter(x=>x.status==='upcoming').length,

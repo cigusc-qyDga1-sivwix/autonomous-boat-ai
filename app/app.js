@@ -600,7 +600,7 @@
     };
     const mainTicketSection = `<section class="card card-pad"><div class="section-head"><h2 class="section-title">${escape(ticketLabel(r))}／3連単フォーメーション</h2>${pill(`${r.bets.length}点 / 仮想`,'pending')}</div><div class="feature-card"><span class="feature-label">SCENARIO / 展開の中心</span><strong>${escape(r.scenario)}</strong><p>着順連動型の仮説。1着の勝ち筋と2・3着の残り方を検証する。</p></div>
       ${proof?'<div class="notice"><strong>増点の根拠審査：</strong>'+escape(proof.signal_quality)+'。内部120通りは比較だけに使用。採用'+r.bets.length+'点、暫定安全上限24点。<strong>展開仮説は実際の攻防を観測した証拠ではありません。</strong></div>':''}
-      <table class="bets-table"><thead><tr><th>評価</th><th>3連単</th>${proof?'<th>採用根拠（未校正）</th>':''}<th>仮想金額</th></tr></thead><tbody>${r.bets.map((b,i)=>`<tr class="${i<3?'top-bet':''}"><td>${i<3?'本線':i<6?'対抗':'穴'}</td><td>${escape(b.combination)}</td>${proof?'<td>'+escape(claimLabels[proof.ticket_reasons?.[b.combination]?.basis]||'根拠未確認')+'</td>':''}<td class="amount">${money(b.virtual_yen)}</td></tr>`).join('')}</tbody></table><div class="detail-total"><span>合計 / ${r.bets.length}点</span><strong>${money(c.stake)}</strong></div><div class="notice warn">実際の購入は0円。${r.phase==='exhibition'?'展示は取得時点の値を反映。':'展示は未反映。'} オッズは未反映。この金額は精度比較用の仮想配分です。</div></section>`;
+      <div class="tablewrap"><table class="bets-table"><thead><tr><th>評価</th><th>3連単</th>${proof?'<th>採用根拠（未校正）</th>':''}<th>仮想金額</th></tr></thead><tbody>${r.bets.map((b,i)=>`<tr class="${i<3?'top-bet':''}"><td>${i<3?'本線':i<6?'対抗':'穴'}</td><td>${escape(b.combination)}</td>${proof?'<td>'+escape(claimLabels[proof.ticket_reasons?.[b.combination]?.basis]||'根拠未確認')+'</td>':''}<td class="amount">${money(b.virtual_yen)}</td></tr>`).join('')}</tbody></table></div><div class="detail-total"><span>合計 / ${r.bets.length}点</span><strong>${money(c.stake)}</strong></div><div class="notice warn">実際の購入は0円。${r.phase==='exhibition'?'展示は取得時点の値を反映。':'展示は未反映。'} オッズは未反映。この金額は精度比較用の仮想配分です。</div></section>`;
     const ticketBlock=isFormalTicket(r)?mainTicketSection:`<details class="ticket-provisional"><summary>暫定買い目を参考表示する（正式買い目ではありません）</summary>${mainTicketSection}</details>`;
     return `<button class="back-btn" data-action="back-races">← レース一覧へ戻る</button>
      ${window.BoatMobileRaceNav?.racePicker(r.venue,r.race,data.forecast_races,data.unforecast_races)||''}
@@ -802,7 +802,9 @@
     const main=el('main');
     el('breadcrumb-label').textContent=titles[state.view];
     document.querySelectorAll('[data-view]').forEach(b=>{b.classList.toggle('active',b.dataset.view===state.view);if(b.dataset.view===state.view)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
-    main.innerHTML=(window.BoatExhibitionAudit?.banner(data)||'')+
+    const desk=(state.view==='overview'||(state.view==='races'&&!state.raceDetail))?
+      (window.BoatLabUIConsole?.render(data)||''):'';
+    main.innerHTML=(window.BoatExhibitionAudit?.banner(data)||'')+desk+
       ({overview,races,results:resultsPage,analysis,settings})[state.view]();
     if(['results','analysis'].includes(state.view)&&window.BoatCumulative?.needsRefresh?.()){
       void window.BoatCumulative.load().then(()=>{if(['results','analysis'].includes(state.view))render()}).catch(()=>{});

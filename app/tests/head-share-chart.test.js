@@ -37,7 +37,9 @@ for(const race of live.forecast_races){
  assert.ok(Math.abs(data.reduce((n,x)=>n+x.percent,0)-100)<1e-9);
 }
 const app=fs.readFileSync('app/app.js','utf8');
-assert.ok(app.indexOf('BoatHeadShareChart?.render(r)')<app.indexOf('    ${ticketBlock}'),'chart immediately above main tickets');
+assert.ok(app.indexOf('    ${ticketBlock}')>=0&&
+ app.indexOf('    ${ticketBlock}')<app.indexOf('BoatHeadShareChart?.render(r)'),
+ 'formal tickets must be visible before the long rating chart on mobile');
 const index=fs.readFileSync('app/index.html','utf8');assert.match(index,/head-share-chart\.css/);assert.match(index,/head-share-chart\.js/);
 console.log('Head share pie: immutable saved values, 100% rounding, lane/course mapping, zero/missing guards, escaping and ticket placement: PASS');
 const mismatched=fixture();

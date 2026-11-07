@@ -43,3 +43,13 @@ def test_completed_main_forecast_triggers_safe_extra_capture():
     # No retrospective auto-promotion of newly seen exhibition previews.
     assert "scripts/autonomous_daily.py" not in source
     assert "--previews-only --date" in source
+
+
+def test_no_status_only_commit_can_contend_with_formal_forecast():
+    source = WORKFLOW.read_text(encoding="utf-8")
+    # Only new six-boat preview snapshots justify a Git write.
+    assert 'git add "$PREVIEW_FILE"' in source
+    assert 'git diff --cached --quiet -- "$PREVIEW_FILE"' in source
+    assert "git add app/data/exhibition/status-latest.json" in source
+    assert source.index('git diff --cached --quiet -- "$PREVIEW_FILE"') < source.index('git add app/data/exhibition/status-latest.json')
+    assert "No new six-boat previews; skip status-only publication" in source

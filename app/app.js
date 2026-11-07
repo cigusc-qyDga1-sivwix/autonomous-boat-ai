@@ -966,6 +966,7 @@
         break;
       }
       case 'refresh-official-results':void refreshOfficialResults();break;
+      case 'refresh-exhibition':void manualRefreshExhibition();break;
       case 'reload-cumulative-results':{
         if(window.BoatCumulative){
           const job=window.BoatCumulative.load(true);
@@ -1284,6 +1285,56 @@
     }catch(e){console.warn('Exhibition heartbeat unavailable:',e?.message);}
     finally{exhibitionHeartbeatBusy=false;}
   }
+  let canonicalForecastBusy=false;
+  // The public GitHub main SHA snapshot may be newer than the GitHub Pages
+  // deployment. A tiny manifest detects it without repeated large downloads.
+  // This path ONLY reads pre-frozen formal forecasts; it NEVER promotes research.
+  async function pollCanonicalForecast(){
+    const client=window.BoatCanonicalExhibitionFeed;
+    if(!client||canonicalForecastBusy||!data||document.hidden||
+       readJSON(STORE_DATA,null))return {state:'skipped'};
+    canonicalForecastBusy=true;
+    try{
+      const outcome=await client.check({current:data});
+      if(outcome.state!=='newer')return outcome;
+      const incoming=normalizeData(outcome.payload);
+      if(incoming.event_date<data.event_date)return {state:'older'};
+      const changed=acceptLiveData(incoming);
+      // The immutable canonical ledger supersedes a lagging Pages copy;
+      // normal acceptLiveData enforces updated_at monotonicity and result checks.
+      state.origin='GitHub main・発走前固定済みの最新公開データ';
+      if(changed)render();
+      await window.BoatExhibitionAudit?.load(incoming.event_date);
+      if(data?.event_date===incoming.event_date)render();
+      return {state:'applied',changed};
+    }catch(error){
+      console.warn('Canonical exhibition feed unavailable:',error?.message);
+      return {state:'unavailable',reason:error?.message};
+    }finally{canonicalForecastBusy=false;}
+  }
+  let manualExhibitionBusy=false;
+  async function manualRefreshExhibition(){
+    if(manualExhibitionBusy)return;
+    if(readJSON(STORE_DATA,null)){
+      toast('読み込み済みファイルを表示中。最新の自動予想へ戻すにはデータ管理から初期化してね');
+      return;
+    }
+    manualExhibitionBusy=true;
+    const before=(data?.forecast_races||[]).filter(r=>r.phase==='exhibition').length;
+    try{
+      const canonical=await pollCanonicalForecast();
+      await reloadLiveIfNew();
+      await window.BoatExhibitionAudit?.load(data.event_date);
+      render();
+      const after=(data?.forecast_races||[]).filter(r=>r.phase==='exhibition').length;
+      const message=after>before?'展示反映済みが '+before+'R → '+after+'R に更新されたよ':
+        canonical?.state==='unavailable'||canonical?.state==='not_ready'?
+        '展示の最新確認を実行したよ。GitHub直結は未確認、公開サイトの記録を表示中':
+        '最新データを確認したよ。正式展示の追加はまだないよ';
+      toast(message);
+    }catch(error){console.warn('Manual exhibition refresh failed:',error?.message);toast('展示の再確認に失敗。既存の固定予想は保持しているよ');}
+    finally{manualExhibitionBusy=false;}
+  }
   let liveUpdateInFlight=false;
   async function reloadLiveIfNew(){
     if(readJSON(STORE_DATA,null)||resultsRefreshBusy||officialPollBusy||liveUpdateInFlight||document.hidden)return;
@@ -1318,6 +1369,7 @@
         // The initial page load already fetches the latest frozen JSON.
         // Begin low-bandwidth heartbeat checks on the next minute.
         setInterval(pollExhibitionHeartbeat,60000);
+        if(window.BoatCanonicalExhibitionFeed)setInterval(pollCanonicalForecast,60000);
         // While reanalysis is open, query the public original-exhibition-only CSV directly.
         // The external publisher is periodic; this is best-effort, not true realtime.
         setInterval(()=>{if(state.view==='races'&&state.raceDetail&&state.showExternalAnalysis&&!document.hidden)void refreshOriginalExhibition(false);},20000);
@@ -1327,7 +1379,8 @@
         setInterval(pollOfficialResults,60000);
       }
       void pollOfficialResults();
-      document.addEventListener('visibilitychange',()=>{if(!document.hidden){void pollOfficialResults().then(reloadLiveIfNew);void pollExhibitionHeartbeat();if(state.view==='races'&&state.showExternalAnalysis)void refreshOriginalExhibition(false);}});
+      if(window.BoatCanonicalExhibitionFeed)void pollCanonicalForecast();
+      document.addEventListener('visibilitychange',()=>{if(!document.hidden){void pollOfficialResults().then(reloadLiveIfNew);void pollExhibitionHeartbeat();void pollCanonicalForecast();if(state.view==='races'&&state.showExternalAnalysis)void refreshOriginalExhibition(false);}});
     }catch(error){el('main').innerHTML=`<section class="card card-pad"><h1>データを読み込めませんでした</h1><p class="muted">${escape(error.message)}</p><p>アプリはHTTPSまたはローカルHTTPサーバー上で開いてください。ダウンロードしたHTMLを直接開くと、ブラウザの制限で予想データを取得できない場合があります。</p></section>`;}
   }
   window.BoatLab={validate:normalizeData,stats,officialStats,officialFor,compute,getData:()=>data,refreshOfficialResults};

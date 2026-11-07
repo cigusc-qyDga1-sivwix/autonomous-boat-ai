@@ -1,4 +1,4 @@
-"""Eligible second-chance CSV exhibition previews after first forecast publication.
+"""Eligible second-chance exhibition previews after first forecast publication.
 
 This gate decides only whether an extra PRE-CUTOFF build is worth running.
 It cannot formalize an archived research record or override the immutable
@@ -10,6 +10,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
+
+from .autonomous_daily import cutoff_of, preview_complete, retrieve, valid_entrants
 
 JST = ZoneInfo("Asia/Tokyo")
 SAFE_LEAD_SECONDS = 180
@@ -82,17 +84,66 @@ def eligible_new_previews(before, after, now):
     return sorted(set(eligible))
 
 
+def pending_api_races(ledger, now):
+    """Limit extra reads to nearby races with a baseline but no exhibition."""
+    day = now.astimezone(JST).date().isoformat()
+    if ledger.get("event_date") != day:
+        return []
+    pending = []
+    for key, record in ledger.get("race_records", {}).items():
+        venue, _, race_number = key.partition("-")
+        versions = record.get("versions", [])
+        if (not venue.isdigit() or not race_number.isdigit() or int(venue) == 3
+                or not versions or any(v.get("phase") == "exhibition" for v in versions)):
+            continue
+        try:
+            cutoff = datetime.fromisoformat(day + "T" + record["cutoff_jst"] + ":00+09:00")
+        except (KeyError, TypeError, ValueError):
+            continue
+        if now + timedelta(seconds=SAFE_LEAD_SECONDS) < cutoff <= now + timedelta(minutes=20):
+            pending.append((str(int(venue)), str(int(race_number))))
+    return pending
+
+
+def eligible_api_previews(ledger, payload, now):
+    """Use the same complete-preview and cutoff gates as the forecast."""
+    stadiums = (payload.get("programs") or {}).get("stadiums") or {}
+    day = now.astimezone(JST).strftime("%Y%m%d")
+    eligible = []
+    for venue, number in pending_api_races(ledger, now):
+        race = (stadiums.get(venue, {}).get("races") or {}).get(number)
+        if not isinstance(race, dict):
+            continue
+        cutoff = cutoff_of(race)
+        if (cutoff is None or cutoff.date() != now.astimezone(JST).date()
+                or now + timedelta(seconds=SAFE_LEAD_SECONDS) >= cutoff
+                or not valid_entrants(race) or not preview_complete(race)):
+            continue
+        eligible.append(day + venue.zfill(2) + number.zfill(2))
+    return sorted(eligible)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--before", type=Path, required=True)
     parser.add_argument("--after", type=Path, required=True)
     parser.add_argument("--github-output", type=Path)
+    parser.add_argument("--ledger", type=Path)
     args = parser.parse_args()
     candidates = eligible_new_previews(_read(args.before), _read(args.after),
                                        datetime.now(timezone.utc))
+    if not candidates and args.ledger:
+        ledger = _read(args.ledger)
+        now = datetime.now(timezone.utc)
+        if pending_api_races(ledger, now):
+            try:
+                payload, _ = retrieve(now.astimezone(JST).strftime("%Y%m%d"))
+                candidates = eligible_api_previews(ledger, payload, datetime.now(timezone.utc))
+            except (OSError, ValueError) as exc:
+                print(f"::warning::Open API exhibition recheck failed: {exc}")
     output = {
         "eligible": bool(candidates), "candidate_races": candidates,
-        "scope": "new timely CSV previews; formalization still requires fresh live build",
+        "scope": "new timely CSV or Open API previews; formalization still requires fresh live build",
     }
     print(json.dumps(output, ensure_ascii=False))
     if args.github_output:

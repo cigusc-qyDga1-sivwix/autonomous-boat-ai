@@ -223,9 +223,12 @@ jobs:
           else
             echo '{}' > "$BEFORE"
           fi
-          python scripts/ingest_boatracecsv_exhibition.py --previews-only
-          python scripts/exhibition_second_chance.py \
-            --before "$BEFORE" --after "$AFTER" --github-output "$GITHUB_OUTPUT"
+          if ! python scripts/ingest_boatracecsv_exhibition.py --previews-only; then
+            echo "::warning::CSV recheck failed; checking Open API independently"
+            AFTER="$BEFORE"
+          fi
+          python -m scripts.exhibition_second_chance \
+            --before "$BEFORE" --after "$AFTER" --ledger "app/data/live/$DAY.json" --github-output "$GITHUB_OUTPUT"
 
       - name: Immediately freeze and publish second-chance exhibition forecasts
         if: steps.second_chance.outputs.eligible == 'true'

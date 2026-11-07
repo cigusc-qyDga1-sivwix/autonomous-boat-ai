@@ -54,11 +54,11 @@ function banner(data){
  const fore=(data.forecast_races||[]),used=fore.filter(x=>x.phase==='exhibition').length;
  const a=age(data.updated_at_utc),b=age(state.collected),
        checked=age(state.checked),stale=a===null||a>20||checked===null||checked>20||state.sourceOkay===false;
- return '<div class="exhibit-health '+(stale?'stale':'ready')+'" role="status"><strong>📡 展示の取得状況</strong>　'+
+ return '<div class="exhibit-health '+(stale?'stale':'ready')+'" role="status"><div class="exhibit-health-heading"><strong>📡 展示の取得状況</strong><button type="button" class="exhibit-refresh-control" data-action="refresh-exhibition" aria-label="最新の展示と固定予想を確認">↻ 展示・買い目を更新</button></div>'+
   '発走前反映 '+used+'/'+fore.length+'R ／ 展示研究記録 '+state.map.size+'R ／ '+ 
   '予想更新 '+(a===null?'不明':a+'分前')+' ／ 展示収集チェック '+(checked===null?'未確認':checked+'分前')+
   ' ／ 展示研究データ更新 '+(b===null?'不明':b+'分前')+
-  (stale?' ／ ⚠ 更新遅延あり':'')+(state.error?' ／ '+esc(state.error):'')+
+  (stale?' ／ ⚠ 公開データの更新遅延あり':'')+(state.error?' ／ '+esc(state.error):'')+
   '<p>研究記録と発走前に反映済みの展示は別です。'+
   '<a href="./exhibition.html">展示の研究記録を見る ↗</a></p></div>';
 }

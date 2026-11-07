@@ -1,0 +1,477 @@
+/*
+ * BOAT LAB — Race Desk / Premium UI 2026-11-07
+ * Visual layer only. Never changes predictions, payout verification, SHA,
+ * betting decisions, cutoff gates, or official result provenance.
+ *
+ * Design: deep-ocean chrome, clear white research surfaces, electric-mint
+ * verified signals, warm amber pending states, large mobile touch targets.
+ */
+:root {
+  --bl-dark:#0b233a;
+  --bl-ink:#15314c;
+  --bl-muted:#5e758a;
+  --bl-aqua:#00a9b9;
+  --bl-mint:#05ab8c;
+  --bl-line:#dce8f0;
+  --bl-surface:#ffffff;
+  --bl-cloud:#f4f8fc;
+  --bl-amber:#a46b16;
+  --bl-radius:18px;
+  --bl-shadow:0 9px 29px rgba(16,55,81,.075);
+  color:var(--bl-ink);
+}
+body {
+  color:var(--bl-ink);
+  background:
+    radial-gradient(circle at 88% -3%,rgba(90,193,212,.13),transparent 34%),
+    radial-gradient(circle at 12% 35%,rgba(166,210,239,.09),transparent 35%),
+    #f3f7fb;
+  -webkit-font-smoothing:antialiased;
+}
+.shell {isolation:isolate}
+.workspace {min-width:0}
+.main {max-width:1390px}
+.main:focus {outline:none}
+.sidebar {
+  background:linear-gradient(176deg,#081a2e 0%,#12304b 58%,#0b2942 100%);
+  border-right:1px solid #1d4760;
+  box-shadow:5px 0 23px rgba(7,29,48,.06);
+}
+.brand-symbol {
+  border:1px solid rgba(120,246,218,.22);
+  background:linear-gradient(145deg,#0b6a79,#074455);
+  box-shadow:0 7px 21px rgba(3,162,173,.16);
+}
+.nav-caption {color:#90abc2}
+.nav-item {border:1px solid transparent;min-height:49px;font-weight:750}
+.nav-item.active {
+  border-color:rgba(87,219,215,.2);
+  background:linear-gradient(95deg,#18405d,#1c4762);
+  box-shadow:inset 3px 0 0 #49dbc1,0 7px 17px rgba(0,0,0,.08);
+}
+.side-note {background:rgba(8,64,78,.55);border-color:#346478}
+.side-note p {color:#cfdfeb}
+.sidebar-foot {color:#aac2d5}
+.topbar {
+  position:sticky;
+  top:0;
+  z-index:15;
+  height:73px;
+  flex-shrink:0;
+  min-width:0;
+  background:rgba(255,255,255,.95);
+  -webkit-backdrop-filter:blur(17px);
+  backdrop-filter:blur(17px);
+  border-bottom:1px solid #dce9ef;
+  box-shadow:0 3px 20px rgba(15,49,77,.045);
+}
+.breadcrumb {color:#607f8e}
+.breadcrumb strong {color:#163b53;font-size:14px}
+.top-actions {gap:11px}
+.live-mark {color:#147b76;letter-spacing:.09em;font-weight:900}
+.live-mark .dot {background:#0fb79d;box-shadow:0 0 0 4px rgba(6,181,150,.10)}
+.quick-links-menu summary {color:#145976;background:#eef8fb;border-color:#cfdee8}
+.quick-links-menu summary:focus-visible {outline:3px solid #61c6d2}
+.quick-links-panel {box-shadow:0 19px 49px rgba(13,43,65,.19)}
+.icon-button {border-radius:11px;border-color:#cbdde7;color:#1b6074;font-weight:800}
+.icon-button:active {transform:scale(.95)}
+.footer {color:#627b90}
+.card {
+  border:1px solid #dfebf2;
+  border-radius:var(--bl-radius);
+  box-shadow:var(--bl-shadow);
+}
+.card-pad {padding:clamp(17px,2.3vw,25px)}
+.page-heading h1,.detail-title,.venue-board-head h2 {color:#15334c;letter-spacing:-.025em}
+.page-eyebrow,.mini-caption {color:#087e8c;font-weight:900;letter-spacing:.13em}
+.page-heading p {color:var(--bl-muted)}
+.section-title {letter-spacing:-.015em;color:#173e59}
+.notice {border-radius:12px;line-height:1.75}
+.notice.warn {border-left:3px solid #d9a545;background:#fff9ee}
+.pill {font-weight:900;letter-spacing:.01em}
+.pill.hit,.venue-badge-ready {background:#e2f9ee;color:#087451}
+.pill.miss {background:#fff0ef;color:#ad4550}
+.pill.watch,.pill.pending {background:#fff5df;color:#98600e}
+.btn-primary {background:#076e84;border-color:#076e84}
+.btn-primary:hover {background:#08576e}
+.btn,.select,.venue-filter,.venue-race-action {min-height:42px}
+:where(button,a,select,input,summary):focus-visible {
+  outline:3px solid #2bbed2;
+  outline-offset:3px;
+}
+
+/* Compact factual control room. Always separate formal and trial. */
+.bl-race-desk {
+  margin:4px 0 20px;
+  padding:20px 23px 16px;
+  border:1px solid #c7e1e8;
+  border-radius:22px;
+  background:
+    radial-gradient(circle at 100% 0,rgba(127,222,220,.17),transparent 45%),
+    linear-gradient(135deg,#ffffff 20%,#f0fafa 100%);
+  box-shadow:0 11px 30px rgba(22,87,111,.065);
+  color:#173b55;
+}
+.bl-desk-topline {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:15px;
+}
+.bl-desk-eyebrow {display:block;font-size:10px;letter-spacing:.15em;color:#218b9a;font-weight:900}
+.bl-desk-topline h2 {
+  margin:5px 0 0;
+  font-size:20px;
+  font-weight:900;
+  line-height:1.3;
+  letter-spacing:-.02em;
+  color:#103b53;
+}
+.bl-desk-topline h2 small {font-size:11px;color:#688392;font-weight:750;letter-spacing:0;white-space:nowrap}
+.bl-desk-fresh {
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  max-width:48%;
+  padding:7px 9px;
+  border-radius:999px;
+  border:1px solid #e5d6b7;
+  background:#fff7e6;
+  font-size:11px;
+  line-height:1.35;
+  color:#875c14;
+  font-weight:850;
+  text-align:right;
+}
+.bl-desk-fresh.is-current {background:#e6f9f1;color:#116858;border-color:#b6e7d8}
+.bl-desk-indicator {height:7px;width:7px;flex:0 0 7px;border-radius:50%;background:currentColor;opacity:.85}
+.bl-desk-updated {font-size:10px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.bl-desk-stat-grid {display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:10px}
+.bl-desk-stat {
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  padding:16px;
+  min-width:0;
+  border:1px solid #d6e6ed;
+  border-radius:15px;
+  background:#fff;
+  color:#17425b;
+}
+.bl-desk-stat>span {font-size:11px;line-height:1.45;font-weight:800;color:#5c788b}
+.bl-desk-stat strong {font-size:29px;line-height:1.15;font-weight:950;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.bl-desk-stat strong small {font-size:12px;font-weight:800;letter-spacing:0;color:#6b8997}
+.bl-desk-stat em {font-size:10px;font-weight:650;font-style:normal;line-height:1.4;color:#7892a3}
+.bl-desk-stat-hero {
+  border-color:#73d2c6;
+  background:linear-gradient(142deg,#096b71 0%,#094e61 94%);
+  color:#fff;
+  box-shadow:0 10px 21px rgba(11,120,112,.14);
+}
+.bl-desk-stat-hero>span,.bl-desk-stat-hero strong small {color:#d3f5ec}
+.bl-desk-progress {height:6px;border-radius:100px;background:#347f84;margin-top:auto;overflow:hidden}
+.bl-desk-progress span {display:block;height:100%;border-radius:100px;background:#70ebc5;transition:width .25s}
+.bl-desk-next {display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:14px}
+.bl-desk-next-label {font-size:10px;font-weight:900;letter-spacing:.05em;color:#4d778a;margin-right:4px}
+.bl-desk-next-race {
+  display:inline-flex;
+  align-items:center;
+  gap:9px;
+  min-height:41px;
+  max-width:100%;
+  border:1px solid #cde1e9;
+  border-radius:11px;
+  padding:8px 11px;
+  color:#1c4861;
+  background:#fff;
+  box-shadow:0 3px 9px rgba(20,79,96,.035);
+  font-size:12px;
+}
+.bl-desk-next-race:hover {border-color:#65bfbe;background:#f3fffc}
+.bl-desk-time {font-size:16px;line-height:1;font-weight:950;color:#0a6b89;font-variant-numeric:tabular-nums}
+.bl-desk-name {font-weight:850}
+.bl-desk-race-state {border-radius:6px;padding:4px 6px;font-size:10px;font-weight:850;white-space:nowrap}
+.bl-desk-race-state.is-formal {background:#ddf8e9;color:#0a7051}
+.bl-desk-race-state.is-pending {background:#fff2d9;color:#99631b}
+.bl-desk-next-empty {margin:12px 0 0;font-size:11px;color:#718696}
+.bl-desk-safety {font-size:10px;line-height:1.6;color:#6a8391;margin:12px 0 0}
+.bl-desk-stat strong,.venue-hero-stats strong,.venue-next span,.metric-value,
+.venue-race-cutoff strong,.detail-total strong {font-variant-numeric:tabular-nums}
+
+/* Premium live board — the information remains identical. */
+.venue-board,.venue-detail-board {color:var(--bl-ink)}
+.venue-hero {
+  isolation:isolate;
+  background:
+    radial-gradient(ellipse at 92% 18%,rgba(14,209,200,.25),transparent 34%),
+    linear-gradient(127deg,#071f38 5%,#0b3e59 57%,#065e70 110%);
+  border:1px solid rgba(114,234,218,.19);
+  box-shadow:0 17px 42px rgba(10,54,80,.19);
+  border-radius:23px;
+  padding:27px 29px 23px;
+}
+.venue-hero:after {color:#b3fff1;opacity:.08;right:0;top:-86px}
+.venue-hero-overline {color:#b5f5e9;letter-spacing:.18em;opacity:1}
+.venue-hero h1 {font-size:clamp(24px,2.7vw,33px);letter-spacing:-.022em;margin:9px 0 6px}
+.venue-hero h1 span {font-size:.8em}
+.venue-hero>p {color:#d5edf5;font-size:12px;line-height:1.5;opacity:1}
+.venue-hero-stats {gap:9px;margin-top:20px}
+.venue-hero-stats>span {
+  padding:12px 13px;
+  border-radius:12px;
+  border-color:rgba(185,250,244,.19);
+  background:rgba(255,255,255,.085);
+  color:#e1f2f8;
+  font-size:11px;
+  line-height:1.45;
+}
+.venue-hero-stats strong {font-size:25px;line-height:1.1;letter-spacing:-.03em}
+.venue-board-head {margin-top:25px}
+.venue-board-head h2 {font-size:23px}
+.venue-board-head p {color:#647c90}
+.venue-filters {gap:8px}
+.venue-filter {
+  padding:10px 15px;
+  border-color:#cddfe9;
+  background:#fff;
+  color:#567187;
+  box-shadow:0 2px 8px rgba(16,71,96,.03);
+}
+.venue-filter.active {
+  background:#0f526b;
+  border-color:#0f526b;
+  color:white;
+  box-shadow:0 5px 14px rgba(16,86,104,.14);
+}
+.venue-sort-label select {background:#fff;min-height:42px;font-weight:850}
+.venue-card-grid {gap:14px}
+.venue-card {
+  border-radius:18px;
+  border-color:#d6e6ef;
+  background:#fff;
+  box-shadow:0 6px 19px rgba(24,65,86,.068);
+  transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease;
+}
+.venue-card:after {
+  content:"";
+  position:absolute;
+  left:0;right:0;bottom:0;height:3px;
+  pointer-events:none;
+  background:linear-gradient(90deg,#1ca6b1,#65dac4);
+  opacity:.66;
+}
+.venue-card:hover {border-color:#8bcfce;box-shadow:0 12px 30px rgba(14,76,101,.13)}
+.venue-theme-morning {background:linear-gradient(148deg,#fff 11%,#edfaff 100%)}
+.venue-theme-day {background:linear-gradient(148deg,#fff 11%,#eaf7fb 100%)}
+.venue-theme-night {
+  background:linear-gradient(149deg,#1b385f 0%,#102842 92%);
+  border-color:#365473;
+}
+.venue-theme-night:after {background:linear-gradient(90deg,#55b4df,#55e7d2);opacity:.8}
+.venue-inactive {background:#edf1f4!important;border-color:#e0e6ec!important;box-shadow:none}
+.venue-inactive:after {background:#bac9d0;opacity:.45}
+.venue-open {min-height:194px;padding:19px 17px 15px}
+.venue-name {font-size:21px;letter-spacing:-.03em;color:#143a54}
+.venue-theme-night .venue-name {color:#fff}
+.venue-emoji {font-size:26px}
+.venue-meta {font-size:11px;font-weight:700}
+.venue-badge {border-radius:7px;font-size:10px;padding:5px 7px}
+.venue-next {background:rgba(248,253,255,.87);padding:9px 12px;border:1px solid rgba(178,212,225,.32)}
+.venue-theme-night .venue-next {background:rgba(255,255,255,.12);border-color:rgba(209,231,244,.16)}
+.venue-next span {letter-spacing:-.035em}
+.venue-favorite {box-shadow:0 1px 7px rgba(13,41,58,.07)}
+.venue-favorite.is-favorite {color:#b97609;background:#fff0be}
+.venue-progress {font-size:11px;font-weight:850}
+.venue-open:focus-visible,.venue-race-action:focus-visible {
+  outline:3px solid #30cfc5;outline-offset:2px;
+}
+.venue-detail-hero {
+  border-radius:19px;
+  background:linear-gradient(125deg,#0a2a46 0%,#096c77 100%);
+  box-shadow:0 12px 28px rgba(11,75,90,.13);
+}
+.venue-race-grid {gap:13px}
+.venue-race {
+  border-radius:16px;
+  border:1px solid #d6e6ee;
+  box-shadow:0 6px 18px rgba(26,75,100,.055);
+  background:#fff;
+  padding:18px 16px;
+}
+.venue-race-empty {background:#eef2f5;border-color:#e0e7ec;box-shadow:none}
+.venue-race-cutoff strong {font-size:19px;color:#125f72}
+.venue-race-main {
+  white-space:normal;
+  overflow-wrap:anywhere;
+  line-height:1.5;
+  font-size:15px;
+  letter-spacing:-.015em;
+}
+.venue-race-action {
+  background:linear-gradient(120deg,#087b87,#065b76);
+  box-shadow:0 5px 11px rgba(10,112,129,.13);
+  border-radius:11px;
+  min-height:43px;
+  font-size:12px;
+}
+.venue-race-action:hover {background:#095c69}
+.venue-race-scene {line-height:1.55;font-size:11px}
+.venue-race-labels {gap:5px}
+.venue-weather-coverage,.venue-current-weather {background:#f0f9fd;border-color:#cbe3ec;color:#285f78}
+.venue-official-summary {
+  background:linear-gradient(100deg,#f0fefa,#e8f8f5);
+  border-color:#a8dfce;
+  box-shadow:0 5px 16px rgba(10,125,107,.055);
+  min-height:55px;
+}
+
+/* Detail: distinguish actual formal tickets from provisional research. */
+.detail-header {
+  padding:19px 20px;
+  background:linear-gradient(112deg,#f2fafd,#fff);
+  border:1px solid #d8e7ef;
+  border-radius:17px;
+  gap:12px;
+}
+.detail-title {font-weight:950;line-height:1.22}
+.detail-sub {font-size:12px;line-height:1.6;color:#59788b}
+.ticket-status {border-radius:15px;box-shadow:0 6px 17px rgba(24,82,91,.06)}
+.ticket-status-formal {
+  border:1px solid #93dbbd;
+  border-left:5px solid #05a879;
+  background:linear-gradient(95deg,#e8fbf1,#f9fffc);
+  color:#085d47;
+}
+.ticket-status-formal strong {color:#075d45}
+.ticket-status-pending {
+  border:1px solid #eacb94;
+  border-left:5px solid #d99935;
+  background:linear-gradient(95deg,#fff7e8,#fffdfa);
+  color:#785216;
+}
+.ticket-status-pending strong {color:#875713}
+.ticket-provisional {border:1px solid #efdcba;border-radius:14px;background:#fffdf8;padding:14px}
+.ticket-provisional>summary {cursor:pointer;color:#885b1d;font-size:14px;font-weight:900;min-height:44px;display:flex;align-items:center}
+.feature-card {border-radius:13px}
+.tablewrap {max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.bets-table {font-variant-numeric:tabular-nums}
+.bets-table th {color:#4f768b;background:#f1f7fa;font-weight:900}
+.bets-table td {color:#243f56}
+.bets-table .top-bet td:nth-child(2) {color:#006b74}
+.amount {color:#1d4f61}
+.detail-total {
+  border:1px solid #bce8de;
+  background:linear-gradient(100deg,#ebfaf6,#f6fdfb);
+  border-radius:12px;
+}
+.exhibit-health {
+  border-radius:13px;
+  border-color:#b3ddd2;
+  background:#effbf6;
+  color:#155b4f;
+}
+.exhibit-health.stale {border-color:#e7ce9c;background:#fff7e8;color:#84591b}
+.venue-badge-missing,.venue-race-empty .venue-badge {color:#885c21}
+.race-tile {border:1px solid #dbe9f0;border-radius:16px;box-shadow:var(--bl-shadow)}
+.race-tile:hover {border-color:#8fd0ce}
+.race-timeline {background:#f8fcff;border-color:#d6e8f4}
+.timeline-next {border-color:#e8c66b;box-shadow:inset 4px 0 0 #dca635}
+.quick-results-v2 {border-radius:18px;box-shadow:var(--bl-shadow)}
+.quick-results-v2 .quick-results-race.is-hit {border-color:#80d8b2}
+
+/* Thumb-friendly mobile first-screen composition. */
+@media(max-width:810px) {
+  .topbar {height:64px;padding:0 16px}
+  .main {padding:17px 15px 108px}
+  .mobile-brand {font-size:17px;font-weight:950;letter-spacing:-.02em;color:#173e53}
+  .mobile-brand .mobile-mark {color:#009c9d}
+  .bottom-nav {
+    bottom:0;
+    padding:7px max(8px,env(safe-area-inset-right)) calc(7px + env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left));
+    border-top:1px solid #d7e7ef;
+    border-radius:16px 16px 0 0;
+    box-shadow:0 -6px 28px rgba(13,48,72,.09);
+    background:rgba(255,255,255,.97);
+    -webkit-backdrop-filter:blur(12px);
+    backdrop-filter:blur(12px);
+  }
+  .bottom-nav button {min-height:49px;border-radius:12px;gap:2px;color:#6d8499}
+  .bottom-nav button span {font-size:22px}
+  .bottom-nav button small {font-size:10px;font-weight:850}
+  .bottom-nav button.active {
+    background:linear-gradient(180deg,#e0f8f3,#f0fcfc);
+    color:#047e7e;
+    box-shadow:inset 0 0 0 1px #a2e5d9;
+  }
+  .venue-card-grid {gap:11px}
+  .venue-race-grid {gap:11px}
+  .bl-race-desk {margin:2px 0 16px}
+}
+@media(max-width:600px) {
+  .main {padding:13px 12px 100px}
+  .bl-race-desk {padding:15px 13px 12px;border-radius:16px}
+  .bl-desk-topline {align-items:flex-start;gap:9px}
+  .bl-desk-topline h2 {font-size:17px}
+  .bl-desk-topline h2 small {display:block;font-size:10px;margin-top:4px}
+  .bl-desk-fresh {max-width:49%;font-size:9px;padding:6px 7px;gap:4px;justify-content:flex-start;border-radius:11px}
+  .bl-desk-updated {font-size:9px}
+  .bl-desk-stat-grid {grid-template-columns:1.2fr 1fr 1fr;gap:6px}
+  .bl-desk-stat {padding:11px 9px;gap:5px;border-radius:11px}
+  .bl-desk-stat>span {font-size:9px;line-height:1.4}
+  .bl-desk-stat strong {font-size:25px}
+  .bl-desk-stat strong small {font-size:10px}
+  .bl-desk-stat em {font-size:9px}
+  .bl-desk-next {gap:7px;margin-top:11px}
+  .bl-desk-next-label {width:100%;margin-bottom:-1px}
+  .bl-desk-next-race {padding:7px 9px;gap:6px;min-height:40px}
+  .bl-desk-time {font-size:15px}
+  .bl-desk-race-state {font-size:9px}
+  .bl-desk-safety {font-size:9px;margin-top:10px}
+  .venue-hero {padding:20px 16px;border-radius:17px}
+  .venue-hero h1 {font-size:24px}
+  .venue-hero-stats {grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:15px}
+  .venue-hero-stats>span {padding:10px 12px;font-size:10px}
+  .venue-hero-stats strong {font-size:23px}
+  .venue-board-head h2 {font-size:20px}
+  .venue-card-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+  .venue-card {border-radius:14px}
+  .venue-open {padding:14px 12px 13px;min-height:183px}
+  .venue-name {font-size:18px}
+  .venue-emoji {font-size:24px;flex-basis:25px}
+  .venue-meta {font-size:9px;margin-top:11px}
+  .venue-progress {font-size:9px}
+  .venue-next span {font-size:17px}
+  .venue-next strong {font-size:14px}
+  .venue-race-grid {grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .venue-race {padding:12px 10px;gap:8px;min-height:178px}
+  .venue-race-top b {font-size:19px}
+  .venue-race-cutoff strong {font-size:17px}
+  .venue-race-main {font-size:13px}
+  .venue-race-action {font-size:11px}
+  .detail-header {padding:15px 13px}
+  .detail-title {font-size:24px}
+  .page-heading h1 {font-size:24px}
+  .card-pad {padding:16px}
+  .bets-table th,.bets-table td {padding:10px 8px}
+}
+@media(max-width:370px) {
+  .bl-desk-stat-grid {grid-template-columns:repeat(2,minmax(0,1fr))}
+  .bl-desk-stat-hero {grid-column:span 2}
+  .bl-desk-stat strong {font-size:23px}
+  .bl-desk-topline {flex-wrap:wrap}
+  .bl-desk-fresh {max-width:100%;justify-content:flex-start}
+  .venue-race-grid {grid-template-columns:1fr}
+  .venue-race {min-height:158px}
+  .venue-card-grid {grid-template-columns:repeat(2,minmax(0,1fr))}
+  .venue-open {padding:13px 9px}
+  .venue-name {font-size:16px}
+}
+@media(hover:none) {
+  .venue-card:hover,.race-tile:hover {transform:none;box-shadow:var(--bl-shadow)}
+}
+@media(prefers-reduced-motion:reduce) {
+  .venue-card,.bl-desk-progress span,.icon-button {transition:none!important}
+}

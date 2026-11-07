@@ -542,3 +542,39 @@ body {
     font-size:9px;
   }
 }
+
+
+/* The first-screen chronological list uses the same formal-exhibition green. */
+.timeline-race[data-exhibition-status="formal"]{
+  background:linear-gradient(110deg,#e1fbf2,#f5fffc);
+  border:2px solid #29ad98;
+  box-shadow:inset 5px 0 0 #05ad91,0 5px 14px rgba(5,116,98,.11);
+}
+.timeline-race[data-exhibition-status="formal"] .timeline-clock strong,
+.timeline-race[data-exhibition-status="formal"] .timeline-race-main strong,
+.timeline-race[data-exhibition-status="formal"] .timeline-race-main strong span{
+  color:#086956;
+}
+.timeline-race[data-exhibition-status="formal"] .timeline-status{
+  background:#c4f3df;
+  color:#075d49;
+  font-weight:900;
+}
+.timeline-race[data-exhibition-status="formal"] .timeline-race-main small{
+  color:#397568;
+}
+.timeline-race[data-exhibition-status="formal"] .timeline-action{
+  border-color:#2da790;
+  color:#075d50;
+  background:#fff;
+}
+/* Safety: urgent timelines still carry an amber separator, even if the
+ * exhibition snapshot itself was already verified before the cutoff. */
+.timeline-race.timeline-urgent[data-exhibition-status="formal"]{
+  border-top-color:#ddab44;
+}
+@media(max-width:600px){
+  .timeline-race[data-exhibition-status="formal"]{
+    box-shadow:inset 4px 0 0 #05ad91,0 5px 12px rgba(5,116,98,.10);
+  }
+}

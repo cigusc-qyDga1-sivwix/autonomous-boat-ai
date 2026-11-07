@@ -100,6 +100,30 @@
   function allRaces() { return [...data.forecast_races].sort((a,b)=>a.venue.localeCompare(b.venue,'ja') || a.race-b.race); }
   function getVenues() { return [...new Set(allRaces().map(r=>r.venue))]; }
   function findRace(venue,race) {return allRaces().find(r=>r.venue===venue && r.race===Number(race));}
+  const REFUND_CODE={
+    '桐生':1,'戸田':2,'江戸川':3,'平和島':4,'多摩川':5,'浜名湖':6,
+    '蒲郡':7,'常滑':8,'津':9,'三国':10,'びわこ':11,'住之江':12,
+    '尼崎':13,'鳴門':14,'丸亀':15,'児島':16,'宮島':17,'徳山':18,
+    '下関':19,'若松':20,'芦屋':21,'福岡':22,'唐津':23,'大村':24
+  };
+  function refundEvidence(v,r){
+    const boats=v.refunded_boats===undefined?[]:v.refunded_boats;
+    if(!Array.isArray(boats)||new Set(boats).size!==boats.length||
+       boats.some(n=>!Number.isInteger(n)||n<1||n>6))return null;
+    const voidRace=v.void_trifecta===true,hasRefund=boats.length>0;
+    if(voidRace){
+      if(!hasRefund||v.finish!==null||v.payout_per_100!==0)return null;
+    }else if(!isCombo(v.finish)||!Number.isSafeInteger(v.payout_per_100)||
+      v.payout_per_100<100||v.payout_per_100>10000000||v.payout_per_100%10)return null;
+    if(hasRefund){
+      if(!REFUND_CODE[r.venue]||
+        v.refund_source_url!=='https://www.boatrace.jp/owpc/pc/race/raceresult?rno='+
+        r.race+'&jcd='+String(REFUND_CODE[r.venue]).padStart(2,'0')+
+        '&hd='+data.event_date.replace(/-/g,''))return null;
+      if(!voidRace&&v.finish.split('-').some(n=>boats.includes(Number(n))))return null;
+    }else if(voidRace||v.refund_source_url)return null;
+    return {boats,voidRace};
+  }
   function officialFor(r) {
     const k=raceKey(r),published=autoResults[k],imported=batchOfficial[k];
     if(!data||data.mode!=='auto-live')return null;
@@ -108,8 +132,7 @@
     const v=published||imported;
     if(!v||v.source!=='boatrace_official_pay'||v.verified!==true)return null;
     if(v.snapshot_sha256&&(!r.sha256||v.snapshot_sha256!==r.sha256))return null;
-    if(!isCombo(v.finish)||!Number.isSafeInteger(v.payout_per_100)||
-      v.payout_per_100<100||v.payout_per_100>10000000||v.payout_per_100%10)return null;
+    if(!refundEvidence(v,r))return null;
     return v;
   }
   function resultIssue(r) {
@@ -141,10 +164,19 @@
   function compute(r) {
     const record=recordFor(r),stake=r.bets.reduce((s,b)=>s+b.virtual_yen,0);
     if (!record) return {record:null,stake,payout:null,hit:null,profit:null};
-    const match=r.bets.find(b=>b.combination===record.finish);
+    const boats=Array.isArray(record.refunded_boats)?record.refunded_boats:[];
+    const voidRace=record.void_trifecta===true;
+    const virtualRefund=voidRace?stake:r.bets.reduce((s,b)=>
+      s+(b.combination.split('-').some(n=>boats.includes(Number(n)))?b.virtual_yen:0),0);
+    const match=voidRace?null:r.bets.find(b=>b.combination===record.finish);
     const hit=!!match;
-    const payout=hit?Math.round(match.virtual_yen*record.payout_per_100/100):0;
-    return {record,stake,payout,hit,profit:payout-stake,headCaptured:r.bets.some(b=>b.combination[0]===record.finish[0]),firstSecond:r.bets.some(b=>b.combination.slice(0,3)===record.finish.slice(0,3))};
+    const winningPayout=hit?Math.round(match.virtual_yen*record.payout_per_100/100):0;
+    const payout=winningPayout+virtualRefund;
+    const hasFinish=typeof record.finish==='string';
+    return {record,stake,payout,winningPayout,virtualRefund,
+      effectiveStake:stake-virtualRefund,hit,profit:payout-stake,
+      headCaptured:hasFinish&&r.bets.some(b=>b.combination[0]===record.finish[0]),
+      firstSecond:hasFinish&&r.bets.some(b=>b.combination.slice(0,3)===record.finish.slice(0,3))};
   }
   function stats(races) {
     let examined=0, hits=0, invested=0, paid=0, heads=0, firstSeconds=0, thirdMiss=0;
@@ -162,7 +194,10 @@
     if(issue)return pill(issue.status==='cancelled'?'レース中止':'公式・要確認','pending');
     const c=compute(r);
     if(!c.record)return pill('未照合','pending');
-    return pill((officialFor(r)?'公式 ':'')+(c.hit?'的中':'不的中'),c.hit?'hit':'miss');
+    if(c.record.void_trifecta)return pill('公式・全額返還','pending');
+    const text=(officialFor(r)?'公式 ':'')+(c.hit?'的中':'不的中')+
+      (c.record.refunded_boats?.length?'＋返還':'');
+    return pill(text,c.hit?'hit':'miss');
   }
   function head(title,subtitle,actions='') {return `<div class="page-heading"><div><div class="page-eyebrow">BOAT LAB / ${escape(data.event_date)}</div><h1>${escape(title)}</h1><p>${escape(subtitle)}</p></div>${actions?`<div class="right-controls">${actions}</div>`:''}</div>`;}
   function metric(label,value,sub,mark='',cls='') {return `<div class="card metric"><div class="metric-top"><span>${escape(label)}</span><span class="metric-mark">${escape(mark)}</span></div><strong class="metric-value ${cls}">${escape(value)}</strong><span class="metric-sub">${escape(sub)}</span></div>`;}
@@ -635,7 +670,7 @@
     <div class="detail-grid">
     <div><section class="card card-pad bottom-margin"><h3>レース情報</h3><div class="meta-list"><div class="meta"><span>開催</span><b>${escape(r.venue)}</b></div><div class="meta"><span>対象日</span><b>${dateDisplay(data.event_date)}</b></div><div class="meta"><span>締切予定</span><b>${escape(r.cutoff_jst)} JST</b></div><div class="meta"><span>予想区分</span><b>${escape(r.classification)}</b></div><div class="meta"><span>展示データ</span><b>${r.phase==='exhibition'?'反映済み（非公式）':'未反映'}</b></div><div class="meta"><span>オッズ</span><b>未反映</b></div></div></section>
     <section class="card card-pad bottom-margin"><h3>🌦 レース気象と試験補正</h3>${data.mode==='auto-live'?raceWeatherHTML(r):(w?`<div class="weather-box"><div class="weather-symbol">≋</div><div class="weather-body"><strong>${escape(w.wind)}</strong><p>${escape(w.note)}</p></div></div>`:'<p class="muted text-sm">気象見通し未登録</p>')}</section>
-    <section class="card card-pad"><h3>結果照合</h3><div class="meta-list"><div class="meta"><span>現在の状態</span>${finishPill(r)}</div>${c.record?`<div class="meta"><span>${officialFor(r)?'公式確定着順':'手入力着順'}</span><b>${escape(c.record.finish)}</b></div><div class="meta"><span>仮想払戻</span><b>${money(c.payout)}</b></div>`:''}</div><button class="btn btn-soft" style="width:100%;margin-top:15px" data-action="settle-this" data-race="${escape(r.venue)}|${r.race}">照合する →</button></section></div></div>`;
+    <section class="card card-pad"><h3>結果照合</h3><div class="meta-list"><div class="meta"><span>現在の状態</span>${finishPill(r)}</div>${c.record?`<div class="meta"><span>${officialFor(r)?'公式確定着順':'手入力着順'}</span><b>${escape(c.record.finish||'3連単不成立')}</b></div><div class="meta"><span>仮想払戻（返還込み）</span><b>${money(c.payout)}</b></div>${c.virtualRefund?`<div class="meta"><span>返還金</span><b>${money(c.virtualRefund)}</b></div>`:''}${c.record.refunded_boats?.length?'<div class="meta"><span>公式返還艇</span><b>'+escape(c.record.refunded_boats.map(n=>String(n)+(c.record.refund_reasons?.[n]||'返還')).join('・'))+'</b></div>':''}`:''}</div><button class="btn btn-soft" style="width:100%;margin-top:15px" data-action="settle-this" data-race="${escape(r.venue)}|${r.race}">照合する →</button></section></div></div>`;
   }
   function formatJst(iso) {
     if(!iso)return '未確認';

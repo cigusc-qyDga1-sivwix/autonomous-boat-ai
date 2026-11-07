@@ -4,8 +4,9 @@ Source: https://www.boatrace.jp/owpc/pc/race/pay?hd=YYYYMMDD
 The HTML includes multiple five-venue tables. Each result cell contains an exact
 rno/jcd/hd data-href, which is validated against its table header, row and day.
 
-Refunds (返), cancellations, ambiguous / multiple payouts and incomplete races
-are deliberately *not* scored as wins or losses. No ticket purchases.
+Refunds (返) require independent official race detail confirmation before
+scoring; unresolved refunds, ambiguous results and incomplete races stay excluded.
+No ticket purchases.
 """
 from __future__ import annotations
 
@@ -107,6 +108,21 @@ def _parse_group(cells, code, race_number, date_yyyymmdd):
     if any("中止" in s for s in parts):
         return "cancelled", None
 
+    # "返" alone does NOT identify which boat was returned. Keep this
+    # as a pending review until the official race-result page corroborates it.
+    # Preserve the printed trifecta solely as expected evidence for that check.
+    if "返" in "".join(parts):
+        refund = {"reason": "refund"}
+        amount = PAY.fullmatch(parts[1])
+        digits = parts[0]
+        if (amount and COMBO.fullmatch(digits) and len(set(digits)) == 3):
+            yen = int(amount.group(1).replace(",", ""))
+            if 100 <= yen <= 100_000_000 and yen % 10 == 0:
+                refund.update({"finish": "-".join(digits), "payout_per_100": yen})
+        elif "不成立" in parts[1]:
+            refund["void_trifecta"] = True
+        return "review", refund
+
     # Payout has to exist and correspond to the exact official race page.
     payout = PAY.fullmatch(parts[1])
     if not payout:
@@ -197,7 +213,7 @@ def parse_pay_page(raw_html: str, date_yyyymmdd: str) -> dict:
                 elif status == "cancelled":
                     cancellations[key] = {"reason": "レース中止"}
                 elif status == "review":
-                    reviews[key] = {"reason": value}
+                    reviews[key] = value if isinstance(value, dict) else {"reason": value}
                 else:
                     pending += 1
             if i != len(remainder):
@@ -231,6 +247,43 @@ def fetch_official_pay(date_yyyymmdd: str, timeout: int = 23) -> dict:
     doc = content.decode("utf-8")
     values = parse_pay_page(doc, date_yyyymmdd)
     values["source_url"] = url
+    # Pay-list "返" intentionally stays a review until the matching, official
+    # race result confirms the actual returned boat(s). A failed detail fetch
+    # must never silently turn a partial refund into a full-race void.
+    try:
+        from scripts.official_refunds import (
+            fetch_race_result, official_race_url, parse_official_refund
+        )
+    except ModuleNotFoundError:
+        from official_refunds import (
+            fetch_race_result, official_race_url, parse_official_refund
+        )
+    venue_by_code = {v: k for k, v in VENUE_CODES.items()}
+    for key, review in list(values["reviews"].items())[:30]:
+        if review.get("reason") != "refund":
+            continue
+        venue_code, race_no = key.split("-")
+        if not (review.get("void_trifecta") is True or
+                (review.get("finish") and review.get("payout_per_100"))):
+            continue
+        try:
+            html = fetch_race_result(date_yyyymmdd, venue_code, int(race_no))
+            detail = parse_official_refund(
+                html, date_yyyymmdd, venue_by_code[venue_code],
+                review.get("finish"), review.get("payout_per_100"),
+                bool(review.get("void_trifecta")))
+            entry = {
+                "finish": review.get("finish"),
+                "payout_per_100": review.get("payout_per_100", 0),
+                **detail,
+                "refund_source_url": official_race_url(
+                    date_yyyymmdd, venue_code, int(race_no)),
+            }
+            values["results"][key] = entry
+            del values["reviews"][key]
+        except (OSError, ValueError, UnicodeError, KeyError, TimeoutError):
+            # Preserve "needs review", not an unverified zero-yen loss.
+            continue
     values["retrieved_at_utc"] = datetime.now(timezone.utc).isoformat()
     return values
 

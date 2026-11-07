@@ -47,6 +47,13 @@ def merge_verified(old: dict | None, new: dict, day: str) -> dict:
     cancellations.update(new.get("cancellations") or {})
     conflicts = copy.deepcopy(prior.get("conflicts", {}))
     for race, incoming in (new.get("results") or {}).items():
+        # A former bare "返" review may now have an official, boat-specific
+        # reconciliation. Clear only that provisional review; never override
+        # conflicts, cancellations, or a different unresolved abnormality.
+        if (reviews.get(race, {}).get("reason") == "refund"
+                and incoming.get("refunded_boats")
+                and incoming.get("refund_source_url")):
+            reviews.pop(race, None)
         if race in results and results[race] != incoming:
             conflicts[race] = {"previous": results[race], "incoming": incoming}
             reviews[race] = {"reason": "official_correction_conflict"}

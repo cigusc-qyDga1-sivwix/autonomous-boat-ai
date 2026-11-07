@@ -19,8 +19,30 @@ const daysThrough=now=>{
  return result;
 };
 const label=day=>day.slice(5).replace('-','/');
-const EMPTY=()=>({eligible:0,checked:0,hits:0,invested:0,paid:0,profit:0,excluded:0});
+const EMPTY=()=>({eligible:0,checked:0,hits:0,invested:0,paid:0,refunded:0,refundRaces:0,voids:0,profit:0,excluded:0});
 const combo=x=>typeof x==='string'&&/^[1-6]-[1-6]-[1-6]$/.test(x)&&new Set(x.split('-')).size===3;
+// Never infer refundable boats from a bare official payoff '返' marker.
+function verifiedRefund(p,id,day){
+ if(!p)return null;
+ const boats=p.refunded_boats===undefined?[]:p.refunded_boats;
+ if(!Array.isArray(boats)||new Set(boats).size!==boats.length||
+   boats.some(n=>!Number.isInteger(n)||n<1||n>6))return null;
+ const isVoid=p.void_trifecta===true,hasRefund=boats.length>0;
+ if(isVoid){
+  if(!hasRefund||p.finish!==null||p.payout_per_100!==0)return null;
+ }else if(!combo(p.finish)||!Number.isSafeInteger(p.payout_per_100)||
+   p.payout_per_100<100||p.payout_per_100>10000000||
+   p.payout_per_100%10!==0)return null;
+ if(hasRefund){
+  const [venue,race]=id.split('-').map(Number);
+  if(!Number.isInteger(venue)||!Number.isInteger(race)||venue<1||venue>24||
+     race<1||race>12||
+     p.refund_source_url!=='https://www.boatrace.jp/owpc/pc/race/raceresult?rno='+
+      race+'&jcd='+String(venue).padStart(2,'0')+'&hd='+day.replace(/-/g,''))return null;
+  if(!isVoid&&p.finish.split('-').some(n=>boats.includes(Number(n))))return null;
+ }else if(isVoid||p.refund_source_url)return null;
+ return {boats,isVoid,hasRefund};
+}
 const money=n=>(n>=0?'+':'−')+Math.abs(n).toLocaleString('ja-JP')+'円';
 const yen=n=>n.toLocaleString('ja-JP')+'円';
 function validBets(bets,snapshot,day){
@@ -55,13 +77,16 @@ function summary(doc,day,formalOnly=false){
   if(record.official_conflict||record.official_review){out.excluded++;continue;}
   const p=record.official_pay;
   if(!p)continue;
-  if(p.source!=='boatrace_official_pay'||p.verified!==true||!combo(p.finish)||
-     !Number.isSafeInteger(p.payout_per_100)||p.payout_per_100<100||
-     p.payout_per_100>10000000||p.payout_per_100%10!==0||
+  const ref=verifiedRefund(p,id,day);
+  if(p.source!=='boatrace_official_pay'||p.verified!==true||!ref||
      (p.snapshot_sha256&&p.snapshot_sha256!==r.sha256)){out.excluded++;continue;}
-  const match=r.bets.find(b=>b.combination===p.finish);
+  const refunded=ref.isVoid?50000:r.bets.reduce((s,b)=>
+   s+(b.combination.split('-').some(n=>ref.boats.includes(Number(n)))?b.virtual_yen:0),0);
+  const match=ref.isVoid?null:r.bets.find(b=>b.combination===p.finish);
   const payout=match?Math.round(match.virtual_yen*p.payout_per_100/100):0;
-  out.checked++;out.hits+=Number(!!match);out.invested+=50000;out.paid+=payout;
+  out.checked++;out.hits+=Number(!!match);out.invested+=50000;
+  out.refunded+=refunded;out.refundRaces+=Number(ref.hasRefund);
+  out.voids+=Number(ref.isVoid);out.paid+=payout+refunded;
  }
  out.profit=out.paid-out.invested;
  return out;
@@ -77,20 +102,26 @@ function overlayVerifiedPays(ledger,doc,day){
  let added=0;
  for(const [id,rec] of Object.entries(ledger.race_records)){
   if(!rec||!Array.isArray(rec.versions)||!rec.versions.length||
-     rec.official_conflict||rec.official_review)continue;
+     rec.official_conflict||(rec.official_review&&rec.official_review!=='refund'))continue;
   const snap=rec.versions[rec.versions.length-1];
   if(!snap||!/^[a-f0-9]{64}$/i.test(snap.sha256||''))continue;
   const pay=doc.results[id];
   if(doc.reviews?.[id]||doc.cancellations?.[id]||doc.conflicts?.[id])continue;
-  if(!pay||!combo(pay.finish)||!Number.isSafeInteger(pay.payout_per_100)||
-     pay.payout_per_100<100||pay.payout_per_100>10000000||
-     pay.payout_per_100%10!==0)continue;
+  const refund=verifiedRefund(pay,id,day);
+  if(!refund)continue;
+  if(rec.official_review==='refund'&&!refund.hasRefund)continue;
   const existing=rec.official_pay;
   if(existing&&(!existing.verified||existing.finish!==pay.finish||
       existing.payout_per_100!==pay.payout_per_100))continue;
   if(existing?.verified)continue;
+  if(rec.official_review==='refund')delete rec.official_review;
   rec.official_pay={
    finish:pay.finish,payout_per_100:pay.payout_per_100,
+   ...(refund.hasRefund?{
+    refunded_boats:[...refund.boats],
+    refund_reasons:pay.refund_reasons||{},
+    void_trifecta:refund.isVoid,refund_source_url:pay.refund_source_url
+   }:{}),
    verified:true,source:'boatrace_official_pay',source_url:doc.source_url,
    recorded_at:doc.retrieved_at_utc,snapshot_sha256:snap.sha256
   };
@@ -146,7 +177,7 @@ function renderFormal(){
  if(!state.range.some(day=>state.formalDays[day]))return '<section class="card card-pad"><h2>正式買い目の累積収支</h2><p>日付別の固定記録を取得できていないため、正式収支は未集計です。</p></section>';
  const total=EMPTY();
  for(const day of state.range){const s=state.formalDays[day];if(s)for(const key of Object.keys(total))total[key]+=s[key];}
- return '<section class="card card-pad" aria-label="正式買い目の累積収支"><h2>正式買い目の累積収支</h2><p>展示反映・締切前固定 '+total.eligible+'R ／ 公式照合 '+total.checked+'R ／ 的中 '+total.hits+'R</p><p>仮想投資 '+yen(total.invested)+' ／ 仮想払戻 '+yen(total.paid)+' ／ 仮想収支 '+money(total.profit)+' ／ 回収率 '+(total.invested?(100*total.paid/total.invested).toFixed(1)+'%':'—')+'</p><p>各レースの最新の展示反映固定版だけ。暫定予想・未照合・返還・中止は正式収支に含めません。欠損日は集計対象外です。</p></section>';
+ return '<section class="card card-pad" aria-label="正式買い目の累積収支"><h2>正式買い目の累積収支</h2><p>展示反映・締切前固定 '+total.eligible+'R ／ 公式照合 '+total.checked+'R ／ 的中 '+total.hits+'R</p><p>仮想投資 '+yen(total.invested)+' ／ 仮想払戻 '+yen(total.paid)+'（返還 '+yen(total.refunded)+'）／ 仮想収支 '+money(total.profit)+' ／ 回収率 '+(total.invested?(100*total.paid/total.invested).toFixed(1)+'%':'—')+'</p><p>各レースの最新の展示反映固定版だけ。公式の返還艇が確認できた分は収支に計上。暫定予想・未照合・未確認返還・中止は正式収支に含めません。</p></section>';
 }
 function render(){
  const dates=state.range.length?state.range:daysThrough(new Date());
@@ -156,7 +187,7 @@ function render(){
  for(const day of dates){
   const d=state.days[day];
   if(!d){rows+='<tr><th scope="row">'+label(day)+'</th><td colspan="5">未取得・累積に含めない</td></tr>';continue;}
-  for(const key of ['eligible','checked','hits','invested','paid','profit'])combined[key]+=d[key];
+  for(const key of ['eligible','checked','hits','invested','paid','refunded','refundRaces','voids','profit'])combined[key]+=d[key];
   running+=d.profit;
   rows+='<tr><th scope="row">'+label(day)+'</th><td>'+d.checked+' / '+d.eligible+
    'R</td><td>'+d.hits+'R</td><td>'+yen(d.invested)+'</td><td>'+yen(d.paid)+
@@ -172,7 +203,7 @@ function render(){
   (found.length?
    '<div class="cum-total"><span>'+(completed?'累積仮想収支（当日は暫定）':'取得済み日だけの暫定累積')+
    '</span><strong class="'+(running>=0?'cum-plus':'cum-minus')+'">'+money(running)+'</strong>'+
-   '<small>仮想投資累計 '+yen(combined.invested)+' ／ 仮想払戻累計 '+yen(combined.paid)+'</small>'+
+   '<small>仮想投資累計 '+yen(combined.invested)+' ／ 仮想払戻累計 '+yen(combined.paid)+'（返還 '+yen(combined.refunded)+'）</small>'+
    '<small>公式照合 '+combined.checked+'R／対象固定 '+combined.eligible+'R · 的中 '+combined.hits+
    'R · 回収率 '+(combined.invested?(combined.paid/combined.invested*100).toFixed(1)+'%':'—')+'</small></div>':
    '<p class="notice">まだ集計できる日付別の公式照合記録がありません。</p>')+
@@ -184,7 +215,7 @@ function render(){
     Object.keys(state.errors).map(day=>label(day)+'分').join('、')+
     '。欠損日は0円として扱わず、累積から除外しています。</p>':'')+
   '<p class="help">10/22以降の日別GitHub発走前固定記録について、各レースの最新の締切前固定バージョンだけを計上。'+
-  '今日を含め公式照合済みレースだけが仮想投資と払戻の集計対象です。未照合・中止・返還・矛盾・不正データは集計せず、日付欠損を0円扱いしません。'+
+  '今日を含め公式照合済みレースだけが仮想投資と払戻の集計対象です。公式返還艇が確認できた分は返還額を収支に計上し、返還だけでは的中数を増やしません。未照合・中止・未確認返還・矛盾・不正データは集計せず、日付欠損を0円扱いしません。'+
   '旧モデルと新モデルの買い目を二重計上しません。全研究予想の仮想収支であり、実際の購入成績・正式BUY収支ではありません。</p></section>';
 }
 root.BoatCumulative={summary,overlayVerifiedPays,load,render,status,needsRefresh,daysThrough,jstDay,get dates(){return daysThrough(new Date())}};

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#081b33">
+  <meta name="theme-color" content="#0b233a">
   <meta name="description" content="競艇AIのレース予想・展示前買い目・仮想収支を検証するアプリ">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -21,6 +21,7 @@
   <link rel="stylesheet" href="./result-reader.css">
   <link rel="stylesheet" href="./result-quickboard-v2.css?v=20261105-results-v2">
   <link rel="stylesheet" href="./batch-result-reader.css">
+  <link rel="stylesheet" href="./premium-ui.css?v=20261107-racedesk-v1">
   <title>BOAT LAB | 競艇AI</title>
 </head>
 <body>
@@ -37,10 +38,10 @@
     </nav>
     <div class="sidebar-spacer"></div>
     <div class="side-note"><span class="pulse"></span> RESEARCH MODE <p>予想の実力は、発走前固定と結果照合で検証します。</p></div>
-    <div class="sidebar-foot">BOAT LAB v1.2 <span>© 2026</span></div>
+    <div class="sidebar-foot">BOAT LAB <span>STUDIO · 2026</span></div>
   </aside>
   <div class="workspace">
-    <header class="topbar"><div class="mobile-brand"><span class="mobile-mark">≈</span> BOAT<span>LAB</span></div><div class="breadcrumb"><span>WORKSPACE</span><span class="crumb-arrow">/</span><strong id="breadcrumb-label">ダッシュボード</strong></div><div class="top-actions"><span class="live-mark"><span class="dot"></span> LOCAL DATA</span><details class="quick-links-menu"><summary aria-label="研究ページを開く">研究メニュー</summary><div class="quick-links-panel" role="navigation" aria-label="研究・展示ページ"><a href="./rebuild-20261023.html" title="10月23日 168R 新旧再計算比較" style="color:#9bf1e4;padding:9px;text-decoration:none;font-size:.88rem">今日の全再評価</a><a href="./ab-20261023.html" title="10/23新旧AI発走前固定比較" style="color:#adffe4;padding:9px;font-weight:900;text-decoration:none;font-size:.9rem">⚔️ 今日のA/B対決</a><a href="./outside-20261023.html" title="外枠4・5・6とまくり戦法：旧v0.1対v0.2の発走前固定比較" style="color:#adffe4;padding:9px;font-weight:900;text-decoration:none;font-size:.9rem">🌊 外枠・まくり比較</a><a href="./wake-20261023.html" title="引き波で内側艇が失速する試験v0.3対v0.2の発走前固定比較" style="color:#9bf1e4;padding:9px;font-weight:900;text-decoration:none;font-size:.9rem">🌊 引き波検証</a><a href="./intelligence.html" title="全国24場・選手とモーターの研究データ" style="color:#9bf1e4;padding:9px;text-decoration:none;font-size:.88rem">🧠 データ研究室</a><a href="./weather/" title="波高・近隣風・潮位の独立データ" style="color:#79ecdb;padding:9px;text-decoration:none;font-size:.88rem">🌊 WEATHER LAB</a><a href="./venue-profiles.html" title="全国24場の水面特性と試験ロジック" style="color:#9bf1e4;padding:9px;text-decoration:none;font-size:.88rem">全国24場</a><a href="./exhibition-watch.html" title="公式の展示リプレイを見る" style="color:#9bf1e4;padding:9px;text-decoration:none;font-size:.88rem">🎥 展示映像</a><a href="./turn-vision-pilot-20261028.html" title="10月28日の唐津・児島・蒲郡ターン映像研究" style="color:#adffe4;padding:9px;text-decoration:none;font-size:.88rem">🔬 3場ターン研究</a><a href="./exhibition.html" title="展示実測・結果（研究用）" style="color:#9bf1e4;padding:9px;text-decoration:none;font-size:.88rem">展示記録</a></div></details><button id="reload-btn" class="icon-button" title="予想データを再読み込み" aria-label="データを再読み込み">↻</button><div class="avatar" aria-label="個人用アプリ">AI</div></div></header>
+    <header class="topbar"><div class="mobile-brand"><span class="mobile-mark">≈</span> BOAT<span>LAB</span></div><div class="breadcrumb"><span>WORKSPACE</span><span class="crumb-arrow">/</span><strong id="breadcrumb-label">ダッシュボード</strong></div><div class="top-actions"><span class="live-mark"><span class="dot"></span> RESEARCH MODE</span><details class="quick-links-menu"><summary aria-label="研究ページを開く">研究メニュー</summary><div class="quick-links-panel" role="navigation" aria-label="研究・展示ページ"><a href="./rebuild-20261023.html" title="10月23日 168R 新旧再計算比較" style="color:#9bf1e4;padding:9px;text-decoration:none;font-size:.88rem">10/23 全再評価</a><a href="./ab-20261023.html" title="10/23新旧AI発走前固定比較" style="color:#adffe4;padding:9px;font-weight:900;text-decoration:none;font-size:.9rem">⚔️ 10/23 A/B検証</a><a href="./outside-20261023.html" title="外枠4・5・6とまくり戦法：旧v0.1対v0.2の発走前固定比較" style="color:#adffe4;padding:9px;font-weight:900;text-decoration:none;font-size:.9rem">🌊 外枠・まくり比較</a><a href="./wake-20261023.html" title="引き波で内側艇が失速する試験v0.3対v0.2の発走前固定比較" style="color:#9bf1e4;padding:9px;font-weight:900;text-decoration:none;font-size:.9rem">🌊 引き波検証</a><a href="./intelligence.html" title="全国24場・選手とモーターの研究データ" style="color:#9bf1e4;padding:9px;text-decoration:none;font-size:.88rem">🧠 データ研究室</a><a href="./weather/" title="波高・近隣風・潮位の独立データ" style="color:#79ecdb;padding:9px;text-decoration:none;font-size:.88rem">🌊 WEATHER LAB</a><a href="./venue-profiles.html" title="全国24場の水面特性と試験ロジック" style="color:#9bf1e4;padding:9px;text-decoration:none;font-size:.88rem">全国24場</a><a href="./exhibition-watch.html" title="公式の展示リプレイを見る" style="color:#9bf1e4;padding:9px;text-decoration:none;font-size:.88rem">🎥 展示映像</a><a href="./turn-vision-pilot-20261028.html" title="10月28日の唐津・児島・蒲郡ターン映像研究" style="color:#adffe4;padding:9px;text-decoration:none;font-size:.88rem">🔬 3場ターン研究</a><a href="./exhibition.html" title="展示実測・結果（研究用）" style="color:#9bf1e4;padding:9px;text-decoration:none;font-size:.88rem">展示記録</a></div></details><button id="reload-btn" class="icon-button" title="予想データを再読み込み" aria-label="データを再読み込み">↻</button><div class="avatar" aria-label="個人用アプリ">AI</div></div></header>
     <main id="main" class="main" tabindex="-1"><section class="loading"><div class="loading-spinner"></div><p>予想データを読み込んでいます…</p></section></main>
     <footer class="footer"><span>Forecasts are hypotheses, not guarantees.</span><span>通知・自動投票なし</span></footer>
   </div>
@@ -73,9 +74,10 @@
 <script src="./race-timeline.js?v=3" defer></script>
 <script src="./result-quickboard.js?v=20261106-cancelled-v1" defer></script>
 <script src="./ticket-policy.js?v=20261025-formal-v1" defer></script>
+<script src="./ui-console.js?v=20261107-racedesk-v1" defer></script>
 <script src="./cumulative-settlement.js?v=20261029-settlement-policy-v3" defer></script>
 <script src="./official-direct-refresh.js?v=20261025-results-direct-v1" defer></script>
 <script src="./weather-lab-link.js?v=20261106-v1" defer></script>
-<script src="./app.js?v=20261107-stable-v1" defer></script>
+<script src="./app.js?v=20261107-premium-v1" defer></script>
 </body>
 </html>

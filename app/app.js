@@ -239,12 +239,20 @@
   }
   function tile(r) {
     const trial=tacticalSummary(r);
-    return '<button type="button" class="race-tile" data-race="'+escape(r.venue)+'|'+r.race+'">'+
+    const formal=isFormalTicket(r);
+    // Display tint only when six-boat exhibition inputs were checked before
+    // immutable cutoff and the card is a formal ticket (never SKIP or trial).
+    const exhibitionFormal=!!(formal&&
+      r.entry_exhibition_gate?.final_eligible===true&&
+      r.exhibition_input_check?.verified_before_freeze===true);
+    return '<button type="button" class="race-tile" data-exhibition-status="'+
+      (exhibitionFormal?'formal':'pending')+'" data-race="'+escape(r.venue)+'|'+r.race+'">'+
       '<div class="tile-top"><span class="tile-r">'+escape(r.venue)+' '+r.race+'R</span>'+pill(r.classification)+'</div>'+
-      '<div class="ticket-list-status '+(isFormalTicket(r)?'ticket-status-formal':'ticket-status-pending')+'">'+(isFormalTicket(r)?'✅ 正式買い目':'⏳ 暫定・購入判断保留')+'</div>'+
-      '<div class="tile-time">締切予定 '+escape(r.cutoff_jst)+' · 固定 '+r.bets.length+'点 · '+(r.phase==='exhibition'?'展示反映':'展示前')+'</div>'+
+      '<div class="ticket-list-status '+(formal?'ticket-status-formal':'ticket-status-pending')+'">'+(formal?'✅ 正式買い目':'⏳ 暫定・購入判断保留')+'</div>'+
+      '<div class="tile-time">締切予定 '+escape(r.cutoff_jst)+' · 固定 '+r.bets.length+'点 · '+
+       (exhibitionFormal?'✅ 展示反映済':r.phase==='exhibition'?'展示版・確認中':'展示前')+'</div>'+
       '<div class="tile-bets">'+(r.model_role==='main'?'✅ '+(r.model_version==='four-factor-v2.2-linked-primary-untrained'?'統合v2.2':r.model_version==='four-factor-v2.1-actual-entry-primary-untrained'?'艇間連動v2.1・進入対応':r.model_version==='four-factor-v2.0-justified-points-primary-untrained'?'艇間連動v2.0・根拠審査':r.model_version==='four-factor-v1.9-aligned-primary-untrained'?'艇間連動v1.9・評価整合':r.model_version==='four-factor-v1.8-adaptive-points-primary-untrained'?'艇間連動v1.8・可変点数':r.model_version==='four-factor-v1.7-interaction-inside-failure-untrained'?'艇間連動v1.7':r.model_version==='four-factor-v1.6-interaction-primary-untrained'?'艇間連動v1.6':r.model_version==='four-factor-v1.5-point-free-untrained'?'点数枠なしv1.5':r.model_version==='four-factor-v1.4-venue-aware-23-untrained'?'場別23場v1.4':r.model_version==='four-factor-v1.3-conditional-scenarios-untrained'?'四要素v1.3':r.model_version==='four-factor-v1.2-head-coverage-untrained'?'四要素v1.2・頭候補保持':r.model_version==='four-factor-v1.1-untrained'?'四要素v1.1':r.model_version==='four-factor-v1.0-untrained'?'四要素v1.0':r.model_version?.includes('v0.9')?'v0.9':'v0.7')+'メイン固定：':'🔒 旧モデル固定：')+
-      (isFormalTicket(r)?escape(r.bets.slice(0,2).map(b=>b.combination).join(' / ')):'正式買い目は未確定')+'</div>'+
+      (formal?escape(r.bets.slice(0,2).map(b=>b.combination).join(' / ')):'正式買い目は未確定')+'</div>'+
       (r.legacy_control||trial?'<div class="tile-tactical">🔬 比較用モデルあり・正式買い目とは別</div>':'')+
       (r.entry_exhibition_gate?.entry_watch&&!r.entry_exhibition_gate.final_eligible?
        '<div class="notice warn">⚠ 前付け警戒・展示進入未確認／最終予想保留</div>':

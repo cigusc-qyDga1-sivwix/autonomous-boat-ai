@@ -206,7 +206,11 @@
     var payInfo=outcome && !outcome.review ?
       '<div class="venue-race-result">公式3連単 '+esc(outcome.finish)+' ／ 払戻 '+Number(outcome.payout_per_100).toLocaleString('ja-JP')+'円</div>':
       outcome&&outcome.review?'<div class="venue-race-result">公式結果：返還・中止などの確認待ち</div>':'';
-    return '<div class="venue-race'+(r?' venue-race-available':' venue-race-empty')+'">' +
+    // Card colour represents a pre-cutoff formally verified exhibition
+    // snapshot, NOT a later research CSV, an outcome or a ticket change.
+    var displayExhibitionFormal=formal&&exhibitionVerified;
+    return '<div class="venue-race'+(r?' venue-race-available':' venue-race-empty')+'" data-exhibition-status="'+
+      (displayExhibitionFormal?'formal':r?'pending':'unavailable')+'">' +
       '<div class="venue-race-top"><b>'+number+'R</b><div class="venue-race-labels">'+
       raceStatus(r,slot,now,data,venue,number)+
       (exhibitionVerified?badge('展示入力確認済','ready'):'')+'</div></div>' +

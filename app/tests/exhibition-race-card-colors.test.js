@@ -61,7 +61,7 @@ assert.equal(win.BoatVenueBoard.renderVenue({...data,mode:'manual'},'多摩川',
  'Manual imports must not be marketed as canonical formal exhibition');
 const timeline=win.BoatRaceTimeline.render(data,new Date('2026-11-07T02:00:00Z'));
 assert.equal((timeline.match(/data-exhibition-status="formal"/g)||[]).length,1);
-assert.match(timeline,/展示反映済/);
+assert.match(timeline,/公式結果確認済/,'official result may take precedence over green colour');
 assert.match(timeline,/6艇展示反映・正式予想固定/);
 assert.equal((timeline.match(/data-exhibition-status="pending"/g)||[]).length,5);
 assert.equal(JSON.stringify(data),before,'Read-only UI must not mutate SHA evidence');

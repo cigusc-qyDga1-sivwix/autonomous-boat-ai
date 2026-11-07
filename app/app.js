@@ -763,7 +763,13 @@
   function weaknessDiagnosis() {
     if(data.mode!=='auto-live')return '';
     const races=allRaces();
-    const verified=races.filter(r=>!!officialFor(r)&&!resultIssue(r));
+    const verified=races.filter(r=>{
+      const outcome=officialFor(r);
+      // Void trifecta: official refund may be verified with finish=null.
+      // Exclude only from finish-order metrics, not settlement or refunds.
+      return !resultIssue(r)&&typeof outcome?.finish==='string'&&
+        /^[1-6]-[1-6]-[1-6]$/.test(outcome.finish);
+    });
     const count=verified.length;
     const stages={hit:0,head_miss:0,second_miss:0,third_miss:0};
     let firstHeadOne=0,actualHeadOne=0;

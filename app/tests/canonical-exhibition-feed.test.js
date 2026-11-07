@@ -90,7 +90,7 @@ async function run(){
  assert.match(audit,/data-action="refresh-exhibition"/);
  assert.match(index,/canonical-exhibition-feed\.js\?v=20261107-main-source-v1/);
  assert.ok(index.indexOf('canonical-exhibition-feed.js')<index.indexOf('app.js'));
- assert.match(sw,/boat-lab-static-v67/);
+ assert.match(sw,/boat-lab-static-v68/);
  assert.match(sw,/\.\/canonical-exhibition-feed\.js/);
  console.log('Canonical exhibition: newer upstream, stale Pages, mismatch, offline, checksum-freeze guard PASS');
 }

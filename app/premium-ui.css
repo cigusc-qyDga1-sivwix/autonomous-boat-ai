@@ -483,3 +483,106 @@ body {
 .exhibit-refresh-control:hover,.exhibit-refresh-control:focus-visible{background:#daf8f0;border-color:#4fbfae}
 .exhibit-health.stale .exhibit-refresh-control{border-color:#d7a968;color:#8b5d16}
 @media(max-width:420px){.exhibit-health-heading{align-items:stretch;gap:8px}.exhibit-refresh-control{width:100%;text-align:center}}
+
+
+/* 2026-11-07 | 6-boat exhibition reflected into PRE-CUTOFF formal forecast.
+ * Colour is evidence based; never colour a provisional / research-only
+ * snapshot on its source time alone. Also visible on iPhone 2-column grids.
+ */
+.venue-race[data-exhibition-status="formal"],
+.race-tile[data-exhibition-status="formal"]{
+  background:linear-gradient(144deg,#ddf9ef 0%,#f0fffb 56%,#fff 100%);
+  border:2px solid #23a68d;
+  box-shadow:inset 5px 0 0 #07ac90,0 8px 23px rgba(5,116,98,.14);
+  color:#123e36;
+}
+.venue-race[data-exhibition-status="formal"] .venue-race-top b,
+.venue-race[data-exhibition-status="formal"] .venue-race-cutoff strong,
+.venue-race[data-exhibition-status="formal"] .venue-race-main,
+.race-tile[data-exhibition-status="formal"] .tile-r,
+.race-tile[data-exhibition-status="formal"] .tile-bets{
+  color:#075e52;
+}
+.venue-race[data-exhibition-status="formal"] .venue-badge-ready{
+  color:#fff;
+  background:#087d68;
+  box-shadow:0 2px 8px rgba(8,125,104,.15);
+}
+.venue-race[data-exhibition-status="formal"] .venue-race-action{
+  background:linear-gradient(120deg,#077763,#086b6a);
+  color:#fff;
+}
+.venue-race[data-exhibition-status="formal"] .ticket-status-formal,
+.race-tile[data-exhibition-status="formal"] .ticket-status-formal{
+  background:#d1f7e6;
+  border-color:#65cfae;
+  color:#064f3e;
+}
+.venue-race[data-exhibition-status="formal"] .venue-race-scene,
+.race-tile[data-exhibition-status="formal"] .tile-scenario{
+  color:#426c65;
+}
+/* Older and unverified snapshots keep neutral/amber surfaces, not a green
+ * visual promise of finality. A results hit badge is a separate dimension. */
+.venue-race[data-exhibition-status="pending"],
+.race-tile[data-exhibition-status="pending"]{
+  border-color:#dae5ef;
+}
+.venue-race[data-exhibition-status="unavailable"]{
+  background:#eef2f5;
+  border-color:#e0e7ec;
+  box-shadow:none;
+}
+@media(max-width:600px){
+  .venue-race[data-exhibition-status="formal"],
+  .race-tile[data-exhibition-status="formal"]{
+    box-shadow:inset 4px 0 0 #07ac90,0 5px 16px rgba(5,116,98,.12);
+  }
+  .venue-race[data-exhibition-status="formal"] .venue-badge-ready{
+    font-size:9px;
+  }
+}
+
+
+/* The first-screen chronological list uses the same formal-exhibition green. */
+.timeline-race[data-exhibition-status="formal"]{
+  background:linear-gradient(110deg,#e1fbf2,#f5fffc);
+  border:2px solid #29ad98;
+  box-shadow:inset 5px 0 0 #05ad91,0 5px 14px rgba(5,116,98,.11);
+}
+.timeline-race[data-exhibition-status="formal"] .timeline-clock strong,
+.timeline-race[data-exhibition-status="formal"] .timeline-race-main strong,
+.timeline-race[data-exhibition-status="formal"] .timeline-race-main strong span{
+  color:#086956;
+}
+.timeline-race[data-exhibition-status="formal"] .timeline-status{
+  background:#c4f3df;
+  color:#075d49;
+  font-weight:900;
+}
+.timeline-race[data-exhibition-status="formal"] .timeline-race-main small{
+  color:#397568;
+}
+.timeline-race[data-exhibition-status="formal"] .timeline-action{
+  border-color:#2da790;
+  color:#075d50;
+  background:#fff;
+}
+/* Safety: urgent timelines still carry an amber separator, even if the
+ * exhibition snapshot itself was already verified before the cutoff. */
+.timeline-race.timeline-urgent[data-exhibition-status="formal"]{
+  border-top-color:#ddab44;
+}
+@media(max-width:600px){
+  .timeline-race[data-exhibition-status="formal"]{
+    box-shadow:inset 4px 0 0 #05ad91,0 5px 12px rgba(5,116,98,.10);
+  }
+}
+
+
+/* Compact visual legend above the nationwide race list. */
+.race-card-colour-guide{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin:-2px 0 13px;color:#496979;font-size:11px;font-weight:750}
+.race-card-colour-guide span{display:inline-flex;gap:7px;align-items:center}
+.race-card-colour-guide i{display:inline-block;width:18px;height:13px;border-radius:4px;box-shadow:inset 3px 0 #07ac90;border:1px solid #23a68d;background:#def9ef}
+.race-card-colour-guide i.race-card-guide-pending{background:#fff;border-color:#dae5ef;box-shadow:none}
+@media(max-width:600px){.race-card-colour-guide{font-size:10px;gap:7px 12px}}

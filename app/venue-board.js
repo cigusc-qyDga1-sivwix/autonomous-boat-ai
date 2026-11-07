@@ -206,7 +206,11 @@
     var payInfo=outcome && !outcome.review ?
       '<div class="venue-race-result">公式3連単 '+esc(outcome.finish)+' ／ 払戻 '+Number(outcome.payout_per_100).toLocaleString('ja-JP')+'円</div>':
       outcome&&outcome.review?'<div class="venue-race-result">公式結果：返還・中止などの確認待ち</div>':'';
-    return '<div class="venue-race'+(r?' venue-race-available':' venue-race-empty')+'">' +
+    // Card colour represents a pre-cutoff formally verified exhibition
+    // snapshot, NOT a later research CSV, an outcome or a ticket change.
+    var displayExhibitionFormal=!!(data.mode==='auto-live'&&formal&&exhibitionVerified);
+    return '<div class="venue-race'+(r?' venue-race-available':' venue-race-empty')+'" data-exhibition-status="'+
+      (displayExhibitionFormal?'formal':r?'pending':'unavailable')+'">' +
       '<div class="venue-race-top"><b>'+number+'R</b><div class="venue-race-labels">'+
       raceStatus(r,slot,now,data,venue,number)+
       (exhibitionVerified?badge('展示入力確認済','ready'):'')+'</div></div>' +
@@ -228,7 +232,7 @@
     return '<div class="venue-detail-board">' +
       '<button type="button" class="venue-back" data-action="back-overview">← 開催一覧へ戻る</button>' +
       '<div class="venue-detail-hero"><span class="venue-detail-symbol">'+x.icon+'</span><div><div class="venue-hero-overline">BOAT LAB / '+esc(data.event_date)+'</div><h1>'+esc(venue)+' <small>全12R</small></h1><p>'+esc(x.grade||'グレード未取得')+' ・ '+esc(rawDay)+' ・ 自動予想 '+x.ready+'/12R ・ 展示反映 '+x.exhibition+'R</p></div></div>' +
-      '<div class="venue-race-legend"><span>'+badge('公式 的中','ready')+' 公式払戻で的中</span><span>'+badge('展示反映','ready')+' 実測展示あり</span><span>'+badge('展示前','watch')+' 出走表中心</span><span>'+badge('未固定','missing')+' 後出し予想なし</span></div>' +
+      '<div class="venue-race-legend"><span>'+badge('公式 的中','ready')+' 公式払戻で的中</span><span>'+badge('展示反映','ready')+' ミント色＝6艇展示反映済みの正式予想</span><span>'+badge('展示前','watch')+' 白色＝展示前・確認中</span><span>'+badge('未固定','missing')+' グレー＝予想未固定</span></div>' +
       ((data.venue_weather||{})[venue]?'<div class="venue-current-weather">🌦 最終取得時点の周辺予報：風'+esc(data.venue_weather[venue].wind_speed)+'m/s・突風'+esc(data.venue_weather[venue].wind_gust??'—')+'m/s・降水'+esc(data.venue_weather[venue].precipitation_mm??'—')+'mm/h　（現地実測ではありません） <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Weather data by Open-Meteo.com ↗</a></div>':'') +
       (window.BoatMobileRaceNav?.racePicker(venue,null,data.forecast_races,data.unforecast_races)||'') +
        '<div class="venue-race-grid">'+allRaces+'</div>' +

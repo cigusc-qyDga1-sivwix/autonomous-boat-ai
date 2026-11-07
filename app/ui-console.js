@@ -23,7 +23,12 @@
     const today=validDay(jstDay(now))?jstDay(now):'';
     const current=day===today;
     // Fail closed on missing ticket-policy code, even if phase says exhibition.
-    const formal=list.filter(r=>policy?.classify?.(r,day)?.formal===true);
+    // The existing formal policy owns classification; explicit pre-cutoff
+    // failure flags may narrow the visual count but never expand it.
+    const formal=list.filter(r=>
+      r?.entry_exhibition_gate?.final_eligible!==false&&
+      r?.exhibition_input_check?.verified_before_freeze!==false&&
+      policy?.classify?.(r,day)?.formal===true);
     const eligible=new Set(formal.map(r=>r.venue+'|'+r.race));
     const frozenExhibition=list.filter(r=>r.phase==='exhibition').length;
     const reviews=data?.settlement_alerts||{};
@@ -66,12 +71,14 @@
       '<div class="bl-desk-next"><span class="bl-desk-next-label">次の締切予定</span>'+
       s.upcoming.map(r=>{
         const formal=s.eligible.has(r.venue+'|'+r.race);
+        const status=r.classification==='SKIP'?'SKIP・研究用':
+          formal?'展示反映':'正式未確定';
         return '<button type="button" class="bl-desk-next-race" data-race="'+escape(r.venue)+'|'+r.race+'" aria-label="'+
-        escape(r.venue+' '+r.race+'R '+r.cutoff_jst+' 展示'+(formal?'反映済み':'未確定'))+'">'+
+        escape(r.venue+' '+r.race+'R '+r.cutoff_jst+' '+status)+'">'+
         '<span class="bl-desk-time">'+escape(r.cutoff_jst)+'</span>'+
         '<span class="bl-desk-name">'+escape(r.venue)+' '+r.race+'R</span>'+
         '<span class="bl-desk-race-state '+(formal?'is-formal':'is-pending')+'">'+
-        (formal?'展示反映':'展示待ち')+'</span></button>';
+        status+'</span></button>';
       }).join('')+'</div>':
       '<p class="bl-desk-next-empty">'+(s.current?'次の締切予定はありません':'当日の締切情報ではありません')+'</p>';
     return '<section class="bl-race-desk" aria-label="予想と展示の稼働ステータス">'+

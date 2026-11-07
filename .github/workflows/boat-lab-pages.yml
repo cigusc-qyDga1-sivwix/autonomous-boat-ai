@@ -19,8 +19,11 @@ permissions:
   pages: write
   id-token: write
 concurrency:
+  # Replace a previously stalled, obsolete heavy artifact when a newer static
+  # release has been prepared. Current Pages stays available until publish.
+  # Only this single workflow can deploy and the new 15-min schedule is sparse.
   group: boat-lab-pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   deploy:
     if: github.ref == 'refs/heads/main'

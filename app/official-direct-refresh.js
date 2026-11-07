@@ -14,6 +14,26 @@ function validCombination(x){
  return typeof x==='string'&&/^[1-6]-[1-6]-[1-6]$/.test(x)&&
   new Set(x.split('-')).size===3;
 }
+function validatePay(p,day,code,race){
+ if(!p)return null;
+ const boats=p.refunded_boats===undefined?[]:p.refunded_boats;
+ if(!Array.isArray(boats)||new Set(boats).size!==boats.length||
+    boats.some(x=>!Number.isInteger(x)||x<1||x>6))return null;
+ const hasRefund=boats.length>0,voidRace=p.void_trifecta===true;
+ if(voidRace){
+  if(!hasRefund||p.finish!==null||p.payout_per_100!==0)return null;
+ }else if(!validCombination(p.finish)||
+    !Number.isSafeInteger(p.payout_per_100)||
+    p.payout_per_100<100||p.payout_per_100>10000000||
+    p.payout_per_100%10!==0)return null;
+ if(hasRefund){
+  const expected='https://www.boatrace.jp/owpc/pc/race/raceresult?rno='+
+    race+'&jcd='+String(code).padStart(2,'0')+'&hd='+day.replace(/-/g,'');
+  if(p.refund_source_url!==expected||
+     (!voidRace&&p.finish.split('-').some(n=>boats.includes(Number(n)))))return null;
+ }else if(voidRace||p.refund_source_url)return null;
+ return {boats,voidRace,hasRefund};
+}
 function merge(doc,day,races,existing={},currentAlerts={},now=new Date()){
  const outcome={results:{...existing},alerts:{...currentAlerts},added:0,
   available:false,retrieved_at_utc:null,verified_on_page:0,conflicts:0};
@@ -43,14 +63,22 @@ function merge(doc,day,races,existing={},currentAlerts={},now=new Date()){
    outcome.alerts[key]={status:'review',reason:'公式結果に返還・中止・矛盾などの確認事項があります'};
    continue;
   }
-  if(outcome.alerts[key])continue;
   const p=doc.results[id];
-  if(!p||!validCombination(p.finish)||
-     !Number.isSafeInteger(p.payout_per_100)||
-     p.payout_per_100<100||p.payout_per_100>10000000||
-     p.payout_per_100%10!==0)continue;
+  const refund=validatePay(p,day,code,r.race);
+  if(!refund)continue;
+  // A newly confirmed official refund resolves a former generic "返"
+  // review. Disputes, conflicting values and cancellations never auto-clear.
+  const existingIssue=outcome.alerts[key];
+  if(existingIssue){
+   if(!(refund.hasRefund&&existingIssue.status==='review'&&
+        !outcome.results[key]&&!doc.conflicts?.[id]&&!doc.cancellations?.[id]))
+     continue;
+   delete outcome.alerts[key];
+  }
   const before=outcome.results[key];
-  if(before&&(before.finish!==p.finish||before.payout_per_100!==p.payout_per_100)){
+  if(before&&(before.finish!==p.finish||before.payout_per_100!==p.payout_per_100||
+     JSON.stringify(before.refunded_boats||[])!==JSON.stringify(refund.boats)|| 
+     Boolean(before.void_trifecta)!==refund.voidRace)){
    outcome.conflicts++;
    outcome.alerts[key]={status:'conflict',reason:'公式払戻の2種類の保存データが一致しません'};
    continue;
@@ -58,6 +86,10 @@ function merge(doc,day,races,existing={},currentAlerts={},now=new Date()){
   if(!before){
    outcome.results[key]={
     finish:p.finish,payout_per_100:p.payout_per_100,
+    ...(refund.hasRefund?{
+     refunded_boats:[...refund.boats],refund_reasons:p.refund_reasons||{},
+     refund_source_url:p.refund_source_url,void_trifecta:refund.voidRace
+    }:{}),
     verified:true,source:'boatrace_official_pay',
     source_url:doc.source_url,snapshot_sha256:r.sha256,
     recorded_at:doc.retrieved_at_utc,
@@ -75,5 +107,5 @@ async function refresh(day,races,existing,alerts={},fetcher=root.fetch?.bind(roo
  if(!response?.ok)throw Error('公式払戻JSON: HTTP '+(response?.status||'取得失敗'));
  return merge(await response.json(),day,races,existing,alerts,now);
 }
-root.BoatOfficialDirect={refresh,merge,version:'20261025-official-direct-v1'};
+root.BoatOfficialDirect={refresh,merge,version:'20261107-official-refund-v2'};
 })(typeof window==='undefined'?globalThis:window);

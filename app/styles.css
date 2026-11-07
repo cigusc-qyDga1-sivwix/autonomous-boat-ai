@@ -387,3 +387,34 @@
 .ticket-provisional>summary{font-weight:800;cursor:pointer;line-height:1.6}
 .ticket-provisional .card{margin-top:14px}
 @media(max-width:600px){.ticket-status{padding:16px}.ticket-status strong{font-size:22px}}
+
+/* 2026-11-07: prevent many research links from widening the PWA viewport. */
+.topbar{position:relative;z-index:11;min-width:0}
+.top-actions{min-width:0;flex:0 0 auto;gap:12px}
+.quick-links-menu{position:relative;min-width:0}
+.quick-links-menu summary{list-style:none;display:flex;align-items:center;justify-content:center;white-space:nowrap;min-height:38px;padding:7px 12px;border-radius:10px;border:1px solid #cde1e9;background:#f2fafa;color:#126b78;font-size:12px;font-weight:800;cursor:pointer}
+.quick-links-menu summary::-webkit-details-marker{display:none}
+.quick-links-menu summary:after{content:" ▾";margin-left:5px;font-size:10px}
+.quick-links-menu[open] summary{background:#dff6f3;border-color:#73c8bd}
+.quick-links-panel{position:absolute;right:0;top:calc(100% + 8px);z-index:30;width:min(350px,calc(100vw - 28px));max-height:min(75dvh,560px);overflow-y:auto;overscroll-behavior:contain;display:grid;gap:3px;padding:9px;background:#fff;border:1px solid #cadbe7;border-radius:12px;box-shadow:0 15px 35px #123e5d33}
+.quick-links-panel a{display:block;padding:12px 11px!important;min-height:42px;line-height:1.4;text-decoration:none!important;color:#214c63!important;font-size:12px!important;font-weight:750;border-radius:8px;overflow-wrap:anywhere}
+.quick-links-panel a:hover,.quick-links-panel a:focus-visible{background:#e5f6f3;color:#075c62!important}
+.quick-links-menu:focus-within{z-index:31}
+.exhibition-frozen-evidence{border:2px solid #9dd9ce;background:linear-gradient(180deg,#f5fffc,#fff)}
+@media(max-width:810px){
+ .topbar{justify-content:space-between;gap:8px}
+ .top-actions{gap:7px}
+ .quick-links-panel{right:-38px}
+ .quick-links-menu summary{font-size:11px;min-height:36px;padding:6px 9px}
+ .live-mark{font-size:9px}
+ .icon-button{flex:0 0 36px}
+}
+@media(max-width:380px){
+ .topbar{padding-left:9px;padding-right:9px}
+ .mobile-brand{font-size:14px}
+ .top-actions{gap:5px}
+ .quick-links-menu summary{font-size:10px;padding:6px 7px}
+ .live-mark{font-size:0}
+ .live-mark .dot{font-size:10px}
+ .quick-links-panel{right:-35px}
+}

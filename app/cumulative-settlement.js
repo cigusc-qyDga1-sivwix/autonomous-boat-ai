@@ -2,7 +2,7 @@
  * Reads immutable per-date ledgers; no predictions, results or SHA are modified. */
 (function(root){
 'use strict';
-const START_DAY='2026-10-22';
+const START_DAY='2026-11-04';
 const jstDay=now=>{
  const date=now instanceof Date?now:new Date(now);
  if(!Number.isFinite(date.getTime()))throw Error('現在日付が不正です');
@@ -174,10 +174,10 @@ function needsRefresh(now=new Date()){
 }
 function renderFormal(){
  if(!root.BoatTicketPolicy)return '';
- if(!state.range.some(day=>state.formalDays[day]))return '<section class="card card-pad"><h2>正式買い目の累積収支</h2><p>日付別の固定記録を取得できていないため、正式収支は未集計です。</p></section>';
+ if(!state.range.some(day=>state.formalDays[day]))return '<section class="card card-pad"><h2>正式買い目の累積収支（'+label(START_DAY)+'〜'+label(state.range.at(-1)||START_DAY)+'）</h2><p>日付別の固定記録を取得できていないため、正式収支は未集計です。</p></section>';
  const total=EMPTY();
  for(const day of state.range){const s=state.formalDays[day];if(s)for(const key of Object.keys(total))total[key]+=s[key];}
- return '<section class="card card-pad" aria-label="正式買い目の累積収支"><h2>正式買い目の累積収支</h2><p>展示反映・締切前固定 '+total.eligible+'R ／ 公式照合 '+total.checked+'R ／ 的中 '+total.hits+'R</p><p>仮想投資 '+yen(total.invested)+' ／ 仮想払戻 '+yen(total.paid)+'（返還 '+yen(total.refunded)+'）／ 仮想収支 '+money(total.profit)+' ／ 回収率 '+(total.invested?(100*total.paid/total.invested).toFixed(1)+'%':'—')+'</p><p>各レースの最新の展示反映固定版だけ。公式の返還艇が確認できた分は収支に計上。暫定予想・未照合・未確認返還・中止は正式収支に含めません。</p></section>';
+ return '<section class="card card-pad" aria-label="正式買い目の累積収支"><h2>正式買い目の累積収支（'+label(START_DAY)+'〜'+label(state.range.at(-1)||START_DAY)+'）</h2><p>展示反映・締切前固定 '+total.eligible+'R ／ 公式照合 '+total.checked+'R ／ 的中 '+total.hits+'R</p><p>仮想投資 '+yen(total.invested)+' ／ 仮想払戻 '+yen(total.paid)+'（返還 '+yen(total.refunded)+'）／ 仮想収支 '+money(total.profit)+' ／ 回収率 '+(total.invested?(100*total.paid/total.invested).toFixed(1)+'%':'—')+'</p><p>各レースの最新の展示反映固定版だけ。公式の返還艇が確認できた分は収支に計上。暫定予想・未照合・未確認返還・中止は正式収支に含めません。</p></section>';
 }
 function render(){
  const dates=state.range.length?state.range:daysThrough(new Date());
@@ -195,8 +195,8 @@ function render(){
  }
  const completed=found.length===dates.length;
  const current=label(dates.at(-1)||START_DAY);
- return renderFormal()+'<section class="card card-pad cumulative-settlement" aria-label="10月22日からの累積仮想収支">'+
-  '<div class="section-head"><div><h2 class="section-title">📈 10/22〜'+current+' 累積収支</h2>'+
+ return renderFormal()+'<section class="card card-pad cumulative-settlement" aria-label="11月4日からの累積仮想収支">'+
+  '<div class="section-head"><div><h2 class="section-title">📈 '+label(START_DAY)+'〜'+current+' 累積収支</h2>'+
   '<p class="cum-subtitle">全研究予想（展示前の暫定を含む）× 公式確認済み払戻だけ（当日は途中経過）</p></div>'+
   '<button type="button" class="btn btn-white" data-action="reload-cumulative-results" '+
    (state.loading?'disabled':'')+'>'+(state.loading?'読み込み中…':'↻ 再集計')+'</button></div>'+
@@ -210,11 +210,11 @@ function render(){
   '<div class="cum-table-wrap"><table class="cum-table"><thead><tr><th>日付</th><th>公式照合</th>'+
   '<th>的中</th><th>仮想投資</th><th>仮想払戻</th><th>日別収支</th></tr></thead><tbody>'+rows+
   '</tbody></table></div>'+
-  (state.loading?'<p class="help">10/22から'+current+'の固定記録を読み込んでいます…</p>':'')+
+  (state.loading?'<p class="help">'+label(START_DAY)+'から'+current+'の固定記録を読み込んでいます…</p>':'')+
   (Object.keys(state.errors).length?'<p class="notice warn">未取得：'+
     Object.keys(state.errors).map(day=>label(day)+'分').join('、')+
     '。欠損日は0円として扱わず、累積から除外しています。</p>':'')+
-  '<p class="help">10/22以降の日別GitHub発走前固定記録について、各レースの最新の締切前固定バージョンだけを計上。'+
+  '<p class="help">'+label(START_DAY)+'以降の日別GitHub発走前固定記録について、各レースの最新の締切前固定バージョンだけを計上。'+
   '今日を含め公式照合済みレースだけが仮想投資と払戻の集計対象です。公式返還艇が確認できた分は返還額を収支に計上し、返還だけでは的中数を増やしません。未照合・中止・未確認返還・矛盾・不正データは集計せず、日付欠損を0円扱いしません。'+
   '旧モデルと新モデルの買い目を二重計上しません。全研究予想の仮想収支であり、実際の購入成績・正式BUY収支ではありません。</p></section>';
 }

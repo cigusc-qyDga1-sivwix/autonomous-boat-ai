@@ -2,7 +2,7 @@
 import unittest
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from scripts.exhibition_second_chance import eligible_new_previews
+from scripts.exhibition_second_chance import eligible_api_previews, eligible_new_previews
 
 JST = ZoneInfo("Asia/Tokyo")
 DAY = "2026-11-06"
@@ -60,6 +60,24 @@ class SecondChanceTests(unittest.TestCase):
         for variant in variants:
             with self.subTest(variant=variant):
                 self.assertEqual(eligible_new_previews({}, document(variant), at), [])
+
+    def test_api_only_recheck_requires_complete_preview_before_cutoff(self):
+        at = datetime(2026, 11, 6, 10, 42, 40, tzinfo=JST)
+        ledger = {"event_date": DAY, "race_records": {"23-6": {
+            "cutoff_jst": "10:48", "versions": [{"phase": "baseline"}],
+        }}}
+        race = {
+            "closed_at": DAY + " 10:48:00",
+            "racers": {str(i): {"name": str(i)} for i in range(1, 7)},
+            "preview": {"racers": {str(i): {
+                "course_number": i, "start_timing": .13, "exhibition_time": 6.7,
+            } for i in range(1, 7)}},
+        }
+        payload = {"programs": {"stadiums": {"23": {"races": {"6": race}}}}}
+        self.assertEqual(eligible_api_previews(ledger, payload, at), [CODE])
+        self.assertEqual(eligible_api_previews(ledger, payload, at.replace(minute=45)), [])
+        race["preview"]["racers"]["6"]["course_number"] = 5
+        self.assertEqual(eligible_api_previews(ledger, payload, at), [])
 
     def test_only_date_scoped_changed_input_not_result_or_payout(self):
         at = datetime(2026, 11, 6, 10, 42, 40, tzinfo=JST)

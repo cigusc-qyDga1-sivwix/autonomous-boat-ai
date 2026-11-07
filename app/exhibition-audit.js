@@ -62,14 +62,49 @@ function banner(data){
   '<p>研究記録と発走前に反映済みの展示は別です。'+
   '<a href="./exhibition.html">展示の研究記録を見る ↗</a></p></div>';
 }
+function frozenSnapshotPanel(r){
+ // A source research file may still be loading/empty although the immutable
+ // prediction already contains six race-day exhibition measurements. Do not
+ // hide or falsely claim those measurements are missing.
+ if(r?.phase!=='exhibition')return '';
+ const boats=r.racers;
+ const verified=r.exhibition_input_check?.verified_before_freeze===true &&
+   r.entry_exhibition_gate?.final_eligible===true;
+ if(!Array.isArray(boats)||boats.length!==6)return '';
+ const lanes=new Set(),courses=new Set();
+ for(const b of boats){
+  if(!Number.isInteger(b?.lane)||b.lane<1||b.lane>6||lanes.has(b.lane)||
+     !Number.isInteger(b?.course)||b.course<1||b.course>6||courses.has(b.course)||
+     typeof b.exhibition_st!=='number'||!Number.isFinite(b.exhibition_st)||
+     typeof b.exhibition_time!=='number'||!Number.isFinite(b.exhibition_time))return '';
+  lanes.add(b.lane);courses.add(b.course);
+ }
+ const rows=[...boats].sort((a,b)=>a.lane-b.lane).map(b=>
+  '<tr><td>'+esc(b.lane)+'</td><td>'+esc(b.course)+'</td><td>'+
+  esc(b.exhibition_st)+'</td><td>'+esc(b.exhibition_time)+'</td></tr>').join('');
+ return '<section class="card card-pad bottom-margin exhibition-frozen-evidence">'+
+  '<h3>'+(verified?'✅ 展示6艇を正式予想へ反映済み':'📋 展示版の固定予想に6艇の数値あり')+'</h3>'+
+  '<p>'+ (verified?'締切前に展示入力の一致を確認済み。':'この記録だけでは正式反映の認定はできません。')+
+  ' 研究用CSVの表示・公開時刻とは別に、発走前予想へ保存された値です。</p>'+
+  '<p>予想固定：'+esc(r.frozen_at_utc||'不明')+
+  ' ／ 取得元：'+esc(r.exhibition_origin?.source||r.source_url||'不明')+'</p>'+
+  '<div class="tablewrap"><table class="bets-table"><thead><tr><th>艇</th><th>進入</th><th>展示ST</th><th>展示タイム</th></tr></thead><tbody>'+
+  rows+'</tbody></table></div>'+
+  '<p class="muted text-sm">後から取得したCSVで発走前の固定買い目は変更しません。</p></section>';
+}
 function panel(r){
- if(!state.day||!r)return '';
+ if(!r)return '';
+ const frozen=frozenSnapshotPanel(r);
+ if(!state.day||state.loading){
+  return frozen||'<div class="notice">📡 展示の研究記録を読み込み中。展示前の固定買い目は正式反映とは区別します。</div>';
+ }
  const x=state.map.get(key(r));
- if(!x)return '<div class="notice warn">📋 6艇の展示は研究記録にまだありません。締切後には固定買い目を書き換えません。</div>';
+ if(!x)return frozen||
+   '<div class="notice warn">📋 6艇の展示は研究記録にまだありません。締切後には固定買い目を書き換えません。</div>';
  const rows=x.boats.map(b=>'<tr><td>'+esc(b.lane)+'</td><td>'+esc(b.course)+'</td><td>'+esc(b.st)+
  '</td><td>'+esc(b.time)+'</td><td>'+esc(b.metrics||'—')+'</td></tr>').join('');
- return '<section class="card card-pad bottom-margin"><h3>📋 取得済み展示（研究記録）</h3>'+
-  '<p><strong>'+(r.phase==='exhibition'?'発走前展示版を固定済み':'固定予想には未反映')+'</strong>'+
+ return frozen+'<section class="card card-pad bottom-margin"><h3>📋 取得済み展示（研究記録）</h3>'+
+  '<p><strong>'+(r.phase==='exhibition'?'発走前展示版を固定済み（研究記録とは別）':'固定予想には未反映')+'</strong>'+
   ' ／ 元の展示観測：'+esc(x.observed||'不明')+'</p>'+
   '<div class="tablewrap"><table class="bets-table"><thead><tr><th>艇</th><th>進入</th><th>展示ST</th>'+
   '<th>展示タイム</th><th>一周・回り足・直線</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+

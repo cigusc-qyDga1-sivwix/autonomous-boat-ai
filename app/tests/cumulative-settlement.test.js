@@ -92,8 +92,9 @@ assert.equal(api.summary(widened('2026-10-29',21),'2026-10-29').checked,0,
    requestedUrls.push(url);
    return {ok:true,json:async()=>docs[url.match(/\d{4}-\d\d-\d\d/)[0]]};
  },new Date('2026-11-05T10:00:00+09:00'));
- assert.ok(requestedUrls.every(x=>x.startsWith('./data/live/settlement/')),
-  'PWA must fetch the packaged, lightweight settlement endpoints');
+ assert.ok(requestedUrls.every(x=>x.startsWith('./data/live/settlement/')||
+  x.startsWith('./data/live/official-pay/')),
+  'PWA may only fetch packaged settlement data and the official-pay supplement');
  const html=api.render();
  assert.match(html,/11\/04〜11\/05 累積収支/);
  assert.match(html,/−50,000円/);

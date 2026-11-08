@@ -90,7 +90,7 @@
       const flags=item?.signals;
       const allowed=['nearby_model_wind_ge_6mps','on_course_wave_ge_5cm','wind_wave_joint_attention'];
       if(item&&at!==null&&src!==null&&obs!==null&&modelAt!==null&&
-          at<=cutoffSafe&&modelAt<=at&&src<=at&&obs<=src+120000&&
+          at<=cutoffSafe&&modelAt<=at&&src<=at&&obs<=at&&obs<=src+120000&&
           at-src<=15*60000&&at-obs<=20*60000&&
           wind!==null&&wind>=0&&wind<=80&&waveCm!==null&&waveCm>=0&&waveCm<=150&&
           Array.isArray(flags)&&flags.every(x=>allowed.includes(x))&&

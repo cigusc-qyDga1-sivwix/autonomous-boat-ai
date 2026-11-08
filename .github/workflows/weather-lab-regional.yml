@@ -6,6 +6,10 @@ on:
       - 'weather_lab/tests/test_regional_jma.py'
       - '.github/workflows/weather-lab-regional.yml'
   workflow_dispatch:
+  # Recover if the half-hour schedule was delayed or skipped.
+  workflow_run:
+    workflows: ['BOAT LAB fast exhibition numeric capture']
+    types: [completed]
   push:
     branches: [main]
     paths:
@@ -20,6 +24,12 @@ concurrency:
   cancel-in-progress: false
 jobs:
   regional:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name != 'workflow_run' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
@@ -27,12 +37,45 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Skip backup when same-day regional forecast was refreshed recently
+        if: github.event_name == 'workflow_run'
+        id: backup_gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://raw.githubusercontent.com/cigusc-qyDga1-sivwix/autonomous-boat-ai/weather-lab-data/weather_lab/data/regional/latest.json'
+          if curl --fail --silent --show-error --location --max-time 8 "$URL?ts=$(date +%s)" -o "$RUNNER_TEMP/regional-last.json"; then
+            if python - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from zoneinfo import ZoneInfo
+          try:
+              with open(os.path.join(os.environ['RUNNER_TEMP'], 'regional-last.json'), encoding='utf-8') as fp:
+                  doc = json.load(fp)
+              now = datetime.now(timezone.utc)
+              collected = datetime.fromisoformat(doc['retrieved_at_utc'].replace('Z', '+00:00'))
+              age = (now - collected).total_seconds()
+              same_day = doc['event_date'] == now.astimezone(ZoneInfo('Asia/Tokyo')).date().isoformat()
+              healthy = doc.get('provider', {}).get('fetch_status') == 'ok' and len(doc.get('venues', [])) == 24
+              raise SystemExit(0 if same_day and healthy and -90 <= age <= 1500 else 1)
+          except (OSError, ValueError, KeyError, TypeError):
+              raise SystemExit(1)
+          PY
+            then
+              echo 'Regional model refreshed within 25 minutes; backup skipped'
+              echo 'collect=no' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo 'collect=yes' >> "$GITHUB_OUTPUT"
       - name: Test independent model parser
+        if: github.event_name != 'workflow_run' || steps.backup_gate.outputs.collect == 'yes'
         run: python -m unittest discover -s weather_lab/tests -p 'test_regional_jma.py' -v
       - name: Fetch JMA MSM/GSM model forecast via Open-Meteo
+        if: github.event_name != 'workflow_run' || steps.backup_gate.outputs.collect == 'yes'
         run: python -m weather_lab.regional_jma --out "$RUNNER_TEMP/regional-latest.json"
       - name: Publish separate model data without modifying forecast history
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && (github.event_name != 'workflow_run' || steps.backup_gate.outputs.collect == 'yes')
         shell: bash
         run: |
           set -euo pipefail

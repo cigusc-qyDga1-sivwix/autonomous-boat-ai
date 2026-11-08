@@ -44,7 +44,7 @@ assert.equal(repeat.status.new_forward_freezes,0);
 assert.equal(repeat.status.already_frozen,1);
 assert.deepEqual(repeat.doc,first.doc);
 assert.equal(run(live,null,Date.parse(day+'T09:57:00+09:00')).status.excluded_late,1);
-assert.equal(run({...live,updated_at_utc:day+'T00:00:00Z'},null,now).status.excluded_stale,1);
+assert.equal(run({...live,updated_at_utc:'2026-11-08T23:45:00Z'},null,now).status.excluded_stale,1);
 assert.equal(run({...live,forecast_races:[{...base,ticket_status:'provisional'}]},null,now).status.excluded_not_formal,1);
 assert.equal(run({...live,forecast_races:[{...base,interaction_primary:{}}]},null,now).status.excluded_missing_120,1);
 assert.equal(run({...live,forecast_races:[{...base,sha256:'e'.repeat(64)}]},first.doc,now).status.new_forward_freezes,1);

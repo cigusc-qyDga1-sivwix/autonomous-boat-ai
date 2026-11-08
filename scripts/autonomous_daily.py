@@ -1720,6 +1720,12 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         "venues_with_races": len(venues_seen),
         "weather_venue_count": len(set(weather_by_venue)&venues_seen),
         "weather_fixed_race_count": sum(bool(r.get("weather_used")) for r in latest_races),
+        "weather_lab_site_wave_applied_race_count": sum(
+            bool((r.get("weather_lab_integration") or {}).get("site_wave_applied"))
+            for r in latest_races),
+        "jma_regional_wind_race_count": sum(
+            (r.get("weather_lab_integration") or {}).get("wind_source") == "open-meteo-jma"
+            for r in latest_races),
         "weather_adjusted_race_count": sum(bool((r.get("weather_adjustment") or {}).get("applied")) for r in latest_races),
         "exhibition_race_count": sum(r.get("phase")=="exhibition" for r in latest_races),
         "exhibition_changed_bet_count": sum(bool((r.get("exhibition_change") or {}).get("bets_changed")) for r in latest_races),
@@ -2169,6 +2175,9 @@ def main():
                                      exhibition_rows=research, enforce_wall_clock=not bool(args.input_json),
                                      racer_context_rows=contexts, tactics_rows=tactics_rows,
                                      site_wave_snapshot=weather_site_wave)
+    weather_bridge_status["formal_wave_applied_races"] = webapp["weather_lab_site_wave_applied_race_count"]
+    weather_bridge_status["formal_jma_wind_races"] = webapp["jma_regional_wind_race_count"]
+    weather_bridge_status["new_weather_revisions"] = summary["new_weather_revisions"]
     summary["weather_lab_bridge"] = weather_bridge_status
     webapp["weather_lab_bridge"] = weather_bridge_status
     if weather_error:

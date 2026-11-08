@@ -150,3 +150,49 @@ def test_stale_wave_never_changes_formal_pre_cutoff_selection():
     bad["races"][0]["weather_observed_at_jst"] = "2026-11-09T07:00:00+09:00"
     other, _, _ = A.build(None, source, NOW, "fixture", site_wave_snapshot=bad)
     assert other["race_records"]["18-1"]["versions"] == prior["race_records"]["18-1"]["versions"]
+
+
+def test_fresh_wave_revises_existing_formal_forecast_append_only():
+    rr = race("2026-11-09")
+    rr["preview"]["wind_speed"] = None
+    rr["preview"]["wave_height"] = None
+    source = {"programs": {"stadiums": {"18": {"races": {"1": rr}}}}}
+    initial, _, _ = A.build(None, source, NOW, "fixture")
+    previous = deepcopy(initial["race_records"]["18-1"]["versions"])
+    assert previous[-1]["phase"] == "exhibition"
+    second_now = datetime.fromisoformat("2026-11-09T09:21:00+09:00")
+    revised, ui, summary = A.build(
+        initial, source, second_now, "fixture",
+        site_wave_snapshot=wave_doc())
+    versions = revised["race_records"]["18-1"]["versions"]
+    assert versions[:len(previous)] == previous
+    assert len(versions) == len(previous) + 1
+    latest = versions[-1]
+    assert latest["phase"] == "exhibition"
+    assert latest["model_version"] == A.CONDITIONAL_SECOND_MAIN_MODEL
+    assert latest["weather_refresh"]["previous_sha256"] == previous[-1]["sha256"]
+    assert latest["weather_refresh"]["new_wave_height_cm"] == 9
+    assert latest["weather_refresh"]["old_prediction_preserved"] is True
+    assert latest["weather_lab_integration"]["site_wave_applied"] is True
+    assert summary["new_weather_revisions"] == 1
+    assert ui["forecast_races"][0]["weather_refresh"] == latest["weather_refresh"]
+    assert latest["sha256"] == A.stable_hash({
+        k: v for k, v in latest.items() if k != "sha256"})
+    repeated, _, again = A.build(revised, source, second_now, "fixture",
+                                 site_wave_snapshot=wave_doc())
+    assert repeated["race_records"]["18-1"]["versions"] == versions
+    assert again["new_weather_revisions"] == 0
+
+
+def test_weather_after_cutoff_never_revises_the_formal_history():
+    rr = race("2026-11-09")
+    rr["preview"]["wind_speed"] = None
+    rr["preview"]["wave_height"] = None
+    source = {"programs": {"stadiums": {"18": {"races": {"1": rr}}}}}
+    first, _, _ = A.build(None, source, NOW, "fixture")
+    history = deepcopy(first["race_records"]["18-1"]["versions"])
+    late_time = datetime.fromisoformat("2026-11-09T10:03:00+09:00")
+    second, _, result = A.build(first, source, late_time, "fixture",
+                                site_wave_snapshot=wave_doc())
+    assert second["race_records"]["18-1"]["versions"] == history
+    assert result["new_weather_revisions"] == 0

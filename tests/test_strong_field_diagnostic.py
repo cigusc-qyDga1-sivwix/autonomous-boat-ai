@@ -88,3 +88,20 @@ def test_forward_only_main_snapshot_includes_diagnostic_without_result_leak():
     post = A.prediction(with_result, "徳山", 1, "exhibition", now, "fixture")
     assert post["bets"] == normal["bets"]
     assert post["strong_field_diagnostic"] == diag
+
+
+def test_official_audit_splits_strong_close_field_vs_unassessed_without_hindsight():
+    from scripts.forecast_audit import analyze as audit
+    from tests.test_forecast_audit import make_example
+    payload = make_example()
+    for race_row in payload["forecast_races"]:
+        race_row["ticket_status"] = "formal"
+    payload["forecast_races"][0]["strong_field_diagnostic"] = {
+        "status": "STRONG_FIELD_CLOSE_HEADS", "changes_bets": False
+    }
+    outcome = audit(payload)
+    formal = outcome["by_strong_field_formal"]
+    assert formal["STRONG_FIELD_CLOSE_HEADS"]["verified_races"] == 1
+    assert formal["NOT_ASSESSED"]["verified_races"] == 3
+    assert formal["STRONG_FIELD_CLOSE_HEADS"]["hits"] == 1
+    assert outcome["metrics"]["verified_races"] == 4

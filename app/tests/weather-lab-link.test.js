@@ -54,6 +54,35 @@ assert.match(html,/潮流の速さ・向き/);
 assert.match(html,/正式買い目と評価には反映していません/);
 assert.doesNotMatch(html,/(?:wind_mps|wind_direction_raw_code).*15/);
 
+const withScenario=structuredClone(feeds);
+withScenario.scenario={
+  schema:B.SCHEMAS.scenario,event_date:day,
+  records:[{
+    race_code:'202611061003',venue_code:'10',race:3,
+    recorded_at_utc:'2026-11-06T00:31:00+00:00',
+    regional_retrieved_at_utc:'2026-11-06T00:25:00+00:00',
+    wave_source_captured_at_jst:'2026-11-06T09:26:00+09:00',
+    wave_observed_at_jst:'2026-11-06T09:24:00+09:00',
+    nearby_model_wind_mps:7.45,on_course_wave_cm:6,
+    status:'research_attention',
+    signals:['nearby_model_wind_ge_6mps','on_course_wave_ge_5cm','wind_wave_joint_attention'],
+    headwind_tailwind:'unverified_not_inferred',
+    formal_prediction_modified:false,bets_changed:false,
+    evidence_sha256:'b'.repeat(64),
+  }],
+};
+const cue=B.selectContext(withScenario,race,day);
+assert.equal(cue.scenarioStatus,'precutoff_research_only');
+assert.equal(cue.scenario.attention,true);
+assert.match(B.renderContext(cue,race,day),/気象展開チェック/);
+assert.match(B.renderContext(cue,race,day),/買い目への自動補正なし/);
+assert.match(B.renderContext(verified,race,day),/未固定/);
+const lateScenario=structuredClone(withScenario);
+lateScenario.scenario.records[0].recorded_at_utc='2026-11-06T00:39:00+00:00';
+assert.equal(B.selectContext(lateScenario,race,day).scenario,null);
+const tampered=structuredClone(withScenario);
+tampered.scenario.records[0].signals=['fake_direction_bias'];
+assert.equal(B.selectContext(tampered,race,day).scenario,null);
 const late=structuredClone(feeds);
 late.frozen.records[0].collector_received_at_utc='2026-11-06T00:39:00+00:00';
 late.regional.retrieved_at_utc='2026-11-06T00:40:00+00:00';

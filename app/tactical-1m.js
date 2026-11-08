@@ -425,6 +425,19 @@ function forecast(input){
   const wake=input.linked_primary_trial===true?followingWakeFactor(phase==='second'?h:s,c,phase):1;
   return prior*Math.pow(own,phase==='second'?1.15:.95)*interaction*wake;
  }
+ // Separate losing the lead from falling out of the top three.
+ // Use exhibition entry as a pre-race hypothesis, and compare the inside
+ // runner's ability with the rest of the chase pack (excluding the winner).
+ const insideRetentionActive=input.linked_primary_trial===true&&input.venue!=='江戸川'&&
+   input.phase==='exhibition'&&Date.parse(input.frozen_at_utc)>=Date.parse('2026-11-09T00:00:00Z')&&
+   sorted.every(r=>Number.isInteger(r.course))&&validMetrics.includes('exhibit');
+ function insideRetention(head, second, course){
+  if(!insideRetentionActive||head===1||course!==1)return 1;
+  const pack=move.filter((_,i)=>i!==byCourse[0]&&i!==byCourse[head-1]&&
+    (second===null||i!==byCourse[second-1]));
+  const reference=pack.reduce((sum,r)=>sum+r.overall,0)/pack.length;
+  return clamp(1+.20*(move[byCourse[0]].overall/reference-1),.95,1.05);
+ }
  function secondWeight(headCourse,secondCourse){
   if(openChasers){
    let weight=openRoleWeight(headCourse,null,secondCourse,'second');
@@ -434,7 +447,7 @@ function forecast(input){
     if(evidence?.inside_one_survivor_supported&&secondCourse===1)weight*=1.14;
    }
    if(venueAware)weight*=venueTactics.secondMultiplier(headCourse,secondCourse);
-   return weight;
+   return weight*insideRetention(headCourse,null,secondCourse);
   }
   let relation;
   if(headCourse===1)relation=({2:1.45,3:1.3,4:1.02,5:.72,6:.43})[secondCourse]||.5;
@@ -512,7 +525,7 @@ function forecast(input){
     if(evidence?.adjacent_follow_supported&&s===h+1&&c===1)weight*=1.10;
    }
    if(venueAware)weight*=venueTactics.thirdMultiplier(h,s,c);
-   return weight;
+   return weight*insideRetention(h,s,c);
   }
   const x=move[byCourse[c-1]];
   let consistency=(c===1?1.27:c===2?1.25:c===3?1.12: c===4?1.03:c===5?.90:.76);
@@ -784,6 +797,7 @@ function forecast(input){
    metadata:{...(fourFactor?{four_factor:{...factorModel,...(!pointFree&&ticketMaxPoints(input)===20?{ticket_bounds:{min:4,max:20,effective_from_jst:'2026-10-29'}}:{}),...(coverage?{ticket_policy:coverage.policy}:{}),...(openChasers?{chaser_policy:{
         version:'ability-first-v1.1',fixed_neighbor_bonus:false,legacy_ticket_rescue:false,
         interaction_bounds:[.95,1.05],calibrated:false,
+        ...(insideRetentionActive?{inside_retention_policy:'conditional-course1-pack-v1'}:{}),
         second_by_head:[1,2,3,4,5,6].map(h=>{
           const rows=[1,2,3,4,5,6].filter(c=>c!==h).map(c=>({course:c,lane:v[byCourse[c-1]].lane,weight:secondWeight(h,c)}));
           const total=rows.reduce((n,x)=>n+x.weight,0);

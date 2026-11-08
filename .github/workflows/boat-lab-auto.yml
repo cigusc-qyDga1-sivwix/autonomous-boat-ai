@@ -285,7 +285,6 @@ jobs:
           set -euo pipefail
           node app/tests/forward-second-place-shadow.test.js
           node scripts/freeze_second_place_trials.js
-          python -m json.tool app/data/experiments/conditional-second-status-latest.json >/dev/null
       - name: Analyze research only after primary pre-cutoff revisions are frozen
         continue-on-error: true
         run: |

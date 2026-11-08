@@ -125,8 +125,12 @@
       (ctx.scenario.attention?'展開の不確実性を再確認':'強い気象注意シグナルなし')+
       '</b><small>近隣モデル風 '+esc(ctx.scenario.wind)+'m/s・場内波高 '+esc(ctx.scenario.waveCm)+
       'cm。着順・コース別有利不利は未推定。買い目への自動補正なし。</small></div>':
-      '<div class="meta"><span>気象展開チェック（発走前・研究）</span><b>未固定</b>'+
-      '<small>締切前の波高と近隣予報が揃った場合のみ表示。欠損をゼロ扱いしません。</small></div>';
+      (ctx.regionalStatus==='model_retrieved_pre_cutoff'&&numeric(ctx.regional?.wind_mps)!==null&&ctx.regional.wind_mps>=6?
+        '<div class="meta"><span>気象展開チェック（近隣モデル参考・未固定）</span><b>広域強風を確認</b>'+
+        '<small>近隣風 '+esc(ctx.regional.wind_mps)+'m/s。展示ST・行き足・1Mの押し切りと差しの条件を再点検。'+
+        '場内風速の実測ではなく、波高との組合せ未確認。正式予想への自動補正なし。</small></div>':
+        '<div class="meta"><span>気象展開チェック（発走前・研究）</span><b>未固定</b>'+
+        '<small>締切前の波高と近隣予報が揃った場合のみ確定。欠損をゼロ扱いしません。</small></div>');
     return '<section class="card card-pad boat-weather-lab-bridge" data-weather-link="verified-read-only" style="margin:16px 0">'+
       '<div class="section-head"><h2 class="section-title">🌊 WEATHER LAB × BOAT LAB</h2>'+
       '<a class="btn btn-soft" href="'+href+'" target="_blank" rel="noopener noreferrer">場別データを開く</a></div>'+

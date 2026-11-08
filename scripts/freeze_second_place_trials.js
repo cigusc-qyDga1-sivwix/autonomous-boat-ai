@@ -83,7 +83,9 @@ function run(live,previous,nowMs){
  if(doc.schema!==SCHEMA||!Array.isArray(doc.records))throw Error('invalid_ledger');
  const hashes=new Map();
  for(const row of doc.records){
-  if(!row.id||!row.record_sha256||hashes.has(row.id))throw Error('invalid_existing_record');
+  const {record_sha256,...original}=row;
+  if(!row.id||!row.record_sha256||hashes.has(row.id)||hash(original)!==row.record_sha256)
+   throw Error('immutable_record_changed');
   hashes.set(row.id,row.record_sha256);
  }
  const status={schema:'boatlabs.conditional_second_status_v1',

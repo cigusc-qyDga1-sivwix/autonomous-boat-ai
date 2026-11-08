@@ -12,7 +12,7 @@
 ## 同一レース比較と前日比
 - 正式v2.3は同じレース・同じ時点のv2.2買い目を`interaction_primary.same_race_v22_control_bets`に保存する。ここは検証専用で、正式収支に加算しない。
 - 公式結果と照合する`app/data/live/audit/YYYY-MM-DD.json`の`by_ticket_status.formal`だけから、前日比（的中率、1/2着一致率、回収率、頭/2着/3着抜け、仮想収益）を計算する。
-- 独立ワークフロー`.github/workflows/boat-lab-daily-formal-compare.yml`を日本時間23:40に実行し、結果をGitHub Actionsの14日ではなく**30日間**のArtifactに保存。未確定レースを自動負けとしない。スケジュールの遅延・不実行やその日の公式結果の更新遅延はあり得る。
+- 独立ワークフロー`.github/workflows/boat-lab-daily-formal-compare.yml`を日本時間07:00に実行し、前日と前々日の完了済みの暦日を比較し、結果をGitHub Actionsの14日ではなく**30日間**のArtifactに保存。未確定レースを自動負けとしない。スケジュールの遅延・不実行やその日の公式結果の更新遅延はあり得る。
 - 前日比は開催場・相手関係・レース構成が異なるため因果比較ではない。精度向上の判定には同一レースv2.2対照と100R以上の前向き照合も併用する。
 
 ## 独立研究との関係

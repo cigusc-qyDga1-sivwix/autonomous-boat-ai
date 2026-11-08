@@ -10,6 +10,7 @@
     wave:'weather_lab.water_surface_monitor.v1',
     tide:'weather_lab.jma_tide_reference.v1',
     frozen:'weather_lab.forward_weather_evidence.v1',
+    scenario:'weather_lab.forward_weather_scenario.v1',
   };
   const VENUES=['桐生','戸田','江戸川','平和島','多摩川','浜名湖','蒲郡','常滑','津','三国','びわこ','住之江','尼崎','鳴門','丸亀','児島','宮島','徳山','下関','若松','芦屋','福岡','唐津','大村'];
   const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -38,7 +39,8 @@
     const cutoff=cutoffTime(race,day);
     const valid=!!(code&&cutoff!==null&&Number.isInteger(race?.race)&&race.race>=1&&race.race<=12);
     const result={valid,code,cutoff,wave:null,waveStatus:'missing',regional:null,
-      regionalStatus:'missing',tideCount:0,tideStatus:'missing',flowStatus:'not_connected',preCutoffEvidence:false};
+      regionalStatus:'missing',tideCount:0,tideStatus:'missing',flowStatus:'not_connected',preCutoffEvidence:false,
+      scenario:null,scenarioStatus:'unavailable'};
     if(!valid)return result;
     const frozen=feeds?.frozen,water=feeds?.wave,regional=feeds?.regional,tide=feeds?.tide;
     const match=doc=>sourceIsToday(doc,SCHEMAS.frozen,day)&&Array.isArray(doc.records)?
@@ -78,6 +80,31 @@
         &&s.on_course_station===false).length;
       result.tideStatus=result.tideCount?'unmapped_reference_only':'missing';
     }
+    const sc=feeds?.scenario;
+    if(sourceIsToday(sc,SCHEMAS.scenario,day)&&Array.isArray(sc.records)){
+      const item=sc.records.find(x=>x.venue_code===code&&x.race===race.race&&
+        x.race_code===day.replace(/-/g,'')+code+String(race.race).padStart(2,'0'));
+      const at=ms(item?.recorded_at_utc),src=ms(item?.wave_source_captured_at_jst),
+        obs=ms(item?.wave_observed_at_jst),modelAt=ms(item?.regional_retrieved_at_utc);
+      const wind=numeric(item?.nearby_model_wind_mps),waveCm=numeric(item?.on_course_wave_cm);
+      const flags=item?.signals;
+      const allowed=['nearby_model_wind_ge_6mps','on_course_wave_ge_5cm','wind_wave_joint_attention'];
+      if(item&&at!==null&&src!==null&&obs!==null&&modelAt!==null&&
+          at<=cutoffSafe&&modelAt<=at&&src<=at&&obs<=src+120000&&
+          at-src<=15*60000&&at-obs<=20*60000&&
+          wind!==null&&wind>=0&&wind<=80&&waveCm!==null&&waveCm>=0&&waveCm<=150&&
+          Array.isArray(flags)&&flags.every(x=>allowed.includes(x))&&
+          ['research_attention','research_baseline'].includes(item.status)&&
+          item.formal_prediction_modified===false&&item.bets_changed===false&&
+          item.headwind_tailwind==='unverified_not_inferred'&&
+          typeof item.evidence_sha256==='string'&&/^[a-f0-9]{64}$/.test(item.evidence_sha256)){
+        result.scenario={
+          attention:item.status==='research_attention',wind, waveCm,
+          flags:flags.slice(),recordedAt:item.recorded_at_utc,
+        };
+        result.scenarioStatus='precutoff_research_only';
+      }
+    }
     return result;
   }
   function renderContext(ctx,race,day){
@@ -93,6 +120,13 @@
       ctx.regionalStatus==='model_reference_after_cutoff'?'発走後取得の参照予報（事前予想の根拠にはできません）':'予報未取得';
     const tideNote=ctx.tideCount?ctx.tideCount+'参照地点（場内との対応未検証）':'未取得';
     const href='./weather/?venue='+encodeURIComponent(code);
+    const scenarioText=ctx.scenario?
+      '<div class="meta"><span>気象展開チェック（発走前・研究）</span><b>'+
+      (ctx.scenario.attention?'展開の不確実性を再確認':'強い気象注意シグナルなし')+
+      '</b><small>近隣モデル風 '+esc(ctx.scenario.wind)+'m/s・場内波高 '+esc(ctx.scenario.waveCm)+
+      'cm。着順・コース別有利不利は未推定。買い目への自動補正なし。</small></div>':
+      '<div class="meta"><span>気象展開チェック（発走前・研究）</span><b>未固定</b>'+
+      '<small>締切前の波高と近隣予報が揃った場合のみ表示。欠損をゼロ扱いしません。</small></div>';
     return '<section class="card card-pad boat-weather-lab-bridge" data-weather-link="verified-read-only" style="margin:16px 0">'+
       '<div class="section-head"><h2 class="section-title">🌊 WEATHER LAB × BOAT LAB</h2>'+
       '<a class="btn btn-soft" href="'+href+'" target="_blank" rel="noopener noreferrer">場別データを開く</a></div>'+
@@ -102,7 +136,7 @@
       '<div class="meta"><span>場内波高</span><b>'+wave+'</b><small>'+esc(waveNote)+'</small></div>'+
       '<div class="meta"><span>近隣の風・気温（JMAモデル）</span><b>'+speed+' ／ '+temp+'</b><small>'+esc(windNote)+'</small></div>'+
       '<div class="meta"><span>天文潮位（気象庁）</span><b>'+esc(tideNote)+'</b><small>参照地点の予測。場内水位の推定ではありません。</small></div>'+
-      '<div class="meta"><span>潮流の速さ・向き</span><b>未取得</b><small>流速・流向は潮位から推定しません。</small></div></div>'+
+      '<div class="meta"><span>潮流の速さ・向き</span><b>未取得</b><small>流速・流向は潮位から推定しません。</small></div>'+scenarioText+'</div>'+
       '<p class="help">選手・モーター・展示・進入・展開が予想の主因。気象は補正研究のみ。事後に入手した値は発走前データとして使いません。</p></section>';
   }
   const cache=new Map();
@@ -116,7 +150,8 @@
     const hit=cache.get(day);
     if(hit&&Date.now()-hit.at<60000)return hit.doc;
     const items=[['regional',URLS.regional],['wave',URLS.wave],['tide',URLS.tide],
-      ['frozen',BASE+'forward/'+day+'.json']];
+      ['frozen',BASE+'forward/'+day+'.json'],
+      ['scenario',BASE+'scenarios/'+day+'.json']];
     const entries=await Promise.all(items.map(async([key,url])=>{
       try{return [key,await getJSON(url)];}catch{return [key,null];}
     }));

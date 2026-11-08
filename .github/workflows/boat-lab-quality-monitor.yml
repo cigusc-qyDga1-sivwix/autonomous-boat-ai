@@ -1,0 +1,55 @@
+name: BOAT LAB read-only quality monitor
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'scripts/ops_quality_monitor.py'
+      - 'tests/test_ops_quality_monitor.py'
+      - '.github/workflows/boat-lab-quality-monitor.yml'
+  schedule:
+    # 06:00-23:59 JST every 30 minutes (best effort; cron can be skipped).
+    - cron: '5,35 21-23 * * *'
+    - cron: '5,35 0-14 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: boat-lab-quality-monitor-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Scheduled jobs must inspect the canonical production main.
+          ref: ${{ github.event_name == 'schedule' && 'main' || github.ref }}
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/ops_quality_monitor.py
+            /tests/test_ops_quality_monitor.py
+            /app/data/live/latest.json
+            /app/data/live/forecast-sync-latest.json
+            /app/data/live/audit-latest.json
+            /app/data/exhibition/status-latest.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Offline integrity regression tests
+        run: python -m unittest discover -s tests -p test_ops_quality_monitor.py -v
+      - name: Audit canonical JSON (no GitHub writes)
+        shell: bash
+        run: |
+          python scripts/ops_quality_monitor.py \
+            --output-json "$RUNNER_TEMP/boat-lab-ops-quality.json" \
+            --output-markdown "$RUNNER_TEMP/boat-lab-ops-quality.md"
+          cat "$RUNNER_TEMP/boat-lab-ops-quality.md" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: boat-lab-ops-quality-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/boat-lab-ops-quality.*
+          retention-days: 7

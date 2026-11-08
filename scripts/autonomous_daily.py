@@ -1394,6 +1394,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
     new_baseline, new_exhibition, revised_exhibition, changed_exhibition = 0, 0, 0, 0
     rejected_exhibition_input_mismatch = 0
     new_model_upgrades = 0
+    new_weather_revisions = 0
     exhibition_rows = exhibition_rows or {}
     withdrawal_notices = {}
     race_source = (payload.get("programs") or {}).get("stadiums") or {}
@@ -1577,9 +1578,22 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 and previous_latest.get("model_version") == expected_main
                 and current_context_quality > context_quality(previous_latest.get("racers") or [])
                 and sum(bool(v.get("racer_context_upgrade")) for v in record["versions"]) < 3)
+            latest_wave = wave_for_race(
+                site_wave_snapshot, venue_code, n, cutoff, upgrade_now)
+            previous_weather = (previous_latest or {}).get("weather_used") or {}
+            weather_gain = bool(
+                previous_latest and previous_latest.get("phase") == "exhibition"
+                and previous_latest.get("model_version") == expected_main
+                and latest_wave is not None
+                and (previous_weather.get("wave_source") != latest_wave["wave_source"]
+                     or (number(previous_weather.get("wave_height")) is not None
+                         and abs(number(previous_weather["wave_height"]) -
+                                 latest_wave["wave_height"]) >= 2))
+                and sum(bool(v.get("weather_refresh")) for v in record["versions"]) < 2)
             if (cutoff.date() >= WAKE_PROMOTION_DATE
                     and record["versions"]
-                    and (record["versions"][-1].get("model_version") != expected_main or context_gain)
+                    and (record["versions"][-1].get("model_version") != expected_main
+                         or context_gain or weather_gain)
                     and upgrade_now.astimezone(JST) < cutoff - timedelta(seconds=margin)):
                 latest_before = record["versions"][-1]
                 phase_to_promote = latest_before["phase"]
@@ -1602,6 +1616,18 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                         "new_model": expected_main,
                         "same_race_pre_cutoff_revision": True,
                     }
+                    if weather_gain and upgrade.get("weather_lab_integration", {}).get("site_wave_applied"):
+                        upgrade["weather_refresh"] = {
+                            "previous_sha256": latest_before["sha256"],
+                            "previous_wave_height_cm": previous_weather.get("wave_height"),
+                            "new_wave_height_cm": upgrade["weather_used"]["wave_height"],
+                            "source": upgrade["weather_used"].get("wave_source"),
+                            "reason": "Fresh verified WEATHER LAB wave arrived before cutoff",
+                            "old_prediction_preserved": True,
+                            "results_used": False,
+                        }
+                    elif weather_gain and not context_gain and latest_before["model_version"] == expected_main:
+                        continue  # Wave evidence aged out during computation.
                     if context_gain:
                         upgrade["racer_context_upgrade"] = {
                             "previous_sha256": latest_before["sha256"],
@@ -1613,7 +1639,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                         k: v for k, v in upgrade.items() if k != "sha256"
                     })
                     record["versions"].append(upgrade)
-                    new_model_upgrades += 1
+                    new_weather_revisions += int(bool(upgrade.get("weather_refresh")))
+                    new_model_upgrades += int(latest_before["model_version"] != expected_main)
             # Results are NEVER taken from the unofficial preview API.
             # Official pay-page evidence is attached only after forecasts are generated.
     # Preserve previous records even if a subsequent source request is incomplete.
@@ -1644,7 +1671,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
             "racers", "weather_observed", "evidence", "source_url"
         )}
         for extra in ("point_count", "point_reason", "head_weight_concentration", "head_weight_gap",
-                      "weather_used", "weather_adjustment", "weather_ab", "weather_lab_integration", "data_quality",
+                      "weather_used", "weather_adjustment", "weather_ab", "weather_lab_integration", "weather_refresh", "data_quality",
                       "exhibition_origin", "exhibition_change",
                       "venue_profile", "venue_adjustment", "venue_surface_v1", "venue_surface_ab", "model_role", "legacy_control",
                       "start_v07", "coupled_v06", "wake_v09", "four_factor", "racer_context_upgrade", "model_upgrade", "primary_model_ab", "head_course_shares",

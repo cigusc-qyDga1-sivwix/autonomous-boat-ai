@@ -32,6 +32,36 @@ def _formal(payload):
     return result
 
 
+
+def _strong_field_groups(payload):
+    """Only prospective, explicitly labeled and official-verified formal rows."""
+    groups = payload.get("by_strong_field_formal") or {}
+    out = {}
+    if not isinstance(groups, dict):
+        return out
+    for label, metric in groups.items():
+        if (label in ("NOT_ASSESSED", "INSUFFICIENT_EVIDENCE")
+                or not isinstance(metric, dict)):
+            continue
+        n, hits, head_miss, stake = (
+            metric.get("verified_races"), metric.get("hits"),
+            metric.get("head_miss"), metric.get("virtual_stake_yen"))
+        payout = metric.get("virtual_payout_yen")
+        if not all(type(value) is int and value >= 0
+                   for value in (n, hits, head_miss, stake, payout)):
+            continue
+        if n == 0 or hits + head_miss > n:
+            continue
+        out[label] = {
+            "verified_races": n, "hits": hits, "head_miss": head_miss,
+            "head_miss_rate": round(head_miss / n, 5),
+            "hit_rate": round(hits / n, 5),
+            "return_rate": round(payout / stake, 5) if stake else None,
+            "virtual_stake_yen": stake,
+            "virtual_payout_yen": payout,
+        }
+    return out
+
 def compare(current, previous):
     day = date.fromisoformat(current["event_date"])
     before = date.fromisoformat(previous["event_date"])
@@ -49,6 +79,9 @@ def compare(current, previous):
         "comparison_date_jst": previous["event_date"],
         "previous_formal": earlier, "current_formal": latest,
         "day_over_day": d,
+        "strong_field_previous_formal": _strong_field_groups(previous),
+        "strong_field_current_formal": _strong_field_groups(current),
+        "strong_field_note": "Comparisons require pre-cutoff diagnostic labels; no retrospective parity relabeling.",
         "current_models_observed_all_statuses": sorted((current.get("by_model") or {}).keys()),
         "previous_models_observed_all_statuses": sorted((previous.get("by_model") or {}).keys()),
         "previous_official_evidence_at_utc": previous.get("official_evidence_at_utc"),

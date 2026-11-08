@@ -1,0 +1,51 @@
+name: BOAT LAB nightly conditional-second paired audit
+on:
+  workflow_dispatch:
+  schedule:
+    # Every day at JST 23:30, after most official payouts have settled.
+    # GitHub scheduled jobs may be delayed or skipped.
+    - cron: '30 14 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/audit_second_place_trials.js'
+      - 'app/tests/audit-second-place-shadow.test.js'
+      - '.github/workflows/boat-lab-second-place-audit.yml'
+permissions:
+  contents: read
+jobs:
+  verify-shadow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Resolve JST day
+        id: day
+        run: echo "value=$(TZ=Asia/Tokyo date +%F)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/app/data/live/20??-??-??.json
+            /app/data/live/${{ steps.day.outputs.value }}.json
+            !/app/data/experiments/conditional-second-20??-??-??.json
+            /app/data/experiments/conditional-second-${{ steps.day.outputs.value }}.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate audit isolation
+        run: node app/tests/audit-second-place-shadow.test.js
+      - name: Compare paired frozen tickets against verified official results
+        shell: bash
+        run: |
+          set -euo pipefail
+          DAY="${{ steps.day.outputs.value }}"
+          node scripts/audit_second_place_trials.js "$DAY" > "conditional-second-audit-$DAY.json"
+          node -e 'const a=require("./conditional-second-audit-"+process.argv[1]+".json"); if(a.schema&&a.not_formal!==true)throw Error("formal contamination")' "$DAY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: conditional-second-audit-${{ github.run_id }}
+          path: conditional-second-audit-*.json
+          retention-days: 14
+          if-no-files-found: error

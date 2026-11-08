@@ -18,7 +18,7 @@
    if(r?.entry_exhibition_gate?.entry_watch&&!r.entry_exhibition_gate.final_eligible)
      return {status:'hold',reason:'前付け警戒・展示進入未確認のため順位を保留'};
    try{
-     const primary=r?.model_role==='main'&&/^four-factor-v(?:1\.(?:[6789])|2\.[012])\b/.test(r.model_version||'');
+     const primary=r?.model_role==='main'&&/^four-factor-v(?:1\.(?:[6789])|2\.[0123])\b/.test(r.model_version||'');
      // Main prediction: render only the frozen primary model's shares.
      // Never silently substitute a separate browser/shadow forecast.
      const forecast=primary?r:(window.BoatRacerRating?.forecastForRace?.(r)||

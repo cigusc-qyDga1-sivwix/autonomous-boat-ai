@@ -40,6 +40,12 @@
       day:doc.event_date,source_ok:doc.provider?.fetch_status==="ok"||doc.provider?.fetch_status==="ok_empty",
       age:ageMinutes(doc.collected_at_utc,now)};
   }
+  function collectorLag(doc,now=Date.now()){
+    const age=ageMinutes(doc?.collected_at_utc,now);
+    // GitHub scheduled runs are best effort; separate the collector heartbeat
+    // from the age of an individual race observation.
+    return {age,delayed:age===null||age < -5||age > 20};
+  }
   const UNIT_VALUE=(value,unit)=>num(value)===null?"—":String(value)+unit;
   function regionalEntry(doc,code,now=Date.now()){
     if(doc?.schema!==REGIONAL_SCHEMA||doc.event_date!==dayJST(now))return null;
@@ -127,7 +133,7 @@
         '<p>満潮 '+esc(row(st.high_tides||[]))+'</p><p>干潮 '+esc(row(st.low_tides||[]))+'</p></div>').join("")+'</div>'+
       '<p>潮流の流速・流向：未取得。海上保安庁の潮流推算との地点対応・API認証を確認中。潮位から潮流を推定しません。</p>';
   }
-  const api={quality,ageMinutes,dayJST,summary,venueView,regionalEntry,tidePanel,latestRow,renderVenueCard,renderRace,renderDetail,esc};
+  const api={quality,ageMinutes,dayJST,summary,collectorLag,venueView,regionalEntry,tidePanel,latestRow,renderVenueCard,renderRace,renderDetail,esc};
   if(typeof module!=="undefined"&&module.exports)module.exports=api;
   if(!root.document)return;
 
@@ -160,21 +166,28 @@
     const when=doc?.collected_at_utc?japaneseDate(new Date(doc.collected_at_utc)):"未取得";
     $("updated-label").textContent="最終取得： "+when+" JST";
     const alert=$("data-alert"),health=$("source-health");
+    const monitor=collectorLag(doc,now);
+    const monitorNote=monitor.delayed?
+      " 波高監視ジョブの更新が遅延しています（最終収集"+
+      (monitor.age===null?"時刻不明":Math.max(0,Math.round(monitor.age))+"分前")+"）。":"";
+    const missingFile=doc?.provider?.fetch_status==="not_published_or_missing";
     alert.className="alert";health.className="hero-tag";
     if(state.error||!doc||stats?.source_ok===false){
       alert.classList.add(regionalCount?"is-warn":"is-error");
       health.classList.add(regionalCount?"is-stale":"is-error");
-      health.textContent=regionalCount?"広域予報 "+regionalCount+"場取得":"取得元・通信エラー";
-      alert.textContent=regionalCount?
-        "場内波高は未取得ですが、近隣JMAモデル予報を"+regionalCount+"場で表示しています。カードの予報は場内実測ではありません。":
-        "場内実測と広域予報を確認できません。推測で補いません。"+
-          (state.regionalError?" 広域予報："+state.regionalError:"");
+      health.textContent=regionalCount?"広域予報 "+regionalCount+"場取得":
+        missingFile?"場内CSV未公開・欠損":"取得元・通信エラー";
+      alert.textContent=(missingFile?"当日の場内CSVは未公開または欠損しています（中止や障害と断定できません）。 ":"")+
+        (regionalCount?
+          "場内波高は未取得ですが、近隣JMAモデル予報を"+regionalCount+"場で表示しています。カードの予報は場内実測ではありません。":
+          "場内実測と広域予報を確認できません。推測で補いません。"+
+            (state.regionalError?" 広域予報："+state.regionalError:""))+monitorNote;
     }else if(stats.age===null||stats.age>15||stats.fresh===0){
       alert.classList.add("is-warn");health.classList.add("is-stale");
       health.textContent=regionalCount?"広域予報 "+regionalCount+"場取得":"過去の観測データ";
       alert.textContent="場内の新鮮な実測は"+stats.fresh+"件。"+
         (regionalCount?"近隣JMAモデル予報は"+regionalCount+"場で確認できます（場内実測ではありません）。":
-        "古い波高記録を現在の水面状況として使用しないでください。");
+        "古い波高記録を現在の水面状況として使用しないでください。")+monitorNote;
     }else{
       health.textContent="場内観測 "+stats.fresh+"件";
       alert.textContent="場内の新鮮な波高"+stats.fresh+"件／近隣モデル予報"+regionalCount+"場。実測と予報は別のデータです。";

@@ -77,6 +77,23 @@ function audit(trials,live){
   not_formal:true,no_additional_stake:true,
   records:included};
 }
+function projectLedger(ledger){
+ if(!ledger||!ledger.event_date||!ledger.race_records)throw Error('dated_ledger_required');
+ const forecast_races=[],official_results={},settlement_alerts={};
+ for(const record of Object.values(ledger.race_records)){
+  const versions=record?.versions||[];
+  if(!versions.length)continue;
+  const last=versions[versions.length-1];
+  forecast_races.push({...last,venue:last.venue||record.venue,
+    race:last.race||record.race});
+  const key=ledger.event_date+'|'+record.venue+'|'+record.race;
+  if(record.official_pay)official_results[key]=record.official_pay;
+  if(record.official_review||record.official_conflict||
+     record.official_pay?.void_trifecta||
+     record.official_pay?.refunded_boats?.length)settlement_alerts[key]=true;
+ }
+ return {event_date:ledger.event_date,forecast_races,official_results,settlement_alerts};
+}
 function main(){
  const day=process.argv[2]||new Intl.DateTimeFormat('en-CA',{
   timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
@@ -87,8 +104,8 @@ function main(){
   return;
  }
  const result=audit(JSON.parse(fs.readFileSync(base,'utf8')),
-   JSON.parse(fs.readFileSync(source,'utf8')));
+   projectLedger(JSON.parse(fs.readFileSync(source,'utf8'))));
  process.stdout.write(JSON.stringify(result)+'\n');
 }
-module.exports={audit,score};
+module.exports={audit,score,projectLedger};
 if(require.main===module)main();

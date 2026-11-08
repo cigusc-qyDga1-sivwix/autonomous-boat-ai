@@ -40,6 +40,7 @@ jobs:
       - run: node app/tests/point-free.test.js
       - run: node app/tests/statistical-shadow.test.js
       - run: node app/tests/head-share-chart.test.js
+      - run: python3 -c "import runpy; tests=runpy.run_path('tests/test_strong_field_diagnostic.py'); [fn() for name,fn in tests.items() if name.startswith('test_')]"
       - run: node --check app/app.js
       - run: node --check app/exhibition-research.js
       - run: node --check app/exhibition-watch.js

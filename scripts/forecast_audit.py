@@ -144,6 +144,10 @@ def analyze(dataset: dict) -> dict:
             "venue": r["venue"], "race": r["race"],
             "classification": r.get("classification", "unclassified"),
             "ticket_status": r.get("ticket_status", "unclassified"),
+            "strong_field_status": (
+                (r.get("strong_field_diagnostic") or {}).get("status", "NOT_ASSESSED")
+                if isinstance(r.get("strong_field_diagnostic"), dict) else "NOT_ASSESSED"
+            ),
             "model_version": r.get("model_version", "unknown"),
             "phase": r.get("phase", "unknown"), "points": len(bets),
             "stage": stage, "actual_finish": win, "actual_head": win[0],
@@ -245,6 +249,11 @@ def analyze(dataset: dict) -> dict:
         "by_classification": _group(verified, "classification"),
         "by_ticket_status": _group(verified, "ticket_status"),
         "by_model": _group(verified, "model_version"),
+        "by_strong_field_status": _group(verified, "strong_field_status"),
+        "by_strong_field_formal": _group(
+            [row for row in verified if row["ticket_status"] == "formal"],
+            "strong_field_status",
+        ),
         "by_points": _group(verified, "points"),
         "by_venue": _group(verified, "venue"),
         "exclusions": dict(exclusions),

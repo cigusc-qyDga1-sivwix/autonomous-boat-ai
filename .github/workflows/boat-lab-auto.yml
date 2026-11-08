@@ -7,6 +7,8 @@ on:
     paths:
       - 'scripts/autonomous_daily.py'
       - 'scripts/conditional_second_primary.py'
+      - 'scripts/strong_field_diagnostic.py'
+      - 'tests/test_strong_field_diagnostic.py'
       - 'tests/test_conditional_second_primary.py'
       - 'scripts/official_withdrawals.py'
       - 'scripts/interaction_scenarios.py'
@@ -130,6 +132,7 @@ jobs:
           node --check app/tactical-1m.js
           python -m compileall -q scripts/autonomous_daily.py
           python -m compileall -q scripts/conditional_second_primary.py
+          python -m compileall -q scripts/strong_field_diagnostic.py
       - name: Verify exhibition ingestion and pre-cutoff freeze invariants
         shell: bash
         run: |

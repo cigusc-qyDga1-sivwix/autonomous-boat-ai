@@ -669,6 +669,7 @@
     ${r.model_role==='main'?legacyControlPanel(r):tacticalTrialPanel(r)}
     ${window.BoatRaceVisual?window.BoatRaceVisual.animationHTML(r):''}
     ${referencePanel}
+    ${r.strong_field_diagnostic?.status==='STRONG_FIELD_CLOSE_HEADS'? `<div class="notice warn"><strong>強豪混戦・1着候補が拮抗：</strong>実力者${r.strong_field_diagnostic.strong_racers_count}艇／上位2頭の相対評価差${Math.round(r.strong_field_diagnostic.head_gap*1000)/10}ポイント。${r.strong_field_diagnostic.head_candidates_absent_from_tickets?.length?`頭候補として買い目未採用の艇：${escape(r.strong_field_diagnostic.head_candidates_absent_from_tickets.join('・'))}号艇。`:'採用済みの頭候補を確認。'}これはリスク警告であり、買い目の自動追加や実測勝率の判定ではありません。</div>` : ''}
     ${r.point_reason?`<div class="notice"><strong>点数を選んだ理由：</strong>${escape(r.point_reason)} ／ ${r.bets.length}点。これは未校正の相対指標で、実測的中確率ではありません。</div>`:''}
     <div class="detail-grid">
     <div><section class="card card-pad bottom-margin"><h3>レース情報</h3><div class="meta-list"><div class="meta"><span>開催</span><b>${escape(r.venue)}</b></div><div class="meta"><span>対象日</span><b>${dateDisplay(data.event_date)}</b></div><div class="meta"><span>締切予定</span><b>${escape(r.cutoff_jst)} JST</b></div><div class="meta"><span>予想区分</span><b>${escape(r.classification)}</b></div><div class="meta"><span>展示データ</span><b>${r.phase==='exhibition'?'反映済み（非公式）':'未反映'}</b></div><div class="meta"><span>オッズ</span><b>未反映</b></div></div></section>

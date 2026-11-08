@@ -26,6 +26,7 @@ if __package__:
     from .venue_weather_special_shadow import rescore as rescore_site_weather_shadow
     from .attack_defense_shadow import rescore as rescore_attack_defence_shadow
     from .grade_competition_shadow import grade_from_program, rescore as rescore_grade_competition
+    from .strong_field_diagnostic import analyze as analyze_strong_field
     from .exhibition_bridge import available_rows, inject
     from .official_withdrawals import fetch_notices, match_lanes
     from .entry_exhibition_gate import validated_preview, summarize_gate
@@ -42,6 +43,7 @@ else:
     from venue_weather_special_shadow import rescore as rescore_site_weather_shadow
     from attack_defense_shadow import rescore as rescore_attack_defence_shadow
     from grade_competition_shadow import grade_from_program, rescore as rescore_grade_competition
+    from strong_field_diagnostic import analyze as analyze_strong_field
     from exhibition_bridge import available_rows, inject
     from official_withdrawals import fetch_notices, match_lanes
     from entry_exhibition_gate import validated_preview, summarize_gate
@@ -1179,6 +1181,13 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
             }
     count = len(bets)
     shares = interaction_meta["new_head_course_shares"] if interaction_meta else promoted["head_course_shares"]
+    # Independent forward-only diagnostic: grade alone never triggers parity,
+    # and this does not alter the officially frozen picks or stake.
+    strong_field_diagnostic = (
+        analyze_strong_field(racers, shares, bets, phase=phase,
+                             grade_context=grade_context)
+        if linked_active else None
+    )
     concentration = max(x["relative_share"] for x in shares)
     top_two = sorted((x["relative_share"] for x in shares), reverse=True)
     gap = top_two[0] - top_two[1]
@@ -1222,6 +1231,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     body = {
         "model_version": chosen_model,
         "grade_context": grade_context,
+        **({"strong_field_diagnostic": strong_field_diagnostic} if strong_field_diagnostic else {}),
         **({"grade_competition_shadow": grade_competition_shadow} if grade_competition_shadow else {}),
         **({"interaction_primary": interaction_meta} if interaction_meta else {}),
         **({"role_skill_shadow": promoted["role_skill_shadow"]} if promoted.get("role_skill_shadow") else {}),
@@ -1603,7 +1613,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "role_coverage", "role_changes", "head_coverage_control", "postrace_conditional_v13",
                       "postrace_conditional_control", "venue_tactics_v2", "venue_tactics_ab", "point_free_control", "point_free_provenance",
                       "role_skill_shadow", "venue_motor_exhibition_shadow", "interaction_primary",
-                      "attack_defence_shadow", "grade_context", "grade_competition_shadow",
+                      "attack_defence_shadow", "grade_context", "grade_competition_shadow", "strong_field_diagnostic",
                       "exhibition_input_check", "relative_scores_uncalibrated"):
             if extra in current:
                 r[extra] = current[extra]

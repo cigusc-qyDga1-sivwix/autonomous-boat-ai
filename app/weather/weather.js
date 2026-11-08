@@ -161,7 +161,10 @@
     if(modelCountNode)modelCountNode.textContent=regionalCount||"—";
     if(modelNoteNode)modelNoteNode.textContent=regionalCount?
       "取得 "+shortTime(state.regional.retrieved_at_utc)+"（近隣モデル予報）":
-      state.regionalError?"通信・提供元を確認":"広域予報の取得待ち";
+      state.regionalError?"通信・提供元を確認":
+      state.regional?.retrieved_at_utc?
+        "最終取得 "+shortTime(state.regional.retrieved_at_utc)+"（現在は古いため非表示）":
+        "広域予報の取得待ち";
     $("stat-venue-note").textContent=stats?stats.day+"の記録":"本日の記録";
     const when=doc?.collected_at_utc?japaneseDate(new Date(doc.collected_at_utc)):"未取得";
     $("updated-label").textContent="最終取得： "+when+" JST";

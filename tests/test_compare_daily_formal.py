@@ -48,3 +48,20 @@ def test_refuse_nonconsecutive_or_missing_formal_or_inconsistent_stages():
     p["by_ticket_status"]["formal"]["second_miss"] = 99
     with pytest.raises(ValueError, match="Stage accounting"):
         compare(p, prior)
+
+
+def test_competitive_field_day_over_day_uses_only_explicit_forward_labels():
+    previous = report("2026-11-07", 101, 48, 32, 16, 5, 5171900)
+    current = report("2026-11-08", 109, 47, 27, 25, 10, 4789500)
+    current["by_strong_field_formal"] = {
+        "STRONG_FIELD_CLOSE_HEADS": {
+            "verified_races": 2, "hits": 0, "head_miss": 2,
+            "virtual_stake_yen": 100000, "virtual_payout_yen": 0},
+        "NOT_ASSESSED": {
+            "verified_races": 107, "hits": 47, "head_miss": 25,
+            "virtual_stake_yen": 5350000, "virtual_payout_yen": 4789500},
+    }
+    result = compare(current, previous)
+    assert result["strong_field_previous_formal"] == {}
+    assert result["strong_field_current_formal"]["STRONG_FIELD_CLOSE_HEADS"]["head_miss_rate"] == 1.0
+    assert "NOT_ASSESSED" not in result["strong_field_current_formal"]

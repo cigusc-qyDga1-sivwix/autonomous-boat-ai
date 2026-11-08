@@ -35,5 +35,5 @@ jobs:
           node-version: '22'
       - run: python -m compileall -q scripts/weather_live_bridge.py scripts/venue_weather.py scripts/autonomous_daily.py
       - run: python -m pip install -q pytest
-      - run: python -m pytest -q tests/test_weather_live_bridge.py
+      - run: python -m pytest -q tests/test_weather_live_bridge.py tests/test_autonomous_source_unavailable.py
       - run: node --check app/app.js

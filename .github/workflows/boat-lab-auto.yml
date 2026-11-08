@@ -139,6 +139,7 @@ jobs:
           python -m compileall -q scripts/conditional_second_primary.py
           python -m compileall -q scripts/strong_field_diagnostic.py
           python -m compileall -q scripts/weather_live_bridge.py
+          python -c "import runpy; tests=runpy.run_path('tests/test_autonomous_source_unavailable.py'); tests['test_unpublished_day_404_preserves_previous_predictions']()"
           python -c "import runpy; tests=runpy.run_path('tests/test_weather_live_bridge.py'); [fn() for name,fn in tests.items() if name.startswith('test_')]"
       - name: Verify exhibition ingestion and pre-cutoff freeze invariants
         shell: bash

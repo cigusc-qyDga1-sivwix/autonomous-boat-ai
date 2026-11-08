@@ -8,7 +8,6 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 from urllib.error import HTTPError
 
-import pytest
 from scripts import autonomous_daily as A
 
 
@@ -35,6 +34,9 @@ def test_other_http_errors_are_not_relabelled_as_unpublished():
         invalid = HTTPError("https://example.invalid", 500, "Server Error", {}, None)
         argv = ["autonomous_daily.py","--now-iso","2026-11-09T00:05:00+09:00","--out-dir",root]
         with patch.object(sys, "argv", argv), patch.object(A, "retrieve", side_effect=invalid):
-            with pytest.raises(HTTPError) as exc:
+            try:
                 A.main()
-        assert exc.value.code == 500
+            except HTTPError as exc:
+                assert exc.code == 500
+            else:
+                raise AssertionError("Non-404 HTTP error must not be suppressed")

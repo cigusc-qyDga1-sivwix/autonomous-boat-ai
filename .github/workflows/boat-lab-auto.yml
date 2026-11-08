@@ -7,6 +7,11 @@ on:
     paths:
       - 'scripts/autonomous_daily.py'
       - 'scripts/conditional_second_primary.py'
+      - 'scripts/weather_live_bridge.py'
+      - 'scripts/venue_weather.py'
+      - 'weather_lab/monitor.py'
+      - 'weather_lab/regional_jma.py'
+      - 'tests/test_weather_live_bridge.py'
       - 'scripts/strong_field_diagnostic.py'
       - 'tests/test_strong_field_diagnostic.py'
       - 'tests/test_conditional_second_primary.py'
@@ -133,6 +138,8 @@ jobs:
           python -m compileall -q scripts/autonomous_daily.py
           python -m compileall -q scripts/conditional_second_primary.py
           python -m compileall -q scripts/strong_field_diagnostic.py
+          python -m compileall -q scripts/weather_live_bridge.py
+          python -c "import runpy; tests=runpy.run_path('tests/test_weather_live_bridge.py'); [fn() for name,fn in tests.items() if name.startswith('test_')]"
       - name: Verify exhibition ingestion and pre-cutoff freeze invariants
         shell: bash
         run: |

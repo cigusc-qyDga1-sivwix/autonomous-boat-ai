@@ -18,7 +18,7 @@ const parseDate=iso=>Date.parse(iso);
 function validateBets(bets,modelVersion,day){
  const free=modelVersion==='four-factor-v1.5-point-free-untrained',unit=free?100:1000;
  const expanded=typeof modelVersion==='string'&&modelVersion.startsWith('four-factor-')&&day>='2026-10-29';
- return Array.isArray(bets)&&bets.length>=(free?1:4)&&bets.length<=(free?120:expanded?20:12)&&
+ return Array.isArray(bets)&&bets.length>=(free?1:4)&&bets.length<=(free?120:expanded&&/four-factor-v2\.[123]-/.test(modelVersion)?24:expanded?20:12)&&
     new Set(bets.map(x=>x.combination)).size===bets.length&&
     bets.every(x=>/^[1-6]-[1-6]-[1-6]$/.test(x.combination)&&new Set(x.combination.split('-')).size===3&&Number.isSafeInteger(x.virtual_yen)&&x.virtual_yen>=unit&&(!free||x.virtual_yen%unit===0))&&
     bets.reduce((s,b)=>s+b.virtual_yen,0)===50000;

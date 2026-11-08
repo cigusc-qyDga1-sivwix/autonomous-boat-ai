@@ -34,6 +34,7 @@ if __package__:
     from .racer_course_tactics import profile as validate_tactics_profile, pairwise_note as tactic_pair
     from .adaptive_main_points import allocate_dynamic, stake_dynamic, VERSION as ADAPTIVE_POINTS_VERSION
     from .justified_main_points import justified_selection, justified_stakes, VERSION as JUSTIFIED_POINTS_VERSION
+    from .conditional_second_primary import diversify as diversify_second_pair
 else:
     from racer_context import collect as collect_racer_context, validated as validate_racer_context
     from official_pay import fetch_official_pay
@@ -49,6 +50,7 @@ else:
     from racer_course_tactics import profile as validate_tactics_profile, pairwise_note as tactic_pair
     from adaptive_main_points import allocate_dynamic, stake_dynamic, VERSION as ADAPTIVE_POINTS_VERSION
     from justified_main_points import justified_selection, justified_stakes, VERSION as JUSTIFIED_POINTS_VERSION
+    from conditional_second_primary import diversify as diversify_second_pair
 
 JST = ZoneInfo("Asia/Tokyo")
 UTC = timezone.utc
@@ -92,6 +94,8 @@ INTERACTION_ENTRY_MODEL = 'four-factor-v2.1-actual-entry-primary-untrained'
 INTERACTION_ENTRY_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T15:00:00+00:00')
 LINKED_MAIN_MODEL = 'four-factor-v2.2-linked-primary-untrained'
 LINKED_MAIN_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T23:15:00+00:00')
+CONDITIONAL_SECOND_MAIN_MODEL = 'four-factor-v2.3-conditional-second-primary-untrained'
+CONDITIONAL_SECOND_ACTIVATION_UTC = datetime.fromisoformat('2026-11-08T15:00:00+00:00')
 VIRTUAL_BUDGET_YEN = 50_000
 MIN_POINTS, MAX_POINTS = 4, 12
 STAKE_UNIT_YEN = 1_000
@@ -630,7 +634,8 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
                         justified_points: bool = False,
                         exhibition_verified: bool = False,
                         site_weather_verified: bool = False,
-                        entry_aware: bool = False, linked_ranked: list[dict] | None = None) -> tuple[list[dict], dict]:
+                        entry_aware: bool = False, linked_ranked: list[dict] | None = None,
+                        conditional_second_main: bool = False) -> tuple[list[dict], dict]:
     """Forward-only main tickets. Existing main forecast is an A/B control."""
     if scored_weights is not None and (len(scored_weights) != 6 or
             any(number(value) is None or value <= 0 for value in scored_weights)):
@@ -756,6 +761,10 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
         except (KeyError, TypeError, ValueError) as exc:
             tactics_report = {"status": "REJECTED", "applied": False, "reason": str(exc)}
     dynamic_meta = None
+    conditional_second_meta = None
+    same_race_v22_control_bets = None
+    if conditional_second_main and (not justified_points or linked_ranked is None):
+        raise ValueError("v2.3 requires the full canonical evidence-gated v2.2 path")
     if justified_points:
         independent = []
         if tactics_report.get("applied"):
@@ -767,6 +776,14 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
             exhibition_verified=exhibition_verified,
             independent_sources=independent, expected_paths=6 if linked_ranked is not None else 5)
         count = len(selected)
+        if conditional_second_main:
+            # Fixed same-race v2.2 control: no future/postrace information and
+            # exactly the same point count and 50,000-yen virtual budget.
+            same_race_v22_control_bets = justified_stakes(selected)
+            selected, ticket_reasons, conditional_second_meta = diversify_second_pair(
+                selected, ranked, dynamic_meta, result["scenario_assumptions"])
+            dynamic_meta["ticket_reasons"] = ticket_reasons
+            dynamic_meta["selected_point_count"] = len(selected)
     elif adaptive_points:
         selected, dynamic_meta = allocate_dynamic(ranked)
         count = len(selected)
@@ -886,6 +903,9 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
             "course1_outside_top3_selected": sum(str(inside_lane) not in b["combination"].split("-") for b in bets),
             "conditional_coverage_applied": conditional_coverage,
             "conditional_coverage_rule": "relative_mass>=.25, candidate>=.55*last_selected",
+            **({"conditional_second_primary": conditional_second_meta,
+                "same_race_v22_control_bets": same_race_v22_control_bets}
+               if conditional_second_meta else {}),
             "racer_course_tactics": tactics_report,
             "scenario_assumptions": result["scenario_assumptions"],
             "conditional_places_by_head": conditional_places,
@@ -913,6 +933,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         raise ValueError("Incomplete exhibition readings")
     linked_active = (venue != "江戸川" and now.astimezone(UTC) >= LINKED_MAIN_ACTIVATION_UTC
                      and cutoff.astimezone(UTC) > LINKED_MAIN_ACTIVATION_UTC)
+    conditional_second_active = (linked_active and now.astimezone(UTC) >= CONDITIONAL_SECOND_ACTIVATION_UTC
+                                 and cutoff.astimezone(UTC) > CONDITIONAL_SECOND_ACTIVATION_UTC)
     weights, racers = features(race, phase)
     # Program grade comes from a named, pre-race API field. Do not infer it
     # from the venue or retroactively enrich frozen predictions.
@@ -1022,10 +1044,11 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
             exhibition_verified=bool(point_gate["final_eligible"]),
             site_weather_verified=bool(selected_weather and selected_weather.get("site_observed")),
             entry_aware=entry_active,
-            linked_ranked=promoted.get("ranked_outcomes") if linked_active else None)
+            linked_ranked=promoted.get("ranked_outcomes") if linked_active else None,
+            conditional_second_main=conditional_second_active)
         if linked_active and promoted.get("ranked_source") != "linked-four-factor-venue-st-wake-120":
             raise ValueError("Linked primary source missing; no simplified fallback")
-        chosen_model = (LINKED_MAIN_MODEL if linked_active else INTERACTION_ENTRY_MODEL if entry_active else INTERACTION_JUSTIFIED_MODEL if justified_active else
+        chosen_model = (CONDITIONAL_SECOND_MAIN_MODEL if conditional_second_active else LINKED_MAIN_MODEL if linked_active else INTERACTION_ENTRY_MODEL if entry_active else INTERACTION_JUSTIFIED_MODEL if justified_active else
                         INTERACTION_ALIGNED_MODEL if aligned_active else
                         INTERACTION_ADAPTIVE_MODEL if adaptive_active else INTERACTION_MAIN_MODEL)
     # An independent venue-specific weather comparison ONLY, never official.
@@ -1194,6 +1217,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
                       "攻め成功・抵抗・攻め流れ・1号艇着外の5展開を評価（未校正）")
     if linked_active:
         reason = "統合v2.2：選手・枠別・当地・モーター・展示・実進入・場別条件・ST・引き波仮説を同一120組で評価／根拠別採用" + str(len(bets)) + "点・仮想5万円・未校正"
+    if conditional_second_active:
+        reason = "正式v2.3：v2.2の根拠別上限を維持／1着→2着の条件付き組み合わせ分散／" + str(len(bets)) + "点・仮想5万円・未校正"
     body = {
         "model_version": chosen_model,
         "grade_context": grade_context,
@@ -1207,7 +1232,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         **({"head_coverage_control": promoted["head_coverage_control"]} if promoted.get("head_coverage_control") else {}),
         **({"venue_tactics_v2": promoted["venue_tactics_v2"],
             "venue_tactics_ab": promoted["venue_tactics_ab"]}
-           if chosen_model in (LINKED_MAIN_MODEL, VENUE_TACTICS_MODEL, POINT_FREE_MODEL) else {}),
+           if chosen_model in (CONDITIONAL_SECOND_MAIN_MODEL, LINKED_MAIN_MODEL, VENUE_TACTICS_MODEL, POINT_FREE_MODEL) else {}),
         **({"postrace_conditional_v13": promoted["postrace_conditional_v13"],
             "postrace_conditional_control": promoted["postrace_conditional_control"]}
            if chosen_model in (LINKED_MAIN_MODEL, POSTRACE_CONDITIONAL_MODEL, VENUE_TACTICS_MODEL, POINT_FREE_MODEL) else {}),
@@ -1406,7 +1431,9 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                             and cutoff.astimezone(UTC) > INTERACTION_ENTRY_ACTIVATION_UTC)
             linked_active = (entry_active and runtime_now.astimezone(UTC) >= LINKED_MAIN_ACTIVATION_UTC
                              and cutoff.astimezone(UTC) > LINKED_MAIN_ACTIVATION_UTC)
-            expected_main = (LINKED_MAIN_MODEL if linked_active else INTERACTION_ENTRY_MODEL if entry_active else INTERACTION_JUSTIFIED_MODEL if justified_active else
+            conditional_second_active = (linked_active and runtime_now.astimezone(UTC) >= CONDITIONAL_SECOND_ACTIVATION_UTC
+                                         and cutoff.astimezone(UTC) > CONDITIONAL_SECOND_ACTIVATION_UTC)
+            expected_main = (CONDITIONAL_SECOND_MAIN_MODEL if conditional_second_active else LINKED_MAIN_MODEL if linked_active else INTERACTION_ENTRY_MODEL if entry_active else INTERACTION_JUSTIFIED_MODEL if justified_active else
                              INTERACTION_ALIGNED_MODEL if aligned_active else
                              INTERACTION_ADAPTIVE_MODEL if adaptive_active else INTERACTION_MAIN_MODEL if interaction_active else
                              POINT_FREE_MODEL if point_free_active else VENUE_TACTICS_MODEL if venue_active else

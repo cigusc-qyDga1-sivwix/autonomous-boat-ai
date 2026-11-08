@@ -1,0 +1,30 @@
+name: BOAT LAB conditional-second shadow tests
+on:
+  push:
+    paths:
+      - 'scripts/freeze_second_place_trials.js'
+      - 'scripts/audit_second_place_trials.js'
+      - 'app/tests/forward-second-place-shadow.test.js'
+      - 'app/tests/audit-second-place-shadow.test.js'
+      - '.github/workflows/boat-lab-second-place-shadow.yml'
+  pull_request:
+    paths:
+      - 'scripts/freeze_second_place_trials.js'
+      - 'app/tests/forward-second-place-shadow.test.js'
+      - '.github/workflows/boat-lab-second-place-shadow.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  shadow-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check scripts/freeze_second_place_trials.js
+      - run: node --check scripts/audit_second_place_trials.js
+      - run: node app/tests/forward-second-place-shadow.test.js
+      - run: node app/tests/audit-second-place-shadow.test.js

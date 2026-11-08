@@ -90,7 +90,8 @@ async function run(){
  assert.match(audit,/data-action="refresh-exhibition"/);
  assert.match(index,/canonical-exhibition-feed\.js\?v=20261107-main-source-v1/);
  assert.ok(index.indexOf('canonical-exhibition-feed.js')<index.indexOf('app.js'));
- assert.match(sw,/boat-lab-static-v69/);
+ const swVersion=sw.match(/boat-lab-static-v(\d+)/);
+ assert.ok(swVersion && Number(swVersion[1])>=69,'PWA cache version must not roll back');
  assert.match(sw,/\.\/canonical-exhibition-feed\.js/);
  console.log('Canonical exhibition: newer upstream, stale Pages, mismatch, offline, checksum-freeze guard PASS');
 }

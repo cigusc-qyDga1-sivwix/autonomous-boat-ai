@@ -78,7 +78,7 @@ delete broken.interaction_primary.main_role_shares;
 assert.equal(window.BoatRacerRating.rate(broken).byLane[1].race_expectation,null);
 assert.equal(shadowCalls,0);
 console.log('Saved main ratings and bought-ticket role counts aligned: PASS');
-for(const model_version of ['four-factor-v2.0-justified-points-primary-untrained','four-factor-v2.1-actual-entry-primary-untrained','four-factor-v2.2-linked-primary-untrained']){
+for(const model_version of ['four-factor-v2.0-justified-points-primary-untrained','four-factor-v2.1-actual-entry-primary-untrained','four-factor-v2.2-linked-primary-untrained','four-factor-v2.3-conditional-second-primary-untrained']){
  const newer={...r,model_version};
  const before=shadowCalls;
  assert.equal(window.BoatRacerRating.rate(newer).byLane[1].role_weights.first,.40);

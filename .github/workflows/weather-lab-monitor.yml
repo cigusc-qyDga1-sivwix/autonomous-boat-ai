@@ -2,6 +2,11 @@ name: WEATHER LAB independent water-surface monitor
 
 on:
   workflow_dispatch:
+  # Backup trigger when GitHub's five-minute schedule is skipped or delayed.
+  # BOAT LAB remains independent: only a successful same-repo event may start collection.
+  workflow_run:
+    workflows: ['BOAT LAB fast exhibition numeric capture']
+    types: [completed]
   push:
     branches: [main]
     paths:
@@ -22,7 +27,12 @@ concurrency:
 
 jobs:
   collect:
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name != 'workflow_run' ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -36,9 +46,41 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Check if backup trigger is already covered by recent collection
+        if: github.event_name == 'workflow_run'
+        id: backup_gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://raw.githubusercontent.com/cigusc-qyDga1-sivwix/autonomous-boat-ai/weather-lab-data/weather_lab/data/latest.json'
+          if curl --fail --silent --show-error --location --max-time 8 "$URL?ts=$(date +%s)" -o "$RUNNER_TEMP/weather-last.json"; then
+            if python - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from zoneinfo import ZoneInfo
+          try:
+              with open(os.path.join(os.environ['RUNNER_TEMP'], 'weather-last.json'), encoding='utf-8') as fp:
+                  doc = json.load(fp)
+              now = datetime.now(timezone.utc)
+              collected = datetime.fromisoformat(doc['collected_at_utc'].replace('Z', '+00:00'))
+              age = (now - collected).total_seconds()
+              same_day = doc['event_date'] == now.astimezone(ZoneInfo('Asia/Tokyo')).date().isoformat()
+              raise SystemExit(0 if same_day and -90 <= age <= 240 else 1)
+          except (OSError, ValueError, KeyError, TypeError):
+              raise SystemExit(1)
+          PY
+            then
+              echo 'Backup trigger skipped: WEATHER LAB already collected within four minutes'
+              echo 'collect=no' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo 'collect=yes' >> "$GITHUB_OUTPUT"
       - name: Offline schema, date and source-safety checks
+        if: github.event_name != 'workflow_run' || steps.backup_gate.outputs.collect == 'yes'
         run: python -m unittest discover -s weather_lab/tests -p 'test_*.py' -v
       - name: Collect public race-based weather snapshots
+        if: github.event_name != 'workflow_run' || steps.backup_gate.outputs.collect == 'yes'
         id: capture
         shell: bash
         run: |
@@ -49,6 +91,7 @@ jobs:
           python -m weather_lab.monitor --date "$DAY" --out-dir "$RUNNER_TEMP/weather-lab-data"
           python -m json.tool "$RUNNER_TEMP/weather-lab-data/latest.json" > /dev/null
       - name: Commit only WEATHER LAB data to its independent data branch
+        if: github.event_name != 'workflow_run' || steps.backup_gate.outputs.collect == 'yes'
         shell: bash
         run: |
           set -euo pipefail

@@ -160,7 +160,8 @@ def build(csv_text, at, day, *, source_url=None, fetch_error=None):
         venues.append({
             "code": f"{i:02d}", "name": name,
             "boat_lab_prediction_in_scope": i != 3,
-            "monitor_status": "provider_unavailable" if fetch_error else
+            "monitor_status": "source_not_published_or_missing" if fetch_error == "source_404" else
+                              "provider_unavailable" if fetch_error else
                               "no_race_snapshot" if not items else
                               newest["freshness_status"],
             "race_snapshots": len(items),
@@ -176,7 +177,8 @@ def build(csv_text, at, day, *, source_url=None, fetch_error=None):
         "event_date": day.isoformat(),
         "collected_at_utc": now.isoformat(),
         "provider": {"name": "BoatraceCSV", "type": "previews/sui",
-                     "url": url, "fetch_status": "unavailable" if fetch_error else
+                     "url": url, "fetch_status": "not_published_or_missing" if fetch_error == "source_404" else
+                                            "unavailable" if fetch_error else
                                             "ok" if races else "ok_empty",
                      "fetch_error_type": fetch_error},
         "scope": {"venues_monitored": 24, "forecast_scope_excludes_edogawa": True,
@@ -207,6 +209,8 @@ def build(csv_text, at, day, *, source_url=None, fetch_error=None):
             "On-site collection is wave height only; wind and air temperature are regional model context.",
             "Tide level/current must come from separate coastal sources; unavailable is not zero.",
             "BOAT LAB's formal predictions, frozen hashes and settlements are unchanged.",
+            *([ "HTTP 404: the daily source file is not published or is missing; not proof of an outage." ]
+              if fetch_error == "source_404" else []),
         ],
     }
 
@@ -220,7 +224,11 @@ def download(day):
             if len(raw) > 4_000_000:
                 return "", url, "source_too_large"
             return raw.decode("utf-8-sig"), url, None
-    except (HTTPError, URLError, TimeoutError, OSError) as exc:
+    except HTTPError as exc:
+        # The per-race CSV is often absent before the first pre-cutoff capture.
+        # HTTP 404 alone does not prove an outage or that racing is cancelled.
+        return "", url, "source_404" if exc.code == 404 else "HTTPError"
+    except (URLError, TimeoutError, OSError) as exc:
         return "", url, type(exc).__name__
     except UnicodeError:
         return "", url, "source_encoding_error"

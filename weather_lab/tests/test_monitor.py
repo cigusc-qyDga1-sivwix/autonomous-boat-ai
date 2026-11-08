@@ -103,6 +103,15 @@ class WeatherLabTests(unittest.TestCase):
         self.assertEqual(doc["summary"]["race_snapshots"], 0)
         self.assertTrue(all(v["monitor_status"] == "provider_unavailable" for v in doc["venues"]))
 
+    def test_404_source_file_is_not_misreported_as_provider_outage(self):
+        doc = build("", NOW, DAY, fetch_error="source_404")
+        self.assertEqual(doc["provider"]["fetch_status"], "not_published_or_missing")
+        self.assertEqual(doc["provider"]["fetch_error_type"], "source_404")
+        self.assertEqual(doc["summary"]["race_snapshots"], 0)
+        self.assertTrue(all(v["monitor_status"] == "source_not_published_or_missing"
+                            for v in doc["venues"]))
+        self.assertFalse(doc["scope"]["no_formal_forecast_integration"] is False)
+
     def test_no_valid_observation_time_is_not_fresh(self):
         rec = build(HEADER + csv_row(clock="25ZZ"), NOW, DAY)["races"][0]
         self.assertEqual(rec["freshness_status"], "observation_time_unverified")

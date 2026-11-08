@@ -134,3 +134,11 @@ WeathernewsのWxTech APIには契約時のキーが必要で、現時点は未�
 - 別系統：気象庁の公開テキスト `https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/{year}/{station}.txt` を読み、東京(TK)・大阪(OS)・洲本(ST)の**参照地点の天文潮位予測**（毎時潮位・満潮・干潮）を保存。`weather_lab/data/tide/latest.json`（別ブランチ）。**レース場と検潮地点は未対応づけであり、場内水位ではない**。
 - 海上保安庁の海しるAPIには潮流推算が存在するが、サブスクリプションキーと場別の適用範囲が必要。現時点は**流速・流向未取得**、潮位の時系列から潮流を推定しない。
 - 出典：気象庁の潮位データ仕様 https://www.data.jma.go.jp/kaiyou/db/tide/suisan/readme.html 、海しるAPI https://portal.msil.go.jp/msil-api-list
+
+## 2026-11-08: 監視ジョブの更新遅延対策（予想とは独立）
+
+- 波高の監視は従来の JST 06:03–23:58・5分間隔の GitHub Actions schedule を維持する。schedule は GitHub 側の都合で遅延・欠落する可能性がある。
+- 予備経路として同じリポジトリの BOAT LAB fast exhibition numeric capture の成功完了を監視し、同一 main 由来の実行だけ収集を起動する。4分以内の当日取得が確認できたときは予備実行を省く。これは別ワークフローの実行完了通知だけを使うもので、BOAT LAB の予想・展示・収支を書き換えない。
+- previews/sui/YYYY/MM/DD.csv が HTTP 404 の場合は not_published_or_missing として記録する。レースごとの直前スナップショットなので、公開前・ファイル欠損・障害を404だけで区別できない。レース中止とは判定しない。通信障害・5xxは従来通り unavailable。
+- WEATHER LABアプリで最終収集から20分を超えると監視更新の遅延を明示し、波高の新鮮度（観測・ソース取得時刻）と収集ジョブの生存確認を分けて表示する。
+- これは稼働の冗長化と診断改善。連続水面計測の保証でも、気象補正の有効性の証明でもない。正式予想の係数変更は前向き固定比較で判断する。

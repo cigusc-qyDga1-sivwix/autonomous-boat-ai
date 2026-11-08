@@ -31,6 +31,8 @@ on:
       - 'scripts/research_start_gap.py'
       - 'scripts/freeze_start_trials.js'
       - 'scripts/freeze_coupling_trials.js'
+      - 'scripts/freeze_second_place_trials.js'
+      - 'app/tests/forward-second-place-shadow.test.js'
       - 'scripts/exhibition_bridge.py'
       - 'scripts/exhibition_rejection_audit.py'
       - 'scripts/exhibition_second_chance.py'
@@ -276,6 +278,14 @@ jobs:
               git commit -m 'forecast: revalidate second-chance previews after rebase'
             done
           fi
+      - name: Freeze conditional second-place shadow before slow research
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          node app/tests/forward-second-place-shadow.test.js
+          node scripts/freeze_second_place_trials.js
+          python -m json.tool app/data/experiments/conditional-second-status-latest.json >/dev/null
       - name: Analyze research only after primary pre-cutoff revisions are frozen
         continue-on-error: true
         run: |
@@ -351,6 +361,7 @@ jobs:
               node scripts/freeze_tactical_trials.js
               node scripts/freeze_outside_trials.js
               node scripts/freeze_coupling_trials.js
+              node scripts/freeze_second_place_trials.js || echo '::warning::Conditional-second research unavailable'
               node scripts/freeze_start_trials.js
               python -m scripts.freeze_statistical_shadow || echo '::warning::Statistical research unavailable'
               # The full-history statistical audit is maintained by the

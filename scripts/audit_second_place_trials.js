@@ -87,7 +87,15 @@ function projectLedger(ledger){
   forecast_races.push({...last,venue:last.venue||record.venue,
     race:last.race||record.race});
   const key=ledger.event_date+'|'+record.venue+'|'+record.race;
-  if(record.official_pay)official_results[key]=record.official_pay;
+  if(record.official_pay)official_results[key]={
+   ...record.official_pay,
+   // Raw dated ledgers store official pay without a derived stake/SHA.
+   // Bind it read-only to the immutable latest snapshot, then require
+   // the independently frozen trial's SHA to match that snapshot.
+   virtual_stake:Array.isArray(last.bets)?
+     last.bets.reduce((sum,b)=>sum+(b.virtual_yen||0),0):0,
+   snapshot_sha256:last.sha256
+  };
   if(record.official_review||record.official_conflict||
      record.official_pay?.void_trifecta||
      record.official_pay?.refunded_boats?.length)settlement_alerts[key]=true;

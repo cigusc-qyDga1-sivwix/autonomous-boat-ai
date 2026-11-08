@@ -175,8 +175,9 @@ def weather_at(venue_weather: dict | None, cutoff: datetime) -> dict | None:
     _, hour, sample = min(options, key=lambda x: (x[0], x[1]))
     return {
         **sample,
-        "source": SOURCE,
-        "source_label": "近隣気象予報",
+        "source": venue_weather.get("source", SOURCE),
+        "source_label": venue_weather.get("source_label", "近隣気象予報"),
+        "source_url": venue_weather.get("source_url", "https://open-meteo.com/"),
         "issued_at_utc": venue_weather["retrieved_at_utc"],
         "forecast_hour_jst": hour.isoformat(timespec="minutes"),
         "site_observed": False,

@@ -23,6 +23,7 @@ if __package__:
     from .racer_context import collect as collect_racer_context, validated as validate_racer_context
     from .official_pay import fetch_official_pay
     from .venue_weather import fetch_weather, weather_at, VENUE_POINTS
+    from .weather_live_bridge import collect_today as collect_live_weather, wave_for_race
     from .venue_weather_special_shadow import rescore as rescore_site_weather_shadow
     from .attack_defense_shadow import rescore as rescore_attack_defence_shadow
     from .grade_competition_shadow import grade_from_program, rescore as rescore_grade_competition
@@ -40,6 +41,7 @@ else:
     from racer_context import collect as collect_racer_context, validated as validate_racer_context
     from official_pay import fetch_official_pay
     from venue_weather import fetch_weather, weather_at, VENUE_POINTS
+    from weather_live_bridge import collect_today as collect_live_weather, wave_for_race
     from venue_weather_special_shadow import rescore as rescore_site_weather_shadow
     from attack_defense_shadow import rescore as rescore_attack_defence_shadow
     from grade_competition_shadow import grade_from_program, rescore as rescore_grade_competition
@@ -421,7 +423,8 @@ def allocate_stakes(ranked: list[tuple[str, float]]) -> list[dict]:
     assert sum(row["virtual_yen"] for row in bets) == VIRTUAL_BUDGET_YEN
     return bets
 
-def weather_for_prediction(race: dict, nearby_forecast: dict | None) -> tuple[dict | None, dict | None]:
+def weather_for_prediction(race: dict, nearby_forecast: dict | None,
+                           site_wave: dict | None = None) -> tuple[dict | None, dict | None]:
     """Return track observation and selected input with unambiguous provenance.
 
     A current source preview may have partial racecourse weather even while
@@ -443,19 +446,38 @@ def weather_for_prediction(race: dict, nearby_forecast: dict | None) -> tuple[di
             "water_temperature": number(preview.get("water_temperature")),
         }
     if observed and wind is not None and 0 <= wind <= 65:
-        return observed, {
+        selected = {
             **observed, "source": "boatrace_preview",
             "source_label": "展示時の場内観測（非公式API経由）",
             "site_observed": True,
-            "source_note": "発走時の実測ではなく、取得時点の展示観測",
+            "wind_source": "boatrace_preview",
+            "source_note": "発走時の実測ではなく、取得時点の展示観測。風向コードは未検証",
         }
-    if nearby_forecast and number(nearby_forecast.get("wind_speed")) is not None:
-        return observed, {
+    elif nearby_forecast and number(nearby_forecast.get("wind_speed")) is not None:
+        selected = {
             **nearby_forecast,
+            "wind_source": nearby_forecast.get("source", "open-meteo"),
             "wave_height": observed.get("wave_height") if observed else None,
-            "wave_source": "boatrace_preview" if observed and observed.get("wave_height") is not None else "unavailable",
+            "wave_source": ("boatrace_preview_timestamp_unverified"
+                            if observed and observed.get("wave_height") is not None else "unavailable"),
         }
-    return observed, None
+    else:
+        selected = None
+    if site_wave and site_wave.get("wave_evidence_quality") == "fresh_pre_cutoff_onsite_snapshot":
+        # WEATHER LAB's time-checked on-site wave is independent of regional
+        # wind: its field-level source overrides ONLY the wave, never direction.
+        measured = number(site_wave.get("wave_height"))
+        if measured is not None and 0 <= measured <= 150:
+            selected = {**(selected or {}), **site_wave,
+                        "wave_height": measured,
+                        "site_wave_observed": True,
+                        "site_observed": bool((selected or {}).get("site_observed")),
+                        "source": (selected or {}).get("source", site_wave["wave_source"]),
+                        "source_label": (selected or {}).get("source_label", "波高のみ場内実測"),
+                        "wind_source": (selected or {}).get("wind_source", "unavailable")}
+            observed = {**(observed or {}), "wave_height": measured,
+                        "wave_source": site_wave["wave_source"]}
+    return observed, selected
 
 
 def condition_weights(weights: list[float], weather: dict | None) -> tuple[list[float], dict]:
@@ -923,7 +945,8 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
 
 
 def prediction(race: dict, venue: str, race_number: int, phase: str,
-               now: datetime, source_url: str, nearby_weather: dict | None = None) -> dict:
+               now: datetime, source_url: str, nearby_weather: dict | None = None,
+               site_wave_evidence: dict | None = None) -> dict:
     if phase not in ("baseline", "exhibition"):
         raise ValueError("Unknown phase")
     cutoff = cutoff_of(race)
@@ -941,7 +964,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     # Program grade comes from a named, pre-race API field. Do not infer it
     # from the venue or retroactively enrich frozen predictions.
     grade_context = grade_from_program(race)
-    observed, selected_weather = weather_for_prediction(race, nearby_weather)
+    observed, selected_weather = weather_for_prediction(race, nearby_weather, site_wave_evidence)
     # Historical venue rates are weak trial priors, not fixed win probabilities.
     venue_code = next((code for code, name in VENUES.items() if name == venue), None)
     venue_weights, venue_adjustment = (
@@ -1305,6 +1328,16 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         "venue_adjustment": venue_adjustment,
         "weather_used": selected_weather,
         "weather_adjustment": weather_adjustment,
+        "weather_lab_integration": {
+            "version": "weather-lab-live-precutoff-v1",
+            "site_wave_applied": bool(selected_weather and selected_weather.get("site_wave_observed")),
+            "wave_source": (selected_weather or {}).get("wave_source", "unavailable"),
+            "wind_source": (selected_weather or {}).get("wind_source", "unavailable"),
+            "relative_wind_verified": False,
+            "local_tide_current_verified": False,
+            "result_data_used": False, "calibrated_gain": False,
+            "weather_is_supplement": True,
+        },
         # Legacy weather A/B used the previous heuristic and cannot be
         # mistaken for a v0.7 weather ablation. Keep it INSIDE the old shadow.
         "weather_ab": None,
@@ -1346,7 +1379,8 @@ def safe_to_append_pre_cutoff(snapshot: dict, cutoff: datetime, margin_seconds: 
 def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
           weather_by_venue: dict | None = None, exhibition_rows: dict | None = None,
           enforce_wall_clock: bool = False, racer_context_rows: dict | None = None,
-          tactics_rows: dict | None = None) -> tuple[dict, dict, dict]:
+          tactics_rows: dict | None = None,
+          site_wave_snapshot: dict | None = None) -> tuple[dict, dict, dict]:
     if now.tzinfo is None:
         raise ValueError("Timezone-aware now is mandatory")
     local_day = now.astimezone(JST).date().isoformat()
@@ -1360,6 +1394,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
     new_baseline, new_exhibition, revised_exhibition, changed_exhibition = 0, 0, 0, 0
     rejected_exhibition_input_mismatch = 0
     new_model_upgrades = 0
+    new_weather_revisions = 0
     exhibition_rows = exhibition_rows or {}
     withdrawal_notices = {}
     race_source = (payload.get("programs") or {}).get("stadiums") or {}
@@ -1452,8 +1487,9 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                              FOUR_FACTOR_MODEL if cutoff.date() >= FOUR_FACTOR_DATE else MAIN_WAKE_MODEL)
             if runtime_now.astimezone(JST) < cutoff - timedelta(seconds=margin) and valid_entrants(race):
                 if "baseline" not in phases:
+                    site_wave = wave_for_race(site_wave_snapshot, venue_code, n, cutoff, runtime_now)
                     baseline = prediction(race, VENUES[venue_code], n,
-                                          "baseline", runtime_now, source_url, nearby)
+                                          "baseline", runtime_now, source_url, nearby, site_wave)
                     completed_at = datetime.now(UTC) if enforce_wall_clock else now
                     if not safe_to_append_pre_cutoff(baseline, cutoff, margin, completed_at):
                         continue  # Historical baseline remains untouched; never backdate.
@@ -1485,8 +1521,10 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 )
                 if preview_ready and ("exhibition" not in phases or revision):
                     origin_url = selected_csv_origin and "https://boatracecsv.github.io/docs/data/previews.html" or source_url
+                    prediction_now = datetime.now(UTC) if enforce_wall_clock else now
+                    site_wave = wave_for_race(site_wave_snapshot, venue_code, n, cutoff, prediction_now)
                     new = prediction(candidate, VENUES[venue_code], n,
-                                     "exhibition", (datetime.now(UTC) if enforce_wall_clock else now), origin_url, nearby)
+                                     "exhibition", prediction_now, origin_url, nearby, site_wave)
                     completed_at = datetime.now(UTC) if enforce_wall_clock else now
                     if not safe_to_append_pre_cutoff(new, cutoff, margin, completed_at):
                         continue  # Keep the prior pre-cutoff version; no late exhibition.
@@ -1540,9 +1578,22 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 and previous_latest.get("model_version") == expected_main
                 and current_context_quality > context_quality(previous_latest.get("racers") or [])
                 and sum(bool(v.get("racer_context_upgrade")) for v in record["versions"]) < 3)
+            latest_wave = wave_for_race(
+                site_wave_snapshot, venue_code, n, cutoff, upgrade_now)
+            previous_weather = (previous_latest or {}).get("weather_used") or {}
+            weather_gain = bool(
+                previous_latest and previous_latest.get("phase") == "exhibition"
+                and previous_latest.get("model_version") == expected_main
+                and latest_wave is not None
+                and (previous_weather.get("wave_source") != latest_wave["wave_source"]
+                     or (number(previous_weather.get("wave_height")) is not None
+                         and abs(number(previous_weather["wave_height"]) -
+                                 latest_wave["wave_height"]) >= 2))
+                and sum(bool(v.get("weather_refresh")) for v in record["versions"]) < 2)
             if (cutoff.date() >= WAKE_PROMOTION_DATE
                     and record["versions"]
-                    and (record["versions"][-1].get("model_version") != expected_main or context_gain)
+                    and (record["versions"][-1].get("model_version") != expected_main
+                         or context_gain or weather_gain)
                     and upgrade_now.astimezone(JST) < cutoff - timedelta(seconds=margin)):
                 latest_before = record["versions"][-1]
                 phase_to_promote = latest_before["phase"]
@@ -1551,7 +1602,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                     latest_timestamp = datetime.now(UTC) if enforce_wall_clock else upgrade_now
                     upgrade = prediction(
                         candidate_now, VENUES[venue_code], n,
-                        phase_to_promote, latest_timestamp, source_url, nearby
+                        phase_to_promote, latest_timestamp, source_url, nearby,
+                        wave_for_race(site_wave_snapshot, venue_code, n, cutoff, latest_timestamp)
                     )
                     completed_at = datetime.now(UTC) if enforce_wall_clock else now
                     if not safe_to_append_pre_cutoff(upgrade, cutoff, margin, completed_at):
@@ -1564,6 +1616,18 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                         "new_model": expected_main,
                         "same_race_pre_cutoff_revision": True,
                     }
+                    if weather_gain and upgrade.get("weather_lab_integration", {}).get("site_wave_applied"):
+                        upgrade["weather_refresh"] = {
+                            "previous_sha256": latest_before["sha256"],
+                            "previous_wave_height_cm": previous_weather.get("wave_height"),
+                            "new_wave_height_cm": upgrade["weather_used"]["wave_height"],
+                            "source": upgrade["weather_used"].get("wave_source"),
+                            "reason": "Fresh verified WEATHER LAB wave arrived before cutoff",
+                            "old_prediction_preserved": True,
+                            "results_used": False,
+                        }
+                    elif weather_gain and not context_gain and latest_before["model_version"] == expected_main:
+                        continue  # Wave evidence aged out during computation.
                     if context_gain:
                         upgrade["racer_context_upgrade"] = {
                             "previous_sha256": latest_before["sha256"],
@@ -1575,7 +1639,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                         k: v for k, v in upgrade.items() if k != "sha256"
                     })
                     record["versions"].append(upgrade)
-                    new_model_upgrades += 1
+                    new_weather_revisions += int(bool(upgrade.get("weather_refresh")))
+                    new_model_upgrades += int(latest_before["model_version"] != expected_main)
             # Results are NEVER taken from the unofficial preview API.
             # Official pay-page evidence is attached only after forecasts are generated.
     # Preserve previous records even if a subsequent source request is incomplete.
@@ -1606,7 +1671,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
             "racers", "weather_observed", "evidence", "source_url"
         )}
         for extra in ("point_count", "point_reason", "head_weight_concentration", "head_weight_gap",
-                      "weather_used", "weather_adjustment", "weather_ab", "data_quality",
+                      "weather_used", "weather_adjustment", "weather_ab", "weather_lab_integration", "weather_refresh", "data_quality",
                       "exhibition_origin", "exhibition_change",
                       "venue_profile", "venue_adjustment", "venue_surface_v1", "venue_surface_ab", "model_role", "legacy_control",
                       "start_v07", "coupled_v06", "wake_v09", "four_factor", "racer_context_upgrade", "model_upgrade", "primary_model_ab", "head_course_shares",
@@ -1655,6 +1720,12 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         "venues_with_races": len(venues_seen),
         "weather_venue_count": len(set(weather_by_venue)&venues_seen),
         "weather_fixed_race_count": sum(bool(r.get("weather_used")) for r in latest_races),
+        "weather_lab_site_wave_applied_race_count": sum(
+            bool((r.get("weather_lab_integration") or {}).get("site_wave_applied"))
+            for r in latest_races),
+        "jma_regional_wind_race_count": sum(
+            (r.get("weather_lab_integration") or {}).get("wind_source") == "open-meteo-jma"
+            for r in latest_races),
         "weather_adjusted_race_count": sum(bool((r.get("weather_adjustment") or {}).get("applied")) for r in latest_races),
         "exhibition_race_count": sum(r.get("phase")=="exhibition" for r in latest_races),
         "exhibition_changed_bet_count": sum(bool((r.get("exhibition_change") or {}).get("bets_changed")) for r in latest_races),
@@ -1682,6 +1753,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
               "missed_or_unavailable": len(unavailable),
               "new_baseline": new_baseline, "new_exhibition": new_exhibition,
               "new_model_upgrades": new_model_upgrades,
+              "new_weather_revisions": new_weather_revisions,
               "revised_exhibition": revised_exhibition,
               "changed_exhibition": changed_exhibition,
               "entry_watch_races": out["entry_watch_races"],
@@ -2066,12 +2138,21 @@ def main():
         if code in VENUES and isinstance(stadium, dict) and stadium.get("races")
     ]
     nearby_forecasts = {}
+    weather_site_wave = None
+    weather_bridge_status = {"status": "fixture_skipped"}
     weather_error = None
     if not args.input_json:
         try:
-            nearby_forecasts = fetch_weather(active, now)
+            nearby_forecasts, weather_site_wave, weather_bridge_status = collect_live_weather(active, now)
         except Exception as exc:
-            weather_error = str(exc)
+            weather_error = type(exc).__name__
+            weather_bridge_status = {"status": "unavailable", "reason": weather_error}
+            # Existing forecast remains available when one live data provider
+            # or the bridge itself is temporarily inaccessible.
+            try:
+                nearby_forecasts = fetch_weather(active, datetime.now(UTC))
+            except Exception:
+                nearby_forecasts = {}
     # BoatraceCSV data must have been downloaded by this run BEFORE forecasting.
     # Tests with --input-json receive no historical research file by default.
     research = (available_rows(Path("app/data/exhibition") / f"{day}.json", day)
@@ -2092,7 +2173,13 @@ def main():
         tactics_rows = raw_tactics['races']
     ledger, webapp, summary = build(previous, source, now, source_url, nearby_forecasts,
                                      exhibition_rows=research, enforce_wall_clock=not bool(args.input_json),
-                                     racer_context_rows=contexts, tactics_rows=tactics_rows)
+                                     racer_context_rows=contexts, tactics_rows=tactics_rows,
+                                     site_wave_snapshot=weather_site_wave)
+    weather_bridge_status["formal_wave_applied_races"] = webapp["weather_lab_site_wave_applied_race_count"]
+    weather_bridge_status["formal_jma_wind_races"] = webapp["jma_regional_wind_race_count"]
+    weather_bridge_status["new_weather_revisions"] = summary["new_weather_revisions"]
+    summary["weather_lab_bridge"] = weather_bridge_status
+    webapp["weather_lab_bridge"] = weather_bridge_status
     if weather_error:
         summary["weather_error"] = weather_error
         webapp["weather_fetch_status"] = "UNAVAILABLE"

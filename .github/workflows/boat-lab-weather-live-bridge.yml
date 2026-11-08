@@ -1,0 +1,39 @@
+name: BOAT LAB weather live-to-formal bridge tests
+on:
+  push:
+    paths:
+      - 'scripts/weather_live_bridge.py'
+      - 'scripts/venue_weather.py'
+      - 'scripts/autonomous_daily.py'
+      - 'weather_lab/monitor.py'
+      - 'weather_lab/regional_jma.py'
+      - 'tests/test_weather_live_bridge.py'
+      - '.github/workflows/boat-lab-weather-live-bridge.yml'
+  pull_request:
+    paths:
+      - 'scripts/weather_live_bridge.py'
+      - 'scripts/venue_weather.py'
+      - 'scripts/autonomous_daily.py'
+      - 'weather_lab/monitor.py'
+      - 'weather_lab/regional_jma.py'
+      - 'tests/test_weather_live_bridge.py'
+      - '.github/workflows/boat-lab-weather-live-bridge.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pre-cutoff-weather-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m compileall -q scripts/weather_live_bridge.py scripts/venue_weather.py scripts/autonomous_daily.py
+      - run: python -m pip install -q pytest
+      - run: python -m pytest -q tests/test_weather_live_bridge.py
+      - run: node --check app/app.js

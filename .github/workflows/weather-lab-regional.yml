@@ -20,7 +20,8 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('weather-lab-regional-pr-{0}', github.run_id) || 'weather-lab-independent-collector' }}
+  # Separate from the five-minute wave monitor: shared concurrency can cancel queued regional runs.
+  group: ${{ github.event_name == 'pull_request' && format('weather-lab-regional-pr-{0}', github.run_id) || 'weather-lab-regional-model' }}
   cancel-in-progress: false
 jobs:
   regional:
@@ -35,6 +36,11 @@ jobs:
     timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /weather_lab/
+          filter: blob:none
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'

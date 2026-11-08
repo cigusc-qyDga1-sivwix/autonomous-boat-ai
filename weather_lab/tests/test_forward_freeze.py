@@ -70,6 +70,14 @@ class ForwardFreezeTests(unittest.TestCase):
                                "provider": {"fetch_status": "unavailable"},
                                "races": []})[0]["records"], [])
 
+    def test_unpublished_csv_does_not_break_forward_freeze(self):
+        x = snapshot()
+        x["provider"]["fetch_status"] = "not_published_or_missing"
+        x["races"] = []
+        doc, count = freeze(x)
+        self.assertEqual(count, 0)
+        self.assertEqual(doc["records"], [])
+
     def test_previous_archive_mismatch_blocks_overwrite(self):
         prev, _ = freeze(snapshot())
         prev = copy.deepcopy(prev)

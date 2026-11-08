@@ -63,7 +63,7 @@ def freeze(snapshot: dict, previous: dict | None = None) -> tuple[dict, int]:
     collection = _dt(snapshot.get("collected_at_utc"))
     if collection is None or collection.astimezone(JST).strftime("%Y-%m-%d") != day:
         raise ValueError("Collection clock does not belong to race day (JST)")
-    if snapshot.get("provider", {}).get("fetch_status") not in ("ok", "ok_empty", "unavailable"):
+    if snapshot.get("provider", {}).get("fetch_status") not in ("ok", "ok_empty", "unavailable", "not_published_or_missing"):
         raise ValueError("Unknown provider status")
     if previous:
         if previous.get("schema") != SCHEMA or previous.get("event_date") != day or not isinstance(previous.get("records"), list):

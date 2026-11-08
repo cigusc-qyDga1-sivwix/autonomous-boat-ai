@@ -49,7 +49,7 @@ function validBets(bets,snapshot,day){
  const pointFree=day==='2026-10-28'&&
    snapshot.model_version==='four-factor-v1.5-point-free-untrained';
  const min=pointFree?1:4;
- const max=pointFree?120:
+ const max=pointFree?120:/^four-factor-v2\\.[123]-/.test(snapshot.model_version||'')?24:
    Date.parse(snapshot.frozen_at_utc)>=Date.parse('2026-10-29T00:00:00+09:00')?20:12;
  return Array.isArray(bets)&&bets.length>=min&&bets.length<=max&&
   bets.every(b=>b&&combo(b.combination)&&Number.isSafeInteger(b.virtual_yen)&&

@@ -103,7 +103,7 @@ assert.match(index,/ui-console\.js\?v=20261107-racedesk-v1/);
 assert.match(app,/BoatLabUIConsole\?\.render\(data\)/);
 assert.match(app,/state\.view==='overview'/);
 assert.match(app,/<div class="tablewrap"><table class="bets-table">/);
-assert.match(sw,/boat-lab-static-v69/);
+assert.ok(((sw.match(/boat-lab-static-v(\d+)/)||[])[1]||0)>=69,'cache version must not regress');
 assert.match(sw,/\.\/ui-console\.js/);
 assert.match(sw,/\.\/premium-ui\.css/);
 assert.match(style,/@media\(max-width:370px\)/);

@@ -228,7 +228,7 @@
     <div class="metrics">${metric('固定予想',`${all.length} R`,data.mode==='auto-live'?`${data.venues_with_races||0}場中・締切前固定済み`:'発走前の記録','↗')}${metric('WATCH',`${countWatch} R`,isLive?'展示前・展示反映を含む／オッズ未確認':'展示・オッズ未反映','◷')}${metric('結果照合',`${recorded.examined} / ${all.length}`,isLive?'非公式結果の自動取得＋手入力':'手入力で記録','✓')}${metric('的中率',recorded.examined?pct(recorded.hitRate):'—','照合済みレースのみ','▥',recorded.examined&&recorded.hits?'positive':'')}</div>
     ${isLive?`<div class="notice ${stale?'warn':''}">自動取得（非公式）最終更新：${escape(updated)} JST ／ 公開出走表 ${escape(data.listed_races||0)}R・締切前予想 ${all.length}R・未固定 ${escape((data.unforecast_races||[]).length)}R。${stale?'<strong>前日以前の記録です。今日の予想ではありません。</strong>':'予想は結果を見ずに作成・固定。'} 定期実行は遅延する場合があります。</div>`:''}
     <div class="columns-2"><section class="card card-pad"><div class="section-head"><h2 class="section-title">注目レース</h2><button class="link-btn" data-action="go-races">全レースを見る →</button></div><div class="race-list">${soon.map(raceRow).join('')}</div><div class="notice">締切は取得時点の予定。<strong>非公式APIは数分遅れることがあります。</strong></div></section>
-    <section class="card card-pad"><div class="section-head"><h2 class="section-title">${isLive?'展示時の場内気象':'時間帯別・気象見通し'}</h2>${pill(isLive?'実測由来・非公式':'予報値','pending')}</div>${isLive?all.filter(r=>r.weather_observed).slice(-6).map(r=>`<div class="weather-box"><div class="weather-symbol">≋</div><div class="weather-body"><strong>${escape(r.venue)} ${r.race}R・風 ${escape(r.weather_observed.wind_speed)}m/s・波高 ${escape(r.weather_observed.wave_height)}cm</strong><p>展示データ取得時点の観測情報（非公式）</p></div></div>`).join('')||'<p class="muted text-sm">展示時の気象はまだ取得できていません。</p>':`<div class="mini-caption">鳴門</div>${weatherHTML('鳴門')}<div class="mini-caption" style="margin-top:18px;margin-bottom:8px">徳山</div>${weatherHTML('徳山')}`}<div class="notice warn">${isLive?'展示前は場内気象未取得。時間別の気象予報と潮位予測は未接続。':'周辺気象の参考値。展示ST・波高・場内風速の実測は未反映。'}</div></section></div>
+    <section class="card card-pad"><div class="section-head"><h2 class="section-title">${isLive?'展示時の場内気象':'時間帯別・気象見通し'}</h2>${pill(isLive?'実測由来・非公式':'予報値','pending')}</div>${isLive?all.filter(r=>r.weather_observed).slice(-6).map(r=>`<div class="weather-box"><div class="weather-symbol">≋</div><div class="weather-body"><strong>${escape(r.venue)} ${r.race}R・風 ${escape(r.weather_observed.wind_speed)}m/s・波高 ${escape(r.weather_observed.wave_height)}cm</strong><p>展示データ取得時点の観測情報（非公式）</p></div></div>`).join('')||'<p class="muted text-sm">展示時の気象はまだ取得できていません。</p>':`<div class="mini-caption">鳴門</div>${weatherHTML('鳴門')}<div class="mini-caption" style="margin-top:18px;margin-bottom:8px">徳山</div>${weatherHTML('徳山')}`}<div class="notice warn">${isLive?'場内波高は締切前の取得・観測時刻を検証。風は地域予報と展示情報の出典を分離し、潮位・潮流は正式補正へ未反映。':'周辺気象の参考値。展示ST・波高・場内風速の実測は未反映。'}</div></section></div>
     <p class="footer-disclaimer">${escape(data.disclaimer||'仮想予想・研究用。自動購入や的中の保証はありません。')} SKIPを含む買い目は比較用の記録で、購入推奨ではありません。</p>`;
   }
   function isFormalTicket(r){
@@ -313,8 +313,16 @@
     if(!selected)return '<p class="muted text-sm">気象情報未取得。風・波による補正は行っていません。</p>';
     const frozen=!!actual;
     const observed=!!selected.site_observed;
-    const source=observed?'場内展示時の観測（非公式API経由）':
+    const siteWave=frozen&&selected.site_wave_observed===true;
+    const source=siteWave?'場内実測波高＋風速は別データ源':
+      observed?'場内展示時の観測（非公式API経由）':
       frozen?'発走前に取得した周辺気象予報':'最新取得分の周辺気象予報（発走前予想には未反映）';
+    const windSource=selected.wind_source==='open-meteo-jma'?'気象庁MSM/GSM近隣モデル予報':
+      selected.wind_source==='boatrace_preview'?'展示時の場内情報':'未確認・その他';
+    const waveSource=siteWave?'BoatraceCSV場内波高（時刻検証済み）':
+      selected.wave_source==='boatrace_preview_timestamp_unverified'?'展示時の場内情報（時刻未検証）':
+      selected.wave_height!=null?'展示時の場内情報（時刻未検証）':'未取得';
+    const waveObserved=siteWave?selected.wave_observed_at_jst:'';
     const wind=selected.wind_speed!=null?escape(selected.wind_speed)+'m/s':'未取得';
     const dir=selected.wind_direction_degrees!=null?escape(selected.wind_direction_degrees)+'°':selected.wind_direction_number!=null?'方向コード'+escape(selected.wind_direction_number):'未取得';
     const gust=selected.wind_gust!=null?escape(selected.wind_gust)+'m/s':'—';
@@ -336,9 +344,10 @@
         <span><b>${temp}</b><small>気温</small></span>
         <span><b>${rain}</b><small>降水量</small></span>
       </div>
+      <p>風：${escape(windSource)} ／ 波高：${escape(waveSource)}${waveObserved?' ／ 波高観測 '+escape(formatJst(waveObserved)):''}</p>
       <p>${escape(status)} ${escape(adjusted?.why||'')} ${issued?'（予報取得 '+escape(issued)+'）':''}</p>
-      <p class="race-weather-caution">${observed?'場内観測は展示時点の値であり、レース本番時の実測を保証しません。':'周辺予報は会場水面の現地実測ではありません。風向とコース有利不利の関係は未校正です。'}
-      ${selected.source==='open-meteo'?'<a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Weather data by Open-Meteo.com (CC BY 4.0) ↗</a>':''}</p>
+      <p class="race-weather-caution">${siteWave?'場内波高は締切前に取得・時刻検証済み。ただし風速・風向は別情報源であり、当日のレース水面実測と同一ではありません。':observed?'場内観測は展示時点の値であり、レース本番時の実測を保証しません。':'周辺予報は会場水面の現地実測ではありません。'} 風向の角度と追い風・向かい風のコース相対方向は未検証。潮位・潮流は正式予想に未反映。
+      ${['open-meteo','open-meteo-jma'].includes(selected.source)?'<a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Weather data by Open-Meteo.com (CC BY 4.0) ↗</a>':''}</p>
     </div>`;
   }
   function venuePanel(r) {

@@ -52,6 +52,8 @@ assert.match(html,/\.\/weather\/\?venue=10/);
 assert.match(html,/場内との対応未検証/);
 assert.match(html,/潮流の速さ・向き/);
 assert.match(html,/正式買い目と評価には反映していません/);
+assert.match(html,/広域強風を確認/,'pre-cutoff nearby model can trigger provisional review even without frozen wave');
+assert.match(html,/近隣モデル参考・未固定/);
 assert.doesNotMatch(html,/(?:wind_mps|wind_direction_raw_code).*15/);
 
 const withScenario=structuredClone(feeds);
@@ -91,6 +93,7 @@ assert.equal(after.waveStatus,'reference_unfrozen');
 assert.equal(after.wave.cm,9);
 assert.equal(after.regionalStatus,'model_reference_after_cutoff');
 assert.match(B.renderContext(after,race,day),/事前予想の根拠にはできません/);
+assert.doesNotMatch(B.renderContext(after,race,day),/広域強風を確認/,'post-cutoff model must not trigger provisional review');
 const wrongDate=structuredClone(feeds);
 wrongDate.wave.event_date='2026-11-05';
 wrongDate.regional.event_date='2026-11-05';

@@ -2,8 +2,9 @@ name: BOAT LAB formal forecast day-over-day report
 on:
   workflow_dispatch:
   schedule:
-    # Daily JST 23:40; best effort and never assumes an unsettled race lost.
-    - cron: '40 14 * * *'
+    # Daily JST 07:00; compare previous TWO completed calendar days.
+    # GitHub cron may lag; no unsettled current-day races are treated as lost.
+    - cron: '0 22 * * *'
   push:
     branches: [main]
     paths:
@@ -27,8 +28,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          DAY=$(TZ=Asia/Tokyo date +%F)
-          PREVIOUS=$(TZ=Asia/Tokyo date -d yesterday +%F)
+          DAY=$(TZ=Asia/Tokyo date -d yesterday +%F)
+          PREVIOUS=$(TZ=Asia/Tokyo date -d "2 days ago" +%F)
           CURRENT="app/data/live/audit/$DAY.json"
           PRIOR="app/data/live/audit/$PREVIOUS.json"
           mkdir -p daily-formal-report

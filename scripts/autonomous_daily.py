@@ -17,6 +17,7 @@ from datetime import date, datetime, timedelta, timezone
 from itertools import permutations
 from pathlib import Path
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 from zoneinfo import ZoneInfo
 
 if __package__:
@@ -2128,7 +2129,25 @@ def main():
     if args.input_json:
         source, source_url = json.loads(args.input_json.read_text(encoding="utf-8")), str(args.input_json)
     else:
-        source, source_url = retrieve(compact)
+        try:
+            source, source_url = retrieve(compact)
+        except HTTPError as exc:
+            if exc.code != 404:
+                raise
+            # Before the first scheduled race the daily program may not yet
+            # have been published. This is neither a cancelled race nor a
+            # failed prediction. Do not rewrite yesterday's latest or fake an
+            # empty current-day forecast; the next 5-min run will retry.
+            print(json.dumps({
+                "status": "PROGRAM_SOURCE_NOT_YET_PUBLISHED",
+                "event_date": day,
+                "source_url": f"{SOURCE}/{compact[:4]}/{compact}.json",
+                "forecast_created": False,
+                "existing_predictions_unchanged": True,
+                "weather_data_misclassified_as_zero": False,
+                "retry_by_next_scheduled_run": True,
+            }, ensure_ascii=False))
+            return
     path = args.out_dir / f"{day}.json"
     previous = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
     # Forecast weather is fetched only for venues actually hosting races today.

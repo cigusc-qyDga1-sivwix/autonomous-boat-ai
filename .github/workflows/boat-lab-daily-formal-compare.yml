@@ -1,0 +1,45 @@
+name: BOAT LAB formal forecast day-over-day report
+on:
+  workflow_dispatch:
+  schedule:
+    # Daily JST 23:40; best effort and never assumes an unsettled race lost.
+    - cron: '40 14 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/compare_daily_formal.py'
+      - 'tests/test_compare_daily_formal.py'
+      - '.github/workflows/boat-lab-daily-formal-compare.yml'
+permissions:
+  contents: read
+jobs:
+  read-only-daily-formal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check daily comparison invariants
+        run: python -m pytest -q tests/test_compare_daily_formal.py
+      - name: Compare preceding and latest JST official verification snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          DAY=$(TZ=Asia/Tokyo date +%F)
+          PREVIOUS=$(TZ=Asia/Tokyo date -d yesterday +%F)
+          CURRENT="app/data/live/audit/$DAY.json"
+          PRIOR="app/data/live/audit/$PREVIOUS.json"
+          mkdir -p daily-formal-report
+          if [ ! -f "$CURRENT" ] || [ ! -f "$PRIOR" ]; then
+            echo "Unverified / missing daily audit; do not fabricate day-over-day comparison" > daily-formal-report/UNAVAILABLE.txt
+            exit 0
+          fi
+          python scripts/compare_daily_formal.py --current "$CURRENT" --previous "$PRIOR" --output daily-formal-report/formal-$DAY.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: boat-lab-formal-daily-comparison-${{ github.run_id }}
+          path: daily-formal-report/
+          retention-days: 30
+          if-no-files-found: error

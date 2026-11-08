@@ -92,9 +92,9 @@ function projectLedger(ledger){
    // Raw dated ledgers store official pay without a derived stake/SHA.
    // Bind it read-only to the immutable latest snapshot, then require
    // the independently frozen trial's SHA to match that snapshot.
-   virtual_stake:Array.isArray(last.bets)?
-     last.bets.reduce((sum,b)=>sum+(b.virtual_yen||0),0):0,
-   snapshot_sha256:last.sha256
+   virtual_stake:record.official_pay.virtual_stake??(Array.isArray(last.bets)?
+     last.bets.reduce((sum,b)=>sum+(b.virtual_yen||0),0):0),
+   snapshot_sha256:record.official_pay.snapshot_sha256||last.sha256
   };
   if(record.official_review||record.official_conflict||
      record.official_pay?.void_trifecta||

@@ -181,6 +181,12 @@ def select_exhibition_source(race: dict, research_row: dict | None, now: datetim
         # the existing strict cutoff/hash gate and agrees on ALL six course,
         # exhibition-ST and exhibition-time observations. Never replace the
         # canonical OpenAPI observations with stale/mismatched CSV values.
+        # No CSV six-boat row: keep the canonical OpenAPI unchanged and
+        # avoid unnecessary fallback calls (including unrelated source errors).
+        if (not isinstance(research_row, dict)
+                or not isinstance(research_row.get("boats"), list)
+                or len(research_row["boats"]) != 6):
+            return live, None, "openapi"
         supplemented, csv_origin = inject(
             race, research_row, now, venue_code, race_number)
         extra_metrics = supplemented.get("_exhibition_original") or {}

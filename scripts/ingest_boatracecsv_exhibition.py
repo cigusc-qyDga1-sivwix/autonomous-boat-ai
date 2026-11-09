@@ -9,6 +9,9 @@ from urllib.error import URLError, HTTPError
 from zoneinfo import ZoneInfo
 
 ROOT = "https://boatracecsv.github.io/data/"
+# The GitHub Pages site can lag or return 404 while the provider has already
+# committed today's per-race CSVs. Read the canonical main branch first.
+RAW_ROOT = "https://raw.githubusercontent.com/BoatraceCSV/boatracecsv.github.io/main/data/"
 SOURCES = {"stt":"previews/stt","tkz":"previews/tkz","sui":"previews/sui",
            "original":"previews/original_exhibition","result":"results/realtime",
            "payout":"results/payouts"}
@@ -16,17 +19,32 @@ VENUES = ["桐生","戸田","江戸川","平和島","多摩川","浜名湖","蒲
           "びわこ","住之江","尼崎","鳴門","丸亀","児島","宮島","徳山","下関","若松",
           "芦屋","福岡","唐津","大村"]
 
-def url(name, day):
-    return f"{ROOT}{SOURCES[name]}/{day:%Y/%m/%d}.csv"
+def url(name, day, root=ROOT):
+    return f"{root}{SOURCES[name]}/{day:%Y/%m/%d}.csv"
 
 def fetch(name, day):
-    try:
-        request = Request(url(name,day),headers={"User-Agent":"boat-lab-research-import/1.0"})
-        with urlopen(request,timeout=12) as response:
-            return list(csv.DictReader(io.StringIO(response.read().decode("utf-8-sig"))))
-    except (HTTPError,URLError,TimeoutError,UnicodeError) as exc:
-        print(f"[research] {name}: unavailable ({type(exc).__name__})")
-        return []
+    """Prefer the upstream GitHub file, then try its possibly lagging Pages CDN.
+
+    Each attempt is a real HTTP fetch at run time. A CSV timestamp alone never
+    proves the model saw the data before cutoff; build() records first capture.
+    Both sources publish the provider's same per-source CSV schema.
+    """
+    failures = []
+    for label, root in (("github_raw", RAW_ROOT), ("github_pages", ROOT)):
+        endpoint = url(name, day, root)
+        try:
+            request = Request(endpoint, headers={"User-Agent": "boat-lab-research-import/1.0"})
+            with urlopen(request, timeout=12) as response:
+                rows = list(csv.DictReader(io.StringIO(response.read().decode("utf-8-sig"))))
+            if rows:
+                print(f"[research] {name}: {len(rows)} rows from {label}")
+                return rows
+            failures.append(f"{label}:empty")
+        except (HTTPError, URLError, TimeoutError, UnicodeError) as exc:
+            detail = f"HTTP {exc.code}" if isinstance(exc, HTTPError) else type(exc).__name__
+            failures.append(f"{label}:{detail}")
+    print(f"[research] {name}: unavailable ({', '.join(failures)})")
+    return []
 
 def numeric(value):
     if value is None or value == "":

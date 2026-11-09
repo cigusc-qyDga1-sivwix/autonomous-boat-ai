@@ -47,6 +47,40 @@ def preview_signature(row):
                                     separators=(",", ":")).encode()).hexdigest()
 
 
+def original_exhibition_signature(row):
+    """Fingerprint measured originals independently from ST, weather and results.
+
+    The timestamp of the first actual capture of THESE values must survive
+    unrelated CSV revisions. Never infer a historical capture time afterward.
+    """
+    boats = row.get("boats")
+    if not isinstance(boats, list) or len(boats) != 6:
+        return None
+    values, lanes = [], set()
+    for boat in boats:
+        if not isinstance(boat, dict) or boat.get("lane") not in range(1, 7):
+            return None
+        lane = boat["lane"]
+        if lane in lanes:
+            return None
+        lanes.add(lane)
+        metrics = sorted(
+            (metric.get("metric"), numeric(metric.get("value")))
+            for metric in (boat.get("original_exhibition") or [])
+            if isinstance(metric, dict)
+            and metric.get("metric") in ("一周", "半周ラップ", "まわり足", "直線")
+            and numeric(metric.get("value")) is not None
+        )
+        if not metrics:
+            return None
+        values.append({"lane": lane, "name": boat.get("name"), "metrics": metrics})
+    if lanes != set(range(1, 7)):
+        return None
+    value = {"race_code": row.get("race_code"), "boats": sorted(values, key=lambda b: b["lane"])}
+    return hashlib.sha256(json.dumps(
+        value, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+
+
 def build(day, inputs, prior=None, collected_at=None):
     captured = collected_at or datetime.now(timezone.utc)
     if captured.tzinfo is None:
@@ -138,6 +172,19 @@ def build(day, inputs, prior=None, collected_at=None):
         entry["preview_captured_at_utc"] = (
             old.get("preview_captured_at_utc") if same_preview else None
         ) or captured_iso
+        # Independent first-capture proof for original exhibition measurements.
+        # A later weather/ST or regular-exhibition change must not erase proof
+        # that the ORIGINAL values were actually acquired before the cutoff.
+        original_hash = original_exhibition_signature(entry)
+        entry["original_exhibition_sha256"] = original_hash
+        entry["original_exhibition_captured_at_utc"] = (
+            (old or {}).get("original_exhibition_captured_at_utc")
+            if original_hash and (old or {}).get("original_exhibition_sha256") == original_hash
+            else None
+        ) or (captured_iso if original_hash else None)
+        entry["original_exhibition_observed_jst"] = (
+            og.get("取得日時") if original_hash else None
+        )
         if old:
             for kind in ("result","payout"):
                 if entry[kind] is None:

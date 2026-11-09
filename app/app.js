@@ -662,6 +662,7 @@
      <div class="detail-header"><div><div class="page-eyebrow">FORECAST DETAILS / ${escape(data.event_date)}</div><h1 class="detail-title">${escape(r.venue)} ${r.race}R <span style="font-size:17px;vertical-align:middle">${pill(r.classification)}</span></h1><div class="detail-sub">締切予定 ${escape(r.cutoff_jst)} JST　 ·　 ${r.phase==='exhibition'?'展示数値反映':r.phase==='baseline'?'展示前':'保存済み'}・結果未使用</div></div><button class="btn btn-primary" data-action="copy-bets" data-race="${escape(r.venue)}|${r.race}">${isFormalTicket(r)?'⎘ 正式買い目をコピー':'⎘ 暫定買い目をコピー'}</button></div>
     ${ticketBanner(r)}
     ${ticketBlock}
+    ${window.BoatRaceScenario?.render(r)||''}
     ${window.BoatHeadShareChart?.render(r)||''}
     ${window.BoatFourFactor?.panel(r)||''}
     ${r.model_version==='four-factor-v1.5-point-free-untrained'&&r.point_free_control?.generated_pre_cutoff&&r.point_free_control.frozen_at_utc===r.frozen_at_utc?'<section class="card card-pad"><details><summary>同じ入力の従来版と比較（検証用）</summary><p>点数枠なし '+r.bets.length+'点 ／ 従来版 '+r.point_free_control.bets.length+'点。各方式の仮想総額は5万円。以下は比較用で、追加の正式投資ではありません。</p><table class="bets-table"><thead><tr><th>従来版の買い目</th><th>仮想配分</th></tr></thead><tbody>'+r.point_free_control.bets.map(b=>'<tr><td>'+escape(b.combination)+'</td><td>'+b.virtual_yen.toLocaleString('ja-JP')+'円</td></tr>').join('')+'</tbody></table></details></section>':''}

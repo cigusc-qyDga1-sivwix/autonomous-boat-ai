@@ -281,3 +281,86 @@ def test_official_notice_requires_matching_venue_date_race_and_name():
     assert match_lanes(notices, 3, racers) == [4]
     assert match_lanes(notices, 4, racers) == []
     assert match_lanes(notices, 3, {**racers, "5": racers["4"]}) == []
+
+
+def openapi_same_as_csv(sample):
+    payload = source()
+    payload["programs"]["stadiums"]["18"]["races"]["3"]["preview"] = {
+        "racers": {
+            str(b["lane"]): {
+                "course_number": b["course"],
+                "start_timing": b["exhibition_st"],
+                "exhibition_time": b["exhibition_time"],
+                "tilt_adjustment": b["tilt"],
+            } for b in sample["boats"]
+        }
+    }
+    return payload
+
+
+def test_openapi_exhibition_enriches_unchanged_preview_from_timely_csv():
+    sample = row()
+    payload = openapi_same_as_csv(sample)
+    ledger, view, status = build(
+        None, payload, datetime(2026, 10, 23, 11, 12, tzinfo=JST),
+        "api", exhibition_rows={sample["race_code"]: sample})
+    assert status["new_exhibition"] == 1
+    final = ledger["race_records"]["18-3"]["versions"][-1]
+    assert final["phase"] == "exhibition"
+    assert final["exhibition_origin"]["source"] == "BoatraceOpenAPI"
+    assert final["exhibition_origin"]["original_exhibition_source"] == "BoatraceCSV"
+    assert final["exhibition_origin"]["original_exhibition_six_boat_preview_matched"] is True
+    assert final["exhibition_origin"]["original_exhibition_measurement_sha256"] == sample["preview_sha256"]
+    assert final["exhibition_input_check"]["source"] == "openapi"
+    assert set(final["exhibition_input_check"]["original_metrics_matched"]) == {
+        "lap_time", "turn_time", "straight_time"}
+    assert final["racers"][2]["original_exhibition"] == {
+        "lap_time": 30, "turn_time": 4, "straight_time": 5}
+    assert final["racers"][2]["exhibition_time"] == sample["boats"][2]["exhibition_time"]
+    assert view["forecast_races"][0]["exhibition_origin"]["source"] == "BoatraceOpenAPI"
+
+
+def test_openapi_exhibition_rejects_mismatched_or_late_csv_extras():
+    sample = row()
+    payload = openapi_same_as_csv(sample)
+    mismatched = deepcopy(sample)
+    mismatched["boats"][2]["exhibition_time"] += .01
+    mismatched["preview_sha256"] = preview_signature(mismatched)
+    first, _, _ = build(
+        None, payload, datetime(2026, 10, 23, 11, 12, tzinfo=JST),
+        "api", exhibition_rows={sample["race_code"]: mismatched})
+    final = first["race_records"]["18-3"]["versions"][-1]
+    assert final["phase"] == "exhibition"
+    assert final["exhibition_origin"]["source"] == "BoatraceOpenAPI"
+    assert "original_exhibition_source" not in final["exhibition_origin"]
+    assert final["racers"][2]["original_exhibition"] == {}
+    late = deepcopy(sample)
+    late["preview_captured_at_utc"] = "2026-10-23T02:19:00+00:00"
+    second, _, _ = build(
+        None, payload, datetime(2026, 10, 23, 11, 12, tzinfo=JST),
+        "api", exhibition_rows={sample["race_code"]: late})
+    assert "original_exhibition_source" not in second["race_records"]["18-3"]["versions"][-1]["exhibition_origin"]
+
+
+def test_new_original_metrics_create_forward_only_openapi_revision():
+    sample = row()
+    payload = openapi_same_as_csv(sample)
+    before, _, _ = build(
+        None, payload, datetime(2026, 10, 23, 11, 10, tzinfo=JST), "api")
+    unchanged_versions = deepcopy(before["race_records"]["18-3"]["versions"])
+    assert len(unchanged_versions) == 2
+    assert unchanged_versions[-1]["racers"][2]["original_exhibition"] == {}
+    after, _, status = build(
+        before, payload, datetime(2026, 10, 23, 11, 12, tzinfo=JST),
+        "api", exhibition_rows={sample["race_code"]: sample})
+    assert status["new_exhibition"] == 1
+    assert status["revised_exhibition"] == 1
+    versions = after["race_records"]["18-3"]["versions"]
+    assert versions[:-1] == unchanged_versions
+    assert versions[-1]["racers"][2]["original_exhibition"]["straight_time"] == 5
+    assert versions[-1]["sha256"] != unchanged_versions[-1]["sha256"]
+    same, _, stats = build(
+        after, payload, datetime(2026, 10, 23, 11, 13, tzinfo=JST),
+        "api", exhibition_rows={sample["race_code"]: sample})
+    assert stats["new_exhibition"] == 0
+    assert same["race_records"]["18-3"]["versions"] == versions

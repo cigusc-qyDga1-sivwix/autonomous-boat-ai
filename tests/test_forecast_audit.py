@@ -106,3 +106,39 @@ def test_v21_audit_supports_24_justified_points_but_not_25_or_subunit_stakes():
     race['bets'][0]['virtual_yen']=3900
     race['bets'][1]['virtual_yen']=2100
     assert _verify_race(race,pay,'2026-10-22')==(False,'stake_invalid')
+
+def test_formal_head_risk_uses_only_frozen_labels_and_never_reconstructs_history():
+    payload = make_example()
+    for item in payload["forecast_races"]:
+        item["ticket_status"] = "formal"
+    payload["forecast_races"][0]["strong_field_diagnostic"] = {
+        "not_formal_model": True,
+        "risk_flags": ["MODEL_CLOSE_HEAD_UNCOVERED"]
+    }
+    payload["forecast_races"][1]["strong_field_diagnostic"] = {
+        "not_formal_model": True,
+        "risk_flags": ["INSIDE_TICKET_CONCENTRATION"]
+    }
+    payload["forecast_races"][2]["strong_field_diagnostic"] = {
+        "not_formal_model": True,
+        "risk_flags": []
+    }
+    prior = deepcopy(payload)
+    result = analyze(payload)
+    formal = result["by_head_risk_formal"]
+    assert formal["MODEL_CLOSE_HEAD_UNCOVERED"]["verified_races"] == 1
+    assert formal["INSIDE_TICKET_CONCENTRATION"]["verified_races"] == 1
+    assert formal["NO_WARNING"]["verified_races"] == 1
+    assert formal["NOT_ASSESSED"]["verified_races"] == 1
+    assert sum(x["verified_races"] for x in formal.values()) == 4
+    assert payload == prior
+
+
+def test_unverified_race_never_enters_head_risk_group():
+    payload = make_example()
+    payload["forecast_races"][0]["ticket_status"] = "formal"
+    payload["forecast_races"][0]["strong_field_diagnostic"] = {
+        "not_formal_model": True, "risk_flags": ["MODEL_CLOSE_HEAD_UNCOVERED"]
+    }
+    payload["official_results"]["2026-10-22|徳山|1"]["verified"] = False
+    assert "MODEL_CLOSE_HEAD_UNCOVERED" not in analyze(payload)["by_head_risk_formal"]

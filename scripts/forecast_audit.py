@@ -140,6 +140,17 @@ def analyze(dataset: dict) -> dict:
                  "second_miss" if win[:3] not in pairs else
                  "third_miss")
         paid = exact["virtual_yen"] * p["payout_per_100"] // 100 if exact else 0
+        # Only pre-cutoff, saved diagnostic labels. Never reconstruct a warning
+        # retrospectively using the official finishing order.
+        diagnostic = r.get("strong_field_diagnostic")
+        labels = (diagnostic.get("risk_flags") if isinstance(diagnostic, dict)
+                  and diagnostic.get("not_formal_model") is True else None)
+        allowed_flags = {"MODEL_CLOSE_HEAD_UNCOVERED", "INSIDE_TICKET_CONCENTRATION"}
+        if isinstance(labels, list) and all(
+                isinstance(label, str) and label in allowed_flags for label in labels):
+            head_risk_status = "+".join(sorted(set(labels))) if labels else "NO_WARNING"
+        else:
+            head_risk_status = "NOT_ASSESSED"
         row = {
             "venue": r["venue"], "race": r["race"],
             "classification": r.get("classification", "unclassified"),
@@ -148,6 +159,7 @@ def analyze(dataset: dict) -> dict:
                 (r.get("strong_field_diagnostic") or {}).get("status", "NOT_ASSESSED")
                 if isinstance(r.get("strong_field_diagnostic"), dict) else "NOT_ASSESSED"
             ),
+            "head_risk_status": head_risk_status,
             "model_version": r.get("model_version", "unknown"),
             "phase": r.get("phase", "unknown"), "points": len(bets),
             "stage": stage, "actual_finish": win, "actual_head": win[0],
@@ -253,6 +265,10 @@ def analyze(dataset: dict) -> dict:
         "by_strong_field_formal": _group(
             [row for row in verified if row["ticket_status"] == "formal"],
             "strong_field_status",
+        ),
+        "by_head_risk_formal": _group(
+            [row for row in verified if row["ticket_status"] == "formal"],
+            "head_risk_status",
         ),
         "by_points": _group(verified, "points"),
         "by_venue": _group(verified, "venue"),

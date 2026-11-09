@@ -105,3 +105,40 @@ def test_official_audit_splits_strong_close_field_vs_unassessed_without_hindsigh
     assert formal["NOT_ASSESSED"]["verified_races"] == 3
     assert formal["STRONG_FIELD_CLOSE_HEADS"]["hits"] == 1
     assert outcome["metrics"]["verified_races"] == 4
+
+def test_close_head_omission_warns_even_outside_strong_field():
+    r = analyze(racers([5.8, 5.5, 5.2, 4.7, 3.2, 3.0]),
+                heads([.31, .28, .20, .10, .06, .05]), picks(),
+                phase="exhibition")
+    assert r["status"] == "MODEL_CLOSE_HEADS_NOT_STRONG_FIELD"
+    assert r["head_coverage_warning"]
+    assert r["risk_flags"] == ["MODEL_CLOSE_HEAD_UNCOVERED"]
+    assert r["recommendation"] == "WATCH_HEAD_RISK"
+    assert r["head_candidates_absent_from_tickets"] == [2]
+    assert not r["changes_bets"] and not r["changes_stake"]
+
+
+def test_course1_concentration_warns_without_confusing_boat_number():
+    base = racers([5.8, 5.5, 5.2, 4.7, 3.2, 3.0])
+    model = heads([.50, .20, .12, .08, .06, .04])
+    r = analyze(base, model, picks(), phase="exhibition")
+    assert r["inside_course_lane"] == 1
+    assert r["inside_course_ticket_stake_share"] == 1.
+    assert r["inside_course_modeled_head_share"] == .50
+    assert r["risk_flags"] == ["INSIDE_TICKET_CONCENTRATION"]
+    assert r["inside_overexposure_research_warning"]
+    reassigned = deepcopy(base)
+    reassigned[0]["course"], reassigned[1]["course"] = 2, 1
+    changed = analyze(reassigned, model, picks(), phase="exhibition")
+    assert changed["inside_course_lane"] == 2
+    assert changed["inside_course_ticket_stake_share"] == 0.
+    assert not changed["inside_overexposure_research_warning"]
+
+
+def test_diagnostic_missing_stake_and_result_phase_fail_closed():
+    rs = racers([5.8, 5.5, 5.2, 4.7, 3.2, 3.0])
+    hs = heads([.31, .28, .20, .10, .06, .05])
+    malformed = picks()
+    malformed[0].pop("virtual_yen")
+    assert analyze(rs, hs, malformed, phase="exhibition")["status"] == "INSUFFICIENT_EVIDENCE"
+    assert analyze(rs, hs, picks(), phase="postrace")["status"] == "INSUFFICIENT_EVIDENCE"

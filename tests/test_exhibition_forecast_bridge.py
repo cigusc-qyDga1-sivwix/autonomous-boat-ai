@@ -386,7 +386,7 @@ def test_independent_original_capture_survives_late_composite_preview_revision()
     assert final["exhibition_origin"]["original_exhibition_source"] == "BoatraceCSV"
     assert final["exhibition_origin"]["original_exhibition_measurement_sha256"] == sample["original_exhibition_sha256"]
     assert final["racers"][2]["original_exhibition"]["straight_time"] == 5
-    assert final["weather_used"].get("wind_source") != "unvalidated_csv_weather"
+    assert final["weather_used"] is None  # CSV weather is not copied into canonical OpenAPI
 
 
 def test_independent_original_capture_rejects_late_or_tampered_values():

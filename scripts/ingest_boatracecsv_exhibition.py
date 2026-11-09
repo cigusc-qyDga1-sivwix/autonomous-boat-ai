@@ -47,6 +47,45 @@ def preview_signature(row):
                                     separators=(",", ":")).encode()).hexdigest()
 
 
+def original_exhibition_signature(row):
+    """Fingerprint measured originals independently from ST, weather and results.
+
+    The timestamp of the first actual capture of THESE values must survive
+    unrelated CSV revisions. Never infer a historical capture time afterward.
+    """
+    boats = row.get("boats")
+    if not isinstance(boats, list) or len(boats) != 6:
+        return None
+    values, lanes = [], set()
+    for boat in boats:
+        if not isinstance(boat, dict) or boat.get("lane") not in range(1, 7):
+            return None
+        lane = boat["lane"]
+        if lane in lanes:
+            return None
+        lanes.add(lane)
+        metrics = sorted(
+            (metric.get("metric"), numeric(metric.get("value")))
+            for metric in (boat.get("original_exhibition") or [])
+            if isinstance(metric, dict)
+            and metric.get("metric") in ("一周", "半周ラップ", "まわり足", "直線")
+            and numeric(metric.get("value")) is not None
+        )
+        if not metrics:
+            return None
+        values.append({
+            "lane": lane, "name": boat.get("name"),
+            "course": boat.get("course"), "exhibition_st": boat.get("exhibition_st"),
+            "exhibition_time": boat.get("exhibition_time"), "tilt": boat.get("tilt"),
+            "metrics": metrics,
+        })
+    if lanes != set(range(1, 7)):
+        return None
+    value = {"race_code": row.get("race_code"), "boats": sorted(values, key=lambda b: b["lane"])}
+    return hashlib.sha256(json.dumps(
+        value, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+
+
 def build(day, inputs, prior=None, collected_at=None):
     captured = collected_at or datetime.now(timezone.utc)
     if captured.tzinfo is None:
@@ -98,6 +137,20 @@ def build(day, inputs, prior=None, collected_at=None):
                        for b in boats)):
             rejected["invalid_or_incomplete_six_boat_preview"]+=1
             continue
+        # If the optional ORIGINAL feed briefly disappears, preserve only an
+        # ALREADY captured six-boat original for an unchanged canonical preview.
+        # Never fill a newly missing metric from a different entry/ST/time.
+        old=merged.get(code)
+        if not og and old and old.get("original_exhibition_sha256"):
+            old_boats={b.get("lane"):b for b in old.get("boats",[]) if isinstance(b,dict)}
+            same_preview=(set(old_boats)==set(range(1,7)) and all(
+                all(old_boats[i].get(k)==boats[i-1].get(k) for k in
+                    ("course","exhibition_st","exhibition_time"))
+                for i in range(1,7)))
+            if same_preview and all(old_boats[i].get("original_exhibition") for i in range(1,7)):
+                for i in range(1,7):
+                    boats[i-1]["original_exhibition"]=old_boats[i]["original_exhibition"]
+                    boats[i-1]["name"]=old_boats[i].get("name")
         entry={
             "race_code":code,"venue":VENUES[int(code[8:10])-1],
             "venue_code":code[8:10],"race":int(code[10:12]),
@@ -125,7 +178,6 @@ def build(day, inputs, prior=None, collected_at=None):
                 "source":"BoatraceCSV/payouts_unofficial"
             } if pp else None)
         }
-        old=merged.get(code)
         # Earliest time THIS importer first persisted the race; never backdate.
         entry["first_seen_at_utc"] = (old or {}).get("first_seen_at_utc") or captured_iso
         if old and old.get("source_observed_jst","")>entry["source_observed_jst"]:
@@ -138,6 +190,21 @@ def build(day, inputs, prior=None, collected_at=None):
         entry["preview_captured_at_utc"] = (
             old.get("preview_captured_at_utc") if same_preview else None
         ) or captured_iso
+        # Independent first-capture proof for original exhibition measurements.
+        # A later weather/ST or regular-exhibition change must not erase proof
+        # that the ORIGINAL values were actually acquired before the cutoff.
+        original_hash = original_exhibition_signature(entry)
+        entry["original_exhibition_sha256"] = original_hash
+        entry["original_exhibition_captured_at_utc"] = (
+            (old or {}).get("original_exhibition_captured_at_utc")
+            if original_hash and (old or {}).get("original_exhibition_sha256") == original_hash
+            else None
+        ) or (captured_iso if original_hash else None)
+        entry["original_exhibition_observed_jst"] = (
+            (old or {}).get("original_exhibition_observed_jst")
+            if original_hash and (old or {}).get("original_exhibition_sha256") == original_hash
+            else None
+        ) or (og.get("取得日時") if original_hash else None)
         if old:
             for kind in ("result","payout"):
                 if entry[kind] is None:

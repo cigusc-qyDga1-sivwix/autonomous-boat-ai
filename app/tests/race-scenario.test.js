@@ -1,0 +1,17 @@
+const assert=require('node:assert/strict');
+const {analyze,render}=require('../race-scenario.js');
+const race={venue:'三国',race:1,phase:'exhibition',sha256:'frozen-sha',model_version:'main-v1',scenario:'攻め手の分岐',racers:[1,2,3,4,5,6].map(lane=>({lane})),bets:[{combination:'1-2-3',virtual_yen:30000},{combination:'4-5-1',virtual_yen:20000}]};
+const original=JSON.stringify(race);
+const result=analyze(race);
+assert.equal(result.complete,true);
+assert.deepEqual(result.scenarios.map(x=>x.head),[1,4]);
+assert.deepEqual(result.scenarios[1].seconds,[5]);
+assert.match(render(race),/研究表示 \/ 買い目不変/);
+assert.match(render(race),/1-2-3/);
+assert.match(render(race),/4-5-1/);
+assert.match(render(race),/独立した展開予測や実測映像ではありません/);
+assert.equal(JSON.stringify(race),original,'read only');
+assert.equal(analyze({...race,racers:[]}).complete,false);
+assert.match(render({...race,bets:[]}),/未判定/);
+assert.doesNotMatch(render({...race,scenario:'<script>bad</script>'}),/<script>/);
+console.log('race scenario viewer tests passed');

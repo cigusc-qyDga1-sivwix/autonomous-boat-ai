@@ -1,0 +1,36 @@
+name: BOAT LAB head-risk and matched audit checks
+on:
+  push:
+    paths:
+      - 'scripts/strong_field_diagnostic.py'
+      - 'scripts/forecast_audit.py'
+      - 'tests/test_strong_field_diagnostic.py'
+      - 'tests/test_v23_frozen_control_audit.py'
+      - 'app/app.js'
+      - '.github/workflows/boat-lab-head-risk-audit.yml'
+  pull_request:
+    paths:
+      - 'scripts/strong_field_diagnostic.py'
+      - 'scripts/forecast_audit.py'
+      - 'tests/test_strong_field_diagnostic.py'
+      - 'tests/test_v23_frozen_control_audit.py'
+      - 'app/app.js'
+      - '.github/workflows/boat-lab-head-risk-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install pytest
+      - run: python -m pytest -q tests/test_strong_field_diagnostic.py tests/test_v23_frozen_control_audit.py tests/test_forecast_audit.py
+      - run: node --check app/app.js

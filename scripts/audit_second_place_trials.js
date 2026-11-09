@@ -3,7 +3,7 @@
 'use strict';
 const fs=require('node:fs');
 const sha=require('node:crypto').createHash;
-const {validBets}=require('./freeze_second_place_trials.js');
+const {validBets,SUPPORTED_FORMAL_MODELS}=require('./freeze_second_place_trials.js');
 function signature(bets){return bets.map(b=>b.combination+':'+b.virtual_yen).sort().join('|');}
 function score(bets,finish,pay){
  const bet=bets.find(b=>b.combination===finish);
@@ -33,7 +33,8 @@ function audit(trials,live){
      archived>cutoff-5*60*1000||originalFreeze>cutoff-5*60*1000){skip('late_or_unproven');continue;}
   const x=forecast.get(r.id);
   if(!x||x.sha256!==r.original_fixed_sha256||
-     x.model_version!=='four-factor-v2.2-linked-primary-untrained'||
+     !SUPPORTED_FORMAL_MODELS.has(x.model_version)||
+     x.model_version!==r.formal_control?.model||
      signature(x.bets||[])!==signature(r.formal_control?.bets||[])){
     skip('source_sha_or_ticket_mismatch');continue;
   }

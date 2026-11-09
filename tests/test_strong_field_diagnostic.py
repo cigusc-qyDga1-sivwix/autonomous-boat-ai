@@ -107,8 +107,11 @@ def test_official_audit_splits_strong_close_field_vs_unassessed_without_hindsigh
     assert outcome["metrics"]["verified_races"] == 4
 
 def test_close_head_omission_warns_even_outside_strong_field():
+    tickets = picks()
+    tickets[1]["combination"] = "3-1-2"
+    tickets[2]["combination"] = "3-2-1"
     r = analyze(racers([5.8, 5.5, 5.2, 4.7, 3.2, 3.0]),
-                heads([.31, .28, .20, .10, .06, .05]), picks(),
+                heads([.31, .28, .20, .10, .06, .05]), tickets,
                 phase="exhibition")
     assert r["status"] == "MODEL_CLOSE_HEADS_NOT_STRONG_FIELD"
     assert r["head_coverage_warning"]

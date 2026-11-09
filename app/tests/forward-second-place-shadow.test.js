@@ -34,6 +34,14 @@ const live={event_date:day,updated_at_utc:day+'T00:30:00Z',
  forecast_races:[base]};
 const first=run(live,null,now);
 assert.equal(first.status.new_forward_freezes,1);
+// The current v2.3 formal model must not be silently discarded by the shadow.
+const v23={...base,model_version:'four-factor-v2.3-conditional-second-primary-untrained',
+ sha256:'c'.repeat(64)};
+const v23Run=run({...live,forecast_races:[v23]},null,now);
+assert.equal(v23Run.status.new_forward_freezes,1);
+assert.equal(v23Run.doc.records[0].formal_control.model,v23.model_version);
+assert.equal(v23Run.doc.records[0].not_formal,true);
+assert.equal(run({...live,forecast_races:[{...v23,model_version:'unknown-model'}]},null,now).status.excluded_not_formal,1);
 assert.equal(first.doc.records.length,1);
 assert.equal(first.doc.records[0].not_formal,true);
 assert.equal(first.doc.records[0].original_fixed_sha256,base.sha256);

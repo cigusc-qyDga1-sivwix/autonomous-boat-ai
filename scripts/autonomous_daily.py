@@ -29,7 +29,7 @@ if __package__:
     from .attack_defense_shadow import rescore as rescore_attack_defence_shadow
     from .grade_competition_shadow import grade_from_program, rescore as rescore_grade_competition
     from .strong_field_diagnostic import analyze as analyze_strong_field
-    from .exhibition_bridge import available_rows, inject
+    from .exhibition_bridge import available_rows, inject, verified_original_for_openapi
     from .official_withdrawals import fetch_notices, match_lanes
     from .entry_exhibition_gate import validated_preview, summarize_gate
     from .venue_profiles import get_profile, adjust_weights as adjust_venue_weights
@@ -47,7 +47,7 @@ else:
     from attack_defense_shadow import rescore as rescore_attack_defence_shadow
     from grade_competition_shadow import grade_from_program, rescore as rescore_grade_competition
     from strong_field_diagnostic import analyze as analyze_strong_field
-    from exhibition_bridge import available_rows, inject
+    from exhibition_bridge import available_rows, inject, verified_original_for_openapi
     from official_withdrawals import fetch_notices, match_lanes
     from entry_exhibition_gate import validated_preview, summarize_gate
     from venue_profiles import get_profile, adjust_weights as adjust_venue_weights
@@ -184,10 +184,15 @@ def select_exhibition_source(race: dict, research_row: dict | None, now: datetim
         supplemented, csv_origin = inject(
             race, research_row, now, venue_code, race_number)
         extra_metrics = supplemented.get("_exhibition_original") or {}
+        if not (csv_origin and extra_metrics):
+            # A later unrelated CSV preview/weather revision must not erase
+            # the independently proven first capture of ORIGINAL measurements.
+            extra_metrics, csv_origin = verified_original_for_openapi(
+                race, research_row, now, venue_code, race_number)
         if csv_origin and extra_metrics:
             api_boats = race["preview"]["racers"]
-            csv_boats = supplemented["preview"]["racers"]
-            matching_preview = all(
+            csv_boats = supplemented.get("preview", race["preview"])["racers"]
+            matching_preview = csv_origin.get("six_boat_preview_matched") is True or all(
                 all(
                     number(api_boats[str(lane)].get(field)) is not None
                     and number(csv_boats[str(lane)].get(field)) is not None

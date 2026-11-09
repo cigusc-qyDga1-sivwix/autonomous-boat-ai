@@ -175,6 +175,39 @@ def select_exhibition_source(race: dict, research_row: dict | None, now: datetim
             "source_observation_time": "not_provided",
             "metrics": [],
         }}
+        # The OpenAPI six-boat preview remains canonical. It does not include
+        # the optional original-exhibition lap/turn/straight measurements.
+        # Enrich ONLY when an independently captured CSV preview satisfies
+        # the existing strict cutoff/hash gate and agrees on ALL six course,
+        # exhibition-ST and exhibition-time observations. Never replace the
+        # canonical OpenAPI observations with stale/mismatched CSV values.
+        supplemented, csv_origin = inject(
+            race, research_row, now, venue_code, race_number)
+        extra_metrics = supplemented.get("_exhibition_original") or {}
+        if csv_origin and extra_metrics:
+            api_boats = race["preview"]["racers"]
+            csv_boats = supplemented["preview"]["racers"]
+            matching_preview = all(
+                all(
+                    number(api_boats[str(lane)].get(field)) is not None
+                    and number(csv_boats[str(lane)].get(field)) is not None
+                    and abs(number(api_boats[str(lane)][field])
+                            - number(csv_boats[str(lane)][field])) <= 1e-6
+                    for field in ("course_number", "start_timing", "exhibition_time")
+                )
+                for lane in range(1, 7)
+            )
+            if matching_preview:
+                live["_exhibition_original"] = extra_metrics
+                live["_exhibition_origin"] = {
+                    **live["_exhibition_origin"],
+                    "metrics": sorted(extra_metrics),
+                    "original_exhibition_source": "BoatraceCSV",
+                    "original_exhibition_observed_at_jst": csv_origin["observed_at_jst"],
+                    "original_exhibition_captured_at_utc": csv_origin["captured_at_utc"],
+                    "original_exhibition_measurement_sha256": csv_origin["measurement_sha256"],
+                    "original_exhibition_six_boat_preview_matched": True,
+                }
         return live, None, "openapi"
     bridged, csv_origin = inject(race, research_row, now, venue_code, race_number)
     if csv_origin and preview_complete(bridged):

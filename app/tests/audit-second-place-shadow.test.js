@@ -19,6 +19,18 @@ const official={source:'boatrace_official_pay',verified:true,virtual_stake:50000
 const ledger={event_date:day,race_records:{'18-3':{venue:'徳山',race:3,versions:[race],official_pay:official}}};
 const report=audit(trial,projectLedger(ledger));
 assert.equal(report.paired_verified_races,1);
+// v2.3 trials require exact model + frozen SHA + tickets to match the source.
+const v23race={...race,model_version:'four-factor-v2.3-conditional-second-primary-untrained',
+ sha256:'c'.repeat(64)};
+const v23Trial=run({...live,forecast_races:[v23race]},null,
+ Date.parse('2026-11-09T09:35:00+09:00')).doc;
+const v23Official={...official,snapshot_sha256:v23race.sha256};
+const v23Ledger={event_date:day,race_records:{'18-3':{venue:'徳山',race:3,
+ versions:[v23race],official_pay:v23Official}}};
+assert.equal(audit(v23Trial,projectLedger(v23Ledger)).paired_verified_races,1);
+const wrongModel=structuredClone(v23Ledger);
+wrongModel.race_records['18-3'].versions[0].model_version='four-factor-v2.2-linked-primary-untrained';
+assert.equal(audit(v23Trial,projectLedger(wrongModel)).paired_verified_races,0);
 assert.equal(report.formal.races,1);
 assert.equal(report.trial.virtual_stake_yen,50000);
 assert.equal(report.provisional_commit_time_not_verified,true);

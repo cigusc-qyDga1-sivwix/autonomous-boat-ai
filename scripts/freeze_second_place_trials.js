@@ -4,6 +4,12 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const SCHEMA='boatlabs.conditional_second_forward_v1';
 const MODEL='conditional-second-coverage-v0.1-shadow-untrained';
+// Formal model compatibility is narrow by design. This code is SHADOW ONLY;
+// eligibility still requires existing verified pre-cutoff canonical 120.
+const SUPPORTED_FORMAL_MODELS=new Set([
+ 'four-factor-v2.2-linked-primary-untrained',
+ 'four-factor-v2.3-conditional-second-primary-untrained'
+]);
 const MIN_LEAD_MS=5*60*1000,MAX_SOURCE_AGE_MS=45*60*1000;
 const hash=x=>crypto.createHash('sha256').update(JSON.stringify(x),'utf8').digest('hex');
 const pair=x=>x.split('-').slice(0,2).join('-');
@@ -94,7 +100,7 @@ function run(live,previous,nowMs){
   excluded_stale:0,excluded_not_formal:0,excluded_missing_120:0,errors:0};
  for(const race of live.forecast_races){
   if(race.phase!=='exhibition'||race.ticket_status!=='formal'||
-     race.model_version!=='four-factor-v2.2-linked-primary-untrained'){
+     !SUPPORTED_FORMAL_MODELS.has(race.model_version)){
     status.excluded_not_formal++;continue;
   }
   const ranked=race.interaction_primary?.ranked_outcomes;
@@ -148,5 +154,5 @@ function main(){
   JSON.stringify(status,null,2)+'\n');
  process.stdout.write(JSON.stringify(status)+'\n');
 }
-module.exports={canonical,validBets,trialSelection,run,MIN_LEAD_MS};
+module.exports={canonical,validBets,trialSelection,run,MIN_LEAD_MS,SUPPORTED_FORMAL_MODELS};
 if(require.main===module)main();

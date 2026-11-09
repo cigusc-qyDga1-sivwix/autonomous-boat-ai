@@ -132,6 +132,20 @@ def build(day, inputs, prior=None, collected_at=None):
                        for b in boats)):
             rejected["invalid_or_incomplete_six_boat_preview"]+=1
             continue
+        # If the optional ORIGINAL feed briefly disappears, preserve only an
+        # ALREADY captured six-boat original for an unchanged canonical preview.
+        # Never fill a newly missing metric from a different entry/ST/time.
+        old=merged.get(code)
+        if not og and old and old.get("original_exhibition_sha256"):
+            old_boats={b.get("lane"):b for b in old.get("boats",[]) if isinstance(b,dict)}
+            same_preview=(set(old_boats)==set(range(1,7)) and all(
+                all(old_boats[i].get(k)==boats[i-1].get(k) for k in
+                    ("course","exhibition_st","exhibition_time"))
+                for i in range(1,7)))
+            if same_preview and all(old_boats[i].get("original_exhibition") for i in range(1,7)):
+                for i in range(1,7):
+                    boats[i-1]["original_exhibition"]=old_boats[i]["original_exhibition"]
+                    boats[i-1]["name"]=old_boats[i].get("name")
         entry={
             "race_code":code,"venue":VENUES[int(code[8:10])-1],
             "venue_code":code[8:10],"race":int(code[10:12]),
@@ -159,7 +173,6 @@ def build(day, inputs, prior=None, collected_at=None):
                 "source":"BoatraceCSV/payouts_unofficial"
             } if pp else None)
         }
-        old=merged.get(code)
         # Earliest time THIS importer first persisted the race; never backdate.
         entry["first_seen_at_utc"] = (old or {}).get("first_seen_at_utc") or captured_iso
         if old and old.get("source_observed_jst","")>entry["source_observed_jst"]:

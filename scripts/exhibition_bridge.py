@@ -13,9 +13,9 @@ SAFE_MARGIN_SECONDS = 120
 from pathlib import Path
 import json
 if __package__:
-    from .ingest_boatracecsv_exhibition import preview_signature
+    from .ingest_boatracecsv_exhibition import preview_signature, original_exhibition_signature
 else:
-    from ingest_boatracecsv_exhibition import preview_signature
+    from ingest_boatracecsv_exhibition import preview_signature, original_exhibition_signature
 
 SOURCE_NAME = "BoatraceCSV"
 METRICS = {"一周": ("lap_time", 30, 50),
@@ -44,6 +44,82 @@ def available_rows(path: Path, day: str) -> dict:
                 if isinstance(r, dict) and r.get("race_code")}
     except (ValueError, TypeError, KeyError, OSError):
         return {}
+
+
+def verified_original_for_openapi(race: dict, row: dict | None, now: datetime,
+                                  venue_code: str, race_number: int):
+    """Only independently captured, six-boat-matched original times.
+
+    The normal CSV preview can be revised by later wind/ST updates even if
+    original straight/lap/turn data were already captured before the cutoff.
+    This function uses an immutable *per-original* SHA and first-capture time
+    instead of accepting the latest composite preview retroactively.
+    """
+    if not isinstance(row, dict) or not isinstance(race, dict) or now.tzinfo is None:
+        return {}, None
+    try:
+        cutoff = datetime.strptime(race["closed_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=JST)
+        stamp = datetime.fromisoformat(row["original_exhibition_captured_at_utc"])
+        observed = datetime.fromisoformat(row["original_exhibition_observed_jst"])
+    except (KeyError, ValueError, TypeError):
+        return {}, None
+    now_jst = now.astimezone(JST)
+    if (row.get("source_status") != "historical_research_only_not_frozen_forecast"
+            or row.get("race_code") != f"{cutoff:%Y%m%d}{int(venue_code):02d}{int(race_number):02d}"
+            or row.get("venue_code") != f"{int(venue_code):02d}"
+            or row.get("race") != int(race_number)
+            or stamp.tzinfo is None or observed.tzinfo is None
+            or now_jst.date() != cutoff.date()
+            or stamp.astimezone(JST).date() != cutoff.date()
+            or observed.astimezone(JST).date() != cutoff.date()
+            or now_jst >= cutoff - timedelta(seconds=SAFE_MARGIN_SECONDS)
+            or stamp.astimezone(JST) >= cutoff - timedelta(seconds=SAFE_MARGIN_SECONDS)
+            or stamp > now + timedelta(seconds=30)
+            or observed > stamp + timedelta(seconds=30)
+            or observed >= cutoff
+            or original_exhibition_signature(row) != row.get("original_exhibition_sha256")):
+        return {}, None
+    boats = row.get("boats")
+    preview = (race.get("preview") or {}).get("racers") or {}
+    if not isinstance(boats, list) or len(boats) != 6 or not isinstance(preview, dict):
+        return {}, None
+    by_lane = {b.get("lane"): b for b in boats if isinstance(b, dict)}
+    if set(by_lane) != set(range(1, 7)):
+        return {}, None
+    # A CSV original time is usable only alongside the SAME real entry/course,
+    # legal exhibition ST and ordinary exhibition time in the live OpenAPI.
+    for lane in range(1, 7):
+        b = by_lane[lane]
+        a = preview.get(str(lane)) or {}
+        for csv_field, api_field in (
+                ("course", "course_number"),
+                ("exhibition_st", "start_timing"),
+                ("exhibition_time", "exhibition_time")):
+            left, right = finite_float(b.get(csv_field)), finite_float(a.get(api_field))
+            if left is None or right is None or abs(left - right) > 1e-6:
+                return {}, None
+    extras = {}
+    for original_name, (key, lo, hi) in METRICS.items():
+        found = {}
+        for lane in range(1, 7):
+            for metric in by_lane[lane].get("original_exhibition") or []:
+                if isinstance(metric, dict) and metric.get("metric") == original_name:
+                    v = finite_float(metric.get("value"))
+                    if v is not None and lo <= v <= hi:
+                        found[str(lane)] = v
+        if len(found) == 6:
+            extras[key] = found
+    if not extras:
+        return {}, None
+    return extras, {
+        "source": SOURCE_NAME,
+        "observed_at_jst": row["original_exhibition_observed_jst"],
+        "captured_at_utc": row["original_exhibition_captured_at_utc"],
+        "measurement_sha256": row["original_exhibition_sha256"],
+        "metrics": sorted(extras),
+        "six_boat_preview_matched": True,
+        "capture_scope": "original_exhibition_only",
+    }
 
 
 def inject(race: dict, row: dict | None, now: datetime, venue_code: str,

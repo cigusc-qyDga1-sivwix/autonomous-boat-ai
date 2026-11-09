@@ -38,6 +38,23 @@ class OptionalWeatherTests(unittest.TestCase):
         self.assertNotEqual(b["preview_captured_at_utc"], a["preview_captured_at_utc"])
         self.assertEqual(b["original_exhibition_sha256"], a["original_exhibition_sha256"])
         self.assertEqual(b["original_exhibition_captured_at_utc"], a["original_exhibition_captured_at_utc"])
+        # Temporary disappearance of the optional original feed cannot erase
+        # earlier genuinely captured values for an unchanged six-boat preview.
+        missing_original = build(date(2026, 10, 26), {
+            "stt": [st], "tkz": [tk]},
+            prior=later, collected_at=datetime(2026, 10, 26, 3, 30, tzinfo=timezone.utc))
+        missing = missing_original["records"][0]
+        self.assertEqual(missing["original_exhibition_sha256"], b["original_exhibition_sha256"])
+        self.assertEqual(missing["original_exhibition_captured_at_utc"], a["original_exhibition_captured_at_utc"])
+        self.assertEqual(missing["boats"][2]["original_exhibition"], b["boats"][2]["original_exhibition"])
+        altered_tk = dict(tk)
+        altered_tk["艇3_展示タイム"] = "6.69"
+        changed_preview = build(date(2026, 10, 26), {
+            "stt": [st], "tkz": [altered_tk]},
+            prior=missing_original, collected_at=datetime(2026, 10, 26, 3, 45, tzinfo=timezone.utc))
+        changed_preview_entry = changed_preview["records"][0]
+        self.assertIsNone(changed_preview_entry["original_exhibition_sha256"])
+        self.assertEqual(changed_preview_entry["boats"][2]["original_exhibition"], [])
         changed = dict(og)
         changed["艇3_値3"] = "7.40"
         third = build(date(2026, 10, 26), {

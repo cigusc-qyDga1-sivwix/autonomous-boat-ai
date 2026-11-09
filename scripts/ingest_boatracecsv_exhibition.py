@@ -73,7 +73,12 @@ def original_exhibition_signature(row):
         )
         if not metrics:
             return None
-        values.append({"lane": lane, "name": boat.get("name"), "metrics": metrics})
+        values.append({
+            "lane": lane, "name": boat.get("name"),
+            "course": boat.get("course"), "exhibition_st": boat.get("exhibition_st"),
+            "exhibition_time": boat.get("exhibition_time"), "tilt": boat.get("tilt"),
+            "metrics": metrics,
+        })
     if lanes != set(range(1, 7)):
         return None
     value = {"race_code": row.get("race_code"), "boats": sorted(values, key=lambda b: b["lane"])}

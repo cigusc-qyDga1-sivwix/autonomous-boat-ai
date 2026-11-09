@@ -113,12 +113,20 @@ def analyze(racers: list[dict], head_shares: list[dict], formal_bets: list[dict]
         "head_gap": round(top[0][1] - top[1][1], 6),
         "head_candidates_from_uncalibrated_mass": contenders,
         "head_candidates_absent_from_tickets": missed,
-        "head_coverage_warning": bool(strong_field and close_heads and missed),
+        # A close winner race needs a head-coverage alert even when national
+        # rates do NOT meet the strong-field cutoff (previously silently hidden).
+        # This is a diagnostic only: no auto ticket widening or formal change.
+        "head_coverage_warning": bool(close_heads and missed),
+        "head_warning_scope": "all_close_modeled_heads_not_just_strong_fields",
+        "head_warning_is_not_calibrated": True,
         "ticket_heads_present": sorted(heads_bought),
         "classification_note": (
             "Multiple highly rated entrants with close modeled 1st-place shares; "
             "review 1M tactics and unresolved head coverage."
             if strong_field and close_heads else
+            "Close modeled head shares are uncertain; inspect missing head paths, "
+            "but do not widen without independent pre-cutoff evidence."
+            if close_heads else
             "No demonstrated reason to widen or alter formal tickets."
         ),
         "thresholds_are_research_only": {
@@ -128,7 +136,7 @@ def analyze(racers: list[dict], head_shares: list[dict], formal_bets: list[dict]
             "head_gap_max": MAX_TOP_TWO_GAP,
             "candidate_mass_fraction_of_leader": 0.7,
         },
-        "recommendation": "WATCH_CONTESTED_HEAD" if strong_field and close_heads else "KEEP_DEFAULT",
+        "recommendation": "WATCH_CONTESTED_HEAD" if close_heads and missed else "KEEP_DEFAULT",
         "inference_limit": (
             "Neither a G1 title nor an equal national win rate proves actual "
             "race parity; no probabilistic calibration or profit edge measured."

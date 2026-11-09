@@ -4,7 +4,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from scripts.exhibition_bridge import inject, available_rows
-from scripts.ingest_boatracecsv_exhibition import preview_signature
+from scripts.ingest_boatracecsv_exhibition import preview_signature, original_exhibition_signature
 from scripts.autonomous_daily import build, preview_complete, numeric_exhibition_matches_snapshot, numeric_exhibition_coverage
 
 JST = ZoneInfo("Asia/Tokyo")
@@ -364,3 +364,46 @@ def test_new_original_metrics_create_forward_only_openapi_revision():
         "api", exhibition_rows={sample["race_code"]: sample})
     assert stats["new_exhibition"] == 0
     assert same["race_records"]["18-3"]["versions"] == versions
+
+
+def test_independent_original_capture_survives_late_composite_preview_revision():
+    sample = row()
+    payload = openapi_same_as_csv(sample)
+    sample["original_exhibition_sha256"] = original_exhibition_signature(sample)
+    sample["original_exhibition_captured_at_utc"] = "2026-10-23T02:10:00+00:00"
+    sample["original_exhibition_observed_jst"] = "2026-10-23T11:09:00+09:00"
+    # Other CSV components changed later; the whole preview was first
+    # captured AFTER the safe cutoff, but these exact originals were not.
+    sample["preview_captured_at_utc"] = "2026-10-23T02:19:00+00:00"
+    sample["weather"]["wind_mps"] = 5
+    sample["preview_sha256"] = preview_signature(sample)
+    ledger, _, status = build(
+        None, payload, datetime(2026, 10, 23, 11, 12, tzinfo=JST),
+        "api", exhibition_rows={sample["race_code"]: sample})
+    assert status["new_exhibition"] == 1
+    final = ledger["race_records"]["18-3"]["versions"][-1]
+    assert final["exhibition_origin"]["source"] == "BoatraceOpenAPI"
+    assert final["exhibition_origin"]["original_exhibition_source"] == "BoatraceCSV"
+    assert final["exhibition_origin"]["original_exhibition_measurement_sha256"] == sample["original_exhibition_sha256"]
+    assert final["racers"][2]["original_exhibition"]["straight_time"] == 5
+    assert final["weather_used"].get("wind_source") != "unvalidated_csv_weather"
+
+
+def test_independent_original_capture_rejects_late_or_tampered_values():
+    sample = row()
+    payload = openapi_same_as_csv(sample)
+    sample["original_exhibition_sha256"] = original_exhibition_signature(sample)
+    sample["original_exhibition_captured_at_utc"] = "2026-10-23T02:19:00+00:00"
+    sample["original_exhibition_observed_jst"] = "2026-10-23T11:09:00+09:00"
+    sample["preview_captured_at_utc"] = "2026-10-23T02:19:00+00:00"
+    one, _, _ = build(
+        None, payload, datetime(2026, 10, 23, 11, 12, tzinfo=JST),
+        "api", exhibition_rows={sample["race_code"]: sample})
+    assert one["race_records"]["18-3"]["versions"][-1]["racers"][2]["original_exhibition"] == {}
+    tampered = deepcopy(sample)
+    tampered["original_exhibition_captured_at_utc"] = "2026-10-23T02:10:00+00:00"
+    tampered["boats"][2]["original_exhibition"][2]["value"] = 5.25
+    two, _, _ = build(
+        None, payload, datetime(2026, 10, 23, 11, 12, tzinfo=JST),
+        "api", exhibition_rows={sample["race_code"]: tampered})
+    assert two["race_records"]["18-3"]["versions"][-1]["racers"][2]["original_exhibition"] == {}

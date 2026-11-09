@@ -105,3 +105,24 @@ def test_official_audit_splits_strong_close_field_vs_unassessed_without_hindsigh
     assert formal["NOT_ASSESSED"]["verified_races"] == 3
     assert formal["STRONG_FIELD_CLOSE_HEADS"]["hits"] == 1
     assert outcome["metrics"]["verified_races"] == 4
+
+def test_non_strong_but_close_heads_have_visible_coverage_warning():
+    # Previously missed: today this class had poor head coverage.
+    report = analyze(racers([5.8, 5.7, 5.6, 5.5, 4.8, 4.6]),
+                     heads([.31, .28, .20, .10, .06, .05]), picks(),
+                     phase="exhibition")
+    assert report["status"] == "MODEL_CLOSE_HEADS_NOT_STRONG_FIELD"
+    assert report["head_candidates_absent_from_tickets"] == [2]
+    assert report["head_coverage_warning"] is True
+    assert report["recommendation"] == "WATCH_CONTESTED_HEAD"
+    assert report["changes_bets"] is False
+    assert report["head_warning_is_not_calibrated"] is True
+
+
+def test_non_close_heads_do_not_warn_or_change_bets():
+    report = analyze(racers([5.8, 5.7, 5.6, 5.5, 4.8, 4.6]),
+                     heads([.70, .13, .07, .05, .03, .02]), picks(),
+                     phase="exhibition")
+    assert report["status"] == "NO_STRONG_FIELD_PARITY_SIGNAL"
+    assert report["head_coverage_warning"] is False
+    assert report["recommendation"] == "KEEP_DEFAULT"

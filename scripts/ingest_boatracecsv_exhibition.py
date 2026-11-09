@@ -183,8 +183,10 @@ def build(day, inputs, prior=None, collected_at=None):
             else None
         ) or (captured_iso if original_hash else None)
         entry["original_exhibition_observed_jst"] = (
-            og.get("取得日時") if original_hash else None
-        )
+            (old or {}).get("original_exhibition_observed_jst")
+            if original_hash and (old or {}).get("original_exhibition_sha256") == original_hash
+            else None
+        ) or (og.get("取得日時") if original_hash else None)
         if old:
             for kind in ("result","payout"):
                 if entry[kind] is None:

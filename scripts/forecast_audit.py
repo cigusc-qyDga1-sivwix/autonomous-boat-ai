@@ -105,6 +105,38 @@ def _verify_race(r: dict, p: dict, day: str) -> tuple[bool, str]:
     return True, "valid"
 
 
+def _v22_control_bets(snapshot: dict) -> list[dict] | None:
+    """Read an *already frozen* v2.2 counterfactual inside v2.3, never rescore."""
+    if snapshot.get("model_version") != "four-factor-v2.3-conditional-second-primary-untrained":
+        return None
+    meta = snapshot.get("interaction_primary")
+    if not isinstance(meta, dict):
+        return None
+    spec = meta.get("conditional_second_primary")
+    if (not isinstance(spec, dict) or spec.get("enabled") is not True
+            or spec.get("same_point_count") is not True
+            or spec.get("historical_results_used") is not False):
+        return None
+    bets, control = snapshot.get("bets"), meta.get("same_race_v22_control_bets")
+    if not isinstance(bets, list) or not isinstance(control, list):
+        return None
+    if len(bets) != len(control) or not 4 <= len(control) <= 24:
+        return None
+    combinations = set()
+    for b in control:
+        if not isinstance(b, dict):
+            return None
+        combo, yen = b.get("combination"), b.get("virtual_yen")
+        if (not isinstance(combo, str) or len(combo.split("-")) != 3
+                or len(set(combo.split("-"))) != 3
+                or any(v not in "123456" for v in combo.split("-"))
+                or combo in combinations or type(yen) is not int
+                or yen < 1000 or yen % 1000):
+            return None
+        combinations.add(combo)
+    return control if sum(b["virtual_yen"] for b in control) == RESEARCH_BUDGET else None
+
+
 def analyze(dataset: dict) -> dict:
     """Audit a single daily snapshot; never add unresolved races as losers."""
     day = dataset["event_date"]
@@ -118,6 +150,8 @@ def analyze(dataset: dict) -> dict:
     all_bet_heads = Counter()
     race_examples = []
     point_free_rows, prior_rows = [], []
+    matched_v23_rows, matched_v22_rows = [], []
+    invalid_v22_control = 0
     for r in raw:
         bets = r.get("bets") or []
         if bets:
@@ -173,6 +207,22 @@ def analyze(dataset: dict) -> dict:
                 point_free_rows.append(row)
                 prior_rows.append({**row, 'stage': prior_stage,
                                    'virtual_payout_yen': match['virtual_yen'] * p['payout_per_100'] // 100 if match else 0})
+        if r.get("model_version") == "four-factor-v2.3-conditional-second-primary-untrained" and r.get("ticket_status") == "formal":
+            control = _v22_control_bets(r)
+            if control is None:
+                invalid_v22_control += 1
+            else:
+                match = next((b for b in control if b["combination"] == win), None)
+                control_heads = {b["combination"][0] for b in control}
+                control_pairs = {b["combination"][:3] for b in control}
+                stage_v22 = ("hit" if match else
+                             "head_miss" if win[0] not in control_heads else
+                             "second_miss" if win[:3] not in control_pairs else
+                             "third_miss")
+                matched_v23_rows.append(row)
+                matched_v22_rows.append({**row, "stage": stage_v22,
+                                         "virtual_payout_yen": (match["virtual_yen"] * p["payout_per_100"] // 100
+                                                                if match else 0)})
         if stage != "hit":
             race_examples.append({k: row[k] for k in
                 ("venue", "race", "stage", "actual_finish", "first_bet_head", "model_version")})
@@ -237,6 +287,32 @@ def analyze(dataset: dict) -> dict:
             "actual_winner_1_share": round(actual1 / len(verified), 4) if verified else None,
             "winner_lane_counts": dict(sorted(Counter(x["actual_head"] for x in verified).items())),
             "first_bet_head_lane_counts": dict(sorted(all_bet_heads.items())),
+        },
+        "same_race_v23_v22_control": {
+            "comparison": "v2.3 vs its own pre-cutoff frozen v2.2 control; only verified formal races",
+            "matched_races": len(matched_v23_rows),
+            "invalid_or_missing_frozen_controls": invalid_v22_control,
+            "same_point_count": True,
+            "same_virtual_budget_per_race": RESEARCH_BUDGET,
+            "formal_v23": _metrics(matched_v23_rows),
+            "frozen_v22_control": _metrics(matched_v22_rows),
+            "v23_head_misses_recovered": sum(
+                a["stage"] == "head_miss" and b["stage"] != "head_miss"
+                for a, b in zip(matched_v22_rows, matched_v23_rows)),
+            "new_v23_head_misses": sum(
+                a["stage"] != "head_miss" and b["stage"] == "head_miss"
+                for a, b in zip(matched_v22_rows, matched_v23_rows)),
+            "changed_ticket_or_allocation_races": sum(
+                _ticket_signature((r.get("interaction_primary") or {}).get("same_race_v22_control_bets") or [])
+                != _ticket_signature(r["bets"]) for r in raw
+                if r.get("model_version") == "four-factor-v2.3-conditional-second-primary-untrained"
+                and r.get("ticket_status") == "formal"
+                and _v22_control_bets(r) is not None
+                and f"{day}|{r['venue']}|{r['race']}" not in alerts
+                and _verify_race(r, official.get(f"{day}|{r['venue']}|{r['race']}"), day)[0]),
+            "not_formal_performance": True,
+            "no_backfilled_counterfactuals": True,
+            "warning": "Same-race comparator is observational and uncalibrated; do not infer a profit edge from one day.",
         },
         "point_free_comparison": {
             "selection": "Same-race, same-input, same-time pre-cutoff controls; virtual 50000 each",

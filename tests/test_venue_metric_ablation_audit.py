@@ -2,7 +2,7 @@
 from copy import deepcopy
 
 from scripts.forecast_audit import analyze
-from tests.test_forecast_audit import BETS, make_example
+from test_forecast_audit import BETS, make_example
 
 
 def prospect():

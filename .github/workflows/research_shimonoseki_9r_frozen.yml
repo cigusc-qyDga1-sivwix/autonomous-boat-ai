@@ -1,0 +1,44 @@
+name: Research Shimonoseki 9R frozen prediction extract
+on:
+  push:
+    branches:
+      - research/shimonoseki-9r-frozen-20261110
+    paths:
+      - .github/workflows/research_shimonoseki_9r_frozen.yml
+  workflow_dispatch:
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show saved pre-cutoff prediction only (no results)
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data=json.loads(Path("app/data/live/2026-11-10.json").read_text(encoding="utf-8"))
+          rows=[r for r in data["forecast_races"] if r.get("venue")=="下関" and str(r.get("race"))=="9"]
+          assert len(rows)==1, "expect exactly one frozen Shimonoseki 9R"
+          row=rows[0]
+          diag=row.get("strong_field_diagnostic") or {}
+          meta=row.get("interaction_primary") or {}
+          chosen=["venue","race","phase","ticket_status","classification","frozen_at_utc","cutoff_jst",
+                  "sha256","model_version","bets","point_reason","head_course_shares",
+                  "main_role_shares","racer_ratings","race_assessment",
+                  "exhibition_input_check","weather_adjustment"]
+          result={k:row.get(k) for k in chosen if k in row}
+          result["all_race_keys"]=sorted(row.keys())
+          result["diagnostic"]=diag
+          result["saved_v22_control_bets"]=meta.get("same_race_v22_control_bets")
+          result["conditional_second_primary"]=meta.get("conditional_second_primary")
+          result["point_policy"]=meta.get("point_policy")
+          result["conditional_places_by_head"]=meta.get("conditional_places_by_head")
+          result["scenario_assumptions"]=meta.get("scenario_assumptions")
+          ranked=meta.get("ranked_outcomes") or []
+          result["ranked_count"]=len(ranked)
+          result["ranked_top50"]=sorted(ranked,key=lambda x:-x.get("relative_score",0))[:50]
+          print("FROZEN_FORECAST_RESEARCH_START")
+          print(json.dumps(result,ensure_ascii=False,separators=(",",":")))
+          print("FROZEN_FORECAST_RESEARCH_END")
+          PY

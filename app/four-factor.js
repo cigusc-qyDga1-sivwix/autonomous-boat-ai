@@ -32,15 +32,36 @@ function evaluate(input){
  const turn=rs.map(r=>expo?val(r.original_exhibition?.turn_time,4,15):null);
  const straight=rs.map(r=>expo?val(r.original_exhibition?.straight_time,5,12):null);
  const lap=rs.map(r=>expo?val(r.original_exhibition?.lap_time,30,50):null);
+ const half=rs.map(r=>expo?val(r.original_exhibition?.half_lap_time,15,25):null);
  const w=relative(win,2),t=relative(top3,30),l=relative(local,2),f=relative(frame,2),s=relative(avg,.06);
  const m=relative(mot2,25),m3=relative(mot3,25);
- const e=relative(et,.30,true),st=relative(es,.12),tr=relative(turn,.8,true),sr=relative(straight,.5,true),lp=relative(lap,2,true);
+ const e=relative(et,.30,true),st=relative(es,.12),tr=relative(turn,.8,true),sr=relative(straight,.5,true),lp=relative(lap,2,true),hf=relative(half,1,true);
+ // v2.4 replaces WITHIN the original 10% exhibition factor: never add a
+ // second speed bonus. Four/special-three metrics must be complete for all 6.
+ const complete=xs=>xs.every(x=>x!==null);
+ let balance=null;
+ if(input.formal_insight_v24===true&&expo&&input.venue!=='江戸川'&&complete(et)&&complete(turn)){
+  if(input.venue==='桐生'&&complete(half)&&complete(straight))
+   balance={time:.25,start:.25,turn:.25,straight:.15,half:.10};
+  else if(['住之江','尼崎','徳山'].includes(input.venue)&&complete(lap))
+   balance={time:.30,start:.25,turn:.30,lap:.15};
+  else if(complete(lap)&&complete(straight))
+   balance=input.venue==='福岡'?
+    {time:.18,start:.25,turn:.28,straight:.19,lap:.10}:
+    {time:.27,start:.25,turn:.23,straight:.15,lap:.10};
+ }
+ if(balance&&Math.abs(Object.values(balance).reduce((sum,v)=>sum+v,0)-1)>1e-12)
+  throw Error('v2.4 exhibition weights must sum to one');
  const wind=val(input.weather_used?.wind_speed,0,65),wave=val(input.weather_used?.wave_height,0,100),gust=val(input.weather_used?.wind_gust,0,100);
  const rough=clamp(Math.max(wind===null?0:(wind-4)/6,wave===null?0:(wave-3)/12,gust===null?0:(gust-8)/12),0,1);
  const rows=rs.map((r,i)=>{
   const athlete=clamp(.40*w[i]+.20*t[i]+.10*l[i]-.15*s[i]+.15*f[i],-.8,.8);
   const motor=clamp(.80*m[i]+.20*m3[i],-.8,.8);
-  const exhibition=expo?clamp(-.45*e[i]-.25*st[i]-.15*tr[i]-.10*sr[i]-.05*lp[i],-1,1):0;
+  const exhibition=expo?clamp(balance?
+    -(balance.time*e[i]+balance.start*st[i]+balance.turn*tr[i]+
+      (balance.straight||0)*sr[i]+(balance.lap||0)*lp[i]+
+      (balance.half||0)*hf[i]):
+    -.45*e[i]-.25*st[i]-.15*tr[i]-.10*sr[i]-.05*lp[i],-1,1):0;
   const base=WEIGHTS.athlete*athlete+WEIGHTS.motor*motor+WEIGHTS.exhibition*exhibition;
   // Shared weather must not multiply all boats equally and cancel. Roughness
   // conservatively flattens the base evaluation; no unverified wind direction bias.
@@ -57,6 +78,13 @@ function evaluate(input){
    exhibition_f_ignored:expo&&typeof r.exhibition_st==='number'&&r.exhibition_st<0};
  });
  return {version:'four-factor-v1.0-untrained',weights:WEIGHTS,rows,roughness:rough,
+  ...(input.formal_insight_v24===true?{formal_exhibition_balance_v24:{
+   requested:true,applied:balance!==null,metric_mix:balance,
+   method:'redistribution_within_existing_10pct_exhibition_factor',
+   original_four_factor_weights_unchanged:true,
+   exhibition_time_not_a_solo_head_signal:true,
+   result_data_used:false,calibrated:false,
+  }}:{}),
   formula:'athlete^0.60 * motor^0.25 * exhibition^0.10 * weather^0.05',
   scope:'Base movement multipliers feed actual-course conditional 1M/2M scenarios; not final attribution percentages.',
   missing_policy:'Missing fields remain unavailable and contribute multiplier 1. No results, payouts, or odds used.',

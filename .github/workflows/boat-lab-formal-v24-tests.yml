@@ -1,0 +1,47 @@
+name: BOAT LAB formal v2.4 forward-only contract tests
+on:
+  push:
+    paths:
+      - 'app/four-factor.js'
+      - 'app/tactical-1m.js'
+      - 'scripts/main_four_factor_bridge.js'
+      - 'scripts/autonomous_daily.py'
+      - 'scripts/forecast_audit.py'
+      - 'app/app.js'
+      - 'app/tests/formal-v24.test.js'
+      - 'tests/test_formal_v24.py'
+      - '.github/workflows/boat-lab-formal-v24-tests.yml'
+  pull_request:
+    paths:
+      - 'app/four-factor.js'
+      - 'app/tactical-1m.js'
+      - 'scripts/main_four_factor_bridge.js'
+      - 'scripts/autonomous_daily.py'
+      - 'scripts/forecast_audit.py'
+      - 'app/app.js'
+      - 'app/tests/formal-v24.test.js'
+      - 'tests/test_formal_v24.py'
+      - '.github/workflows/boat-lab-formal-v24-tests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: node --check app/app.js
+      - run: node --check app/four-factor.js
+      - run: node --check app/tactical-1m.js
+      - run: node --check scripts/main_four_factor_bridge.js
+      - run: node app/tests/formal-v24.test.js
+      - run: node app/tests/open-chasers.test.js
+      - run: python -m pip install -q -e '.[test,research]'
+      - run: python -m pytest -q tests/test_formal_v24.py tests/test_coverage_reselection_shadow.py tests/test_strong_field_diagnostic.py

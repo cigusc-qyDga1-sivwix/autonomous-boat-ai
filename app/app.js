@@ -671,6 +671,33 @@
       }
       return html;
     };
+    const researchCoveragePanel = () => {
+      const trial = r.coverage_reselection_shadow;
+      if (!trial || trial.model_role !== 'research_shadow' || trial.not_formal !== true) return '';
+      const proposed = trial.status === 'PROPOSED_FOR_FORWARD_TEST_ONLY'
+        && Array.isArray(trial.forecast_alternative_bets)
+        && trial.point_count_matched === true
+        && trial.no_additional_stake === true;
+      const change = proposed ? trial.replacement : null;
+      const explanation = change
+        ? '提案：' + escape(change.removed) + ' を外し ' + escape(change.added)
+          + ' を研究候補へ。' + (change.coverage_kind === 'uncovered_head'
+              ? '1着候補の抜けを再評価。' : '1着→2着のペア抜けを再評価。')
+        : '採用条件を満たす入れ替え案はありません（'
+          + escape(trial.status || 'NOT_ASSESSED') + '）。';
+      const rows = proposed
+        ? '<table class="bets-table"><thead><tr><th>研究用3連単</th><th>仮想配分</th></tr></thead><tbody>'
+          + trial.forecast_alternative_bets.map(b => '<tr><td>' + escape(b.combination)
+            + '</td><td>' + money(b.virtual_yen) + '</td></tr>').join('')
+          + '</tbody></table>' : '';
+      return '<section class="card card-pad"><details><summary>研究用｜見落とし候補の買い目再評価（'
+        + (proposed ? '変更候補あり' : '変更なし') + '）</summary>'
+        + '<p class="notice warn"><strong>正式予想ではありません。</strong> 展開モデル上の仮説をもとにした発走前の比較案です。'
+        + '実際の正式買い目・仮想収支・判定は変更していません。的中改善は未検証です。</p>'
+        + '<p>' + explanation + '</p>' + rows
+        + (proposed ? '<p>同一点数・仮想5万円を維持して比較。追加投資は0円。</p>' : '')
+        + '</details></section>';
+    };
     const proof=['four-factor-v2.1-actual-entry-primary-untrained','four-factor-v2.0-justified-points-primary-untrained'].includes(r.model_version)?
       r.interaction_primary?.point_policy:null;
     const claimLabels={
@@ -707,6 +734,7 @@
     ${referencePanel}
     ${['STRONG_FIELD_CLOSE_HEADS','MODEL_CLOSE_HEADS_NOT_STRONG_FIELD'].includes(r.strong_field_diagnostic?.status)? `<div class="notice warn"><strong>${r.strong_field_diagnostic.status==='STRONG_FIELD_CLOSE_HEADS'?'強豪混戦':'1着候補の相対評価が接近'}：</strong>上位2頭の相対評価差${Math.round(r.strong_field_diagnostic.head_gap*1000)/10}ポイント。${r.strong_field_diagnostic.head_candidates_absent_from_tickets?.length?`頭候補として買い目未採用の艇：${escape(r.strong_field_diagnostic.head_candidates_absent_from_tickets.join('・'))}号艇。`:'採用済みの頭候補を確認。'}${r.strong_field_diagnostic.status==='MODEL_CLOSE_HEADS_NOT_STRONG_FIELD'?'強豪条件外でも頭の取りこぼしに注意。':''}未校正モデルによる注意表示で、買い目・配分は変更しません。</div>` : ''}
     ${coverageRiskNotices()}
+    ${researchCoveragePanel()}
     ${r.point_reason?`<div class="notice"><strong>点数を選んだ理由：</strong>${escape(r.point_reason)} ／ ${r.bets.length}点。これは未校正の相対指標で、実測的中確率ではありません。</div>`:''}
     <div class="detail-grid">
     <div><section class="card card-pad bottom-margin"><h3>レース情報</h3><div class="meta-list"><div class="meta"><span>開催</span><b>${escape(r.venue)}</b></div><div class="meta"><span>対象日</span><b>${dateDisplay(data.event_date)}</b></div><div class="meta"><span>締切予定</span><b>${escape(r.cutoff_jst)} JST</b></div><div class="meta"><span>予想区分</span><b>${escape(r.classification)}</b></div><div class="meta"><span>展示データ</span><b>${r.phase==='exhibition'?'反映済み（非公式）':'未反映'}</b></div><div class="meta"><span>オッズ</span><b>未反映</b></div></div></section>

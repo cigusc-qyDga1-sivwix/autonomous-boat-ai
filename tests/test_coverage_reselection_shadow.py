@@ -126,7 +126,9 @@ def test_formal_prediction_unchanged_and_research_field_frozen_with_sha():
     now = datetime.fromisoformat("2026-11-11T09:20:00+09:00")
     data = race(day)
     saved = A.prediction(data, "徳山", 1, "exhibition", now, "fixture")
-    assert saved["model_version"] == A.CONDITIONAL_SECOND_MAIN_MODEL
+    assert saved["model_version"] == A.FORMAL_INSIGHT_V24_MODEL
+    assert saved["formal_insight_v24"]["pre_cutoff_only"] is True
+    assert saved["venue_tactics_v2"]["eligible"] is True
     assert sum(b["virtual_yen"] for b in saved["bets"]) == 50000
     shadow = saved["coverage_reselection_shadow"]
     assert shadow["version"] == VERSION

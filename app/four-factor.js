@@ -103,6 +103,23 @@ function panel(r){
   role.bets.map(b=>'<tr><td>'+esc(b.combination)+'</td><td>'+esc(Number(b.virtual_yen).toLocaleString('ja-JP'))+'円</td></tr>').join('')+'</tbody></table></details>'+
   '<p class="help"><strong>正式予想・正式収支には加算しません。</strong> 公式結果確定後に別枠でA/B比較します。</p></section>':
   role?.status==='unavailable'?'<section class="card card-pad"><p class="help">選手着順適性の試験は未生成。正式予想は変更していません。</p></section>':'';
+ const formalLeg=r?.three_leg_primary;
+ const legTable=Array.isArray(formalLeg?.rows)&&formalLeg.rows.length===6?
+  '<div class="boat-entry-overflow"><table class="bets-table"><thead><tr><th>艇</th><th>行き足方向</th><th>旋回方向</th><th>直線方向</th><th>独立行き足根拠</th></tr></thead><tbody>'+
+  formalLeg.rows.map(x=>'<tr><td>'+esc(x.lane)+'</td>'+
+    ['go','turn','straight'].map(k=>'<td>×'+esc(Number(x.multipliers[k]).toFixed(3))+'</td>').join('')+
+    '<td>'+(x.go_evidence==='not_separately_measured'?'未計測':'計測区間の参考')+'</td></tr>').join('')+
+  '</tbody></table></div>':'';
+ const legMainHTML=formalLeg?
+  '<section class="card card-pad"><h3>正式v2.3への足別展開反映</h3>'+
+  '<p class="help">状態：'+esc(formalLeg.status||'未確認')+
+  ' ／ 最大配分幅（対数）：'+esc(formalLeg.max_abs_stage_log??'—')+
+  ' ／ 同条件の旧v2.3との買い目・配分変化：'+
+   (formalLeg.same_input_prior_v23_control?(formalLeg.actual_ticket_or_allocation_changed?'あり':'なし'):'比較未生成')+
+  ' ／ 点数一致：'+(formalLeg.same_point_count===true?'はい':formalLeg.same_point_count===false?'いいえ':'未確認')+'</p>'+
+  '<p class="help">展示評価の総量は増やさず、ターンと直線の展開評価へ保守的に再配分。正式な総合倍率と仮想資金は維持。独立した行き足情報がない場では行き足の倍率を変更しません。</p>'+
+  legTable+
+  '<p class="help">係数は未校正。改善率や期待回収率の優位性を保証しません。旧v2.3対照は別枠で公式結果照合します。</p></section>':'';
  const vm=r?.venue_motor_exhibition_shadow;
  const vmRows=Array.isArray(vm?.rows)?vm.rows:[];
  const multiplier=x=>typeof x==='number'&&Number.isFinite(x)?'×'+x.toFixed(3):'未取得';
@@ -140,7 +157,7 @@ function panel(r){
  const linked=r?.model_version==='four-factor-v2.2-linked-primary-untrained';
  const newerMain=!linked&&r?.model_role==='main'&&/^four-factor-v(?:1\.(?:[6789])|2\.[012])\b/.test(r.model_version||'');
  return '<section class="card card-pad four-factor-panel"><h3>'+(newerMain?'参考：旧4要素の基礎評価':'4要素の基礎評価')+'</h3><p>選手60・モーター25・展示10・気象5</p>'+
-  (newerMain?'<p class="help"><strong>これは旧4要素モデルの参考倍率で、正式v1.6〜v2.1の展開評価や買い目を直接生成する係数ではありません。</strong>最終的な1〜3着評価と採用点数は「6艇の総合評価」にある正式メインの数値をご確認ください。</p>':'')+'<div class="boat-entry-overflow"><table class="bets-table"><thead><tr><th>艇</th>'+labels.map(x=>'<th>'+x+'</th>').join('')+'<th>合成</th></tr></thead><tbody>'+rows+'</tbody></table></div><p class="help">表示は重み適用後の倍率。欠損は中立の×1とし、取得値を捏造しません。'+(linked?'統合v2.2の基礎入力として使い、実進入・場別条件・ST・引き波仮説を通して最終評価へ接続します。':'旧4要素の参考評価で、旧v1.6〜v2.1とは同一計算ではありません。')+'比率は試験設定で、的中確率や金銭的期待値ではありません。</p>'+policyHTML+chaserHTML+'</section>'+roleHTML+motorHTML+stHTML+(root.BoatThreeLegDiagnostic?.panel(r)||'');
+  (newerMain?'<p class="help"><strong>これは旧4要素モデルの参考倍率で、正式v1.6〜v2.1の展開評価や買い目を直接生成する係数ではありません。</strong>最終的な1〜3着評価と採用点数は「6艇の総合評価」にある正式メインの数値をご確認ください。</p>':'')+'<div class="boat-entry-overflow"><table class="bets-table"><thead><tr><th>艇</th>'+labels.map(x=>'<th>'+x+'</th>').join('')+'<th>合成</th></tr></thead><tbody>'+rows+'</tbody></table></div><p class="help">表示は重み適用後の倍率。欠損は中立の×1とし、取得値を捏造しません。'+(linked?'統合v2.2の基礎入力として使い、実進入・場別条件・ST・引き波仮説を通して最終評価へ接続します。':'旧4要素の参考評価で、旧v1.6〜v2.1とは同一計算ではありません。')+'比率は試験設定で、的中確率や金銭的期待値ではありません。</p>'+policyHTML+chaserHTML+'</section>'+roleHTML+legMainHTML+motorHTML+stHTML+(root.BoatThreeLegDiagnostic?.panel(r)||'');
 }
 root.BoatFourFactor={evaluate,panel,WEIGHTS};
 if(typeof module!=='undefined')module.exports=root.BoatFourFactor;

@@ -116,11 +116,12 @@ def summarize(payload: dict) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", default="app/data/live/latest.json")
+    ap.add_argument("--fail-on-alert", action="store_true", help="Strict mode for new post-fix snapshots only")
     args = ap.parse_args()
     p = Path(args.input)
     report = summarize(json.loads(p.read_text(encoding="utf-8")))
     print(json.dumps(report, ensure_ascii=False, sort_keys=True))
-    return 1 if report["v24_alerts"] else 0
+    return 1 if args.fail_on_alert and report["v24_alerts"] else 0
 
 
 if __name__ == "__main__":

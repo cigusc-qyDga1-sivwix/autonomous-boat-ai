@@ -31,7 +31,6 @@ for(const venue of ['福岡','児島','桐生','徳山']){
  assert.equal(revised.formal_insight_v24.generated_pre_cutoff,true);
  assert.equal(revised.formal_insight_v24.result_data_used,false);
  assert.deepEqual(revised.formal_insight_v24.ranked_outcomes,prior.ranked_outcomes);
- assert.equal(revised.formal_insight_v24.formal_inside_pressure,undefined);
  assert.equal(revised.formal_insight_v24.formal_exhibition_balance.applied,true);
  assert.equal(revised.formal_insight_v24.formal_inside_pressure?.pre_cutoff_only,true);
  assert.equal(revised.ranked_outcomes.length,120);

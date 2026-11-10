@@ -78,14 +78,13 @@ function evaluate(input){
    exhibition_f_ignored:expo&&typeof r.exhibition_st==='number'&&r.exhibition_st<0};
  });
  return {version:'four-factor-v1.0-untrained',weights:WEIGHTS,rows,roughness:rough,
-  formal_exhibition_balance_v24:{
-   requested:input.formal_insight_v24===true,
-   applied:balance!==null,metric_mix:balance,
+  ...(input.formal_insight_v24===true?{formal_exhibition_balance_v24:{
+   requested:true,applied:balance!==null,metric_mix:balance,
    method:'redistribution_within_existing_10pct_exhibition_factor',
    original_four_factor_weights_unchanged:true,
    exhibition_time_not_a_solo_head_signal:true,
    result_data_used:false,calibrated:false,
-  },
+  }}:{}),
   formula:'athlete^0.60 * motor^0.25 * exhibition^0.10 * weather^0.05',
   scope:'Base movement multipliers feed actual-course conditional 1M/2M scenarios; not final attribution percentages.',
   missing_policy:'Missing fields remain unavailable and contribute multiplier 1. No results, payouts, or odds used.',

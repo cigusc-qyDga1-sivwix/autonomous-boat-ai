@@ -413,6 +413,47 @@ function forecast(input){
      follower_lane:h<6?v[byCourse[h]].lane:null,
      follower_readiness:+follow.toFixed(4),inside};
  }):[];
+ // v2.4 (formal): do not automatically suppress the inside. Require the
+ // actual-course opponent's measured legal average-ST advantage AND complete
+ // six-boat original turn evidence, plus comparable movement. A single fast
+ // normal exhibition time is NEVER sufficient to reduce course 1.
+ const insidePressureV24={
+  version:'inside-head-pressure-v2.4-forward',requested:input.formal_insight_v24===true,
+  applied:false,inside_lane:v[byCourse[0]].lane,
+  attacking_lane:null,attacking_course:null,head_multiplier:1,
+  pre_cutoff_only:true,result_data_used:false,
+  reason:'no_independent_st_and_turn_advantage'
+ };
+ if(input.formal_insight_v24===true&&input.phase==='exhibition'&&
+    input.venue!=='江戸川'&&v.every(x=>x.turn!==null&&
+      x.turn>=4&&x.turn<=15&&x.exhibit!==null)&&
+    v[byCourse[0]].avgValid){
+  const inside=v[byCourse[0]];
+  const plausible=[2,3,4].map(course=>{
+   const attacker=v[byCourse[course-1]];
+   const stEdge=inside.avg-attacker.avg;
+   const turnEdge=inside.turn-attacker.turn;
+   const moveRatio=move[byCourse[course-1]].go/
+     Math.max(.38,move[byCourse[0]].go);
+   return {course,lane:attacker.lane,stEdge,turnEdge,moveRatio,
+     eligible:attacker.avgValid&&stEdge>=.025&&turnEdge>=.04&&moveRatio>=.92};
+  }).filter(x=>x.eligible)
+    .sort((a,b)=>b.stEdge-a.stEdge||b.turnEdge-a.turnEdge);
+  if(plausible.length){
+   const attacker=plausible[0];
+   const correction=clamp(.025+.60*(attacker.stEdge-.025)+
+     .015*clamp(attacker.turnEdge/.40,0,1),0,.07);
+   strength[0]*=1-correction;
+   insidePressureV24.applied=true;
+   insidePressureV24.attacking_lane=attacker.lane;
+   insidePressureV24.attacking_course=attacker.course;
+   insidePressureV24.head_multiplier=+(1-correction).toFixed(6);
+   insidePressureV24.observed_avg_st_edge_sec=+attacker.stEdge.toFixed(4);
+   insidePressureV24.observed_turn_time_edge_sec=+attacker.turnEdge.toFixed(4);
+   insidePressureV24.move_ratio=+attacker.moveRatio.toFixed(4);
+   insidePressureV24.reason='documented_legal_avg_st_and_original_turn_advantage';
+  }
+ }
  const denom=strength.reduce((a,b)=>a+b,0),shares=strength.map(v=>v/denom);
  // Condition second and third on WHICH first-turn maneuver succeeded. If c=3
  // attacks, nearby c2 and inside c1 can survive; if c1 escapes, c2/c3 can chase.

@@ -26,6 +26,7 @@ const FOCUS=Object.freeze({
 const METRICS=Object.freeze({
  exhibition_time:{min:5,max:10,scale:.30},
  lap_time:{min:30,max:50,scale:2.0},
+ half_lap_time:{min:15,max:25,scale:1.0},
  turn_time:{min:4,max:15,scale:.8},
  straight_time:{min:5,max:12,scale:.5}
 });
@@ -34,6 +35,22 @@ const MIX=Object.freeze({
  turn:{turn_time:.80,lap_time:.20},
  straight:{straight_time:.75,exhibition_time:.25}
 });
+// A venue-specific measurement schema: unmeasured is not missing.
+const TWO_METRIC_VENUES=Object.freeze(['住之江','尼崎','徳山']);
+const ALL=Object.freeze(['exhibition_time','lap_time','turn_time','straight_time']);
+function expectedMetrics(venue){
+ if(venue==='江戸川')return [];
+ if(venue==='桐生')return ['exhibition_time','half_lap_time','turn_time','straight_time'];
+ if(TWO_METRIC_VENUES.includes(venue))return ['exhibition_time','lap_time','turn_time'];
+ return Object.prototype.hasOwnProperty.call(FOCUS,venue)?[...ALL]:[];
+}
+function stageMix(venue){
+ return venue==='桐生'?{
+  go:{exhibition_time:.55,half_lap_time:.45},
+  turn:{turn_time:.80,half_lap_time:.20},
+  straight:{straight_time:.75,exhibition_time:.25}
+ }:MIX;
+}
 const clamp=(x,lo,hi)=>Math.max(lo,Math.min(hi,x));
 const valid=(v,lo,hi)=>typeof v==='number'&&Number.isFinite(v)&&v>=lo&&v<=hi;
 function evaluate(input){
@@ -47,11 +64,13 @@ function evaluate(input){
  const documented=Object.prototype.hasOwnProperty.call(FOCUS,venue);
  const eligible=!!(documented&&!excluded&&FOCUS[venue]&&profile&&
    profile.name===venue&&profile.code!=='03'&&input.phase==='exhibition');
+ const expected=expectedMetrics(venue);
  const motorValues=racers.map(r=>r.motor_top_2_percent);
  const motorComplete=motorValues.every(n=>valid(n,0.001,100));
  const means={};
  const arrays={};
  for(const [key,rule] of Object.entries(METRICS)){
+   if(!expected.includes(key))continue;
    const values=racers.map(r=>key==='exhibition_time'?r.exhibition_time:r.original_exhibition?.[key]);
    if(values.every(n=>valid(n,rule.min,rule.max))){
      arrays[key]=values;
@@ -59,6 +78,9 @@ function evaluate(input){
    }
  }
  const completeMetrics=Object.keys(arrays);
+ const missingExpected=expected.filter(key=>!completeMetrics.includes(key));
+ const notMeasured=Object.keys(METRICS).filter(key=>!expected.includes(key));
+ const venueMix=stageMix(venue);
  const active=!!(eligible&&motorComplete&&completeMetrics.length);
  const motorMean=motorComplete?motorValues.reduce((sum,n)=>sum+n,0)/6:null;
  // Nearby forecast wind only flattens a hypothesis; it is NOT a surface
@@ -84,7 +106,7 @@ function evaluate(input){
      const priorities=FOCUS[venue];
      ['go','turn','straight'].forEach((stage,j)=>{
        // Missing components do NOT receive reallocated weights.
-       const signal=Object.entries(MIX[stage]).reduce((sum,[key,w])=>
+       const signal=Object.entries(venueMix[stage]).reduce((sum,[key,w])=>
          sum+(agreement[key]||0)*w,0);
        const log=clamp(.028*priorities[j]*signal*scale,-.035,.035);
        adjustment[stage]=+Math.exp(log).toFixed(6);
@@ -108,6 +130,9 @@ function evaluate(input){
    venue_focus:FOCUS[venue]?{go:FOCUS[venue][0],turn:FOCUS[venue][1],straight:FOCUS[venue][2]}:null,
    metric_coverage:completeMetrics,
    metric_coverage_count:completeMetrics.length,
+   expected_metrics:expected,missing_expected_metrics:missingExpected,
+   not_measured_by_venue:notMeasured,per_race_metric_mix:venueMix,
+   metric_scheme:excluded?'excluded':venue==='桐生'?'half_lap':TWO_METRIC_VENUES.includes(venue)?'lap_turn_only':'lap_turn_straight',
    six_boat_motor_complete:motorComplete,
    wind_caution_from_nearby_forecast:caution,
    tide_unobserved:!!profile?.tide_sensitive,
@@ -117,6 +142,6 @@ function evaluate(input){
    rows
  };
 }
-root.BoatVenueMotorExhibition={evaluate,FOCUS,METRICS};
+root.BoatVenueMotorExhibition={evaluate,FOCUS,METRICS,expectedMetrics,stageMix};
 if(typeof module!=='undefined')module.exports=root.BoatVenueMotorExhibition;
 })(typeof window==='undefined'?globalThis:window);

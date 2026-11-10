@@ -106,7 +106,7 @@ CONDITIONAL_SECOND_MAIN_MODEL = 'four-factor-v2.3-conditional-second-primary-unt
 CONDITIONAL_SECOND_ACTIVATION_UTC = datetime.fromisoformat('2026-11-08T15:00:00+00:00')
 # Forward-only formal revision: never rewrite v2.3 or replay prior races.
 FORMAL_INSIGHT_V24_MODEL = 'four-factor-v2.4-entry-exhibition-balance-untrained'
-FORMAL_INSIGHT_V24_ACTIVATION_UTC = datetime.fromisoformat('2026-11-11T00:45:00+00:00')
+FORMAL_INSIGHT_V24_ACTIVATION_UTC = datetime.fromisoformat('2026-11-10T16:44:00+00:00')
 # User-approved three-leg primary starts only for newly captured pre-cutoff
 # snapshots after this forward activation. Old v2.3 snapshots are immutable.
 THREE_LEG_PRIMARY_ACTIVATION_UTC = datetime.fromisoformat('2026-11-10T01:30:00+00:00')

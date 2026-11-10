@@ -53,6 +53,87 @@ def _group(rows: list[dict], field: str) -> dict:
     return {key: _metrics(subset) for key, subset in sorted(groups.items())}
 
 
+
+# User-selected operational boundary: Shimonoseki 8R (11/10) is the old
+# reference; post-boundary status requires positive pre-cutoff provenance.
+HEAD_RISK_BREAKPOINT_UTC = datetime.fromisoformat("2026-11-10T09:30:59+00:00")
+HEAD_RISK_V02 = "strong-field-parity-diagnostic-v0.2-readonly-coverage"
+
+
+def _head_risk_breakpoint_report(forecasts: list[dict], verified: list[dict],
+                                 day: str) -> dict:
+    """Read-only performance cohorts, NOT a v2.3 ticket-model A/B experiment.
+
+    Classify by each actual frozen snapshot, not venue race number or a later
+    deployment. Formal only; missing diagnostic provenance is not 'after'.
+    """
+    cohorts = ("before_checkpoint", "after_v02_verified", "after_unconfirmed")
+    frozen_counts = Counter()
+    result_rows = {name: [] for name in cohorts}
+    lookup = {}
+    anchor = None
+
+    for r in forecasts:
+        if r.get("ticket_status") != "formal":
+            continue
+        label = "after_unconfirmed"
+        try:
+            stamp = datetime.fromisoformat(r["frozen_at_utc"])
+            if stamp.tzinfo is not None and stamp < HEAD_RISK_BREAKPOINT_UTC:
+                label = "before_checkpoint"
+            elif stamp.tzinfo is not None and stamp >= HEAD_RISK_BREAKPOINT_UTC:
+                diagnostic = r.get("strong_field_diagnostic")
+                if (r.get("phase") == "exhibition"
+                        and isinstance(diagnostic, dict)
+                        and diagnostic.get("version") == HEAD_RISK_V02
+                        and diagnostic.get("coverage_diagnostics_read_only") is True
+                        and diagnostic.get("changes_bets") is False
+                        and diagnostic.get("changes_stake") is False):
+                    label = "after_v02_verified"
+        except (TypeError, ValueError, KeyError):
+            pass
+        frozen_counts[label] += 1
+        lookup[(r.get("venue"), r.get("race"), r.get("sha256"))] = label
+        if day == "2026-11-10" and r.get("venue") == "下関" and r.get("race") == 8:
+            diagnostic = r.get("strong_field_diagnostic")
+            anchor = {
+                "frozen_at_utc": r.get("frozen_at_utc"),
+                "snapshot_sha256": r.get("sha256"),
+                "diagnostic_version": diagnostic.get("version")
+                    if isinstance(diagnostic, dict) else None,
+                "provenance_group": label,
+            }
+
+    for row in verified:
+        if row.get("ticket_status") != "formal":
+            continue
+        label = lookup.get((row["venue"], row["race"], row["snapshot_sha256"]))
+        if label in result_rows:
+            result_rows[label].append(row)
+
+    return {
+        "checkpoint": "2026-11-10 下関8R→9R",
+        "merge_at_utc": HEAD_RISK_BREAKPOINT_UTC.isoformat(),
+        "diagnostic_version_required_after": HEAD_RISK_V02,
+        "anchor_snapshot": anchor if day == "2026-11-10" else None,
+        "frozen_formal_counts": {name: frozen_counts[name] for name in cohorts},
+        "official_verified_formal": {
+            name: _metrics(result_rows[name]) for name in cohorts
+        },
+        "post_cohort_eligibility": (
+            "Only immutable pre-cutoff formal/exhibition forecasts frozen after "
+            "merge with diagnostic v0.2 and read-only flags; otherwise unconfirmed."
+        ),
+        "interpretation": (
+            "New diagnostic adds warnings only, not ticket selections or budget. "
+            "Day/venue composition differs, so before/after hit and ROI changes "
+            "do NOT establish that the warning improved prediction accuracy."
+        ),
+        "historical_bets_modified": False,
+        "research_only": True,
+    }
+
+
 def _verify_race(r: dict, p: dict, day: str) -> tuple[bool, str]:
     if not p or p.get("verified") is not True or p.get("source") != "boatrace_official_pay":
         return False, "unverified"
@@ -558,6 +639,8 @@ def analyze(dataset: dict) -> dict:
         "exclusions": dict(exclusions),
         "unhit_examples": race_examples[:30],
     }
+    if day >= "2026-11-10":
+        report["head_risk_breakpoint"] = _head_risk_breakpoint_report(raw, verified, day)
     report["venue_metric_ablation"] = _venue_metric_ablation_report(
         raw, official, alerts, day
     )

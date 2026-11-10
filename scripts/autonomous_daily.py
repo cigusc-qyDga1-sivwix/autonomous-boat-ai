@@ -1320,7 +1320,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     # and this does not alter the officially frozen picks or stake.
     strong_field_diagnostic = (
         analyze_strong_field(racers, shares, bets, phase=phase,
-                             grade_context=grade_context)
+                             grade_context=grade_context,
+                             ranked_outcomes=(interaction_meta or {}).get("ranked_outcomes"))
         if linked_active else None
     )
     concentration = max(x["relative_share"] for x in shares)

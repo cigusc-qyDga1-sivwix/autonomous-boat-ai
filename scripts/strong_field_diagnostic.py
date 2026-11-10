@@ -8,15 +8,50 @@ from __future__ import annotations
 
 from math import isfinite
 
-VERSION = "strong-field-parity-diagnostic-v0.1-untrained"
+VERSION = "strong-field-parity-diagnostic-v0.2-readonly-coverage"
 MIN_STRONG_RATE = 6.0
 MAX_TOP_FOUR_RATE_SPREAD = 1.5
 MAX_HEAD1_MASS = 0.45
 MAX_TOP_TWO_GAP = 0.10
 
 
+
+def _missing_second_pairs(ranked, bets):
+    """Audit model-relative 1st->2nd coverage using only pre-cutoff scores."""
+    if not isinstance(ranked, list) or len(ranked) != 120:
+        return None
+    seen, head_mass, pair_mass = set(), {}, {}
+    for row in ranked:
+        if not isinstance(row, dict):
+            return None
+        combo, weight = row.get("combination"), row.get("relative_score")
+        parts = combo.split("-") if isinstance(combo, str) else []
+        if (len(parts) != 3 or any(p not in "123456" or len(p) != 1 for p in parts)
+                or len(set(parts)) != 3 or combo in seen
+                or type(weight) not in (int, float) or not isfinite(weight) or weight <= 0):
+            return None
+        seen.add(combo)
+        h, s = int(parts[0]), int(parts[1])
+        head_mass[h] = head_mass.get(h, 0) + weight
+        pair_mass[(h, s)] = pair_mass.get((h, s), 0) + weight
+    if len(seen) != 120 or len(head_mass) != 6 or abs(sum(head_mass.values()) - 1) > 1e-5:
+        return None
+    bought = {(int(b["combination"][0]), int(b["combination"][2])) for b in bets}
+    missing = []
+    for h in sorted({a for a, _ in bought}):
+        partners = sorted(((s, mass / head_mass[h]) for (head, s), mass in pair_mass.items()
+                           if head == h), key=lambda x: (-x[1], x[0]))
+        for rank, (s, share) in enumerate(partners[:2], 1):
+            if share >= .20 and (h, s) not in bought:
+                missing.append({"head_lane": h, "second_lane": s,
+                                "model_relative_share_given_head": round(share, 6),
+                                "partner_rank": rank})
+    return missing
+
+
 def analyze(racers: list[dict], head_shares: list[dict], formal_bets: list[dict],
-            *, phase: str, grade_context: dict | None = None) -> dict:
+            *, phase: str, grade_context: dict | None = None,
+            ranked_outcomes: list[dict] | None = None) -> dict:
     """Separate 'strong field' from 'uncertain winner'; identify head coverage gaps.
 
     National rate is a *proxy* for pre-race ability, not a course-adjusted
@@ -90,6 +125,10 @@ def analyze(racers: list[dict], head_shares: list[dict], formal_bets: list[dict]
     contenders = [lane for lane, share in top
                   if share >= max(0.12, top[0][1] * 0.7)]
     missed = [lane for lane in contenders if lane not in heads_bought]
+    # Independent of close-head status; attention threshold, not win probability.
+    missing_heads = [{"lane": lane, "model_relative_share": round(share, 6)}
+                     for lane, share in top[:2] if lane not in heads_bought and share >= .15]
+    missing_pairs = _missing_second_pairs(ranked_outcomes, formal_bets)
     if strong_field and close_heads:
         status = "STRONG_FIELD_CLOSE_HEADS"
     elif strong_field:
@@ -113,6 +152,12 @@ def analyze(racers: list[dict], head_shares: list[dict], formal_bets: list[dict]
         "head_gap": round(top[0][1] - top[1][1], 6),
         "head_candidates_from_uncalibrated_mass": contenders,
         "head_candidates_absent_from_tickets": missed,
+        "uncovered_top_two_heads": missing_heads,
+        "head_coverage_outside_parity_warning": bool(missing_heads and not close_heads),
+        "second_pair_coverage_status": "ASSESSED" if missing_pairs is not None else "NOT_ASSESSED",
+        "missing_top_second_pairs": missing_pairs or [],
+        "second_pair_coverage_warning": bool(missing_pairs),
+        "coverage_diagnostics_read_only": True,
         # A close winner race needs a head-coverage alert even when national
         # rates do NOT meet the strong-field cutoff (previously silently hidden).
         # This is a diagnostic only: no auto ticket widening or formal change.
@@ -135,6 +180,8 @@ def analyze(racers: list[dict], head_shares: list[dict], formal_bets: list[dict]
             "leading_head_mass_max": MAX_HEAD1_MASS,
             "head_gap_max": MAX_TOP_TWO_GAP,
             "candidate_mass_fraction_of_leader": 0.7,
+            "uncovered_head_relative_mass_min": .15,
+            "second_partner_conditional_mass_min": .20,
         },
         "recommendation": "WATCH_CONTESTED_HEAD" if close_heads and missed else "KEEP_DEFAULT",
         "inference_limit": (

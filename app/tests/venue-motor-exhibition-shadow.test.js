@@ -34,7 +34,14 @@ for(const name of names){
  assert.equal(detail.result_data_used,false);
  assert.equal(detail.pre_cutoff_only,true);
  assert.equal(detail.rows.length,6);
- assert.equal(detail.metric_coverage_count,4);
+ const expectedCount=name==='江戸川'?0:['桐生','住之江','尼崎','徳山'].includes(name)?3:4;
+ assert.equal(detail.metric_coverage_count,expectedCount);
+ assert.equal(detail.expected_metrics.length,name==='江戸川'?0:['住之江','尼崎','徳山'].includes(name)?3:4);
+ if(name==='桐生')assert.ok(detail.missing_expected_metrics.includes('half_lap_time'));
+ if(['住之江','尼崎','徳山'].includes(name)){
+  assert.ok(detail.not_measured_by_venue.includes('straight_time'));
+  assert.ok(!detail.missing_expected_metrics.includes('straight_time'));
+ }
  assert.equal(detail.applied,name!=='江戸川');
  for(const row of detail.rows){
   assert.ok(Object.values(row.multipliers).every(n=>n>=.965&&n<=1.036));
@@ -63,6 +70,23 @@ assert.equal(bridge.ticketSignature([
  {combination:'1-2-3',virtual_yen:5000,relative_score:.11}]));
 assert.notEqual(bridge.ticketSignature([{combination:'1-2-3',virtual_yen:5000}]),
  bridge.ticketSignature([{combination:'1-2-3',virtual_yen:6000}]));
+// Kiryu actually measures half-lap, which must never masquerade as full lap.
+const kiryu=fixture('桐生');
+for(let i=0;i<6;i++){
+ kiryu.racers[i].original_exhibition.half_lap_time=18.1+i*.11;
+ delete kiryu.racers[i].original_exhibition.lap_time;
+}
+const kiryuResult=engine.evaluate(kiryu);
+assert.equal(kiryuResult.metric_scheme,'half_lap');
+assert.ok(kiryuResult.metric_coverage.includes('half_lap_time'));
+assert.ok(!kiryuResult.metric_coverage.includes('lap_time'));
+assert.deepEqual(kiryuResult.missing_expected_metrics,[]);
+assert.ok(kiryuResult.per_race_metric_mix.go.half_lap_time>0);
+assert.ok(kiryuResult.rows[0].multipliers.go>1);
+const two=engine.evaluate(fixture('住之江'));
+assert.equal(two.metric_scheme,'lap_turn_only');
+assert.ok(!two.missing_expected_metrics.includes('straight_time'));
+assert.ok(two.not_measured_by_venue.includes('straight_time'));
 const base=fixture();
 const check=engine.evaluate(base);
 assert.ok(check.rows[0].multipliers.straight>1);

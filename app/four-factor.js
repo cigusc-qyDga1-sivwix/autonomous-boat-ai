@@ -140,7 +140,7 @@ function panel(r){
  const linked=r?.model_version==='four-factor-v2.2-linked-primary-untrained';
  const newerMain=!linked&&r?.model_role==='main'&&/^four-factor-v(?:1\.(?:[6789])|2\.[012])\b/.test(r.model_version||'');
  return '<section class="card card-pad four-factor-panel"><h3>'+(newerMain?'参考：旧4要素の基礎評価':'4要素の基礎評価')+'</h3><p>選手60・モーター25・展示10・気象5</p>'+
-  (newerMain?'<p class="help"><strong>これは旧4要素モデルの参考倍率で、正式v1.6〜v2.1の展開評価や買い目を直接生成する係数ではありません。</strong>最終的な1〜3着評価と採用点数は「6艇の総合評価」にある正式メインの数値をご確認ください。</p>':'')+'<div class="boat-entry-overflow"><table class="bets-table"><thead><tr><th>艇</th>'+labels.map(x=>'<th>'+x+'</th>').join('')+'<th>合成</th></tr></thead><tbody>'+rows+'</tbody></table></div><p class="help">表示は重み適用後の倍率。欠損は中立の×1とし、取得値を捏造しません。'+(linked?'統合v2.2の基礎入力として使い、実進入・場別条件・ST・引き波仮説を通して最終評価へ接続します。':'旧4要素の参考評価で、旧v1.6〜v2.1とは同一計算ではありません。')+'比率は試験設定で、的中確率や金銭的期待値ではありません。</p>'+policyHTML+chaserHTML+'</section>'+roleHTML+motorHTML+stHTML;
+  (newerMain?'<p class="help"><strong>これは旧4要素モデルの参考倍率で、正式v1.6〜v2.1の展開評価や買い目を直接生成する係数ではありません。</strong>最終的な1〜3着評価と採用点数は「6艇の総合評価」にある正式メインの数値をご確認ください。</p>':'')+'<div class="boat-entry-overflow"><table class="bets-table"><thead><tr><th>艇</th>'+labels.map(x=>'<th>'+x+'</th>').join('')+'<th>合成</th></tr></thead><tbody>'+rows+'</tbody></table></div><p class="help">表示は重み適用後の倍率。欠損は中立の×1とし、取得値を捏造しません。'+(linked?'統合v2.2の基礎入力として使い、実進入・場別条件・ST・引き波仮説を通して最終評価へ接続します。':'旧4要素の参考評価で、旧v1.6〜v2.1とは同一計算ではありません。')+'比率は試験設定で、的中確率や金銭的期待値ではありません。</p>'+policyHTML+chaserHTML+'</section>'+roleHTML+motorHTML+stHTML+(root.BoatThreeLegDiagnostic?.panel(r)||'');
 }
 root.BoatFourFactor={evaluate,panel,WEIGHTS};
 if(typeof module!=='undefined')module.exports=root.BoatFourFactor;

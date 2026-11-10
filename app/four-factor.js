@@ -111,6 +111,8 @@ function panel(r){
    '<div class="boat-entry-overflow"><table class="bets-table"><thead><tr><th>艇</th><th>モーター2連対率</th><th>行き足</th><th>旋回</th><th>直線</th></tr></thead><tbody>'+
    vmRows.map(v=>'<tr><td>'+esc(v.lane)+'</td><td>'+pct(v.motor_top2_pct)+'</td><td>'+multiplier(v.multipliers?.go)+'</td><td>'+multiplier(v.multipliers?.turn)+'</td><td>'+multiplier(v.multipliers?.straight)+'</td></tr>').join('')+
    '</tbody></table></div>':'';
+ const vmMetricNames={exhibition_time:'展示',lap_time:'一周',half_lap_time:'半周ラップ',turn_time:'まわり足',straight_time:'直線'};
+ const vmNames=x=>(Array.isArray(x)?x:[]).map(k=>vmMetricNames[k]||k).join('・');
  const vmBets=vm?.status==='ready'&&Array.isArray(vm.trial_bets)?
    '<details><summary>場別モーター×展示 試験買い目（'+vm.trial_bets.length+'点・仮想5万円）</summary>'+
    '<p>正式：'+(vm.control_bets||[]).map(b=>esc(b.combination)).join(' / ')+'</p>'+
@@ -119,7 +121,10 @@ function panel(r){
  const motorHTML=vm?
    '<section class="card card-pad"><h3>場別モーター×展示の一致度（試験・正式とは別）</h3>'+
    '<p class="help">状態：'+esc(vm.status)+' ／ 対象場：'+esc(vm.venue||'未取得')+
-   ' ／ 6艇完備の展示指標：'+esc((vm.metric_coverage||[]).join('・')||'なし')+
+    ' ／ 場別計測：'+esc(vm.metric_scheme||'未確認')+
+    ' ／ 6艇完備：'+esc(vmNames(vm.metric_coverage)||'なし')+
+    ' ／ 未取得：'+esc(vmNames(vm.missing_expected_metrics)||'なし')+
+    ' ／ その場で未計測：'+esc(vmNames(vm.not_measured_by_venue)||'なし')+
    ' ／ 周辺予報風の注意：'+(vm.wind_caution_from_nearby_forecast?'あり':'なし')+'</p>'+
    '<p class="help">モーターの過去2連対率と当日の展示の良し悪しが同方向の場合のみ、小幅に行き足・旋回・直線を試算。展示Fで有利にしません。モーター交換・整備・使用回数・実測潮位は未接続。係数は未学習です。</p>'+
    vmEvidence+vmBets+

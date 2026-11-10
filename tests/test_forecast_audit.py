@@ -170,3 +170,84 @@ def test_shimonoseki_checkpoint_never_attributes_after_without_version():
     assert rep["frozen_formal_counts"]["after_v02_verified"] == 0
     assert rep["frozen_formal_counts"]["after_unconfirmed"] == 1
     assert rep["official_verified_formal"]["after_v02_verified"]["return_rate"] is None
+
+
+def test_nationwide_breakpoint_reports_each_eligible_venue_without_backfilling():
+    from scripts.forecast_audit import _head_risk_breakpoint_report
+    frozen = [
+        {"venue": "下関", "race": 8, "ticket_status": "formal",
+         "phase": "exhibition", "frozen_at_utc": "2026-11-10T09:29:18+00:00",
+         "sha256": "shimonoseki-old",
+         "strong_field_diagnostic": {"version": "strong-field-parity-diagnostic-v0.1-untrained"}},
+        {"venue": "福岡", "race": 11, "ticket_status": "formal",
+         "phase": "exhibition", "frozen_at_utc": "2026-11-10T09:45:00+00:00",
+         "sha256": "fukuoka-new",
+         "strong_field_diagnostic": {
+             "version": "strong-field-parity-diagnostic-v0.2-readonly-coverage",
+             "coverage_diagnostics_read_only": True,
+             "changes_bets": False, "changes_stake": False,
+             "head_coverage_outside_parity_warning": True,
+             "second_pair_coverage_warning": True}},
+        {"venue": "平和島", "race": 11, "ticket_status": "formal",
+         "phase": "exhibition", "frozen_at_utc": "2026-11-10T09:46:00+00:00",
+         "sha256": "heiwajima-unverified",
+         "strong_field_diagnostic": {
+             "version": "strong-field-parity-diagnostic-v0.1-untrained"}},
+        {"venue": "福岡", "race": 12, "ticket_status": "baseline",
+         "phase": "baseline", "frozen_at_utc": "2026-11-10T09:47:00+00:00",
+         "sha256": "fukuoka-provisional"},
+    ]
+    verified = [
+        {"venue": "下関", "race": 8, "ticket_status": "formal",
+         "snapshot_sha256": "shimonoseki-old", "stage": "hit",
+         "virtual_stake_yen": 50000, "virtual_payout_yen": 100000},
+        {"venue": "福岡", "race": 11, "ticket_status": "formal",
+         "snapshot_sha256": "fukuoka-new", "stage": "second_miss",
+         "virtual_stake_yen": 50000, "virtual_payout_yen": 0},
+        # Mismatched SHA must not be included in the report's venue cohort.
+        {"venue": "平和島", "race": 11, "ticket_status": "formal",
+         "snapshot_sha256": "mismatched-sha", "stage": "hit",
+         "virtual_stake_yen": 50000, "virtual_payout_yen": 200000},
+    ]
+    source = deepcopy(frozen)
+    out = _head_risk_breakpoint_report(frozen, verified, "2026-11-10")
+    assert len(out["eligible_venues"]) == 23
+    assert out["excluded_venue"] == "江戸川"
+    assert "江戸川" not in out["by_venue"]
+    venues = out["by_venue"]
+    assert venues["下関"]["status"] == "BEFORE_CHECKPOINT_ONLY"
+    assert venues["下関"]["official_verified_formal"]["before_checkpoint"]["hits"] == 1
+    assert venues["福岡"]["status"] == "AFTER_V02_VERIFIED"
+    assert venues["福岡"]["formal_frozen_counts"]["after_v02_verified"] == 1
+    assert venues["福岡"]["official_verified_formal"]["after_v02_verified"]["second_miss"] == 1
+    assert venues["福岡"]["first_v02_pre_cutoff_snapshot"]["snapshot_sha256"] == "fukuoka-new"
+    assert venues["福岡"]["new_diagnostic_warning_counts"] == {
+        "uncovered_head_alerts": 1, "missing_second_pair_alerts": 1}
+    assert venues["平和島"]["status"] == "AFTER_NOT_VERIFIED"
+    assert venues["平和島"]["official_verified_formal"]["after_unconfirmed"]["verified_races"] == 0
+    assert venues["戸田"]["status"] == "NO_FORMAL_FORECAST_RECORDED"
+    assert venues["戸田"]["official_verified_formal"]["after_v02_verified"]["return_rate"] is None
+    assert frozen == source
+
+
+def test_venue_breakpoint_tracks_first_confirmed_snapshot_by_actual_freeze():
+    from scripts.forecast_audit import _head_risk_breakpoint_report
+    version = "strong-field-parity-diagnostic-v0.2-readonly-coverage"
+    rows = [
+        {"venue": "三国", "race": 12, "ticket_status": "formal",
+         "phase": "exhibition", "frozen_at_utc": "2026-11-10T10:30:00+00:00",
+         "sha256": "later", "strong_field_diagnostic": {
+             "version": version, "coverage_diagnostics_read_only": True,
+             "changes_bets": False, "changes_stake": False}},
+        {"venue": "三国", "race": 11, "ticket_status": "formal",
+         "phase": "exhibition", "frozen_at_utc": "2026-11-10T10:10:00+00:00",
+         "sha256": "earlier", "strong_field_diagnostic": {
+             "version": version, "coverage_diagnostics_read_only": True,
+             "changes_bets": False, "changes_stake": False}},
+    ]
+    results = _head_risk_breakpoint_report(rows, [], "2026-11-10")
+    first = results["by_venue"]["三国"]["first_v02_pre_cutoff_snapshot"]
+    assert first["race"] == 11
+    assert first["snapshot_sha256"] == "earlier"
+    assert results["by_venue"]["三国"]["formal_frozen_counts"]["after_v02_verified"] == 2
+    assert results["by_venue"]["三国"]["official_verified_formal"]["after_v02_verified"]["verified_races"] == 0

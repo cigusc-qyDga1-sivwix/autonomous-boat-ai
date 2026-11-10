@@ -58,6 +58,13 @@ def _group(rows: list[dict], field: str) -> dict:
 # reference; post-boundary status requires positive pre-cutoff provenance.
 HEAD_RISK_BREAKPOINT_UTC = datetime.fromisoformat("2026-11-10T09:30:59+00:00")
 HEAD_RISK_V02 = "strong-field-parity-diagnostic-v0.2-readonly-coverage"
+HEAD_RISK_ELIGIBLE_VENUES = (
+    "桐生", "戸田", "平和島", "多摩川", "浜名湖", "蒲郡", "常滑",
+    "津", "三国", "びわこ", "住之江", "尼崎", "鳴門", "丸亀",
+    "児島", "宮島", "徳山", "下関", "若松", "芦屋", "福岡",
+    "唐津", "大村",
+)
+# 江戸川 is excluded from current BOAT LAB rollout; no silent classification.
 
 
 def _head_risk_breakpoint_report(forecasts: list[dict], verified: list[dict],
@@ -70,6 +77,11 @@ def _head_risk_breakpoint_report(forecasts: list[dict], verified: list[dict],
     cohorts = ("before_checkpoint", "after_v02_verified", "after_unconfirmed")
     frozen_counts = Counter()
     result_rows = {name: [] for name in cohorts}
+    # Per-venue evidence; venues with no races are explicitly unverified.
+    venue_frozen = defaultdict(Counter)
+    venue_results = defaultdict(lambda: {name: [] for name in cohorts})
+    first_v02 = {}
+    venue_warnings = defaultdict(Counter)
     lookup = {}
     anchor = None
 
@@ -93,6 +105,22 @@ def _head_risk_breakpoint_report(forecasts: list[dict], verified: list[dict],
         except (TypeError, ValueError, KeyError):
             pass
         frozen_counts[label] += 1
+        venue = r.get("venue")
+        if isinstance(venue, str) and venue:
+            venue_frozen[venue][label] += 1
+            if label == "after_v02_verified":
+                diag = r["strong_field_diagnostic"]
+                if diag.get("head_coverage_warning") or diag.get("head_coverage_outside_parity_warning"):
+                    venue_warnings[venue]["uncovered_head_alerts"] += 1
+                if diag.get("second_pair_coverage_warning"):
+                    venue_warnings[venue]["missing_second_pair_alerts"] += 1
+                record = {
+                    "race": r.get("race"),
+                    "frozen_at_utc": r.get("frozen_at_utc"),
+                    "snapshot_sha256": r.get("sha256"),
+                }
+                if venue not in first_v02 or stamp < first_v02[venue][0]:
+                    first_v02[venue] = (stamp, record)
         lookup[(r.get("venue"), r.get("race"), r.get("sha256"))] = label
         if day == "2026-11-10" and r.get("venue") == "下関" and r.get("race") == 8:
             diagnostic = r.get("strong_field_diagnostic")
@@ -110,6 +138,37 @@ def _head_risk_breakpoint_report(forecasts: list[dict], verified: list[dict],
         label = lookup.get((row["venue"], row["race"], row["snapshot_sha256"]))
         if label in result_rows:
             result_rows[label].append(row)
+            venue_results[row["venue"]][label].append(row)
+
+    def venue_status(venue: str) -> str:
+        counts = venue_frozen[venue]
+        if sum(counts.values()) == 0:
+            return "NO_FORMAL_FORECAST_RECORDED"
+        if counts["after_unconfirmed"]:
+            return "PARTIALLY_UNCONFIRMED" if counts["after_v02_verified"] else "AFTER_NOT_VERIFIED"
+        if counts["after_v02_verified"]:
+            return "AFTER_V02_VERIFIED"
+        return "BEFORE_CHECKPOINT_ONLY"
+
+    by_venue = {
+        venue: {
+            "status": venue_status(venue),
+            "formal_frozen_counts": {
+                name: venue_frozen[venue][name] for name in cohorts
+            },
+            "official_verified_formal": {
+                name: _metrics(venue_results[venue][name]) for name in cohorts
+            },
+            "first_v02_pre_cutoff_snapshot": (
+                first_v02[venue][1] if venue in first_v02 else None
+            ),
+            "new_diagnostic_warning_counts": {
+                "uncovered_head_alerts": venue_warnings[venue]["uncovered_head_alerts"],
+                "missing_second_pair_alerts": venue_warnings[venue]["missing_second_pair_alerts"],
+            },
+        }
+        for venue in sorted(set(HEAD_RISK_ELIGIBLE_VENUES) | set(venue_frozen))
+    }
 
     return {
         "checkpoint": "2026-11-10 下関8R→9R",
@@ -120,6 +179,14 @@ def _head_risk_breakpoint_report(forecasts: list[dict], verified: list[dict],
         "official_verified_formal": {
             name: _metrics(result_rows[name]) for name in cohorts
         },
+        "by_venue": by_venue,
+        "eligible_venues": list(HEAD_RISK_ELIGIBLE_VENUES),
+        "excluded_venue": "江戸川",
+        "venue_reporting_note": (
+            "Per-venue status requires each individual immutable pre-cutoff "
+            "snapshot with v0.2 evidence. No forecast does not mean a failed venue. "
+            "Official results are not counted until SHA matched and verified."
+        ),
         "post_cohort_eligibility": (
             "Only immutable pre-cutoff formal/exhibition forecasts frozen after "
             "merge with diagnostic v0.2 and read-only flags; otherwise unconfirmed."

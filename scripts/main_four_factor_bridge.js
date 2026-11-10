@@ -9,6 +9,7 @@ const fs=require('node:fs');
 require('../app/four-factor.js');
 require('../app/venue-tactics-v2.js');
 require('../app/venue-motor-exhibition.js');
+require('../app/three-leg-primary.js');
 require('../app/tactical-1m.js');
 require('../app/role-skill-shadow.js');
 const model=globalThis.BoatTacticalModel;
@@ -38,6 +39,7 @@ function run(input){
  const result=forecast({
   venue:input.venue,phase:input.phase,racers:input.racers,
   linked_primary_trial:input.linked_primary_trial===true,
+  three_leg_primary_trial:input.three_leg_primary_trial===true,
   weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
   frozen_at_utc:input.frozen_at_utc,
   surface_trial_disabled:input.surface_trial_disabled===true,
@@ -51,6 +53,7 @@ function run(input){
  const surfaceControl=surface.applied?forecast({
   venue:input.venue,phase:input.phase,racers:input.racers,
   linked_primary_trial:input.linked_primary_trial===true,
+  three_leg_primary_trial:input.three_leg_primary_trial===true,
   weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
   frozen_at_utc:input.frozen_at_utc,surface_trial_disabled:true,
   venue_tactics_disabled:input.venue_tactics_disabled===true
@@ -93,6 +96,7 @@ function run(input){
    const shadow=forecast({
      venue:input.venue,phase:input.phase,racers:input.racers,
   linked_primary_trial:input.linked_primary_trial===true,
+     three_leg_primary_trial:input.three_leg_primary_trial===true,
      weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
      frozen_at_utc:input.frozen_at_utc,
      surface_trial_disabled:input.surface_trial_disabled===true,
@@ -119,6 +123,7 @@ function run(input){
          const candidate=forecast({
            venue:input.venue,phase:input.phase,racers:input.racers,
            linked_primary_trial:input.linked_primary_trial===true,
+           three_leg_primary_trial:input.three_leg_primary_trial===true,
            weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
            frozen_at_utc:input.frozen_at_utc,
            surface_trial_disabled:input.surface_trial_disabled===true,

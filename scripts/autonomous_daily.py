@@ -29,6 +29,7 @@ if __package__:
     from .attack_defense_shadow import rescore as rescore_attack_defence_shadow
     from .grade_competition_shadow import grade_from_program, rescore as rescore_grade_competition
     from .strong_field_diagnostic import analyze as analyze_strong_field
+    from .coverage_reselection_shadow import review as review_coverage_shadow
     from .exhibition_bridge import available_rows, inject, verified_original_for_openapi
     from .official_withdrawals import fetch_notices, match_lanes
     from .entry_exhibition_gate import validated_preview, summarize_gate
@@ -47,6 +48,7 @@ else:
     from attack_defense_shadow import rescore as rescore_attack_defence_shadow
     from grade_competition_shadow import grade_from_program, rescore as rescore_grade_competition
     from strong_field_diagnostic import analyze as analyze_strong_field
+    from coverage_reselection_shadow import review as review_coverage_shadow
     from exhibition_bridge import available_rows, inject, verified_original_for_openapi
     from official_withdrawals import fetch_notices, match_lanes
     from entry_exhibition_gate import validated_preview, summarize_gate
@@ -59,6 +61,7 @@ else:
 
 JST = ZoneInfo("Asia/Tokyo")
 UTC = timezone.utc
+COVERAGE_RESELECTION_SHADOW_ACTIVATION_UTC = datetime(2026, 11, 10, 15, tzinfo=UTC)
 SOURCE = "https://boatraceopenapi.github.io/api/v1"
 APP_DATA = Path("app/data/live")
 VENUES = {
@@ -1324,6 +1327,31 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
                              ranked_outcomes=(interaction_meta or {}).get("ranked_outcomes"))
         if linked_active else None
     )
+    # A pre-cutoff research alternative only. Never change the formal v2.3
+    # selection, forecast history, or the formal 50,000-yen budget.
+    coverage_reselection_shadow = None
+    if (linked_active and venue != "江戸川"
+            and now.astimezone(UTC) >= COVERAGE_RESELECTION_SHADOW_ACTIVATION_UTC
+            and cutoff.astimezone(UTC) > COVERAGE_RESELECTION_SHADOW_ACTIVATION_UTC):
+        try:
+            coverage_reselection_shadow = review_coverage_shadow(
+                bets, (interaction_meta or {}).get("ranked_outcomes"),
+                strong_field_diagnostic,
+                (interaction_meta or {}).get("scenario_assumptions"),
+                (interaction_meta or {}).get("point_policy"),
+                phase=phase,
+                exhibition_verified=bool(pre_cutoff_leg_gate["final_eligible"]))
+            coverage_reselection_shadow["frozen_at_utc"] = frozen_at
+            coverage_reselection_shadow["formal_bets_sha256"] = stable_hash({"bets": bets})
+        except (ValueError, TypeError, KeyError, AssertionError) as exc:
+            coverage_reselection_shadow = {
+                "version": "coverage-reselection-shadow-v0.1-untrained",
+                "status": "UNAVAILABLE", "reason": type(exc).__name__,
+                "model_role": "research_shadow", "not_formal": True,
+                "no_additional_stake": True, "results_used": False,
+                "frozen_at_utc": frozen_at,
+                "formal_bets_sha256": stable_hash({"bets": bets}),
+            }
     concentration = max(x["relative_share"] for x in shares)
     top_two = sorted((x["relative_share"] for x in shares), reverse=True)
     gap = top_two[0] - top_two[1]
@@ -1368,6 +1396,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         "model_version": chosen_model,
         "grade_context": grade_context,
         **({"strong_field_diagnostic": strong_field_diagnostic} if strong_field_diagnostic else {}),
+        **({"coverage_reselection_shadow": coverage_reselection_shadow} if coverage_reselection_shadow else {}),
         **({"grade_competition_shadow": grade_competition_shadow} if grade_competition_shadow else {}),
         **({"interaction_primary": interaction_meta} if interaction_meta else {}),
         **({"three_leg_primary": three_leg_primary_meta} if three_leg_primary_meta else {}),
@@ -1794,6 +1823,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "role_skill_shadow", "venue_motor_exhibition_shadow", "interaction_primary",
                       "three_leg_primary",
                       "attack_defence_shadow", "grade_context", "grade_competition_shadow", "strong_field_diagnostic",
+                      "coverage_reselection_shadow",
                       "exhibition_input_check", "relative_scores_uncalibrated"):
             if extra in current:
                 r[extra] = current[extra]

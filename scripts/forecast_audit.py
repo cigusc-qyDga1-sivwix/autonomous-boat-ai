@@ -8,6 +8,7 @@ the corresponding pre-cutoff snapshots. Missing payouts are NOT losses.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from collections import Counter, defaultdict
 from datetime import datetime, timezone, timedelta
@@ -508,6 +509,114 @@ def _three_leg_primary_report(forecasts, official, alerts, day):
     }
 
 
+def _coverage_reselection_forward_report(forecasts, official, alerts, day):
+    """Equal-point formal vs immutable PRE-CUTOFF coverage shadow; never refit."""
+    formal, trial = [], []
+    venues = defaultdict(lambda: {"formal": [], "trial": []})
+    groups = defaultdict(lambda: {"formal": [], "trial": []})
+    states = Counter()
+    exclusions = Counter()
+    proposed = 0
+    for snapshot in forecasts:
+        s = snapshot.get("coverage_reselection_shadow")
+        if not isinstance(s, dict):
+            continue
+        states[str(s.get("status", "UNKNOWN"))] += 1
+        if s.get("status") != "PROPOSED_FOR_FORWARD_TEST_ONLY":
+            continue
+        proposed += 1
+        key = f"{day}|{snapshot['venue']}|{snapshot['race']}"
+        if key in alerts:
+            exclusions["official_refund_or_conflict"] += 1
+            continue
+        valid, why = _verify_race(snapshot, official.get(key), day)
+        if not valid:
+            exclusions["official_" + why] += 1
+            continue
+        if (snapshot.get("ticket_status") != "formal"
+                or snapshot.get("phase") != "exhibition"
+                or snapshot.get("model_version") !=
+                "four-factor-v2.3-conditional-second-primary-untrained"
+                or s.get("version") != "coverage-reselection-shadow-v0.1-untrained"
+                or s.get("model_role") != "research_shadow"
+                or s.get("not_formal") is not True
+                or s.get("no_additional_stake") is not True
+                or s.get("results_used") is not False
+                or s.get("odds_used") is not False
+                or s.get("formal_bets_unchanged") is not True
+                or s.get("same_point_count") is not True
+                or s.get("point_count_matched") is not True
+                or s.get("actual_ticket_or_allocation_change") is not True
+                or s.get("frozen_at_utc") != snapshot.get("frozen_at_utc")):
+            exclusions["invalid_pre_cutoff_provenance"] += 1
+            continue
+        base = snapshot.get("bets")
+        alternative = s.get("forecast_alternative_bets")
+        if (not _valid_shadow_tickets(base) or not _valid_shadow_tickets(alternative)
+                or len(base) != len(alternative)):
+            exclusions["invalid_budget_or_points"] += 1
+            continue
+        meta = snapshot.get("interaction_primary")
+        if not isinstance(meta, dict):
+            exclusions["missing_ranked_source"] += 1
+            continue
+        source = {"ranked": meta.get("ranked_outcomes"),
+                  "formal_bets": base, "scenarios": meta.get("scenario_assumptions")}
+        if not isinstance(source["ranked"], list) or len(source["ranked"]) != 120:
+            exclusions["missing_ranked_source"] += 1
+            continue
+        def sha(data):
+            return hashlib.sha256(json.dumps(
+                data, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")).hexdigest()
+        if (s.get("formal_bets_sha256") != sha({"bets": base})
+                or s.get("source_input_sha256") != sha(source)):
+            exclusions["input_sha_mismatch"] += 1
+            continue
+        paid = official[key]
+        a = _shadow_trial_result(snapshot, base, paid)
+        b = _shadow_trial_result(snapshot, alternative, paid)
+        formal.append(a)
+        trial.append(b)
+        venues[snapshot["venue"]]["formal"].append(a)
+        venues[snapshot["venue"]]["trial"].append(b)
+        category = str(s.get("replacement", {}).get("coverage_kind", "unclassified"))
+        groups[category]["formal"].append(a)
+        groups[category]["trial"].append(b)
+    def table(source):
+        return {
+            name: {"formal": _metrics(rows["formal"]),
+                   "research_shadow": _metrics(rows["trial"])}
+            for name, rows in sorted(source.items())
+        }
+    return {
+        "protocol": "same-frozen-input-coverage-shadow-v0.1-vs-formal-v2.3",
+        "not_formal_performance": True,
+        "no_backfilled_counterfactuals": True,
+        "same_point_count_and_50000yen": True,
+        "generated_status_counts": dict(sorted(states.items())),
+        "frozen_proposals": proposed,
+        "official_verified_sha_matched_pairs": len(formal),
+        "formal_v23": _metrics(formal),
+        "research_shadow": _metrics(trial),
+        "head_misses_recovered": sum(a["stage"] == "head_miss"
+                                    and b["stage"] != "head_miss"
+                                    for a, b in zip(formal, trial)),
+        "new_head_misses": sum(a["stage"] != "head_miss"
+                               and b["stage"] == "head_miss"
+                               for a, b in zip(formal, trial)),
+        "second_misses_recovered": sum(a["stage"] == "second_miss"
+                                       and b["stage"] in ("hit", "third_miss")
+                                       for a, b in zip(formal, trial)),
+        "by_venue": table(venues),
+        "by_coverage_kind": table(groups),
+        "exclusions": dict(sorted(exclusions.items())),
+        "warning": ("Model-only hypothetical path support is not an observed "
+                    "win condition. Do not infer hit/ROI improvement before "
+                    ">=100 independent pre-cutoff matched races and venue splits."),
+    }
+
+
 def analyze(dataset: dict) -> dict:
     """Audit a single daily snapshot; never add unresolved races as losers."""
     day = dataset["event_date"]
@@ -713,6 +822,9 @@ def analyze(dataset: dict) -> dict:
     )
     report["three_leg_primary_comparison"] = _three_leg_primary_report(
         raw, official, alerts, day
+    )
+    report["coverage_reselection_forward_comparison"] = (
+        _coverage_reselection_forward_report(raw, official, alerts, day)
     )
     if len(verified) >= 20:
         report["warnings"] = [

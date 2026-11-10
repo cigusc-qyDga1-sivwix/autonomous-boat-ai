@@ -18,7 +18,9 @@ else:
     from ingest_boatracecsv_exhibition import preview_signature, original_exhibition_signature
 
 SOURCE_NAME = "BoatraceCSV"
+# Venue 01 Kiryu has half-lap, not full-lap timing; never conflate them.
 METRICS = {"一周": ("lap_time", 30, 50),
+           "半周ラップ": ("half_lap_time", 15, 25),
            "まわり足": ("turn_time", 4, 15),
            "直線": ("straight_time", 5, 12)}
 

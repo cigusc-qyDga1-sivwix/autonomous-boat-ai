@@ -18,9 +18,12 @@ jobs:
           import json
           from pathlib import Path
           data=json.loads(Path("app/data/live/2026-11-10.json").read_text(encoding="utf-8"))
-          rows=[r for r in data["forecast_races"] if r.get("venue")=="下関" and str(r.get("race"))=="9"]
-          assert len(rows)==1, "expect exactly one frozen Shimonoseki 9R"
-          row=rows[0]
+          record=data.get("race_records",{}).get("19-9") or {}
+          rows=record.get("versions") or []
+          target_sha="80d2e603743bb58a87bc0a2f198bb4f6ea587094daf06a7ec5c6fc145ec80327"
+          matched=[v for v in rows if v.get("sha256")==target_sha]
+          assert len(matched)==1, "frozen SHA not found or duplicated: "+str([(v.get("sha256"),v.get("frozen_at_utc")) for v in rows])
+          row=matched[0]
           diag=row.get("strong_field_diagnostic") or {}
           meta=row.get("interaction_primary") or {}
           chosen=["venue","race","phase","ticket_status","classification","frozen_at_utc","cutoff_jst",

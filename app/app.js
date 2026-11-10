@@ -220,7 +220,7 @@
     return {now:jp.format(current),today:extract('year')+'-'+extract('month')+'-'+extract('day'),favorites,filter:state.boardFilter,sort:state.boardSort};
   }
   function overview() {
-    if(window.BoatVenueBoard) return (window.BoatRaceTimeline?.render(data)||'')+window.BoatVenueBoard.renderHome(data,boardOptions());
+    if(window.BoatVenueBoard) return '<details class="bl-timeline-disclosure"><summary>締切順・展示待ちの一覧を開く</summary>'+(window.BoatRaceTimeline?.render(data)||'')+'</details>'+window.BoatVenueBoard.renderHome(data,boardOptions());
     const all=allRaces();const recorded=stats(all);const countWatch=all.filter(r=>r.classification==='WATCH').length;const countSkip=all.filter(r=>r.classification==='SKIP').length;const isLive=data.mode==='auto-live';const dayJst=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());const stale=isLive&&dayJst!==data.event_date;const updated=isLive&&data.updated_at_utc?new Date(data.updated_at_utc).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'}):'未確認';
     const nowJst=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());const soon=all.filter(r=>r.classification==='WATCH' && (data.mode!=='auto-live'||r.cutoff_jst>nowJst)).sort((a,b)=>a.cutoff_jst.localeCompare(b.cutoff_jst)).slice(0,6);
     return `${head('AI予想ダッシュボード',`${dateDisplay(data.event_date)} ・ ${getVenues().length}場 / ${data.mode==='auto-live'?'全国開催・自動取得（非公式）':'展示前の固定予想'}` ,`<button class="btn btn-white" data-action="export-results">↧ 結果CSV</button>`)}
@@ -921,9 +921,14 @@
     const main=el('main');
     el('breadcrumb-label').textContent=titles[state.view];
     document.querySelectorAll('[data-view]').forEach(b=>{b.classList.toggle('active',b.dataset.view===state.view);if(b.dataset.view===state.view)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
-    const desk=(state.view==='overview'||(state.view==='races'&&!state.raceDetail))?
+    const deskInner=(state.view==='overview'||(state.view==='races'&&!state.raceDetail))?
       (window.BoatLabUIConsole?.render(data)||''):'';
-    main.innerHTML=(window.BoatExhibitionAudit?.banner(data)||'')+desk+
+    const desk=deskInner?'<details class="bl-desk-disclosure"><summary>データ取得・展示反映の稼働状況</summary>'+deskInner+'</details>':'';
+    const focus=(state.view==='overview'||(state.view==='races'&&!state.raceDetail))?
+      (window.BoatPredictionFocus?.render(data,new Date(),window.BoatTicketPolicy,{
+        imported:!!readJSON(STORE_DATA,null),venue:state.view==='races'?state.venue:'全場'
+      })||''):'';
+    main.innerHTML=(window.BoatExhibitionAudit?.banner(data)||'')+focus+desk+
       ({overview,races,results:resultsPage,analysis,settings})[state.view]();
     if(['results','analysis'].includes(state.view)&&window.BoatCumulative?.needsRefresh?.()){
       void window.BoatCumulative.load().then(()=>{if(['results','analysis'].includes(state.view))render()}).catch(()=>{});
@@ -951,6 +956,11 @@
   function exportResultsCSV(){const header=['date','venue','race','classification','cutoff_jst','finish','payout_per_100','is_hit','stake_yen','virtual_payout_yen','virtual_profit_yen','recorded_at','source'];const body=allRaces().map(r=>{let c=compute(r);return [data.event_date,r.venue,r.race,r.classification,r.cutoff_jst,c.record?.finish||'',c.record?.payout_per_100??'',c.record?Number(c.hit):'',c.record?c.stake:'',c.payout??'',c.profit??'',c.record?.recorded_at||'',c.record?(c.record.source||'manual'):''];});const csv=[header,...body].map(a=>a.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\r\n');download(`boatlab-results-${data.event_date}.csv`,'\uFEFF'+csv,'text/csv;charset=utf-8');toast('結果CSVを書き出したよ');}
   function copyBets(r){const s=`${data.event_date} ${r.venue} ${r.race}R ${r.cutoff_jst} [${r.classification}] ${ticketLabel(r)}（${r.bets.length}点）\n${r.scenario}\n${r.bets.map((b,i)=>`${i+1}. ${b.combination} ${money(b.virtual_yen)}`).join('\n')}\n合計 ${money(r.bets.reduce((s,b)=>s+b.virtual_yen,0))} / 研究用・仮想`;if(navigator.clipboard?.writeText)navigator.clipboard.writeText(s).then(()=>toast('買い目をコピーしたよ'),()=>toast('コピーできませんでした'));else {const t=document.createElement('textarea');t.value=s;document.body.append(t);t.select();document.execCommand('copy');t.remove();toast('買い目をコピーしたよ');}}
   document.addEventListener('click',e=>{
+    const focusMode=e.target.closest('[data-focus-mode]');
+    if(focusMode&&window.BoatPredictionFocus){
+      window.BoatPredictionFocus.setMode(focusMode.dataset.focusMode);
+      render();return;
+    }
     const timelineFilter=e.target.closest('[data-timeline-filter]');
     if(timelineFilter&&window.BoatRaceTimeline){
       window.BoatRaceTimeline.setFilter(timelineFilter.dataset.timelineFilter);

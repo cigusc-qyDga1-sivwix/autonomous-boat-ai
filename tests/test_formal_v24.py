@@ -46,7 +46,7 @@ def test_v24_forward_formal_and_same_time_v23_control():
     poisoned["result"] = {"finish": "6-5-4", "payout_per_100": 999999}
     assert A.prediction(poisoned, "福岡", 1, "exhibition", now, "fixture") == frozen
     prior = A.prediction(fixture(), "福岡", 1, "exhibition",
-                         datetime.fromisoformat("2026-11-11T09:40:00+09:00"),
+                         datetime.fromisoformat("2026-11-11T01:40:00+09:00"),
                          "fixture")
     assert prior["model_version"] == A.CONDITIONAL_SECOND_MAIN_MODEL
     assert "formal_insight_v24" not in prior

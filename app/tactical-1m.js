@@ -902,6 +902,7 @@ function forecast(input){
        proof_note:'Untrained relative model, not calibrated win probabilities. No blanket exterior picks.'
      }}:{}),
      ...(openChasers?{venue_surface_v1:venueSurface}:{}),
+     ...(input.formal_insight_v24===true?{formal_inside_pressure_v24:insidePressureV24}:{}),
      ...(formalLegs?{three_leg_primary_v1:formalLegs}:{}),
      ...(motorExhibition?{venue_motor_exhibition_v1:motorExhibition}:{}),
      ...(venueAware?{venue_tactics_v2:({

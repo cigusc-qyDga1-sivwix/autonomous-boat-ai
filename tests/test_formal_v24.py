@@ -29,6 +29,12 @@ def test_v24_forward_formal_and_same_time_v23_control():
     frozen = A.prediction(src, "福岡", 1, "exhibition", now, "fixture")
     assert frozen["model_version"] == A.FORMAL_INSIGHT_V24_MODEL
     assert frozen["interaction_primary"]["result_data_used"] is False
+    assert frozen["venue_tactics_v2"]["eligible"] is True
+    assert frozen["venue_tactics_v2"]["excluded"] is False
+    assert frozen["venue_tactics_v2"]["result_data_used"] is False
+    assert frozen["postrace_conditional_v13"]["result_data_used"] is False
+    assert frozen["venue_tactics_ab"]["generated_pre_cutoff"] is True
+    assert frozen["postrace_conditional_control"]["generated_pre_cutoff"] is True
     meta = frozen["formal_insight_v24"]
     assert meta["formal_component"] is True
     assert meta["pre_cutoff_only"] is True

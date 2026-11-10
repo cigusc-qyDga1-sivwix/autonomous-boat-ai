@@ -53,11 +53,14 @@
     const shown=r.bets.slice(0,3);
     const total=r.bets.reduce((n,b)=>n+(Number.isSafeInteger(b.virtual_yen)?b.virtual_yen:0),0);
     const classified=r.classification==='SKIP'?' / SKIP':r.classification==='BUY'?' / BUY分類':' / WATCH分類';
+    const scenario=typeof r.scenario==='string'&&r.scenario.trim()?
+      '<p class="bl-focus-scenario"><strong>保存時の展開仮説</strong>'+esc(r.scenario)+'</p>':'';
     return '<article class="bl-focus-card is-'+kind+'">'+
       '<div class="bl-focus-card-head"><div><strong>'+esc(r.venue)+' <span>'+r.race+'R</span></strong>'+
       '<small>締切予定 '+esc(r.cutoff_jst)+' JST'+esc(classified)+'</small></div>'+
       '<span class="bl-focus-status is-'+kind+'">'+label+'</span></div>'+
       '<div class="bl-focus-tickets">'+shown.map((b,i)=>ticket(r,i)).join('')+'</div>'+
+      scenario+
       '<div class="bl-focus-card-bottom"><span>先頭'+shown.length+'点を表示 / 全'+r.bets.length+'点・仮想'+money(total)+'</span>'+
       '<button type="button" data-race="'+esc(r.venue)+'|'+r.race+'" aria-label="'+esc(r.venue+' '+r.race)+'Rの'+(formal?'正式':'暫定')+'予想詳細を開く">全買い目を見る <span aria-hidden="true">→</span></button></div>'+
       (formal?'<p class="bl-focus-note">正式固定の確認済み。BUYの採算判断・オッズ確認とは別です。</p>':
@@ -72,6 +75,12 @@
     const updated=s.updated?new Date(s.updated):null;
     const updatedAt=updated&&!Number.isNaN(updated.getTime())?
       updated.toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'時刻未確認';
+    const ageMinutes=updated&&!Number.isNaN(updated.getTime())?
+      Math.max(0,Math.floor((now.getTime()-updated.getTime())/60000)):null;
+    const delayed=s.current&&(ageMinutes===null||ageMinutes>20);
+    const freshnessNote=delayed?'<p class="bl-focus-delay" role="status">⚠ 予想データの更新が遅れています（'+
+      (ageMinutes===null?'最終取得時刻不明':esc(ageMinutes)+'分前')+
+      '）。最新の展示・締切情報は未確認です。</p>':'';
     const count=s.formal.length+s.research.length;
     const title=s.venue?s.venue+'の予想を先に確認':'直近の予想を先に確認';
     return '<section class="bl-focus-board" aria-label="買い目を先に確認するクイックボード">'+
@@ -83,6 +92,7 @@
       '<span><strong>'+esc(s.first?.cutoff_jst||'—')+'</strong>次の締切予定</span></div>':
       '<div class="bl-focus-old" role="status">表示中の記録は'+esc(s.day||'日付不明')+
       '分です。今日の予想・締切として扱いません。</div>')+
+      freshnessNote+
       '<div class="bl-focus-switch" role="group" aria-label="予想の種類">'+
       '<button type="button" data-focus-mode="formal" aria-pressed="'+(mode==='formal')+'"'+
       (mode==='formal'?' class="active"':'')+'>正式予想 <span>'+s.formal.length+'</span></button>'+

@@ -104,8 +104,53 @@ function run(input){
       detail.pre_cutoff_only!==true||detail.result_data_used!==false||
       !validBets(shadow.bets,model.ticketMaxPoints(input)))
      throw Error('invalid motor/exhibition shadow provenance or tickets');
+   // Independent one-metric-at-a-time prospective comparisons.
+   // This is NOT v2.3 ablation: the canonical four-factor component and
+   // all source inputs stay unchanged. Only venue-motor concordance is removed.
+   // Each variant must be computed at the SAME pre-cutoff instant, before
+   // any race results, and cannot overwrite either the main or full shadow.
+   const ablations=[];
+   if(detail.status==='ready'&&detail.applied===true){
+     const originalKeys=[...new Set(detail.metric_coverage||[])];
+     for(const key of originalKeys){
+       try{
+         if(!Object.prototype.hasOwnProperty.call(globalThis.BoatVenueMotorExhibition.METRICS,key))
+           throw Error('unexpected_metric');
+         const candidate=forecast({
+           venue:input.venue,phase:input.phase,racers:input.racers,
+           linked_primary_trial:input.linked_primary_trial===true,
+           weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
+           frozen_at_utc:input.frozen_at_utc,
+           surface_trial_disabled:input.surface_trial_disabled===true,
+           venue_tactics_disabled:input.venue_tactics_disabled===true,
+           venue_motor_exhibition_shadow_trial:true,
+           venue_metric_ablation_key:key
+         });
+         const meta=candidate.metadata?.venue_motor_exhibition_v1;
+         if(meta?.ablated_metric!==key||
+            !validBets(candidate.bets,model.ticketMaxPoints(input)))
+           throw Error('invalid_ablation_forecast');
+         ablations.push({
+           metric:key,status:'ready',
+           bets:candidate.bets,
+           same_point_count:candidate.bets.length===shadow.bets.length,
+           same_virtual_budget:true,
+           ticket_or_allocation_changed:ticketSignature(candidate.bets)!==ticketSignature(shadow.bets),
+           original_metric_present:originalKeys.includes(key),
+           actual_results_used:false,
+           frozen_at_utc:input.frozen_at_utc,
+           model_role:'shadow_validation',not_formal:true,no_additional_stake:true
+         });
+       }catch(e){
+         ablations.push({metric:key,status:'unavailable',
+           reason:String(e?.message||e).slice(0,90),not_formal:true,no_additional_stake:true});
+       }
+     }
+   }
    motorExhibitionShadow={
      ...detail,status:detail.status,
+     metric_ablation_protocol:'venue-shadow-v0.2-one-metric-removed',
+     metric_ablations:ablations,
      trial_model_version:'venue-motor-exhibition-v0.1-shadow-untrained',
      control_model_version:result.model,
      control_bets:result.bets,

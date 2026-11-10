@@ -65,12 +65,17 @@ function evaluate(input){
  const eligible=!!(documented&&!excluded&&FOCUS[venue]&&profile&&
    profile.name===venue&&profile.code!=='03'&&input.phase==='exhibition');
  const expected=expectedMetrics(venue);
+ // Research ablation removes exactly ONE venue-shadow metric. The canonical
+ // four-factor forecast continues to read the unchanged original input.
+ const ablated=input?.venue_metric_ablation_key??null;
+ if(ablated!==null&&(!expected.includes(ablated)||!Object.prototype.hasOwnProperty.call(METRICS,ablated)))
+   throw Error('Only an expected venue metric may be ablated');
  const motorValues=racers.map(r=>r.motor_top_2_percent);
  const motorComplete=motorValues.every(n=>valid(n,0.001,100));
  const means={};
  const arrays={};
  for(const [key,rule] of Object.entries(METRICS)){
-   if(!expected.includes(key))continue;
+   if(!expected.includes(key)||key===ablated)continue;
    const values=racers.map(r=>key==='exhibition_time'?r.exhibition_time:r.original_exhibition?.[key]);
    if(values.every(n=>valid(n,rule.min,rule.max))){
      arrays[key]=values;
@@ -130,6 +135,7 @@ function evaluate(input){
    venue_focus:FOCUS[venue]?{go:FOCUS[venue][0],turn:FOCUS[venue][1],straight:FOCUS[venue][2]}:null,
    metric_coverage:completeMetrics,
    metric_coverage_count:completeMetrics.length,
+   ablated_metric:ablated,
    expected_metrics:expected,missing_expected_metrics:missingExpected,
    not_measured_by_venue:notMeasured,per_race_metric_mix:venueMix,
    metric_scheme:excluded?'excluded':venue==='桐生'?'half_lap':TWO_METRIC_VENUES.includes(venue)?'lap_turn_only':'lap_turn_straight',

@@ -118,6 +118,14 @@ function panel(r){
    '<p>正式：'+(vm.control_bets||[]).map(b=>esc(b.combination)).join(' / ')+'</p>'+
    '<p>試験：'+vm.trial_bets.map(b=>esc(b.combination)).join(' / ')+'</p>'+
    '<p>買い目・配分変更：'+(vm.bet_changes?'あり':'なし')+' ／ 評価スコア・表示順の変化：'+(vm.score_or_order_changes?'あり':'なし')+' ／ 点数一致：'+(vm.point_count_equal?'はい':'いいえ')+'</p></details>':'';
+ const vmAblations=Array.isArray(vm?.metric_ablations)?vm.metric_ablations:[];
+ const vmAblationHTML=vmAblations.length?
+  '<details><summary>展示指標を1つずつ除外する比較（研究専用・'+vmAblations.length+'項目）</summary>'+
+  '<div class="boat-entry-overflow"><table class="bets-table"><thead><tr><th>除外項目</th><th>試験状態</th><th>点数一致</th><th>買い目／配分変化</th></tr></thead><tbody>'+
+  vmAblations.map(v=>'<tr><td>'+esc(vmMetricNames[v.metric]||v.metric||'不明')+
+   '</td><td>'+esc(v.status||'未確認')+'</td><td>'+(v.same_point_count===true?'一致':v.same_point_count===false?'不一致':'判定不可')+
+   '</td><td>'+(v.ticket_or_allocation_changed===true?'あり':v.ticket_or_allocation_changed===false?'なし':'判定不可')+'</td></tr>').join('')+
+  '</tbody></table></div><p class="help">本表は締切前の独立試験。正式v2.3の買い目や収支に混ぜず、結果確定後に点数一致レースだけ比較します。</p></details>':'';
  const motorHTML=vm?
    '<section class="card card-pad"><h3>場別モーター×展示の一致度（試験・正式とは別）</h3>'+
    '<p class="help">状態：'+esc(vm.status)+' ／ 対象場：'+esc(vm.venue||'未取得')+
@@ -127,7 +135,7 @@ function panel(r){
     ' ／ その場で未計測：'+esc(vmNames(vm.not_measured_by_venue)||'なし')+
    ' ／ 周辺予報風の注意：'+(vm.wind_caution_from_nearby_forecast?'あり':'なし')+'</p>'+
    '<p class="help">モーターの過去2連対率と当日の展示の良し悪しが同方向の場合のみ、小幅に行き足・旋回・直線を試算。展示Fで有利にしません。モーター交換・整備・使用回数・実測潮位は未接続。係数は未学習です。</p>'+
-   vmEvidence+vmBets+
+   vmEvidence+vmBets+vmAblationHTML+
    '<p class="help"><strong>正式予想・正式収支は変更しません。</strong> 発走前に固定した試験を別集計します。</p></section>':'';
  const linked=r?.model_version==='four-factor-v2.2-linked-primary-untrained';
  const newerMain=!linked&&r?.model_role==='main'&&/^four-factor-v(?:1\.(?:[6789])|2\.[012])\b/.test(r.model_version||'');

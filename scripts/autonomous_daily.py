@@ -336,8 +336,10 @@ def features(race: dict, phase: str) -> tuple[list[float], list[dict]]:
     # A complete six-boat original-exhibition field is used only in test mode.
     # Individual missing boats must not create artificial rankings.
     original = race.get("_exhibition_original") or {} if phase == "exhibition" else {}
+    # Keep Kiryu's half-lap evidence for the venue shadow without altering
+    # the formal v2.3 ranking coefficients (zero legacy multiplier effect).
     valid_ranges = {"lap_time": (30, 50, .09), "turn_time": (4, 15, .15),
-                    "straight_time": (5, 12, .12)}
+                    "straight_time": (5, 12, .12), "half_lap_time": (15, 25, 0.0)}
     normalised = {}
     for key,(lower,upper,rate) in valid_ranges.items():
         values = [number((original.get(key) or {}).get(str(i))) for i in range(1,7)]

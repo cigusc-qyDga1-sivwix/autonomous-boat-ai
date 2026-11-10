@@ -47,6 +47,28 @@ function run(input){
  });
  if(result.model!==(venueAware?'four-factor-v1.4-venue-aware-23-untrained':conditional?'four-factor-v1.3-conditional-scenarios-untrained':coverage?'four-factor-v1.2-head-coverage-untrained':'four-factor-v1.1-untrained')||!validBets(result.bets,model.ticketMaxPoints(input)))
   throw Error('Four-factor model returned invalid prediction / allocation');
+ // Formal leg redistribution is explicitly gated by Python's pre-cutoff
+ // policy. Freeze SAME-input old linked 120 outcomes as the true control.
+ // A display diagnostic must never be substituted for a probability model.
+ const legRequested=input.three_leg_primary_trial===true;
+ const legEvidence=legRequested?result.metadata?.three_leg_primary_v1:null;
+ if(legRequested&&(
+    input.linked_primary_trial!==true||
+    !legEvidence||
+    legEvidence.version!=='three-leg-formal-redistribution-v0.1-untrained'||
+    legEvidence.result_data_used!==false||
+    legEvidence.source_exhibition_weight_unchanged!==true&&legEvidence.applied===true||
+    !Array.isArray(legEvidence.rows)))
+   throw Error('Invalid formal three-leg provenance');
+ let threeLegControlRanked=null;
+ if(legEvidence?.applied===true){
+   const old=forecast({...input,three_leg_primary_trial:false});
+   if(!validBets(old.bets,model.ticketMaxPoints(input))||
+      !Array.isArray(old.ranked_outcomes)||old.ranked_outcomes.length!==120||
+      !Array.isArray(result.ranked_outcomes)||result.ranked_outcomes.length!==120)
+     throw Error('Missing old canonical linked control; cannot freeze leg primary');
+   threeLegControlRanked=old.ranked_outcomes;
+ }
  const surface=result.metadata?.venue_surface_v1||null;
  if(!surface||surface.version!=='venue-surface-v1-ex-edogawa')
   throw Error('Missing prospective venue surface diagnostics');
@@ -176,6 +198,8 @@ function run(input){
  return {
   model_version:result.model,
   ...(input.linked_primary_trial===true?{ranked_outcomes:result.ranked_outcomes,ranked_source:result.ranked_source}:{}),
+  ...(legRequested?{three_leg_primary_v1:legEvidence,
+    ...(threeLegControlRanked?{three_leg_control_ranked:threeLegControlRanked}:{})}:{}),
 
   ...(motorExhibitionShadow?{venue_motor_exhibition_shadow:motorExhibitionShadow}:{}),
   ...(roleSkillShadow?{role_skill_shadow:roleSkillShadow}:{}),

@@ -645,6 +645,32 @@
       </div>` : ''}
       <p class="external-footnote">BOATERSが掲載する独自展示指標は、元の競艇場公式でも公開されることがあります。データ利用条件を確認し、許可された提供元から取り込む方針です。<strong>この機能はBOATERSから自動取得したものではありません。</strong>この端末内の手動再評価では、固定済み買い目を変更しません。</p>
     </section>`;
+
+    const coverageRiskNotices = () => {
+      const diagnostic = r.strong_field_diagnostic;
+      if (!diagnostic || diagnostic.coverage_diagnostics_read_only !== true) return '';
+      const missingHeads = Array.isArray(diagnostic.uncovered_top_two_heads)
+        ? diagnostic.uncovered_top_two_heads : [];
+      const missingPairs = Array.isArray(diagnostic.missing_top_second_pairs)
+        ? diagnostic.missing_top_second_pairs : [];
+      let html = '';
+      if (diagnostic.head_coverage_outside_parity_warning && missingHeads.length) {
+        const names = missingHeads.map(x => escape(x.lane) + '号艇（相対評価'
+          + (Number(x.model_relative_share) * 100).toFixed(1) + '%）').join('・');
+        html += '<div class="notice warn"><strong>研究注意｜混戦判定外の1着候補抜け：</strong>'
+          + names + '。上位2頭の未採用候補です。モデルの相対評価は実測勝率ではありません。正式買い目と配分は変更しません。</div>';
+      }
+      if (diagnostic.second_pair_coverage_status === 'ASSESSED'
+          && diagnostic.second_pair_coverage_warning && missingPairs.length) {
+        const pairs = missingPairs.slice(0, 4).map(x => escape(x.head_lane) + '→'
+          + escape(x.second_lane) + '号艇（条件付き相対評価'
+          + (Number(x.model_relative_share_given_head) * 100).toFixed(1) + '%）').join('・');
+        html += '<div class="notice warn"><strong>研究注意｜1着→2着の組合せ抜け：</strong>'
+          + pairs + '。モデル上位候補でも独立した買い目採用根拠が不足する場合があります。'
+          + '自動増点や投資配分変更はしません。</div>';
+      }
+      return html;
+    };
     const proof=['four-factor-v2.1-actual-entry-primary-untrained','four-factor-v2.0-justified-points-primary-untrained'].includes(r.model_version)?
       r.interaction_primary?.point_policy:null;
     const claimLabels={
@@ -680,6 +706,7 @@
     ${window.BoatRaceVisual?window.BoatRaceVisual.animationHTML(r):''}
     ${referencePanel}
     ${['STRONG_FIELD_CLOSE_HEADS','MODEL_CLOSE_HEADS_NOT_STRONG_FIELD'].includes(r.strong_field_diagnostic?.status)? `<div class="notice warn"><strong>${r.strong_field_diagnostic.status==='STRONG_FIELD_CLOSE_HEADS'?'強豪混戦':'1着候補の相対評価が接近'}：</strong>上位2頭の相対評価差${Math.round(r.strong_field_diagnostic.head_gap*1000)/10}ポイント。${r.strong_field_diagnostic.head_candidates_absent_from_tickets?.length?`頭候補として買い目未採用の艇：${escape(r.strong_field_diagnostic.head_candidates_absent_from_tickets.join('・'))}号艇。`:'採用済みの頭候補を確認。'}${r.strong_field_diagnostic.status==='MODEL_CLOSE_HEADS_NOT_STRONG_FIELD'?'強豪条件外でも頭の取りこぼしに注意。':''}未校正モデルによる注意表示で、買い目・配分は変更しません。</div>` : ''}
+    ${coverageRiskNotices()}
     ${r.point_reason?`<div class="notice"><strong>点数を選んだ理由：</strong>${escape(r.point_reason)} ／ ${r.bets.length}点。これは未校正の相対指標で、実測的中確率ではありません。</div>`:''}
     <div class="detail-grid">
     <div><section class="card card-pad bottom-margin"><h3>レース情報</h3><div class="meta-list"><div class="meta"><span>開催</span><b>${escape(r.venue)}</b></div><div class="meta"><span>対象日</span><b>${dateDisplay(data.event_date)}</b></div><div class="meta"><span>締切予定</span><b>${escape(r.cutoff_jst)} JST</b></div><div class="meta"><span>予想区分</span><b>${escape(r.classification)}</b></div><div class="meta"><span>展示データ</span><b>${r.phase==='exhibition'?'反映済み（非公式）':'未反映'}</b></div><div class="meta"><span>オッズ</span><b>未反映</b></div></div></section>

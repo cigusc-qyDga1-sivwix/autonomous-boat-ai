@@ -40,6 +40,7 @@ function run(input){
   venue:input.venue,phase:input.phase,racers:input.racers,
   linked_primary_trial:input.linked_primary_trial===true,
   three_leg_primary_trial:input.three_leg_primary_trial===true,
+  formal_insight_v24:input.formal_insight_v24===true,
   weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
   frozen_at_utc:input.frozen_at_utc,
   surface_trial_disabled:input.surface_trial_disabled===true,
@@ -47,6 +48,30 @@ function run(input){
  });
  if(result.model!==(venueAware?'four-factor-v1.4-venue-aware-23-untrained':conditional?'four-factor-v1.3-conditional-scenarios-untrained':coverage?'four-factor-v1.2-head-coverage-untrained':'four-factor-v1.1-untrained')||!validBets(result.bets,model.ticketMaxPoints(input)))
   throw Error('Four-factor model returned invalid prediction / allocation');
+ // Formal v2.4 is strictly forward-only. Freeze a same-instant v2.3
+ // 120-outcome control BEFORE results; no later reconstruction is allowed.
+ const insightRequested=input.formal_insight_v24===true;
+ let insightV23Control=null;
+ if(insightRequested){
+  if(input.venue==='江戸川'||input.phase!=='exhibition'||input.linked_primary_trial!==true)
+   throw Error('v2.4 requires linked exhibition and non-Edogawa venue');
+  const previous=forecast({...input,formal_insight_v24:false});
+  if(!Array.isArray(previous.ranked_outcomes)||previous.ranked_outcomes.length!==120||
+     !Array.isArray(result.ranked_outcomes)||result.ranked_outcomes.length!==120||
+     previous.metadata?.four_factor?.formal_exhibition_balance_v24?.applied===true||
+     result.metadata?.four_factor?.formal_exhibition_balance_v24?.requested!==true||
+     result.metadata?.formal_inside_pressure_v24?.pre_cutoff_only!==true)
+   throw Error('v2.4 same-time v2.3 canonical control missing');
+  insightV23Control={
+    prior_model:'four-factor-v2.3-conditional-second-primary-untrained',
+    ranked_outcomes:previous.ranked_outcomes,
+    formal_exhibition_balance:result.metadata.four_factor.formal_exhibition_balance_v24,
+    formal_inside_pressure:result.metadata.formal_inside_pressure_v24,
+    generated_pre_cutoff:true,result_data_used:false,
+    same_120_canonical_inputs_except_v24:true,calibrated:false,
+    frozen_at_utc:input.frozen_at_utc
+  };
+ }
  // Formal leg redistribution is explicitly gated by Python's pre-cutoff
  // policy. Freeze SAME-input old linked 120 outcomes as the true control.
  // A display diagnostic must never be substituted for a probability model.
@@ -197,6 +222,7 @@ function run(input){
  }
  return {
   model_version:result.model,
+  ...(insightV23Control?{formal_insight_v24:insightV23Control}:{}),
   ...(input.linked_primary_trial===true?{ranked_outcomes:result.ranked_outcomes,ranked_source:result.ranked_source}:{}),
   ...(legRequested?{three_leg_primary_v1:legEvidence,
     ...(threeLegControlRanked?{three_leg_control_ranked:threeLegControlRanked}:{})}:{}),

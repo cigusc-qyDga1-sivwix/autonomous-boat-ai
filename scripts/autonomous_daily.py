@@ -1691,7 +1691,12 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                              and cutoff.astimezone(UTC) > LINKED_MAIN_ACTIVATION_UTC)
             conditional_second_active = (linked_active and runtime_now.astimezone(UTC) >= CONDITIONAL_SECOND_ACTIVATION_UTC
                                          and cutoff.astimezone(UTC) > CONDITIONAL_SECOND_ACTIVATION_UTC)
-            expected_main = (CONDITIONAL_SECOND_MAIN_MODEL if conditional_second_active else LINKED_MAIN_MODEL if linked_active else INTERACTION_ENTRY_MODEL if entry_active else INTERACTION_JUSTIFIED_MODEL if justified_active else
+            formal_insight_v24_active = (
+                conditional_second_active
+                and runtime_now.astimezone(UTC) >= FORMAL_INSIGHT_V24_ACTIVATION_UTC
+                and cutoff.astimezone(UTC) > FORMAL_INSIGHT_V24_ACTIVATION_UTC)
+            expected_main = (FORMAL_INSIGHT_V24_MODEL if formal_insight_v24_active else
+                             CONDITIONAL_SECOND_MAIN_MODEL if conditional_second_active else LINKED_MAIN_MODEL if linked_active else INTERACTION_ENTRY_MODEL if entry_active else INTERACTION_JUSTIFIED_MODEL if justified_active else
                              INTERACTION_ALIGNED_MODEL if aligned_active else
                              INTERACTION_ADAPTIVE_MODEL if adaptive_active else INTERACTION_MAIN_MODEL if interaction_active else
                              POINT_FREE_MODEL if point_free_active else VENUE_TACTICS_MODEL if venue_active else
@@ -1891,7 +1896,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "role_coverage", "role_changes", "head_coverage_control", "postrace_conditional_v13",
                       "postrace_conditional_control", "venue_tactics_v2", "venue_tactics_ab", "point_free_control", "point_free_provenance",
                       "role_skill_shadow", "venue_motor_exhibition_shadow", "interaction_primary",
-                      "three_leg_primary",
+                      "three_leg_primary", "formal_insight_v24",
                       "attack_defence_shadow", "grade_context", "grade_competition_shadow", "strong_field_diagnostic",
                       "coverage_reselection_shadow",
                       "exhibition_input_check", "relative_scores_uncalibrated"):

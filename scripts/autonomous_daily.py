@@ -1478,10 +1478,10 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         **({"head_coverage_control": promoted["head_coverage_control"]} if promoted.get("head_coverage_control") else {}),
         **({"venue_tactics_v2": promoted["venue_tactics_v2"],
             "venue_tactics_ab": promoted["venue_tactics_ab"]}
-           if chosen_model in (CONDITIONAL_SECOND_MAIN_MODEL, LINKED_MAIN_MODEL, VENUE_TACTICS_MODEL, POINT_FREE_MODEL) else {}),
+           if chosen_model in (FORMAL_INSIGHT_V24_MODEL, CONDITIONAL_SECOND_MAIN_MODEL, LINKED_MAIN_MODEL, VENUE_TACTICS_MODEL, POINT_FREE_MODEL) else {}),
         **({"postrace_conditional_v13": promoted["postrace_conditional_v13"],
             "postrace_conditional_control": promoted["postrace_conditional_control"]}
-           if chosen_model in (LINKED_MAIN_MODEL, POSTRACE_CONDITIONAL_MODEL, VENUE_TACTICS_MODEL, POINT_FREE_MODEL) else {}),
+           if chosen_model in (FORMAL_INSIGHT_V24_MODEL, CONDITIONAL_SECOND_MAIN_MODEL, LINKED_MAIN_MODEL, POSTRACE_CONDITIONAL_MODEL, VENUE_TACTICS_MODEL, POINT_FREE_MODEL) else {}),
         **({"four_factor": promoted["four_factor"],
             "venue_surface_v1": promoted.get("venue_surface_v1"),
             "venue_surface_ab": promoted.get("venue_surface_ab")} if four_factor else {}),

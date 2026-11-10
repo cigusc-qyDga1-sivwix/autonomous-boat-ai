@@ -126,3 +126,52 @@ def test_non_close_heads_do_not_warn_or_change_bets():
     assert report["status"] == "NO_STRONG_FIELD_PARITY_SIGNAL"
     assert report["head_coverage_warning"] is False
     assert report["recommendation"] == "KEEP_DEFAULT"
+
+
+def test_non_close_runner_up_head_gap_is_visible_without_rewriting_bets():
+    bets = picks()
+    original = deepcopy(bets)
+    report = analyze(racers([5.8, 5.7, 5.6, 5.5, 4.8, 4.6]),
+                     heads([.58, .19, .08, .06, .05, .04]), bets,
+                     phase="exhibition")
+    assert report["status"] == "NO_STRONG_FIELD_PARITY_SIGNAL"
+    assert report["head_coverage_warning"] is False
+    assert report["head_coverage_outside_parity_warning"] is True
+    assert report["uncovered_top_two_heads"] == [
+        {"lane": 2, "model_relative_share": .19}
+    ]
+    assert report["second_pair_coverage_status"] == "NOT_ASSESSED"
+    assert bets == original
+    assert not report["changes_bets"] and not report["changes_stake"]
+
+
+def test_top_second_partner_gap_and_invalid_120_fail_closed():
+    from itertools import permutations
+    rows = []
+    for head, second, third in permutations("123456", 3):
+        weight = 20 if (head, second) == ("1", "3") else (
+            10 if (head, second) == ("1", "2") else 1
+        )
+        rows.append({"combination": f"{head}-{second}-{third}",
+                     "relative_score": weight})
+    total = sum(x["relative_score"] for x in rows)
+    for item in rows:
+        item["relative_score"] /= total
+    bets = [{"combination": combo, "virtual_yen": 12500}
+            for combo in ("1-2-3", "1-2-4", "1-2-5", "1-2-6")]
+    saved = deepcopy(bets)
+    args = (racers([5.8, 5.7, 5.6, 5.5, 4.8, 4.6]),
+            heads([.58, .19, .08, .06, .05, .04]), bets)
+    report = analyze(*args, phase="exhibition", ranked_outcomes=rows)
+    assert report["second_pair_coverage_status"] == "ASSESSED"
+    assert report["second_pair_coverage_warning"] is True
+    assert {"head_lane": 1, "second_lane": 3,
+            "model_relative_share_given_head": round(80 / 132, 6),
+            "partner_rank": 1} in report["missing_top_second_pairs"]
+    assert bets == saved
+    assert not report["changes_bets"] and not report["results_used"]
+    bad = deepcopy(rows)
+    bad[0]["combination"] = bad[1]["combination"]
+    rejected = analyze(*args, phase="exhibition", ranked_outcomes=bad)
+    assert rejected["second_pair_coverage_status"] == "NOT_ASSESSED"
+    assert not rejected["second_pair_coverage_warning"]

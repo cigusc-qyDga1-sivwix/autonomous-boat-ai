@@ -1,0 +1,26 @@
+name: BOAT LAB v2.4 actual-snapshot venue proof (read only)
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/diagnose_formal_v24_live.py'
+      - '.github/workflows/boat-lab-v24-live-proof.yml'
+  pull_request:
+    paths:
+      - 'scripts/diagnose_formal_v24_live.py'
+      - '.github/workflows/boat-lab-v24-live-proof.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate diagnostic script syntax
+        run: python -m py_compile scripts/diagnose_formal_v24_live.py
+      - name: Display actual saved venue and model application
+        run: python scripts/diagnose_formal_v24_live.py --input app/data/live/latest.json

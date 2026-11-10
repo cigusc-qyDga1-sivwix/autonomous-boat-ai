@@ -161,6 +161,10 @@ function forecast(input){
  const factorModel=fourFactor?global.BoatFourFactor?.evaluate(input):null;
  if(fourFactor&&!factorModel)throw Error('Four-factor engine unavailable');
  // Only the independent forward shadow may change the movement scenarios.
+ const formalLegs=input.three_leg_primary_trial===true?
+   global.BoatThreeLegPrimary?.evaluate(input,factorModel):null;
+ if(input.three_leg_primary_trial===true&&!formalLegs)
+   throw Error('Three-leg formal movement engine unavailable');
  const motorExhibition=input.venue_motor_exhibition_shadow_trial===true?
    global.BoatVenueMotorExhibition?.evaluate(input):null;
  if(input.venue_motor_exhibition_shadow_trial===true&&!motorExhibition)
@@ -182,6 +186,16 @@ function forecast(input){
   return {go:clamp(go,.38,2.8),turn:clamp(turn,.35,2.8),
           straight:clamp(straight,.35,2.8),overall:clamp(skill*motor,.3,2.8)};
  });
+ // Explicit v2.3 forward-time gate only. The SAME combined four-factor
+ // score is redistributed into phase-specific roles; there is NO second
+ // exhibition bonus and the three-stage geometric mean is unchanged.
+ if(formalLegs?.applied){
+   formalLegs.rows.forEach((row,i)=>{
+     const x=row.multipliers;
+     move[i]={...move[i],go:move[i].go*x.go,
+       turn:move[i].turn*x.turn,straight:move[i].straight*x.straight};
+   });
+ }
  if(motorExhibition?.status==='ready'){
    motorExhibition.rows.forEach((row,i)=>{
      const w=row.multipliers;
@@ -847,6 +861,7 @@ function forecast(input){
        proof_note:'Untrained relative model, not calibrated win probabilities. No blanket exterior picks.'
      }}:{}),
      ...(openChasers?{venue_surface_v1:venueSurface}:{}),
+     ...(formalLegs?{three_leg_primary_v1:formalLegs}:{}),
      ...(motorExhibition?{venue_motor_exhibition_v1:motorExhibition}:{}),
      ...(venueAware?{venue_tactics_v2:({
        version:venueTactics.version,venue:venueTactics.venue,

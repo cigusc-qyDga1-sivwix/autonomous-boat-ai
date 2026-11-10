@@ -9,6 +9,7 @@ const fs=require('node:fs');
 require('../app/four-factor.js');
 require('../app/venue-tactics-v2.js');
 require('../app/venue-motor-exhibition.js');
+require('../app/three-leg-primary.js');
 require('../app/tactical-1m.js');
 require('../app/role-skill-shadow.js');
 const model=globalThis.BoatTacticalModel;
@@ -38,6 +39,7 @@ function run(input){
  const result=forecast({
   venue:input.venue,phase:input.phase,racers:input.racers,
   linked_primary_trial:input.linked_primary_trial===true,
+  three_leg_primary_trial:input.three_leg_primary_trial===true,
   weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
   frozen_at_utc:input.frozen_at_utc,
   surface_trial_disabled:input.surface_trial_disabled===true,
@@ -45,12 +47,35 @@ function run(input){
  });
  if(result.model!==(venueAware?'four-factor-v1.4-venue-aware-23-untrained':conditional?'four-factor-v1.3-conditional-scenarios-untrained':coverage?'four-factor-v1.2-head-coverage-untrained':'four-factor-v1.1-untrained')||!validBets(result.bets,model.ticketMaxPoints(input)))
   throw Error('Four-factor model returned invalid prediction / allocation');
+ // Formal leg redistribution is explicitly gated by Python's pre-cutoff
+ // policy. Freeze SAME-input old linked 120 outcomes as the true control.
+ // A display diagnostic must never be substituted for a probability model.
+ const legRequested=input.three_leg_primary_trial===true;
+ const legEvidence=legRequested?result.metadata?.three_leg_primary_v1:null;
+ if(legRequested&&(
+    input.linked_primary_trial!==true||
+    !legEvidence||
+    legEvidence.version!=='three-leg-formal-redistribution-v0.1-untrained'||
+    legEvidence.result_data_used!==false||
+    legEvidence.source_exhibition_weight_unchanged!==true&&legEvidence.applied===true||
+    !Array.isArray(legEvidence.rows)))
+   throw Error('Invalid formal three-leg provenance');
+ let threeLegControlRanked=null;
+ if(legEvidence?.applied===true){
+   const old=forecast({...input,three_leg_primary_trial:false});
+   if(!validBets(old.bets,model.ticketMaxPoints(input))||
+      !Array.isArray(old.ranked_outcomes)||old.ranked_outcomes.length!==120||
+      !Array.isArray(result.ranked_outcomes)||result.ranked_outcomes.length!==120)
+     throw Error('Missing old canonical linked control; cannot freeze leg primary');
+   threeLegControlRanked=old.ranked_outcomes;
+ }
  const surface=result.metadata?.venue_surface_v1||null;
  if(!surface||surface.version!=='venue-surface-v1-ex-edogawa')
   throw Error('Missing prospective venue surface diagnostics');
  const surfaceControl=surface.applied?forecast({
   venue:input.venue,phase:input.phase,racers:input.racers,
   linked_primary_trial:input.linked_primary_trial===true,
+  three_leg_primary_trial:input.three_leg_primary_trial===true,
   weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
   frozen_at_utc:input.frozen_at_utc,surface_trial_disabled:true,
   venue_tactics_disabled:input.venue_tactics_disabled===true
@@ -93,6 +118,7 @@ function run(input){
    const shadow=forecast({
      venue:input.venue,phase:input.phase,racers:input.racers,
   linked_primary_trial:input.linked_primary_trial===true,
+     three_leg_primary_trial:input.three_leg_primary_trial===true,
      weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
      frozen_at_utc:input.frozen_at_utc,
      surface_trial_disabled:input.surface_trial_disabled===true,
@@ -119,6 +145,7 @@ function run(input){
          const candidate=forecast({
            venue:input.venue,phase:input.phase,racers:input.racers,
            linked_primary_trial:input.linked_primary_trial===true,
+           three_leg_primary_trial:input.three_leg_primary_trial===true,
            weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
            frozen_at_utc:input.frozen_at_utc,
            surface_trial_disabled:input.surface_trial_disabled===true,
@@ -171,6 +198,8 @@ function run(input){
  return {
   model_version:result.model,
   ...(input.linked_primary_trial===true?{ranked_outcomes:result.ranked_outcomes,ranked_source:result.ranked_source}:{}),
+  ...(legRequested?{three_leg_primary_v1:legEvidence,
+    ...(threeLegControlRanked?{three_leg_control_ranked:threeLegControlRanked}:{})}:{}),
 
   ...(motorExhibitionShadow?{venue_motor_exhibition_shadow:motorExhibitionShadow}:{}),
   ...(roleSkillShadow?{role_skill_shadow:roleSkillShadow}:{}),

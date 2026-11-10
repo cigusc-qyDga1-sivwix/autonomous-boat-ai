@@ -101,6 +101,9 @@ LINKED_MAIN_MODEL = 'four-factor-v2.2-linked-primary-untrained'
 LINKED_MAIN_ACTIVATION_UTC = datetime.fromisoformat('2026-11-04T23:15:00+00:00')
 CONDITIONAL_SECOND_MAIN_MODEL = 'four-factor-v2.3-conditional-second-primary-untrained'
 CONDITIONAL_SECOND_ACTIVATION_UTC = datetime.fromisoformat('2026-11-08T15:00:00+00:00')
+# User-approved three-leg primary starts only for newly captured pre-cutoff
+# snapshots after this forward activation. Old v2.3 snapshots are immutable.
+THREE_LEG_PRIMARY_ACTIVATION_UTC = datetime.fromisoformat('2026-11-10T01:30:00+00:00')
 VIRTUAL_BUDGET_YEN = 50_000
 MIN_POINTS, MAX_POINTS = 4, 12
 STAKE_UNIT_YEN = 1_000
@@ -628,11 +631,14 @@ def promoted_v09(venue: str, phase: str, racers: list[dict],
                  postrace_conditional: bool = False, venue_tactics: bool = False, point_free: bool = False,
                  role_skill_trial: bool = False,
                  role_skill_preserve_heads: bool = False,
-                 venue_motor_exhibition_trial: bool = False, linked_primary: bool = False) -> dict:
+                 venue_motor_exhibition_trial: bool = False, linked_primary: bool = False,
+                 three_leg_primary: bool = False) -> dict:
     """Invoke one explicit model identity; never fall back on bridge failure."""
     inputs = {
         "venue": venue, "phase": phase,
         "linked_primary_trial": linked_primary,
+        "three_leg_primary_trial": bool(three_leg_primary and linked_primary and four_factor
+                                         and phase == "exhibition"),
         "racers": [{key: r.get(key) for key in (
             "lane", "course", "national_win_rate", "motor_top_2_percent",
             "average_start_timing", "exhibition_st", "exhibition_time",
@@ -1055,6 +1061,18 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     venue_active = postrace_active and venue != "江戸川" and now.astimezone(UTC) >= VENUE_TACTICS_ACTIVATION_UTC
     point_free_active = cutoff.date() == POINT_FREE_DATE and now.astimezone(JST).date() == POINT_FREE_DATE
     role_skill_active = four_factor and cutoff.date() >= date(2026, 10, 31) and now.astimezone(JST).date() >= date(2026, 10, 31)
+    pre_cutoff_leg_gate = summarize_gate({
+        "racers": racers, "phase": phase,
+        "cutoff_jst": cutoff.strftime("%H:%M"),
+        "frozen_at_utc": frozen_at,
+        "exhibition_origin": race.get("_exhibition_origin"),
+    }, cutoff.astimezone(JST).date().isoformat())
+    three_leg_primary_active = bool(
+        conditional_second_active and phase == "exhibition"
+        and now.astimezone(UTC) >= THREE_LEG_PRIMARY_ACTIVATION_UTC
+        and cutoff.astimezone(UTC) > THREE_LEG_PRIMARY_ACTIVATION_UTC
+        and pre_cutoff_leg_gate.get("final_eligible")
+    )
     motor_exhibition_shadow_active = (four_factor and phase == "exhibition"
                                       and cutoff.date() >= date(2026, 11, 2)
                                       and now.astimezone(JST).date() >= date(2026, 11, 2))
@@ -1080,7 +1098,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
                                 role_skill_preserve_heads=(role_skill_active
                                     and cutoff.date() >= date(2026, 11, 2)
                                     and now.astimezone(JST).date() >= date(2026, 11, 2)),
-                                venue_motor_exhibition_trial=motor_exhibition_shadow_active, linked_primary=linked_active)
+                                venue_motor_exhibition_trial=motor_exhibition_shadow_active,
+                                linked_primary=linked_active, three_leg_primary=three_leg_primary_active)
         chosen_model = promoted["model_version"]
     else:
         promoted = promoted_v07(venue, phase, racers, profile, selected_weather, frozen_at)
@@ -1098,15 +1117,11 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     entry_active = (justified_active and now.astimezone(UTC) >= INTERACTION_ENTRY_ACTIVATION_UTC
                     and cutoff.astimezone(UTC) > INTERACTION_ENTRY_ACTIVATION_UTC)
     interaction_meta = None
+    three_leg_primary_meta = None
     if interaction_active:
         # The same strict six-boat exhibition/entry pre-cutoff gate controls
         # whether the main can broaden beyond the base ticket set.
-        point_gate = summarize_gate({
-            "racers": racers, "phase": phase,
-            "cutoff_jst": cutoff.strftime("%H:%M"),
-            "frozen_at_utc": frozen_at,
-            "exhibition_origin": race.get("_exhibition_origin"),
-        }, cutoff.astimezone(JST).date().isoformat())
+        point_gate = pre_cutoff_leg_gate
         bets, interaction_meta = interaction_primary(
             promoted, racers, frozen_at, cutoff,
             tactics=race.get("_course_tactics"),
@@ -1118,6 +1133,56 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
             entry_aware=entry_active,
             linked_ranked=promoted.get("ranked_outcomes") if linked_active else None,
             conditional_second_main=conditional_second_active)
+        # The primary result is already the formal v2.3. Freeze the old v2.3
+        # from the SAME untouched 120-outcome engine inputs, before the result.
+        # This is a research control, not another formal wager or historical
+        # backfill. Do not modify a previously frozen snapshot.
+        if three_leg_primary_active:
+            details = promoted.get("three_leg_primary_v1")
+            if (not isinstance(details, dict) or
+                    details.get("version") != "three-leg-formal-redistribution-v0.1-untrained" or
+                    details.get("result_data_used") is not False or
+                    details.get("pre_cutoff_only") is not True):
+                raise ValueError("Missing verified three-leg formal provenance")
+            three_leg_primary_meta = {
+                **details, "frozen_at_utc": frozen_at,
+                "activation_utc": THREE_LEG_PRIMARY_ACTIVATION_UTC.isoformat(),
+                "formal_component": True,
+                "same_input_prior_v23_control": False,
+                "no_additional_stake": True,
+                "original_prior_snapshot_immutable": True,
+            }
+            if details.get("applied") is True:
+                control_ranked = promoted.get("three_leg_control_ranked")
+                if not isinstance(control_ranked, list) or len(control_ranked) != 120:
+                    raise ValueError("Missing previous formal v2.3 leg control")
+                control_bets, control_meta = interaction_primary(
+                    promoted, racers, frozen_at, cutoff,
+                    tactics=race.get("_course_tactics"),
+                    scored_weights=None if linked_active else weathered,
+                    adaptive_points=adaptive_active,
+                    justified_points=justified_active,
+                    exhibition_verified=bool(point_gate["final_eligible"]),
+                    site_weather_verified=bool(selected_weather and selected_weather.get("site_observed")),
+                    entry_aware=entry_active,
+                    linked_ranked=control_ranked,
+                    conditional_second_main=conditional_second_active)
+                if sum(b["virtual_yen"] for b in control_bets) != VIRTUAL_BUDGET_YEN:
+                    raise ValueError("Three-leg control stake invalid")
+                final_signature = sorted((x["combination"], x["virtual_yen"]) for x in bets)
+                control_signature = sorted((x["combination"], x["virtual_yen"]) for x in control_bets)
+                three_leg_primary_meta.update({
+                    "same_input_prior_v23_control": True,
+                    "control_model_version": CONDITIONAL_SECOND_MAIN_MODEL,
+                    "control_bets": control_bets,
+                    "control_frozen_at_utc": frozen_at,
+                    "control_ranked_sha256": stable_hash({"ranked": control_ranked}),
+                    "main_ranked_sha256": stable_hash({"ranked": promoted["ranked_outcomes"]}),
+                    "same_point_count": len(bets) == len(control_bets),
+                    "actual_ticket_or_allocation_changed": final_signature != control_signature,
+                    "control_no_postrace_data": control_meta.get("result_data_used") is False,
+                    "model_role": "formal_primary_plus_shadow_control",
+                })
         if linked_active and promoted.get("ranked_source") != "linked-four-factor-venue-st-wake-120":
             raise ValueError("Linked primary source missing; no simplified fallback")
         chosen_model = (CONDITIONAL_SECOND_MAIN_MODEL if conditional_second_active else LINKED_MAIN_MODEL if linked_active else INTERACTION_ENTRY_MODEL if entry_active else INTERACTION_JUSTIFIED_MODEL if justified_active else
@@ -1304,6 +1369,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         **({"strong_field_diagnostic": strong_field_diagnostic} if strong_field_diagnostic else {}),
         **({"grade_competition_shadow": grade_competition_shadow} if grade_competition_shadow else {}),
         **({"interaction_primary": interaction_meta} if interaction_meta else {}),
+        **({"three_leg_primary": three_leg_primary_meta} if three_leg_primary_meta else {}),
         **({"role_skill_shadow": promoted["role_skill_shadow"]} if promoted.get("role_skill_shadow") else {}),
         **({"venue_motor_exhibition_shadow": promoted["venue_motor_exhibition_shadow"]}
            if promoted.get("venue_motor_exhibition_shadow") else {}),
@@ -1725,6 +1791,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "role_coverage", "role_changes", "head_coverage_control", "postrace_conditional_v13",
                       "postrace_conditional_control", "venue_tactics_v2", "venue_tactics_ab", "point_free_control", "point_free_provenance",
                       "role_skill_shadow", "venue_motor_exhibition_shadow", "interaction_primary",
+                      "three_leg_primary",
                       "attack_defence_shadow", "grade_context", "grade_competition_shadow", "strong_field_diagnostic",
                       "exhibition_input_check", "relative_scores_uncalibrated"):
             if extra in current:

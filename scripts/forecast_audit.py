@@ -281,6 +281,85 @@ def _venue_metric_ablation_report(forecasts, official, alerts, day):
     }
 
 
+def _three_leg_primary_report(forecasts, official, alerts, day):
+    """Formal v2.3 leg-distributed vs old same-input v2.3 pre-cutoff control.
+
+    Never refit model with hindsight. Only verified official payouts and frozen
+    source SHA, 50k per arm, equal ticket count, valid source provenance.
+    """
+    actual_rows, control_rows = [], []
+    by_venue = defaultdict(lambda: {"formal": [], "prior_v23": []})
+    exclusions = Counter()
+    generated, adjusted, changed = 0, 0, 0
+    for snapshot in forecasts:
+        leg = snapshot.get("three_leg_primary")
+        if not isinstance(leg, dict):
+            continue
+        generated += 1
+        if leg.get("applied") is not True:
+            continue
+        adjusted += 1
+        if leg.get("actual_ticket_or_allocation_changed") is True:
+            changed += 1
+        key = f"{day}|{snapshot['venue']}|{snapshot['race']}"
+        if key in alerts:
+            exclusions["official_refund_or_conflict"] += 1
+            continue
+        eligible, why = _verify_race(snapshot, official.get(key), day)
+        if not eligible:
+            exclusions["result_" + why] += 1
+            continue
+        if (snapshot.get("model_version") !=
+                "four-factor-v2.3-conditional-second-primary-untrained"
+                or snapshot.get("phase") != "exhibition"
+                or snapshot.get("ticket_status") != "formal"
+                or leg.get("version") != "three-leg-formal-redistribution-v0.1-untrained"
+                or leg.get("formal_component") is not True
+                or leg.get("result_data_used") is not False
+                or leg.get("pre_cutoff_only") is not True
+                or leg.get("source_exhibition_weight_unchanged") is not True
+                or leg.get("same_input_prior_v23_control") is not True
+                or leg.get("control_no_postrace_data") is not True
+                or leg.get("no_additional_stake") is not True
+                or leg.get("control_frozen_at_utc") != snapshot.get("frozen_at_utc")
+                or leg.get("frozen_at_utc") != snapshot.get("frozen_at_utc")):
+            exclusions["invalid_pre_cutoff_provenance"] += 1
+            continue
+        control = leg.get("control_bets")
+        bets = snapshot.get("bets")
+        if not _valid_shadow_tickets(bets) or not _valid_shadow_tickets(control):
+            exclusions["invalid_control_or_formal_bets"] += 1
+            continue
+        if leg.get("same_point_count") is not True or len(bets) != len(control):
+            exclusions["point_count_mismatch"] += 1
+            continue
+        payout = official[key]
+        main = _shadow_trial_result(snapshot, bets, payout)
+        old = _shadow_trial_result(snapshot, control, payout)
+        actual_rows.append(main)
+        control_rows.append(old)
+        by_venue[snapshot["venue"]]["formal"].append(main)
+        by_venue[snapshot["venue"]]["prior_v23"].append(old)
+    return {
+        "protocol": "formal-v2.3-leg-redistribution-vs-unmodified-v2.3",
+        "generated_pre_cutoff_latest_snapshots": generated,
+        "formal_adjusted_races": adjusted,
+        "changed_tickets_or_allocations": changed,
+        "official_verified_equal_point_pairs": len(actual_rows),
+        "formal_three_leg": _metrics(actual_rows),
+        "same_input_unmodified_v23": _metrics(control_rows),
+        "by_venue": {
+            venue: {"formal_three_leg": _metrics(rows["formal"]),
+                    "same_input_unmodified_v23": _metrics(rows["prior_v23"])}
+            for venue, rows in sorted(by_venue.items())
+        },
+        "exclusions": dict(sorted(exclusions.items())),
+        "sample_warning": ("Uncalibrated bounded attribution within existing exhibition "
+                           "factor, not proven lift. No backfilled controls or new stake. "
+                           "Require >=100 independent forward matched races and venue splits."),
+    }
+
+
 def analyze(dataset: dict) -> dict:
     """Audit a single daily snapshot; never add unresolved races as losers."""
     day = dataset["event_date"]
@@ -480,6 +559,9 @@ def analyze(dataset: dict) -> dict:
         "unhit_examples": race_examples[:30],
     }
     report["venue_metric_ablation"] = _venue_metric_ablation_report(
+        raw, official, alerts, day
+    )
+    report["three_leg_primary_comparison"] = _three_leg_primary_report(
         raw, official, alerts, day
     )
     if len(verified) >= 20:

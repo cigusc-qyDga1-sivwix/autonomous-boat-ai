@@ -106,3 +106,67 @@ def test_v21_audit_supports_24_justified_points_but_not_25_or_subunit_stakes():
     race['bets'][0]['virtual_yen']=3900
     race['bets'][1]['virtual_yen']=2100
     assert _verify_race(race,pay,'2026-10-22')==(False,'stake_invalid')
+
+
+def test_shimonoseki_8r_checkpoint_requires_frozen_v02_provenance():
+    payload = make_example()
+    payload["event_date"] = "2026-11-10"
+    payload["listed_races"] = 4
+    payload["unforecast_races"] = []
+    payload["official_results"] = {}
+    freezes = ("2026-11-10T09:29:09+00:00",
+               "2026-11-10T09:34:00+00:00",
+               "2026-11-10T09:35:00+00:00",
+               "2026-11-10T09:36:00+00:00")
+    for idx, row in enumerate(payload["forecast_races"]):
+        row.update({"venue": "下関", "race": 8 + idx,
+                    "cutoff_jst": "21:00",
+                    "frozen_at_utc": freezes[idx],
+                    "ticket_status": "formal", "phase": "exhibition"})
+        payload["official_results"][f"2026-11-10|下関|{8 + idx}"] = {
+            "verified": True, "source": "boatrace_official_pay",
+            "snapshot_sha256": row["sha256"],
+            "finish": ("1-2-3", "1-6-2", "1-2-6", "5-1-2")[idx],
+            "payout_per_100": 1000, "virtual_stake": 50000,
+        }
+    approved = {"version": "strong-field-parity-diagnostic-v0.2-readonly-coverage",
+                "coverage_diagnostics_read_only": True,
+                "changes_bets": False, "changes_stake": False}
+    payload["forecast_races"][1]["strong_field_diagnostic"] = deepcopy(approved)
+    payload["forecast_races"][2]["strong_field_diagnostic"] = {
+        **approved, "version": "strong-field-parity-diagnostic-v0.1-untrained"}
+    payload["forecast_races"][3]["ticket_status"] = "provisional"
+
+    frozen = deepcopy(payload)
+    audit = analyze(payload)
+    breakpoint = audit["head_risk_breakpoint"]
+    assert breakpoint["anchor_snapshot"]["provenance_group"] == "before_checkpoint"
+    assert breakpoint["anchor_snapshot"]["snapshot_sha256"] == "snapshot-1"
+    assert breakpoint["frozen_formal_counts"] == {
+        "before_checkpoint": 1, "after_v02_verified": 1, "after_unconfirmed": 1}
+    assert breakpoint["official_verified_formal"]["before_checkpoint"]["verified_races"] == 1
+    assert breakpoint["official_verified_formal"]["before_checkpoint"]["hits"] == 1
+    assert breakpoint["official_verified_formal"]["after_v02_verified"]["verified_races"] == 1
+    assert breakpoint["official_verified_formal"]["after_v02_verified"]["hits"] == 0
+    assert breakpoint["official_verified_formal"]["after_unconfirmed"]["verified_races"] == 1
+    assert audit["metrics"]["verified_races"] == 4
+    assert payload == frozen
+
+
+def test_shimonoseki_checkpoint_never_attributes_after_without_version():
+    from scripts.forecast_audit import _head_risk_breakpoint_report
+    race = {
+        "venue": "下関", "race": 9,
+        "ticket_status": "formal", "phase": "exhibition",
+        "frozen_at_utc": "2026-11-10T09:35:00+00:00",
+        "sha256": "s9",
+        "strong_field_diagnostic": {
+            "version": "strong-field-parity-diagnostic-v0.2-readonly-coverage",
+            "coverage_diagnostics_read_only": True, "changes_bets": False,
+            "changes_stake": True,
+        },
+    }
+    rep = _head_risk_breakpoint_report([race], [], "2026-11-10")
+    assert rep["frozen_formal_counts"]["after_v02_verified"] == 0
+    assert rep["frozen_formal_counts"]["after_unconfirmed"] == 1
+    assert rep["official_verified_formal"]["after_v02_verified"]["return_rate"] is None

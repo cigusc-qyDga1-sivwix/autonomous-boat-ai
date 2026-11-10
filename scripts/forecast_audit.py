@@ -137,6 +137,150 @@ def _v22_control_bets(snapshot: dict) -> list[dict] | None:
     return control if sum(b["virtual_yen"] for b in control) == RESEARCH_BUDGET else None
 
 
+def _valid_shadow_tickets(bets):
+    """Exact immutable 50k virtual stake and legal 3連単, no fabricated wins."""
+    if not isinstance(bets, list) or not 4 <= len(bets) <= 24:
+        return False
+    combinations = set()
+    spent = 0
+    for bet in bets:
+        if not isinstance(bet, dict):
+            return False
+        combo, stake = bet.get("combination"), bet.get("virtual_yen")
+        if (not isinstance(combo, str) or len(combo.split("-")) != 3
+                or len(set(combo.split("-"))) != 3
+                or any(v not in "123456" for v in combo.split("-"))
+                or combo in combinations or type(stake) is not int
+                or stake < 1000 or stake % 1000 != 0):
+            return False
+        combinations.add(combo)
+        spent += stake
+    return spent == RESEARCH_BUDGET
+
+
+def _shadow_trial_result(snapshot, bets, payout):
+    finish = payout["finish"]
+    exact = next((b for b in bets if b["combination"] == finish), None)
+    heads = {b["combination"][0] for b in bets}
+    pairs = {b["combination"][:3] for b in bets}
+    stage = ("hit" if exact else "head_miss" if finish[0] not in heads else
+             "second_miss" if finish[:3] not in pairs else "third_miss")
+    return {
+        "venue": snapshot["venue"], "race": snapshot["race"], "stage": stage,
+        "virtual_stake_yen": RESEARCH_BUDGET,
+        "virtual_payout_yen": (
+            exact["virtual_yen"] * payout["payout_per_100"] // 100 if exact else 0
+        ),
+    }
+
+
+def _venue_metric_ablation_report(forecasts, official, alerts, day):
+    """Results-only daily analysis. No re-scoring or retrospective variants.
+
+    Every compared bet must have been frozen inside the SAME validated
+    pre-cutoff snapshot. Missing or nonmatching trials cannot count as losses.
+    The compared pair is full VENUE SHADOW vs its ablated VENUE SHADOW;
+    neither is the actual v2.3 main bet.
+    """
+    pair_rows = defaultdict(lambda: {"with": [], "without": [], "venues": defaultdict(
+        lambda: {"with": [], "without": []})})
+    exclusions = Counter()
+    generated, verified_source = 0, 0
+    for snapshot in forecasts:
+        shadow = snapshot.get("venue_motor_exhibition_shadow")
+        if not isinstance(shadow, dict):
+            continue
+        variants = shadow.get("metric_ablations")
+        if not isinstance(variants, list) or not variants:
+            continue
+        generated += 1
+        key = f"{day}|{snapshot['venue']}|{snapshot['race']}"
+        if key in alerts:
+            exclusions["official_refund_or_conflict"] += 1
+            continue
+        verified, why = _verify_race(snapshot, official.get(key), day)
+        if not verified:
+            exclusions["result_" + why] += 1
+            continue
+        if (snapshot.get("phase") != "exhibition"
+                or snapshot.get("ticket_status") != "formal"
+                or shadow.get("status") != "ready"
+                or shadow.get("not_formal") is not True
+                or shadow.get("result_data_used") is not False
+                or shadow.get("frozen_at_utc") != snapshot.get("frozen_at_utc")
+                or shadow.get("metric_ablation_protocol") != "venue-shadow-v0.2-one-metric-removed"):
+            exclusions["invalid_shadow_provenance"] += 1
+            continue
+        control = shadow.get("trial_bets")
+        if not _valid_shadow_tickets(control):
+            exclusions["invalid_shadow_bets"] += 1
+            continue
+        verified_source += 1
+        seen_metrics = set()
+        for variant in variants:
+            if not isinstance(variant, dict):
+                exclusions["malformed_variant"] += 1
+                continue
+            metric = variant.get("metric")
+            if (not isinstance(metric, str)
+                    or metric not in ("exhibition_time", "lap_time", "half_lap_time",
+                                      "turn_time", "straight_time")
+                    or metric not in (shadow.get("metric_coverage") or [])
+                    or metric in seen_metrics):
+                exclusions["invalid_or_duplicate_metric"] += 1
+                continue
+            seen_metrics.add(metric)
+            bets = variant.get("bets")
+            if (variant.get("status") != "ready"
+                    or variant.get("not_formal") is not True
+                    or variant.get("actual_results_used") is not False
+                    or variant.get("same_virtual_budget") is not True
+                    or variant.get("frozen_at_utc") != snapshot.get("frozen_at_utc")
+                    or not _valid_shadow_tickets(bets)):
+                exclusions["invalid_or_unavailable_variant"] += 1
+                continue
+            if (variant.get("same_point_count") is not True
+                    or len(bets) != len(control)):
+                exclusions["point_count_mismatch"] += 1
+                continue
+            p = official[key]
+            with_row = _shadow_trial_result(snapshot, control, p)
+            without_row = _shadow_trial_result(snapshot, bets, p)
+            group = pair_rows[metric]
+            group["with"].append(with_row)
+            group["without"].append(without_row)
+            group["venues"][snapshot["venue"]]["with"].append(with_row)
+            group["venues"][snapshot["venue"]]["without"].append(without_row)
+    metrics = {}
+    for metric, group in sorted(pair_rows.items()):
+        metrics[metric] = {
+            "matched_verified_races": len(group["with"]),
+            "with_metric": _metrics(group["with"]),
+            "without_metric": _metrics(group["without"]),
+            "by_venue": {
+                venue: {"matched_verified_races": len(rows["with"]),
+                        "with_metric": _metrics(rows["with"]),
+                        "without_metric": _metrics(rows["without"])}
+                for venue, rows in sorted(group["venues"].items())
+            },
+        }
+    return {
+        "protocol": "venue-shadow-v0.2-one-metric-removed",
+        "shadow_only_not_formal": True,
+        "read_only_official_result_audit": True,
+        "same_race_same_time_same_50000yen_budget": True,
+        "matched_point_count_only": True,
+        "generated_races_in_latest_snapshot": generated,
+        "verified_full_shadow_races": verified_source,
+        "per_metric": metrics,
+        "exclusions": dict(sorted(exclusions.items())),
+        "warning": ("Small single-day samples do not prove causality. Compared items "
+                    "are VENUE SHADOW full/ablated, NOT v2.3 formal main. "
+                    "Only prospective official-verified pairs count; collect at least 100 "
+                    "matched races and sufficient venue-level samples before promotion."),
+    }
+
+
 def analyze(dataset: dict) -> dict:
     """Audit a single daily snapshot; never add unresolved races as losers."""
     day = dataset["event_date"]
@@ -335,6 +479,9 @@ def analyze(dataset: dict) -> dict:
         "exclusions": dict(exclusions),
         "unhit_examples": race_examples[:30],
     }
+    report["venue_metric_ablation"] = _venue_metric_ablation_report(
+        raw, official, alerts, day
+    )
     if len(verified) >= 20:
         report["warnings"] = [
             "First-bet head skew: compare lane-1 share to winners and inspect course prior."

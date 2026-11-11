@@ -41,6 +41,7 @@ function run(input){
   linked_primary_trial:input.linked_primary_trial===true,
   three_leg_primary_trial:input.three_leg_primary_trial===true,
   formal_insight_v24:input.formal_insight_v24===true,
+  formal_head_risk_v25:input.formal_head_risk_v25===true,
   weather_used:input.weather_used||null,venue_profile:input.venue_profile||null,
   frozen_at_utc:input.frozen_at_utc,
   surface_trial_disabled:input.surface_trial_disabled===true,
@@ -55,7 +56,7 @@ function run(input){
  if(insightRequested){
   if(input.venue==='江戸川'||input.phase!=='exhibition'||input.linked_primary_trial!==true)
    throw Error('v2.4 requires linked exhibition and non-Edogawa venue');
-  const previous=forecast({...input,formal_insight_v24:false});
+  const previous=forecast({...input,formal_insight_v24:false,formal_head_risk_v25:false});
   if(!Array.isArray(previous.ranked_outcomes)||previous.ranked_outcomes.length!==120||
      !Array.isArray(result.ranked_outcomes)||result.ranked_outcomes.length!==120||
      previous.metadata?.four_factor?.formal_exhibition_balance_v24?.applied===true||
@@ -70,6 +71,31 @@ function run(input){
     generated_pre_cutoff:true,result_data_used:false,
     same_120_canonical_inputs_except_v24:true,calibrated:false,
     frozen_at_utc:input.frozen_at_utc
+  };
+ }
+ // v2.5 keeps the same 120-way canonical forecast and freezes its v2.4
+ // control at the same time. This is a separate forward-only formal identity.
+ let headRiskV25Control=null;
+ if(input.formal_head_risk_v25===true){
+  if(!insightRequested||input.phase!=='exhibition'||input.venue==='江戸川'||
+     input.linked_primary_trial!==true)
+   throw Error('v2.5 head switch requires eligible formal v2.4 exhibition');
+  const control=forecast({...input,formal_head_risk_v25:false});
+  const risk=result.metadata?.formal_inside_pressure_v25;
+  if(!risk||risk.requested!==true||risk.pre_cutoff_only!==true||
+     risk.result_data_used!==false||
+     !Array.isArray(control.ranked_outcomes)||control.ranked_outcomes.length!==120||
+     !Array.isArray(result.ranked_outcomes)||result.ranked_outcomes.length!==120||
+     !validBets(control.bets,model.ticketMaxPoints(input)))
+   throw Error('v2.5 same-time v2.4 ranked control missing');
+  headRiskV25Control={
+   prior_model:'four-factor-v2.4-entry-exhibition-balance-untrained',
+   ranked_outcomes:control.ranked_outcomes,
+   control_bets:control.bets,
+   inside_head_rebalance:risk,
+   generated_pre_cutoff:true,result_data_used:false,
+   no_additional_stake:true,calibrated:false,
+   frozen_at_utc:input.frozen_at_utc
   };
  }
  // Formal leg redistribution is explicitly gated by Python's pre-cutoff
@@ -223,6 +249,7 @@ function run(input){
  return {
   model_version:result.model,
   ...(insightV23Control?{formal_insight_v24:insightV23Control}:{}),
+  ...(headRiskV25Control?{formal_head_risk_v25:headRiskV25Control}:{}),
   ...(input.linked_primary_trial===true?{ranked_outcomes:result.ranked_outcomes,ranked_source:result.ranked_source}:{}),
   ...(legRequested?{three_leg_primary_v1:legEvidence,
     ...(threeLegControlRanked?{three_leg_control_ranked:threeLegControlRanked}:{})}:{}),

@@ -27,6 +27,7 @@ if __package__:
     from .weather_live_bridge import collect_today as collect_live_weather, wave_for_race
     from .venue_weather_special_shadow import rescore as rescore_site_weather_shadow
     from .attack_defense_shadow import rescore as rescore_attack_defence_shadow
+    from .hidden_path_shadow import analyze as analyze_hidden_path
     from .grade_competition_shadow import grade_from_program, rescore as rescore_grade_competition
     from .strong_field_diagnostic import analyze as analyze_strong_field
     from .coverage_reselection_shadow import review as review_coverage_shadow
@@ -46,6 +47,7 @@ else:
     from weather_live_bridge import collect_today as collect_live_weather, wave_for_race
     from venue_weather_special_shadow import rescore as rescore_site_weather_shadow
     from attack_defense_shadow import rescore as rescore_attack_defence_shadow
+    from hidden_path_shadow import analyze as analyze_hidden_path
     from grade_competition_shadow import grade_from_program, rescore as rescore_grade_competition
     from strong_field_diagnostic import analyze as analyze_strong_field
     from coverage_reselection_shadow import review as review_coverage_shadow
@@ -1441,6 +1443,26 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
                 "no_additional_stake": True,
                 "result_data_used": False,
             }
+    # A new, independent forward-only counterfactual: two evidential signals
+    # for a less-obvious attacker, follower and attack-overrun counter.
+    # It never edits the official bet array, allocations or classification.
+    hidden_path_shadow = None
+    if linked_active and venue != "江戸川" and phase == "exhibition" and pre_cutoff_leg_gate.get("final_eligible") is True:
+        try:
+            hidden_path_shadow = analyze_hidden_path(
+                bets, promoted.get("ranked_outcomes"), racers,
+                phase=phase, exhibition_verified=True,
+                frozen_at_utc=frozen_at, cutoff_at_utc=cutoff.isoformat())
+            if hidden_path_shadow is not None:
+                hidden_path_shadow["formal_bets_sha256"] = stable_hash({"bets": bets})
+                hidden_path_shadow["ranked_source_sha256"] = stable_hash({"ranked": promoted["ranked_outcomes"]})
+        except (ValueError, TypeError, KeyError, AssertionError) as exc:
+            hidden_path_shadow = {
+                "version": "hidden-1m-counterfactual-shadow-v0.1",
+                "status": "UNAVAILABLE", "reason": type(exc).__name__,
+                "model_role": "research_shadow", "not_formal": True,
+                "no_additional_stake": True, "result_data_used": False,
+            }
     count = len(bets)
     shares = interaction_meta["new_head_course_shares"] if interaction_meta else promoted["head_course_shares"]
     # Independent forward-only diagnostic: grade alone never triggers parity,
@@ -1526,6 +1548,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         "grade_context": grade_context,
         **({"strong_field_diagnostic": strong_field_diagnostic} if strong_field_diagnostic else {}),
         **({"coverage_reselection_shadow": coverage_reselection_shadow} if coverage_reselection_shadow else {}),
+        **({"hidden_path_shadow": hidden_path_shadow} if hidden_path_shadow else {}),
         **({"grade_competition_shadow": grade_competition_shadow} if grade_competition_shadow else {}),
         **({"interaction_primary": interaction_meta} if interaction_meta else {}),
         **({"three_leg_primary": three_leg_primary_meta} if three_leg_primary_meta else {}),

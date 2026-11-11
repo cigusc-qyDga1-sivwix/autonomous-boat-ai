@@ -2,7 +2,9 @@
 from copy import deepcopy
 from scripts.hidden_path_shadow import analyze as detect
 from scripts.forecast_audit import _hidden_path_forward_report
-from tests.test_hidden_path_shadow import source, FROZEN, CUTOFF
+import runpy
+_fixture = runpy.run_path('tests/test_hidden_path_shadow.py')
+source, FROZEN, CUTOFF = (_fixture[x] for x in ('source', 'FROZEN', 'CUTOFF'))
 
 DAY = "2026-11-12"
 

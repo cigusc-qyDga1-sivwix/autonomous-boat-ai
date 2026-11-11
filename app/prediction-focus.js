@@ -55,19 +55,20 @@
     return '<div class="bl-focus-ticket">'+numbers(b.combination)+
       '<strong class="bl-focus-amount">'+money(b.virtual_yen)+'</strong></div>';
   }
-  function card(r,formal,minutesLeft=null,closed=false){
+  function card(r,formal,minutesLeft=null,closed=false,context={}){
     const kind=formal?'formal':'pending';
     const label=formal?'展示反映・正式固定':r.classification==='SKIP'?
       'SKIP・研究記録':r.entry_exhibition_gate?.entry_watch?'前付け警戒・暫定':'展示未確認・暫定';
     const shown=r.bets.slice(0,3);
     const total=r.bets.reduce((n,b)=>n+(Number.isSafeInteger(b.virtual_yen)?b.virtual_yen:0),0);
     const classified=r.classification==='SKIP'?' / SKIP':r.classification==='BUY'?' / BUY分類':' / WATCH分類';
+    const rough=root.BoatRoughRaceSignal?.render(r,{mode:context.mode,formal,event_date:context.event_date})||'';
     const scenario=typeof r.scenario==='string'&&r.scenario.trim()?
       '<p class="bl-focus-scenario"><strong>保存時の展開仮説</strong>'+esc(r.scenario)+'</p>':'';
     return '<article class="bl-focus-card is-'+kind+(closed?' is-cutoff-soon':'')+'">'+
       '<div class="bl-focus-card-head"><div><strong>'+esc(r.venue)+' <span>'+r.race+'R</span></strong>'+
       '<small>締切予定 '+esc(r.cutoff_jst)+' JST'+esc(classified)+'</small></div>'+
-      '<span class="bl-focus-status is-'+kind+'">'+label+'</span></div>'+
+      '<span class="bl-focus-status is-'+kind+'">'+label+'</span></div>'+rough+
       (closed?'<p class="bl-focus-countdown is-closed" role="status">投票締切済み ・ 記録表示あと約'+esc(minutesLeft)+'分</p>':'')+
       '<div class="bl-focus-tickets">'+shown.map((b,i)=>ticket(r,i)).join('')+'</div>'+
       scenario+
@@ -110,7 +111,7 @@
         '<p>締切時刻から10分間、発走前に保存した買い目を表示します。投票締切済み・新規投票不可。</p>'+
         '<div class="bl-focus-grid">'+s.postCutoff.slice(0,6).map(r=>{
           const until=Date.parse(s.day+'T'+r.cutoff_jst+':00+09:00')+POST_CUTOFF_WINDOW_MS-now.getTime();
-          return card(r,isFormal(r,data,policy,opts),Math.ceil(until/60000),true);
+          return card(r,isFormal(r,data,policy,opts),Math.ceil(until/60000),true,{mode:data.mode,event_date:data.event_date});
         }).join('')+'</div></div>':'')+
       '<div class="bl-focus-switch" role="group" aria-label="予想の種類">'+
       '<button type="button" data-focus-mode="formal" aria-pressed="'+(mode==='formal')+'"'+
@@ -118,13 +119,13 @@
       '<button type="button" data-focus-mode="research" aria-pressed="'+(mode==='research')+'"'+
       (mode==='research'?' class="active"':'')+'>暫定・研究 <span>'+s.research.length+'</span></button></div>'+
       (s.current?
-        '<div class="bl-focus-grid">'+(visible.length?visible.map(r=>card(r,mode==='formal')).join(''):
+        '<div class="bl-focus-grid">'+(visible.length?visible.map(r=>card(r,mode==='formal',null,false,{mode:data.mode,event_date:data.event_date})).join(''):
         '<p class="bl-focus-empty">'+(mode==='formal'?'展示情報と締切前固定を確認できた正式予想は、現在の締切予定にはありません。':
           '今後の締切予定に該当する暫定・研究予想はありません。')+'</p>')+'</div>'+
         (chosen.length>6?'<p class="bl-focus-overflow">直近6Rを表示中。残り'+(chosen.length-6)+'Rは下のレース一覧から確認してください。</p>':''):
         '<p class="bl-focus-empty">過去の固定予想は下の開催一覧・レース一覧から確認できます。</p>')+
       '<p class="bl-focus-guard">正式＝6艇展示入力を照合し、締切前に固定された買い目。BUY採算判定とは異なります。'+
-      'SKIP・暫定・研究用は正式に含めません。仮想金額であり実投票ではありません。'+
+      'SKIP・暫定・研究用は正式に含めません。⚡ 荒れ注意は未校正の展開警戒で、万舟確率ではありません。仮想金額であり実投票ではありません。'+
       (count===0&&s.current?'予想が未取得の場合は表示しません。':'')+'</p></section>';
   }
   root.BoatPredictionFocus={render,summarize,isFormal,setMode,getMode};

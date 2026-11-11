@@ -4,6 +4,8 @@
 (function(root){
   'use strict';
   const CLOSE_HEADS=new Set(['STRONG_FIELD_CLOSE_HEADS','MODEL_CLOSE_HEADS_NOT_STRONG_FIELD']);
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const pathLabels={OUTER_ATTACK_FOLLOWER:'外攻め→追走',OUTER_ATTACK_INSIDE_SURVIVES:'外攻め→イン残り',ATTACK_OVERRUN_INNER_COUNTER:'攻め流れ→内の逆転'};
   function assess(r,context={}){
     if(!r||context.mode!=='auto-live'||context.formal!==true||
       r.model_role!=='main'||r.classification==='SKIP'||
@@ -18,6 +20,12 @@
       frozen<cutoff-24*60*60*1000)return null;
     const d=r.strong_field_diagnostic;
     const reasons=[];
+    const hidden=r.hidden_path_shadow;
+    if(hidden?.model_role==='research_shadow'&&hidden.not_formal===true&&
+      hidden.result_data_used===false&&hidden.frozen_at_utc===r.frozen_at_utc&&
+      ['PRE_CUTOFF_SHADOW_SWAP_ONLY','MISSING_SCENARIO_CANDIDATE'].includes(hidden.status)&&
+      Array.isArray(hidden.candidates)&&hidden.candidates.some(x=>x.already_in_formal===false))
+      reasons.push('隠れ展開候補');
     if(CLOSE_HEADS.has(d?.status))reasons.push('1着混戦');
     if(r.formal_head_risk_v25?.inside_head_rebalance?.applied===true||
       r.formal_insight_v24?.inside_pressure?.applied===true)reasons.push('攻防変化');
@@ -39,6 +47,20 @@
     return '<span class="bl-rough-marker" title="'+info.meaning+'" aria-label="荒れ注意（未校正・展示反映後）">'+
       '<strong>⚡ 荒れ注意</strong><small>'+info.reasons.join('・')+'</small></span>';
   }
-  root.BoatRoughRaceSignal={assess,render};
+  function renderDetails(r,context={}){
+    const info=assess(r,context),hidden=r?.hidden_path_shadow;
+    if(!info||!info.reasons.includes('隠れ展開候補')||!hidden)return '';
+    const missing=hidden.candidates.filter(x=>x.already_in_formal===false).slice(0,3);
+    const rows=missing.map(x=>'<li><strong>'+esc(x.combination)+'</strong>：'+
+      esc(pathLabels[x.scenario]||'1M別展開')+'</li>').join('');
+    const swap=hidden.status==='PRE_CUTOFF_SHADOW_SWAP_ONLY'?
+      '<p>同一点数・仮想5万円の研究用差替案：'+esc(hidden.replacement_candidate)+
+      '（外す候補 '+esc(hidden.replacement_victim)+'）。正式買い目には追加・置換していません。</p>':
+      '<p>採用根拠・点数上限を満たす差替案は未確定です。</p>';
+    return '<section class="notice bl-hidden-path-note"><strong>🧠 発走前に検出した隠れ展開（研究用）</strong>'+
+      '<ul>'+rows+'</ul>'+swap+
+      '<p>すべて展示後の相対値に基づく未校正の仮説です。実際の牽制・進路は映像で未確認。万舟確率や購入推奨ではありません。</p></section>';
+  }
+  root.BoatRoughRaceSignal={assess,render,renderDetails};
   if(typeof module==='object'&&module.exports)module.exports=root.BoatRoughRaceSignal;
 })(typeof window==='undefined'?globalThis:window);

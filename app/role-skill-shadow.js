@@ -13,8 +13,29 @@ function relative(values,scale){
  const mean=numbers.reduce((a,b)=>a+b,0)/numbers.length;
  return values.map(v=>v===null?null:clamp((v-mean)/scale,-1,1));
 }
+// Fixed prospective hypothesis, not fitted to retrospective winners. At each
+// slot only alternatives within 85% of the best remaining conditional score
+// qualify. Diversity never invents an unsupported candidate or a new head.
+function coverFollowers(ranked,count){
+ const pending=[...ranked],selected=[],seconds=new Set(),thirds=new Set();
+ for(let i=0;i<count;i++){
+  const best=pending[0];
+  const eligible=pending.filter(c=>best.shadow_score>0&&c.shadow_score>=.85*best.shadow_score);
+  const utility=c=>{
+   const [,s,t]=c.combination.split('-');
+   return c.shadow_score*(1+(seconds.has(s)?0:.10)+(thirds.has(t)?0:.10));
+  };
+  const choice=eligible.sort((a,b)=>utility(b)-utility(a)||b.shadow_score-a.shadow_score||
+    a.combination.localeCompare(b.combination))[0]||best;
+  selected.push(choice);pending.splice(pending.indexOf(choice),1);
+  const [,s,t]=choice.combination.split('-');seconds.add(s);thirds.add(t);
+ }
+ return selected.concat(pending);
+}
 function run(input,controlBets,options={}){
  const preserveHeads=options.preserveHeadCoverage===true;
+ const followerCoverage=options.preserveFollowerCoverage===true;
+ if(followerCoverage&&!preserveHeads)throw Error('Follower coverage requires head preservation');
  const model=root.BoatTacticalModel,base=root.BoatFourFactor;
  if(!model||!base)throw Error('Pre-cutoff model dependencies unavailable');
  if(!input||!Array.isArray(input.racers)||input.racers.length!==6||
@@ -100,7 +121,8 @@ function run(input,controlBets,options={}){
   for(let h=1;h<=6;h++){
    const stakes=controlBets.filter(b=>Number(b.combination[0])===h)
      .map(b=>b.virtual_yen).sort((a,b)=>b-a);
-   const candidates=ranked.filter(c=>Number(c.combination[0])===h);
+   let candidates=ranked.filter(c=>Number(c.combination[0])===h);
+   if(followerCoverage)candidates=coverFollowers(candidates,stakes.length);
    if(candidates.length<stakes.length)throw Error('Insufficient same-head candidates');
    stakes.forEach((stake,i)=>bets.push({
     combination:candidates[i].combination,virtual_yen:stake
@@ -113,7 +135,8 @@ function run(input,controlBets,options={}){
   }));
  }
  if(bets.reduce((sum,b)=>sum+b.virtual_yen,0)!==50000)throw Error('Shadow budget mismatch');
- return {version:preserveHeads?'racer-role-suitability-shadow-v0.2-head-preserved':
+ return {version:followerCoverage?'racer-role-suitability-shadow-v0.3-follower-coverage':
+   preserveHeads?'racer-role-suitability-shadow-v0.2-head-preserved':
    'racer-role-suitability-shadow-v0.1',status:'ready',
   model_role:'shadow_validation',generated_pre_cutoff:true,result_data_used:false,
   odds_used:false,calibrated:false,no_additional_stake:true,
@@ -127,6 +150,12 @@ function run(input,controlBets,options={}){
   evidence:{top3_residual_boats:roles.filter(r=>r.top3_residual_used).length,
     frame_order_boats:roles.filter(r=>r.frame_start_order_used).length,
     eligible_follow_scenarios:followEligible,eligible_inside_survival_scenarios:innerEligible},
+  ...(followerCoverage?{follower_coverage_policy:{
+    version:'conditional-diversity-v1',minimum_score_ratio:.85,
+    unseen_second_bonus:.10,unseen_third_bonus:.10,
+    applied_equally_to_all_lanes:true,untrained:true,
+    rationale:'Keep credible follower alternatives within existing head budgets; no outside-lane bonus'
+  }}:{}),
   roles,bets};
 }
 root.BoatRoleSkillShadow={run};

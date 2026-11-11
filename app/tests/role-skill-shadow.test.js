@@ -75,3 +75,34 @@ const v2Poison=bridge.run({...input,venue_tactics_trial:true,role_skill_shadow_t
  role_skill_head_preserved_trial:true,result:{finish:'6-5-4'},odds:{'6-5-4':10000}});
 assert.deepEqual(v2Poison.role_skill_shadow,viaBridge.role_skill_shadow);
 console.log('Role-skill shadow: isolation, provenance, guards, matching point/stake, no-result leakage, role evidence PASS');
+
+const v3Flags={...input,venue_tactics_trial:true,role_skill_shadow_trial:true,
+ role_skill_head_preserved_trial:true,role_skill_follower_coverage_trial:true};
+const v3=bridge.run(v3Flags);
+assert.equal(v3.role_skill_shadow.version,'racer-role-suitability-shadow-v0.3-follower-coverage');
+assert.deepEqual(v3.bets,control.bets,'coverage experiment cannot change main');
+assert.deepEqual(headSignature(v3.role_skill_shadow.bets),headSignature(control.bets));
+assert.deepEqual(bridge.run({...v3Flags,result:{finish:'6-5-4'},odds:{'6-5-4':999}}).role_skill_shadow,
+ v3.role_skill_shadow,'v0.3 ignores results and odds');
+assert.throws(()=>skill.run(input,control.bets,{preserveFollowerCoverage:true}));
+// Controlled scores expose follower crowding and a weak alternative which must
+// remain excluded. The same rule applies to inner and outer lanes alike.
+const originalForecast=globalThis.BoatTacticalModel.forecastFourFactorPointFree;
+try{
+ const candidates=[];
+ for(let h=1;h<=6;h++)for(let s=1;s<=6;s++)for(let t=1;t<=6;t++)
+  if(new Set([h,s,t]).size===3)candidates.push({combination:`${h}-${s}-${t}`,relative_score:.01});
+ for(const [combination,score] of [['1-2-3',1],['1-2-4',.99],['1-5-6',.98],['1-6-5',.70]])
+  candidates.find(c=>c.combination===combination).relative_score=score;
+ globalThis.BoatTacticalModel.forecastFourFactorPointFree=()=>({metadata:{four_factor:{ticket_policy:{candidates}}}});
+ const noContext=structuredClone(input);noContext.racers.forEach(r=>r.racer_context=null);
+ const crowded=[{combination:'1-2-3',virtual_yen:20000},{combination:'1-2-4',virtual_yen:20000},
+  {combination:'2-1-3',virtual_yen:5000},{combination:'3-1-2',virtual_yen:5000}];
+ const old=skill.run(noContext,crowded,{preserveHeadCoverage:true});
+ const trial=skill.run(noContext,crowded,{preserveHeadCoverage:true,preserveFollowerCoverage:true});
+ assert.ok(old.bets.some(b=>b.combination==='1-2-4'));
+ assert.ok(trial.bets.some(b=>b.combination==='1-5-6'),'credible outside alternative retained');
+ assert.ok(!trial.bets.some(b=>b.combination==='1-6-5'),'weak alternative cannot receive coverage rescue');
+ assert.deepEqual(headSignature(trial.bets),headSignature(crowded));
+}finally{globalThis.BoatTacticalModel.forecastFourFactorPointFree=originalForecast;}
+console.log('Follower coverage: credible alternative, score floor, head budgets and result isolation PASS');

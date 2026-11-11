@@ -4,6 +4,8 @@ on:
     paths:
       - 'app/role-skill-shadow.js'
       - 'app/tests/role-skill-shadow.test.js'
+      - 'app/tests/role-follower-replay.test.js'
+      - 'scripts/replay_role_follower_coverage.js'
       - 'scripts/main_four_factor_bridge.js'
       - 'scripts/autonomous_daily.py'
       - 'tests/test_role_skill_shadow.py'
@@ -27,9 +29,13 @@ jobs:
           node --check app/role-skill-shadow.js
           node --check scripts/main_four_factor_bridge.js
           node --check app/tests/role-skill-shadow.test.js
+          node --check scripts/replay_role_follower_coverage.js
+          node --check app/tests/role-follower-replay.test.js
       - name: Python syntax
         run: python -m py_compile scripts/autonomous_daily.py tests/test_role_skill_shadow.py
       - name: Standalone conditional-role shadow tests
-        run: node app/tests/role-skill-shadow.test.js
+        run: |
+          node app/tests/role-skill-shadow.test.js
+          node app/tests/role-follower-replay.test.js
       - name: Python-to-Node forecast bridge parity
         run: python -m unittest discover -s tests -p 'test_role_skill_shadow.py' -v

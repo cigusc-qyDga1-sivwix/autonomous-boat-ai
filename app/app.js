@@ -943,7 +943,7 @@
   }
   function refreshTimelineClock(){
     if(!['overview','races'].includes(state.view)||!data||document.hidden)return;
-    // Refresh the time-sensitive 10-minute board without reloading or changing tickets.
+    // Refresh the read-only 10-minute post-cutoff board without changing frozen tickets.
     const focus=document.querySelector('.bl-focus-board');
     if(focus&&window.BoatPredictionFocus&&!focus.contains(document.activeElement)){
       const markup=window.BoatPredictionFocus.render(data,new Date(),window.BoatTicketPolicy,{
@@ -1521,7 +1521,7 @@
         // While reanalysis is open, query the public original-exhibition-only CSV directly.
         // The external publisher is periodic; this is best-effort, not true realtime.
         setInterval(()=>{if(state.view==='races'&&state.raceDetail&&state.showExternalAnalysis&&!document.hidden)void refreshOriginalExhibition(false);},20000);
-        setInterval(refreshTimelineClock,60000);
+        setInterval(refreshTimelineClock,15000);
         // Poll the small verified payout file on every visible screen, independently
         // of the much larger forecast JSON and its prediction timestamp.
         setInterval(pollOfficialResults,60000);

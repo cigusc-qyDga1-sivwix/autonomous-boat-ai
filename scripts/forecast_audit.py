@@ -619,6 +619,96 @@ def _coverage_reselection_forward_report(forecasts, official, alerts, day):
     }
 
 
+def _hidden_path_forward_report(forecasts, official, alerts, day):
+    """Compare only already-frozen equal-point research swaps with official payouts."""
+    baseline, alternative = [], []
+    by_venue = defaultdict(lambda: {"formal": [], "research": []})
+    by_scenario = defaultdict(lambda: {"formal": [], "research": []})
+    statuses, exclusions = Counter(), Counter()
+    for r in forecasts:
+        shadow = r.get("hidden_path_shadow")
+        if not isinstance(shadow, dict):
+            continue
+        status = shadow.get("status", "unknown")
+        statuses[status] += 1
+        if status != "PRE_CUTOFF_SHADOW_SWAP_ONLY":
+            continue
+        key = f"{day}|{r['venue']}|{r['race']}"
+        if key in alerts:
+            exclusions["official_refund_or_conflict"] += 1
+            continue
+        ok, why = _verify_race(r, official.get(key), day)
+        if not ok:
+            exclusions["official_" + why] += 1
+            continue
+        formal = r.get("bets")
+        control = shadow.get("formal_control_bets")
+        trial = shadow.get("shadow_alternative_bets")
+        if (r.get("ticket_status") != "formal"
+                or r.get("phase") != "exhibition"
+                or shadow.get("model_role") != "research_shadow"
+                or shadow.get("not_formal") is not True
+                or shadow.get("no_additional_stake") is not True
+                or shadow.get("result_data_used") is not False
+                or shadow.get("odds_used") is not False
+                or shadow.get("frozen_at_utc") != r.get("frozen_at_utc")
+                or shadow.get("same_point_count") is not True
+                or shadow.get("same_virtual_budget_yen") != RESEARCH_BUDGET
+                or not isinstance(shadow.get("formal_bets_sha256"), str)
+                or not isinstance(shadow.get("ranked_source_sha256"), str)
+                or not _valid_shadow_tickets(formal)
+                or not _valid_shadow_tickets(control)
+                or not _valid_shadow_tickets(trial)
+                or len(formal) != len(trial)
+                or _ticket_signature(formal) != _ticket_signature(control)):
+            exclusions["invalid_or_unmatched_pre_cutoff_control"] += 1
+            continue
+        main_row = _shadow_trial_result(r, formal, official[key])
+        trial_row = _shadow_trial_result(r, trial, official[key])
+        baseline.append(main_row)
+        alternative.append(trial_row)
+        by_venue[r["venue"]]["formal"].append(main_row)
+        by_venue[r["venue"]]["research"].append(trial_row)
+        candidate = shadow.get("replacement_candidate")
+        evidence = next((x for x in shadow.get("candidates", [])
+                         if x.get("combination") == candidate), {})
+        group = evidence.get("scenario", "OTHER_UNVERIFIED_SCENARIO")
+        by_scenario[group]["formal"].append(main_row)
+        by_scenario[group]["research"].append(trial_row)
+    def grouped(source):
+        return {name: {"formal": _metrics(x["formal"]),
+                       "research_shadow": _metrics(x["research"])}
+                for name, x in sorted(source.items())}
+    return {
+        "protocol": "pre_cutoff_hidden_1m_v01_vs_same_snapshot_formal",
+        "not_formal_performance": True,
+        "no_backfilled_counterfactuals": True,
+        "same_point_count_and_50000yen": True,
+        "status_counts": dict(sorted(statuses.items())),
+        "official_verified_equal_point_pairs": len(baseline),
+        "formal": _metrics(baseline),
+        "research_shadow": _metrics(alternative),
+        "head_misses_recovered": sum(a["stage"] == "head_miss" and
+                                    b["stage"] != "head_miss"
+                                    for a, b in zip(baseline, alternative)),
+        "new_head_misses": sum(a["stage"] != "head_miss" and
+                              b["stage"] == "head_miss"
+                              for a, b in zip(baseline, alternative)),
+        "second_misses_recovered": sum(a["stage"] == "second_miss" and
+                                      b["stage"] in ("hit", "third_miss")
+                                      for a, b in zip(baseline, alternative)),
+        "new_second_misses": sum(a["stage"] != "second_miss" and
+                                b["stage"] == "second_miss"
+                                for a, b in zip(baseline, alternative)),
+        "by_venue": grouped(by_venue),
+        "by_scenario": grouped(by_scenario),
+        "exclusions": dict(sorted(exclusions.items())),
+        "warning": ("Hypothesized maneuvers are not observed; do not promote "
+                    "without >=100 independent matched races plus venue splits. "
+                    "Both gains and newly introduced misses must be reported."),
+    }
+
+
 def _formal_v24_forward_report(forecasts, official, alerts, day):
     """Official-only v2.4 vs pre-cutoff same-input frozen v2.3 controls."""
     trial, old = [], []
@@ -964,6 +1054,9 @@ def analyze(dataset: dict):
     )
     report["coverage_reselection_forward_comparison"] = (
         _coverage_reselection_forward_report(raw, official, alerts, day)
+    )
+    report["hidden_path_forward_comparison"] = (
+        _hidden_path_forward_report(raw, official, alerts, day)
     )
     if len(verified) >= 20:
         report["warnings"] = [

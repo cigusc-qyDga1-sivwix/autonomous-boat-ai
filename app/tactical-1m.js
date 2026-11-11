@@ -454,6 +454,63 @@ function forecast(input){
    insidePressureV24.reason='documented_legal_avg_st_and_original_turn_advantage';
   }
  }
+ // v2.5: promote an independently supported challenger only when its legal
+ // average ST is faster and its turn/entry movement can exploit that start.
+ // The adjustment is prospective, bounded and never lowers lane 1 by fiat.
+ // v2.4's already-applied pressure counts toward the total (no double debit).
+ const insidePressureV25={
+  version:'inside-challenger-head-switch-v2.5-forward',
+  requested:input.formal_head_risk_v25===true,applied:false,
+  inside_lane:v[byCourse[0]].lane,attacking_lane:null,attacking_course:null,
+  prior_v24_multiplier:insidePressureV24.head_multiplier,
+  final_head_multiplier:insidePressureV24.head_multiplier,
+  reduction_vs_v24:0,attacker_multiplier:1,
+  reason:'no_independent_legal_start_and_turn_support',
+  pre_cutoff_only:true,result_data_used:false,odds_used:false,calibrated:false
+ };
+ if(input.formal_head_risk_v25===true&&input.formal_insight_v24===true&&
+    input.phase==='exhibition'&&input.venue!=='江戸川'&&
+    v.every(x=>x.turn!==null&&x.turn>=4&&x.turn<=15&&
+      x.exhibit!==null&&x.exhibit>=5&&x.exhibit<=10)&&
+    v[byCourse[0]].avgValid){
+  const inside=v[byCourse[0]],insideMove=move[byCourse[0]];
+  const attackers=[2,3,4].map(course=>{
+   const challenger=v[byCourse[course-1]],m=move[byCourse[course-1]];
+   const stEdge=inside.avg-challenger.avg;
+   const turnEdge=inside.turn-challenger.turn;
+   const goRatio=m.go/Math.max(.38,insideMove.go);
+   const turnRatio=m.turn/Math.max(.35,insideMove.turn);
+   return {course,lane:challenger.lane,stEdge,turnEdge,goRatio,turnRatio,
+    eligible:challenger.avgValid&&stEdge>=.018&&goRatio>=.92&&
+      (turnEdge>=.025||(goRatio>=1.045&&turnRatio>=.94))};
+  }).filter(x=>x.eligible).sort((a,b)=>b.stEdge-a.stEdge||b.turnEdge-a.turnEdge);
+  if(attackers.length){
+   const best=attackers[0];
+   const priorReduction=1-insidePressureV24.head_multiplier;
+   const desiredReduction=clamp(.040+
+      1.15*(best.stEdge-.018)+
+      .055*Math.max(0,best.goRatio-1)+
+      .020*clamp(best.turnEdge/.10,0,1),.04,.16);
+   // A v2.4 correction is already in strength[0]; do not stack it again.
+   const finalReduction=Math.max(priorReduction,desiredReduction);
+   const extraMultiplier=(1-finalReduction)/(1-priorReduction);
+   strength[0]*=extraMultiplier;
+   // Real 1M attacker goes to 1st; the inside remains eligible for 2nd/3rd.
+   const challengerMultiplier=1+.35*finalReduction;
+   strength[best.course-1]*=challengerMultiplier;
+   insidePressureV25.applied=extraMultiplier<1||challengerMultiplier>1;
+   insidePressureV25.attacking_lane=best.lane;
+   insidePressureV25.attacking_course=best.course;
+   insidePressureV25.final_head_multiplier=+(1-finalReduction).toFixed(6);
+   insidePressureV25.reduction_vs_v24=+(1-extraMultiplier).toFixed(6);
+   insidePressureV25.attacker_multiplier=+challengerMultiplier.toFixed(6);
+   insidePressureV25.observed_avg_st_edge_sec=+best.stEdge.toFixed(4);
+   insidePressureV25.observed_turn_time_edge_sec=+best.turnEdge.toFixed(4);
+   insidePressureV25.go_ratio=+best.goRatio.toFixed(4);
+   insidePressureV25.turn_ratio=+best.turnRatio.toFixed(4);
+   insidePressureV25.reason='legal_avg_st_and_turn_or_movement_advantage';
+  }
+ }
  const denom=strength.reduce((a,b)=>a+b,0),shares=strength.map(v=>v/denom);
  // Condition second and third on WHICH first-turn maneuver succeeded. If c=3
  // attacks, nearby c2 and inside c1 can survive; if c1 escapes, c2/c3 can chase.
@@ -903,6 +960,7 @@ function forecast(input){
      }}:{}),
      ...(openChasers?{venue_surface_v1:venueSurface}:{}),
      ...(input.formal_insight_v24===true?{formal_inside_pressure_v24:insidePressureV24}:{}),
+     ...(input.formal_head_risk_v25===true?{formal_inside_pressure_v25:insidePressureV25}:{}),
      ...(formalLegs?{three_leg_primary_v1:formalLegs}:{}),
      ...(motorExhibition?{venue_motor_exhibition_v1:motorExhibition}:{}),
      ...(venueAware?{venue_tactics_v2:({

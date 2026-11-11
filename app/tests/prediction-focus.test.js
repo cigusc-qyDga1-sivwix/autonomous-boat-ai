@@ -61,4 +61,24 @@ assert.equal(byVenue.upcoming.length,1);
 const escaped=board.render({...data,forecast_races:[race('<script>',1,'18:40')]},now,policy);
 assert.match(escaped,/&lt;script&gt;/);
 assert.doesNotMatch(escaped,/<script>/);
-console.log('Prediction-first quickboard: PASS');
+// 10-minute window is precise to the second, not merely the displayed minute.
+const cutoffRace=race('芦屋',6,'18:10');
+const tenData={...data,forecast_races:[cutoffRace]};
+const atStart=new Date('2026-11-11T09:00:00Z'); // exact T-10m
+const beforeStart=new Date('2026-11-11T08:59:59Z');
+const nearEnd=new Date('2026-11-11T09:09:59Z');
+const afterEnd=new Date('2026-11-11T09:10:00Z');
+assert.equal(board.summarize(tenData,beforeStart,policy).urgent.length,0);
+assert.equal(board.summarize(tenData,atStart,policy).urgent.length,1);
+assert.equal(board.summarize(tenData,nearEnd,policy).urgent.length,1);
+assert.equal(board.summarize(tenData,afterEnd,policy).urgent.length,0);
+assert.match(board.render(tenData,atStart,policy),/締切前10分・直前予想/);
+assert.match(board.render(tenData,atStart,policy),/締切まで約10分/);
+assert.match(board.render(tenData,nearEnd,policy),/締切まで約1分/);
+assert.doesNotMatch(board.render(tenData,beforeStart,policy),/bl-focus-urgent"/);
+assert.doesNotMatch(board.render(tenData,afterEnd,policy),/bl-focus-urgent"/);
+const pendingSoon={...tenData,forecast_races:[{...cutoffRace,entry_exhibition_gate:{final_eligible:false}}]};
+assert.match(board.render(pendingSoon,atStart,policy),/暫定予想・正式未確認/);
+assert.doesNotMatch(board.render(pendingSoon,atStart,policy),/正式予想を表示中/);
+assert.match(board.render({...tenData,event_date:'2026-11-10'},atStart,policy),/今日の予想・締切として扱いません/);
+console.log('Prediction-first quickboard: 10-minute fixed window + formal/provisional segregation PASS');

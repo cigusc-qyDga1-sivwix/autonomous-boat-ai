@@ -942,7 +942,16 @@
     else window.BoatRaceVisual?.dispose();
   }
   function refreshTimelineClock(){
-    if(state.view!=='overview'||!data||document.hidden||!window.BoatRaceTimeline)return;
+    if(!['overview','races'].includes(state.view)||!data||document.hidden)return;
+    // Refresh the time-sensitive 10-minute board without reloading or changing tickets.
+    const focus=document.querySelector('.bl-focus-board');
+    if(focus&&window.BoatPredictionFocus&&!focus.contains(document.activeElement)){
+      const markup=window.BoatPredictionFocus.render(data,new Date(),window.BoatTicketPolicy,{
+        imported:!!readJSON(STORE_DATA,null),venue:state.view==='races'?state.venue:'全場'
+      });
+      if(markup)focus.outerHTML=markup;
+    }
+    if(state.view!=='overview'||!window.BoatRaceTimeline)return;
     const node=document.querySelector('.race-timeline');
     if(!node||node.contains(document.activeElement))return;
     // Refresh only the timeline. Never refetch, mutate a frozen prediction, or reset scroll.

@@ -219,8 +219,9 @@ def _verify_race(r: dict, p: dict, day: str) -> tuple[bool, str]:
         "four-factor-v2.2-linked-primary-untrained",
         "four-factor-v2.3-conditional-second-primary-untrained",
         "four-factor-v2.4-entry-exhibition-balance-untrained",
+        "four-factor-v2.5-evidence-head-switch-untrained",
     )
-    if r.get("model_version") in ("four-factor-v2.1-actual-entry-primary-untrained", "four-factor-v2.2-linked-primary-untrained", "four-factor-v2.3-conditional-second-primary-untrained", "four-factor-v2.4-entry-exhibition-balance-untrained"):
+    if r.get("model_version") in ("four-factor-v2.1-actual-entry-primary-untrained", "four-factor-v2.2-linked-primary-untrained", "four-factor-v2.3-conditional-second-primary-untrained", "four-factor-v2.4-entry-exhibition-balance-untrained", "four-factor-v2.5-evidence-head-switch-untrained"):
         if not 4 <= len(bets) <= 24:
             return False, "bets_count_invalid"
         if any(type(b.get("virtual_yen")) is not int or b["virtual_yen"] < 1000
@@ -682,6 +683,73 @@ def _formal_v24_forward_report(forecasts, official, alerts, day):
     }
 
 
+def _formal_v25_forward_report(forecasts, official, alerts, day):
+    """Official-only, same-time v2.5 vs frozen v2.4, no hindsight."""
+    trial, old = [], []
+    excluded = Counter()
+    by_venue = defaultdict(lambda: {"trial": [], "old": []})
+    generated = 0
+    changed = 0
+    for r in forecasts:
+        proof = r.get("formal_head_risk_v25")
+        if not isinstance(proof, dict) or proof.get("formal_component") is not True:
+            continue
+        generated += 1
+        changed += int(proof.get("actual_ticket_or_allocation_changed") is True)
+        key = f"{day}|{r['venue']}|{r['race']}"
+        if key in alerts:
+            excluded["official_refund_or_conflict"] += 1
+            continue
+        eligible, reason = _verify_race(r, official.get(key), day)
+        if not eligible:
+            excluded["official_" + reason] += 1
+            continue
+        control = proof.get("control_bets")
+        if (r.get("model_version") != "four-factor-v2.5-evidence-head-switch-untrained"
+                or r.get("ticket_status") != "formal"
+                or r.get("phase") != "exhibition"
+                or proof.get("pre_cutoff_only") is not True
+                or proof.get("result_data_used") is not False
+                or proof.get("odds_used") is not False
+                or proof.get("no_additional_stake") is not True
+                or proof.get("frozen_at_utc") != r.get("frozen_at_utc")
+                or proof.get("control_frozen_at_utc") != r.get("frozen_at_utc")
+                or proof.get("prior_model") != "four-factor-v2.4-entry-exhibition-balance-untrained"
+                or not isinstance(proof.get("control_ranked_sha256"), str)
+                or not isinstance(proof.get("main_ranked_sha256"), str)):
+            excluded["missing_forward_provenance"] += 1
+            continue
+        if (not _valid_shadow_tickets(control)
+                or not _valid_shadow_tickets(r.get("bets"))
+                or proof.get("same_point_count") is not True
+                or len(control) != len(r["bets"])):
+            excluded["not_equal_point_count_or_invalid_budget"] += 1
+            continue
+        alt = _shadow_trial_result(r, r["bets"], official[key])
+        base = _shadow_trial_result(r, control, official[key])
+        trial.append(alt)
+        old.append(base)
+        by_venue[r["venue"]]["trial"].append(alt)
+        by_venue[r["venue"]]["old"].append(base)
+    return {
+        "protocol": "forward_frozen_v25_vs_same_time_v24",
+        "generated_before_official_reconciliation": generated,
+        "actual_ticket_or_allocation_changes": changed,
+        "official_verified_equal_point_pairs": len(trial),
+        "formal_v25": _metrics(trial),
+        "frozen_v24_control_not_formal": _metrics(old),
+        "by_venue": {
+            venue: {"formal_v25": _metrics(rows["trial"]),
+                    "frozen_v24_control_not_formal": _metrics(rows["old"])}
+            for venue, rows in sorted(by_venue.items())
+        },
+        "exclusions": dict(sorted(excluded.items())),
+        "historical_forecasts_immutable": True,
+        "not_calibrated": True,
+        "note": "Same stake and point count; evaluate >=100 prospective matched races and venue splits before accuracy claims.",
+    }
+
+
 def analyze(dataset: dict):
     """Audit a single daily snapshot; never add unresolved races as losers."""
     day = dataset["event_date"]
@@ -890,6 +958,9 @@ def analyze(dataset: dict):
     )
     report["formal_v24_forward_comparison"] = (
         _formal_v24_forward_report(raw, official, alerts, day)
+    )
+    report["formal_v25_forward_comparison"] = (
+        _formal_v25_forward_report(raw, official, alerts, day)
     )
     report["coverage_reselection_forward_comparison"] = (
         _coverage_reselection_forward_report(raw, official, alerts, day)

@@ -737,6 +737,7 @@
     ${['STRONG_FIELD_CLOSE_HEADS','MODEL_CLOSE_HEADS_NOT_STRONG_FIELD'].includes(r.strong_field_diagnostic?.status)? `<div class="notice warn"><strong>${r.strong_field_diagnostic.status==='STRONG_FIELD_CLOSE_HEADS'?'強豪混戦':'1着候補の相対評価が接近'}：</strong>上位2頭の相対評価差${Math.round(r.strong_field_diagnostic.head_gap*1000)/10}ポイント。${r.strong_field_diagnostic.head_candidates_absent_from_tickets?.length?`頭候補として買い目未採用の艇：${escape(r.strong_field_diagnostic.head_candidates_absent_from_tickets.join('・'))}号艇。`:'採用済みの頭候補を確認。'}${r.strong_field_diagnostic.status==='MODEL_CLOSE_HEADS_NOT_STRONG_FIELD'?'強豪条件外でも頭の取りこぼしに注意。':''}未校正モデルによる注意表示で、買い目・配分は変更しません。</div>` : ''}
     ${r.formal_insight_v24?.formal_component===true?`<div class="notice"><strong>正式v2.4｜1コース・展示依存の条件付き調整</strong><p>展示配分：${r.formal_insight_v24.exhibition_balance?.applied?'場別複数指標に再配分済み':'必要な全艇のオリジナル展示不足につき旧配分維持'} ／ 1コース攻防：${r.formal_insight_v24.inside_pressure?.applied?'平均ST差とターン指標から再評価済み':'外艇の独立優位が未確認のため補正なし'}。</p><p>買い目は発走前固定。旧v2.3対照買い目は研究用で、追加投資はありません。確率未校正・精度改善未実証です。</p></div>`:``}
     ${coverageRiskNotices()}
+    ${window.BoatRoughRaceSignal?.renderDetails(r,{mode:data.mode,formal:isFormalTicket(r),event_date:data.event_date})||''}
     ${researchCoveragePanel()}
     ${r.point_reason?`<div class="notice"><strong>点数を選んだ理由：</strong>${escape(r.point_reason)} ／ ${r.bets.length}点。これは未校正の相対指標で、実測的中確率ではありません。</div>`:''}
     <div class="detail-grid">

@@ -656,6 +656,9 @@ def _hidden_path_forward_report(forecasts, official, alerts, day):
                 or shadow.get("same_virtual_budget_yen") != RESEARCH_BUDGET
                 or not isinstance(shadow.get("formal_bets_sha256"), str)
                 or not isinstance(shadow.get("ranked_source_sha256"), str)
+                or shadow.get("formal_bets_sha256") != hashlib.sha256(
+                    json.dumps({"bets": formal}, ensure_ascii=False, sort_keys=True,
+                               separators=(",", ":")).encode("utf-8")).hexdigest()
                 or not _valid_shadow_tickets(formal)
                 or not _valid_shadow_tickets(control)
                 or not _valid_shadow_tickets(trial)

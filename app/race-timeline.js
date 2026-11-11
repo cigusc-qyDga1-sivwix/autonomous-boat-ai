@@ -51,6 +51,7 @@
      r.entry_exhibition_gate?.final_eligible===true&&
      r.exhibition_input_check?.verified_before_freeze===true&&
      root.BoatTicketPolicy?.classify(r,data.event_date)?.formal===true);
+   const rough=root.BoatRoughRaceSignal?.render(r,{mode:data.mode,formal:exhibitionFormal,event_date:data.event_date})||'';
    const delta=minutes(r.cutoff_jst)-nowMinutes;
    const phase=verified?'公式結果確認済':up?(exhibitionFormal?'展示反映済':gate?.entry_watch?'前付け・展示待ち':r.phase==='exhibition'?'展示版・確認中':'展示未確認'):'締切経過・結果待ち';
    const urgent=up&&delta<=10;
@@ -62,7 +63,7 @@
    const result=hasForecast&&!up?'<button type="button" data-result-next="'+esc(r.venue)+'|'+r.race+'" class="timeline-action">'+(verified?'結果照合':'結果を確認')+'</button>':
      '<span class="timeline-disabled">'+(up?'結果待ち':hasForecast?'結果未確認':'結果・予想未取得')+'</span>';
    return '<article class="timeline-race'+(up&&first?' timeline-next':'')+(urgent?' timeline-urgent':'')+'" data-exhibition-status="'+(exhibitionFormal?'formal':'pending')+'"><div class="timeline-clock"><strong>'+esc(r.cutoff_jst)+'</strong><small>'+esc(detail)+'</small></div>'+
-    '<div class="timeline-race-main"><strong>'+esc(r.venue)+' <span>'+r.race+'R</span></strong><span class="timeline-status">'+esc(label)+'</span>'+
+    '<div class="timeline-race-main"><strong>'+esc(r.venue)+' <span>'+r.race+'R</span></strong><span class="timeline-status">'+esc(label)+'</span>'+rough+
     '<small>'+(gate?.entry_watch?'⚠ 前付け警戒 · ':'')+(exhibitionFormal?'✅ 6艇展示反映・正式予想固定':hasForecast?r.phase==='exhibition'?'展示版・正式確認待ち':'展示前固定・最終判断保留':'展示・予想未確認')+'</small></div>'+
     '<div class="timeline-actions">'+main+result+'</div></article>';
   };

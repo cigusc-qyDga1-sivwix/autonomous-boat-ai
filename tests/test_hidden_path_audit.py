@@ -1,5 +1,7 @@
 """Forward-only official reconciliation for hidden 1M alternative tickets."""
 from copy import deepcopy
+import hashlib
+import json
 from scripts.hidden_path_shadow import analyze as detect
 from scripts.forecast_audit import _hidden_path_forward_report
 import runpy
@@ -14,7 +16,7 @@ def setup():
                     exhibition_verified=True, frozen_at_utc=FROZEN,
                     cutoff_at_utc=CUTOFF)
     assert hidden["status"] == "PRE_CUTOFF_SHADOW_SWAP_ONLY"
-    hidden["formal_bets_sha256"] = "b"*64
+    hidden["formal_bets_sha256"] = hashlib.sha256(json.dumps({"bets": bets}, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     hidden["ranked_source_sha256"] = "c"*64
     snapshot = {"venue": "三国", "race": 4, "phase": "exhibition",
                 "ticket_status": "formal", "cutoff_jst": "10:30",

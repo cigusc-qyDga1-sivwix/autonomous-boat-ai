@@ -237,7 +237,8 @@
   }
   function ticketBanner(r){
     const formal=isFormalTicket(r);
-    return '<div class="ticket-status '+(formal?'ticket-status-formal':'ticket-status-pending')+'" role="status"><strong>'+(formal?'✅ 正式買い目':'⏳ 暫定・購入判断保留')+'</strong><p>'+(formal?'展示情報を反映して締切前に固定。この下の買い目を正式版として採用しています。':'正式な買い目はまだありません。展示を確認して締切前に固定できるまで保留します。')+'</p></div>';
+    return '<div class="ticket-status '+(formal?'ticket-status-formal':'ticket-status-pending')+'" role="status"><strong>'+(formal?'✅ 正式買い目':'⏳ 暫定・購入判断保留')+'</strong><p>'+(formal?'展示情報を反映して締切前に固定。この下の買い目を正式版として採用しています。':'正式な買い目はまだありません。展示を確認して締切前に固定できるまで保留します。')+'</p></div>'+
+      (window.BoatRoughRaceSignal?.render(r,{mode:data.mode,formal,event_date:data.event_date})||'');
   }
   function ticketLabel(r){
     if(readJSON(STORE_DATA,null))return "暫定買い目（インポート・固定未検証）";
@@ -281,9 +282,10 @@
     const exhibitionFormal=!!(formal&&
       r.entry_exhibition_gate?.final_eligible===true&&
       r.exhibition_input_check?.verified_before_freeze===true);
+    const rough=window.BoatRoughRaceSignal?.render(r,{mode:data.mode,formal:exhibitionFormal,event_date:data.event_date})||'';
     return '<button type="button" class="race-tile" data-exhibition-status="'+
       (exhibitionFormal?'formal':'pending')+'" data-race="'+escape(r.venue)+'|'+r.race+'">'+
-      '<div class="tile-top"><span class="tile-r">'+escape(r.venue)+' '+r.race+'R</span>'+pill(r.classification)+'</div>'+
+      '<div class="tile-top"><span class="tile-r">'+escape(r.venue)+' '+r.race+'R</span>'+pill(r.classification)+'</div>'+rough+
       '<div class="ticket-list-status '+(formal?'ticket-status-formal':'ticket-status-pending')+'">'+(formal?'✅ 正式買い目':'⏳ 暫定・購入判断保留')+'</div>'+
       '<div class="tile-time">締切予定 '+escape(r.cutoff_jst)+' · 固定 '+r.bets.length+'点 · '+
        (exhibitionFormal?'✅ 展示反映済':r.phase==='exhibition'?'展示版・確認中':'展示前')+'</div>'+ 
@@ -303,7 +305,7 @@
     if(state.raceDetail) return detail(state.raceDetail);
     if(state.venue!=='全場' && window.BoatVenueBoard) return window.BoatVenueBoard.renderVenue(data,state.venue,boardOptions());
     const filtered=allRaces().filter(r=>(state.venue==='全場'||r.venue===state.venue)&&(state.classification==='ALL'||r.classification===state.classification));
-    return `${head('レース・買い目',`${dateDisplay(data.event_date)} / ${data.mode==='auto-live'?'全国の発走前固定済み予想':'保存済み予想'} / 各Rの仮想5万円配分`)}<div class="filter-bar"><div class="segmented">${['ALL','WATCH','SKIP'].map(v=>`<button data-filter-status="${v}" class="${state.classification===v?'active':''}">${v==='ALL'?'すべて':v}</button>`).join('')}</div>${venueSelect(state.venue)}</div><div class="race-card-colour-guide"><span><i class="race-card-guide-formal" aria-hidden="true"></i> ミント色：展示6艇を正式反映</span><span><i class="race-card-guide-pending" aria-hidden="true"></i> 白色：展示前・確認待ち</span></div><div class="race-grid">${filtered.map(tile).join('')||'<div class="no-data">該当するレースはありません</div>'}</div>${data.mode==='auto-live'&&data.unforecast_races?.length?`<div class="notice warn">${data.unforecast_races.length}Rは締切前の予想を固定できなかったため、買い目を表示しません。結果を見てから予想を追加することもありません。</div>`:''}<p class="footer-disclaimer">BUYが0件なのは、オッズによる採算チェックを完了していないため。SKIPレースも研究目的で予想を保持しています。</p>`;
+    return `${head('レース・買い目',`${dateDisplay(data.event_date)} / ${data.mode==='auto-live'?'全国の発走前固定済み予想':'保存済み予想'} / 各Rの仮想5万円配分`)}<div class="filter-bar"><div class="segmented">${['ALL','WATCH','SKIP'].map(v=>`<button data-filter-status="${v}" class="${state.classification===v?'active':''}">${v==='ALL'?'すべて':v}</button>`).join('')}</div>${venueSelect(state.venue)}</div><div class="race-card-colour-guide"><span><i class="race-card-guide-formal" aria-hidden="true"></i> ミント色：展示6艇を正式反映</span><span><i class="race-card-guide-pending" aria-hidden="true"></i> 白色：展示前・確認待ち</span><span>⚡ 荒れ注意：展示後のみ・相対評価は未校正</span></div><div class="race-grid">${filtered.map(tile).join('')||'<div class="no-data">該当するレースはありません</div>'}</div>${data.mode==='auto-live'&&data.unforecast_races?.length?`<div class="notice warn">${data.unforecast_races.length}Rは締切前の予想を固定できなかったため、買い目を表示しません。結果を見てから予想を追加することもありません。</div>`:''}<p class="footer-disclaimer">BUYが0件なのは、オッズによる採算チェックを完了していないため。SKIPレースも研究目的で予想を保持しています。</p>`;
   }
   function raceWeatherHTML(r) {
     const actual=r.weather_used||(r.weather_observed?.wind_speed!=null?

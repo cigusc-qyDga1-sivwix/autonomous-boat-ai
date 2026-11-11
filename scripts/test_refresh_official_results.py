@@ -41,6 +41,65 @@ def pay(finish="4-5-1",yen=1320):
       "retrieved_at_utc":"2026-10-25T07:35:00+00:00"}
 
 class FastOfficialTests(unittest.TestCase):
+    def test_midnight_before_daily_ledger_is_read_only_and_does_not_call_official(self):
+        sentinel = {"event_date": "2026-10-24", "mode": "auto-live", "forecast_races": [{"sha256": "preserved"}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            old = directory / "latest.json"
+            old.write_text(json.dumps(sentinel), encoding="utf-8")
+            before = old.read_bytes()
+            def no_fetch(_):
+                raise AssertionError("Must not fetch official payout before today's forecast exists")
+            status = run(directory, NOW, no_fetch)
+            self.assertEqual(status["status"], "WAITING_FOR_FORECAST")
+            self.assertEqual(status["reason"], "TODAY_LEDGER_NOT_YET_PUBLISHED")
+            self.assertFalse(status["changed"])
+            self.assertFalse(status["official_fetch_attempted"])
+            self.assertEqual(old.read_bytes(), before)
+            self.assertFalse((directory / (DAY + ".json")).exists())
+            self.assertFalse((directory / "official-pay" / (DAY + ".json")).exists())
+            self.assertFalse((directory / "audit-latest.json").exists())
+
+    def test_new_daily_ledger_with_yesterdays_view_waits_without_mutation(self):
+        ledger, view = fixture()
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            path = directory / (DAY + ".json")
+            live = directory / "latest.json"
+            view["event_date"] = "2026-10-24"
+            path.write_text(json.dumps(ledger), encoding="utf-8")
+            live.write_text(json.dumps(view), encoding="utf-8")
+            previous = path.read_bytes(), live.read_bytes()
+            def no_fetch(_):
+                raise AssertionError("Never fetch official for stale daily view")
+            result = run(directory, NOW, no_fetch)
+            self.assertEqual(result["reason"], "CURRENT_DAY_DASHBOARD_NOT_READY")
+            self.assertEqual((path.read_bytes(), live.read_bytes()), previous)
+            self.assertFalse((directory / "official-pay" / (DAY + ".json")).exists())
+
+    def test_empty_frozen_ledger_is_not_misclassified_as_an_official_loss(self):
+        ledger, view = fixture()
+        ledger["race_records"]["16-1"]["versions"] = []
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            (directory / (DAY + ".json")).write_text(json.dumps(ledger))
+            (directory / "latest.json").write_text(json.dumps(view))
+            def no_fetch(_):
+                raise AssertionError("Never synthesize a race before its forecast")
+            report = run(directory, NOW, no_fetch)
+            self.assertEqual(report["reason"], "NO_PRE_CUTOFF_FORECASTS_YET")
+            self.assertTrue(report["retry_on_next_run"])
+
+    def test_corrupted_daily_ledger_still_fails_instead_of_hiding_errors(self):
+        ledger, view = fixture()
+        ledger["event_date"] = "2026-10-24"
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            (directory / (DAY + ".json")).write_text(json.dumps(ledger))
+            (directory / "latest.json").write_text(json.dumps(view))
+            with self.assertRaisesRegex(ValueError, "Invalid current-day ledger date"):
+                run(directory, NOW, lambda _: pay())
+
     def test_result_update_and_unchanged_retry_rebuild_the_same_audit(self):
         ledger,view=fixture()
         with tempfile.TemporaryDirectory() as tmp:

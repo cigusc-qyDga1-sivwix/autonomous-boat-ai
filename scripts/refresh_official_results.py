@@ -105,10 +105,34 @@ def run(directory: Path, now: datetime, fetcher=fetch_official_pay) -> dict:
     path=directory/f"{day}.json"
     live=directory/"latest.json"
     pay_path=directory/"official-pay"/f"{day}.json"
-    if not path.exists() or not live.exists():
-        raise SystemExit("Forecast snapshot unavailable, cannot attach official outcome")
+    # GitHub may dispatch result collection immediately after midnight,
+    # before the new-day program, forecast ledger, or same-day dashboard exists.
+    # That is a normal WAIT state, NOT an official result failure; never settle
+    # yesterday's predictions against today's official payout page.
+    def waiting(reason: str) -> dict:
+        return {
+            "date": day, "status": "WAITING_FOR_FORECAST",
+            "reason": reason, "checked_at_utc": now.astimezone(UTC).isoformat(),
+            "changed": False, "newly_verified": 0, "result_written": False,
+            "existing_predictions_unchanged": True, "retry_on_next_run": True,
+            "official_fetch_attempted": False,
+        }
+
+    if not path.exists():
+        return waiting("TODAY_LEDGER_NOT_YET_PUBLISHED")
+    if not live.exists():
+        return waiting("CURRENT_DAY_DASHBOARD_NOT_YET_PUBLISHED")
     ledger=json.loads(path.read_text(encoding="utf-8"))
     view=json.loads(live.read_text(encoding="utf-8"))
+    if ledger.get("event_date") != day:
+        raise ValueError("Invalid current-day ledger date")
+    if (view.get("event_date") != day or view.get("mode") != "auto-live"
+            or not isinstance(view.get("forecast_races"), list)):
+        return waiting("CURRENT_DAY_DASHBOARD_NOT_READY")
+    if not isinstance(ledger.get("race_records"), dict):
+        raise ValueError("Invalid frozen forecast ledger")
+    if not any((r.get("versions") or []) for r in ledger["race_records"].values()):
+        return waiting("NO_PRE_CUTOFF_FORECASTS_YET")
     previous=json.loads(pay_path.read_text(encoding="utf-8")) if pay_path.exists() else {}
     incoming=fetcher(compact)
     updated_ledger,updated_view,merged,changed,report=update(ledger,view,previous,incoming,now)

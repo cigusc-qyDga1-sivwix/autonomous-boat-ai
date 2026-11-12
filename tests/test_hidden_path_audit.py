@@ -64,3 +64,33 @@ def test_unverified_and_conflicted_not_losses():
     report = _hidden_path_forward_report([snap], paid, {f"{DAY}|三国|4": "review"}, DAY)
     assert report["official_verified_equal_point_pairs"] == 0
     assert report["exclusions"]["official_refund_or_conflict"] == 1
+
+def test_hidden_path_passes_unchanged_from_frozen_snapshot_to_live_view():
+    """Prevent silent disappearance: the live JSON projection must carry
+    the signed snapshot's independent research evidence, not regenerate it."""
+    import ast
+    from pathlib import Path
+    tree = ast.parse(Path('scripts/autonomous_daily.py').read_text(encoding='utf-8'))
+    candidates = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.For) and isinstance(node.target, ast.Name)
+        and node.target.id == 'extra'
+        and isinstance(node.iter, ast.Tuple)
+        and 'hidden_path_shadow' in [
+            el.value for el in node.iter.elts if isinstance(el, ast.Constant)
+        ]
+    ]
+    assert candidates, 'Live view is omitting the frozen hidden-path shadow'
+    assert any(
+        isinstance(n, ast.Assign)
+        and any(
+            isinstance(target, ast.Subscript)
+            and isinstance(target.value, ast.Name)
+            and target.value.id == 'r'
+            for target in n.targets
+        )
+        and isinstance(n.value, ast.Subscript)
+        and isinstance(n.value.value, ast.Name)
+        and n.value.value.id == 'current'
+        for node in candidates for n in ast.walk(node)
+    ), 'Live view must copy frozen source, not compute a new forecast'

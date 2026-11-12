@@ -1984,10 +1984,16 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                          and abs(number(previous_weather["wave_height"]) -
                                  latest_wave["wave_height"]) >= 2))
                 and sum(bool(v.get("weather_refresh")) for v in record["versions"]) < 2)
+            v26_input_recheck = bool(
+                record["versions"]
+                and record["versions"][-1].get("model_version") == FORMAL_CONDITIONAL_V26_MODEL
+                and record["versions"][-1].get("phase") == "exhibition"
+                and (record["versions"][-1].get("exhibition_input_check") or {}).get("verified_before_freeze") is not True
+                and preview_ready)
             if (cutoff.date() >= WAKE_PROMOTION_DATE
                     and record["versions"]
                     and (record["versions"][-1].get("model_version") != expected_main
-                         or context_gain or weather_gain)
+                         or context_gain or weather_gain or v26_input_recheck)
                     and upgrade_now.astimezone(JST) < cutoff - timedelta(seconds=margin)):
                 latest_before = record["versions"][-1]
                 phase_to_promote = latest_before["phase"]
@@ -2002,6 +2008,18 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                     completed_at = datetime.now(UTC) if enforce_wall_clock else now
                     if not safe_to_append_pre_cutoff(upgrade, cutoff, margin, completed_at):
                         continue  # No delayed upgrade, regardless of the initial clock.
+                    # v2.6 must never inherit a false formal exhibition gate from
+                    # a prior snapshot: verify the actual source AGAIN in this run.
+                    if upgrade.get("model_version") == FORMAL_CONDITIONAL_V26_MODEL:
+                        if (phase_to_promote != "exhibition" or not preview_ready
+                                or not numeric_exhibition_matches_snapshot(candidate_now, upgrade)):
+                            continue
+                        upgrade["exhibition_input_check"] = {
+                            "verified_before_freeze": True, "six_boats_matched": 6,
+                            "matched_fields": ["course", "exhibition_time", "exhibition_st"],
+                            "original_metrics_matched": sorted((candidate_now.get("_exhibition_original") or {}).keys()),
+                            "source": selected_source, "no_result_or_payout_used": True,
+                        }
                     # Unique immutable record, not a rewrite of earlier SHA.
                     upgrade["model_upgrade"] = {
                         "previous_sha256": latest_before["sha256"],
@@ -2082,6 +2100,11 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         # This is a derived, non-hashed display gate. Do not alter any frozen
         # baseline/exhibition snapshot or re-create SHA with post-race facts.
         r["entry_exhibition_gate"] = summarize_gate(current, local_day)
+        if (r.get("model_version") == FORMAL_CONDITIONAL_V26_MODEL
+                and (r.get("exhibition_input_check") or {}).get("verified_before_freeze") is not True):
+            r["entry_exhibition_gate"].update(
+                final_eligible=False, buy_allowed=False,
+                reason="v2.6展示6艇の保存時照合が未確認")
         r["ticket_status"] = ("formal" if r["entry_exhibition_gate"]["final_eligible"] and r.get("classification") != "SKIP" else "provisional")
         if withdrawal:
             r["official_withdrawal"] = withdrawal
@@ -2659,6 +2682,7 @@ def main():
             'ticket_status': r['ticket_status'],
             'exhibition_verified': r.get('exhibition_input_check', {}).get('verified_before_freeze') is True,
             'gate_eligible': r.get('entry_exhibition_gate', {}).get('final_eligible') is True,
+            'formal_gate_reason': r.get('entry_exhibition_gate', {}).get('reason'),
             'sha256': r['sha256'], 'frozen_at_utc': r['frozen_at_utc'],
             'bets': r['bets'],
             'new_conditional_status': v26.get('status'),

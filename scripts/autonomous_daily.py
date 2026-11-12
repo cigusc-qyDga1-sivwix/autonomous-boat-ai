@@ -40,6 +40,7 @@ if __package__:
     from .adaptive_main_points import allocate_dynamic, stake_dynamic, VERSION as ADAPTIVE_POINTS_VERSION
     from .justified_main_points import justified_selection, justified_stakes, VERSION as JUSTIFIED_POINTS_VERSION
     from .conditional_second_primary import diversify as diversify_second_pair
+    from .conditional_one_mark_v26 import rescore as rescore_conditional_v26
 else:
     from racer_context import collect as collect_racer_context, validated as validate_racer_context
     from official_pay import fetch_official_pay
@@ -60,6 +61,7 @@ else:
     from adaptive_main_points import allocate_dynamic, stake_dynamic, VERSION as ADAPTIVE_POINTS_VERSION
     from justified_main_points import justified_selection, justified_stakes, VERSION as JUSTIFIED_POINTS_VERSION
     from conditional_second_primary import diversify as diversify_second_pair
+    from conditional_one_mark_v26 import rescore as rescore_conditional_v26
 
 JST = ZoneInfo("Asia/Tokyo")
 UTC = timezone.utc
@@ -112,6 +114,8 @@ FORMAL_INSIGHT_V24_ACTIVATION_UTC = datetime.fromisoformat('2026-11-10T16:44:00+
 # v2.5 never changes any older SHA / wager. New snapshots only.
 FORMAL_HEAD_RISK_V25_MODEL = 'four-factor-v2.5-evidence-head-switch-untrained'
 FORMAL_HEAD_RISK_V25_ACTIVATION_UTC = datetime.fromisoformat('2026-11-11T02:00:00+00:00')
+FORMAL_CONDITIONAL_V26_MODEL = 'four-factor-v2.6-evidence-conditional-pairs-untrained'
+FORMAL_CONDITIONAL_V26_ACTIVATION_UTC = datetime.fromisoformat('2026-11-12T09:45:00+00:00')
 # User-approved three-leg primary starts only for newly captured pre-cutoff
 # snapshots after this forward activation. Old v2.3 snapshots are immutable.
 THREE_LEG_PRIMARY_ACTIVATION_UTC = datetime.fromisoformat('2026-11-10T01:30:00+00:00')
@@ -729,7 +733,8 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
                         exhibition_verified: bool = False,
                         site_weather_verified: bool = False,
                         entry_aware: bool = False, linked_ranked: list[dict] | None = None,
-                        conditional_second_main: bool = False) -> tuple[list[dict], dict]:
+                        conditional_second_main: bool = False,
+                        formal_conditional_v26: bool = False) -> tuple[list[dict], dict]:
     """Forward-only main tickets. Existing main forecast is an A/B control."""
     if scored_weights is not None and (len(scored_weights) != 6 or
             any(number(value) is None or value <= 0 for value in scored_weights)):
@@ -854,6 +859,47 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
                               "method": "bounded_pre_cutoff_tactic_tiebreaker"}
         except (KeyError, TypeError, ValueError) as exc:
             tactics_report = {"status": "REJECTED", "applied": False, "reason": str(exc)}
+    # Preserve the canonical head marginal; adjust only evidence-backed
+    # second/third conditionals, from pre-cutoff source data alone.
+    conditional_v26_meta = None
+    if formal_conditional_v26:
+        if not (justified_points and entry_aware and linked_ranked is not None
+                and exhibition_verified and conditional_second_main):
+            raise ValueError('v2.6 requires verified linked exhibition')
+        source_total = sum(x['relative_score'] for x in ranked)
+        trial, conditional_v26_meta = rescore_conditional_v26(
+            [{'combination': x['combination'],
+              'relative_score': x['relative_score'] / source_total} for x in ranked],
+            racers, frozen_at_utc=frozen_at, cutoff_at_utc=cutoff.isoformat())
+        if conditional_v26_meta['status'] == 'APPLIED_UNCALIBRATED':
+            ranked = trial
+            result['top_combinations'] = ranked
+            courses = {r['course']: r['lane'] for r in racers}
+            paths, outside = [], {}
+            inside_lane = courses[1]
+            for course in range(1, 7):
+                lane = courses[course]
+                subset = [x for x in ranked if x['combination'].split('-')[0] == str(lane)]
+                mass = sum(x['relative_score'] for x in subset)
+                label = 'head_course_' + str(course)
+                paths.append({'scenario': label, 'assumed_share': mass,
+                    'share_kind': 'canonical_head_marginal_not_observed_probability',
+                    'attack_lane': lane, 'attack_course': course,
+                    'defender_lane': courses.get(course - 1),
+                    'defender_course': course - 1 if course > 1 else None,
+                    'follower_lane': courses.get(course + 1),
+                    'follower_course': course + 1 if course < 6 else None,
+                    'inside_lane': inside_lane,
+                    'reason': '発走前ST・まわり足による条件付き2/3着再評価（未校正）',
+                    'top_3': [(x['combination'], x['relative_score']/mass)
+                              for x in subset[:3]]})
+                outside[label] = sum(x['relative_score'] for x in subset
+                    if str(inside_lane) not in x['combination'].split('-')) / mass
+            result['scenario_assumptions'] = paths
+            result['course1_outside_top3_by_path'] = outside
+            result['course1_outside_top3_relative_mass'] = sum(
+                x['relative_score'] for x in ranked
+                if str(inside_lane) not in x['combination'].split('-'))
     dynamic_meta = None
     conditional_second_meta = None
     same_race_v22_control_bets = None
@@ -1000,6 +1046,7 @@ def interaction_primary(previous: dict, racers: list[dict], frozen_at: str, cuto
             **({"conditional_second_primary": conditional_second_meta,
                 "same_race_v22_control_bets": same_race_v22_control_bets}
                if conditional_second_meta else {}),
+            **({"formal_conditional_v26": conditional_v26_meta} if conditional_v26_meta else {}),
             "racer_course_tactics": tactics_report,
             "scenario_assumptions": result["scenario_assumptions"],
             "conditional_places_by_head": conditional_places,
@@ -1040,6 +1087,10 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         and now.astimezone(UTC) >= FORMAL_HEAD_RISK_V25_ACTIVATION_UTC
         and cutoff.astimezone(UTC) > FORMAL_HEAD_RISK_V25_ACTIVATION_UTC
     )
+    formal_conditional_v26_active = (
+        formal_head_risk_v25_active and phase == 'exhibition'
+        and now.astimezone(UTC) >= FORMAL_CONDITIONAL_V26_ACTIVATION_UTC
+        and cutoff.astimezone(UTC) > FORMAL_CONDITIONAL_V26_ACTIVATION_UTC)
     weights, racers = features(race, phase)
     # Program grade comes from a named, pre-race API field. Do not infer it
     # from the venue or retroactively enrich frozen predictions.
@@ -1153,6 +1204,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     three_leg_primary_meta = None
     formal_insight_v24_meta = None
     formal_head_risk_v25_meta = None
+    formal_conditional_v26_meta = None
     if interaction_active:
         # The same strict six-boat exhibition/entry pre-cutoff gate controls
         # whether the main can broaden beyond the base ticket set.
@@ -1167,7 +1219,30 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
             site_weather_verified=bool(selected_weather and selected_weather.get("site_observed")),
             entry_aware=entry_active,
             linked_ranked=promoted.get("ranked_outcomes") if linked_active else None,
-            conditional_second_main=conditional_second_active)
+            conditional_second_main=conditional_second_active,
+            formal_conditional_v26=(formal_conditional_v26_active
+                and pre_cutoff_leg_gate.get('final_eligible') is True))
+        if formal_conditional_v26_active and pre_cutoff_leg_gate.get('final_eligible') is True:
+            control_bets, control_meta = interaction_primary(
+                promoted, racers, frozen_at, cutoff,
+                tactics=race.get('_course_tactics'),
+                scored_weights=None if linked_active else weathered,
+                adaptive_points=adaptive_active, justified_points=justified_active,
+                exhibition_verified=True,
+                site_weather_verified=bool(selected_weather and selected_weather.get('site_observed')),
+                entry_aware=entry_active, linked_ranked=promoted.get('ranked_outcomes'),
+                conditional_second_main=conditional_second_active, formal_conditional_v26=False)
+            formal_conditional_v26_meta = {
+                **interaction_meta['formal_conditional_v26'],
+                'control_model': FORMAL_HEAD_RISK_V25_MODEL,
+                'control_bets': control_bets,
+                'control_ranked_sha256': stable_hash({'ranked': control_meta['ranked_outcomes']}),
+                'main_ranked_sha256': stable_hash({'ranked': interaction_meta['ranked_outcomes']}),
+                'same_point_count': len(bets) == len(control_bets),
+                'same_virtual_budget_yen': VIRTUAL_BUDGET_YEN,
+                'actual_ticket_or_allocation_changed': sorted((b['combination'], b['virtual_yen']) for b in bets) != sorted((b['combination'], b['virtual_yen']) for b in control_bets),
+                'control_generated_pre_cutoff': True,
+                'no_backfilled_forecasts': True}
         # The primary result is already the formal v2.3. Freeze the old v2.3
         # from the SAME untouched 120-outcome engine inputs, before the result.
         # This is a research control, not another formal wager or historical
@@ -1220,7 +1295,9 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
                 })
         if linked_active and promoted.get("ranked_source") != "linked-four-factor-venue-st-wake-120":
             raise ValueError("Linked primary source missing; no simplified fallback")
-        chosen_model = (FORMAL_HEAD_RISK_V25_MODEL if formal_head_risk_v25_active else
+        chosen_model = (FORMAL_CONDITIONAL_V26_MODEL if formal_conditional_v26_active
+                        and pre_cutoff_leg_gate.get('final_eligible') is True else
+                        FORMAL_HEAD_RISK_V25_MODEL if formal_head_risk_v25_active else
                         FORMAL_INSIGHT_V24_MODEL if formal_insight_v24_active else
                         CONDITIONAL_SECOND_MAIN_MODEL if conditional_second_active else LINKED_MAIN_MODEL if linked_active else INTERACTION_ENTRY_MODEL if entry_active else INTERACTION_JUSTIFIED_MODEL if justified_active else
                         INTERACTION_ALIGNED_MODEL if aligned_active else
@@ -1450,12 +1527,12 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     if linked_active and venue != "江戸川" and phase == "exhibition" and pre_cutoff_leg_gate.get("final_eligible") is True:
         try:
             hidden_path_shadow = analyze_hidden_path(
-                bets, promoted.get("ranked_outcomes"), racers,
+                bets, (interaction_meta or {}).get('ranked_outcomes') or promoted.get('ranked_outcomes'), racers,
                 phase=phase, exhibition_verified=True,
                 frozen_at_utc=frozen_at, cutoff_at_utc=cutoff.isoformat())
             if hidden_path_shadow is not None:
                 hidden_path_shadow["formal_bets_sha256"] = stable_hash({"bets": bets})
-                hidden_path_shadow["ranked_source_sha256"] = stable_hash({"ranked": promoted["ranked_outcomes"]})
+                hidden_path_shadow["ranked_source_sha256"] = stable_hash({"ranked": (interaction_meta or {}).get('ranked_outcomes') or promoted['ranked_outcomes']})
         except (ValueError, TypeError, KeyError, AssertionError) as exc:
             hidden_path_shadow = {
                 "version": "hidden-1m-counterfactual-shadow-v0.1",
@@ -1540,7 +1617,10 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         reason = "正式v2.3：v2.2の根拠別上限を維持／1着→2着の条件付き組み合わせ分散／" + str(len(bets)) + "点・仮想5万円・未校正"
     if formal_insight_v24_active:
         reason = "正式v2.4：実進入・平均ST・1M攻防＋会場別展示複数指標の依存度を再配分／" + str(len(bets)) + "点・仮想5万円・未校正" if phase == "exhibition" and pre_cutoff_leg_gate.get("final_eligible") is True else "v2.4対象・展示未確認のため旧v2.3相当／仮想5万円・暫定"
-    if formal_head_risk_v25_active:
+    if formal_conditional_v26_meta:
+        reason = ('正式v2.6：1着頭評価を維持し、実進入・平均ST・まわり足で条件付き2/3着を再評価／'
+                  + str(len(bets)) + '点・仮想5万円・未校正')
+    if formal_head_risk_v25_active and not formal_conditional_v26_meta:
         reason = ("正式v2.5：実進入・合法平均ST差と旋回/行き足で逃げ失敗の頭候補を条件付き再配分／" +
                   str(len(bets)) + "点・仮想5万円・未校正") if phase == "exhibition" and pre_cutoff_leg_gate.get("final_eligible") is True else "v2.5対象・展示未確認のため旧v2.3相当／仮想5万円・暫定"
     body = {
@@ -1554,6 +1634,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         **({"three_leg_primary": three_leg_primary_meta} if three_leg_primary_meta else {}),
         **({"formal_insight_v24": formal_insight_v24_meta} if formal_insight_v24_meta else {}),
         **({"formal_head_risk_v25": formal_head_risk_v25_meta} if formal_head_risk_v25_meta else {}),
+        **({"formal_conditional_v26": formal_conditional_v26_meta} if formal_conditional_v26_meta else {}),
         **({"role_skill_shadow": promoted["role_skill_shadow"]} if promoted.get("role_skill_shadow") else {}),
         **({"venue_motor_exhibition_shadow": promoted["venue_motor_exhibition_shadow"]}
            if promoted.get("venue_motor_exhibition_shadow") else {}),
@@ -1562,10 +1643,10 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         **({"head_coverage_control": promoted["head_coverage_control"]} if promoted.get("head_coverage_control") else {}),
         **({"venue_tactics_v2": promoted["venue_tactics_v2"],
             "venue_tactics_ab": promoted["venue_tactics_ab"]}
-           if chosen_model in (FORMAL_HEAD_RISK_V25_MODEL, FORMAL_INSIGHT_V24_MODEL, CONDITIONAL_SECOND_MAIN_MODEL, LINKED_MAIN_MODEL, VENUE_TACTICS_MODEL, POINT_FREE_MODEL) else {}),
+           if chosen_model in (FORMAL_CONDITIONAL_V26_MODEL, FORMAL_HEAD_RISK_V25_MODEL, FORMAL_INSIGHT_V24_MODEL, CONDITIONAL_SECOND_MAIN_MODEL, LINKED_MAIN_MODEL, VENUE_TACTICS_MODEL, POINT_FREE_MODEL) else {}),
         **({"postrace_conditional_v13": promoted["postrace_conditional_v13"],
             "postrace_conditional_control": promoted["postrace_conditional_control"]}
-           if chosen_model in (FORMAL_HEAD_RISK_V25_MODEL, FORMAL_INSIGHT_V24_MODEL, CONDITIONAL_SECOND_MAIN_MODEL, LINKED_MAIN_MODEL, POSTRACE_CONDITIONAL_MODEL, VENUE_TACTICS_MODEL, POINT_FREE_MODEL) else {}),
+           if chosen_model in (FORMAL_CONDITIONAL_V26_MODEL, FORMAL_HEAD_RISK_V25_MODEL, FORMAL_INSIGHT_V24_MODEL, CONDITIONAL_SECOND_MAIN_MODEL, LINKED_MAIN_MODEL, POSTRACE_CONDITIONAL_MODEL, VENUE_TACTICS_MODEL, POINT_FREE_MODEL) else {}),
         **({"four_factor": promoted["four_factor"],
             "venue_surface_v1": promoted.get("venue_surface_v1"),
             "venue_surface_ab": promoted.get("venue_surface_ab")} if four_factor else {}),
@@ -1783,7 +1864,13 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 formal_insight_v24_active
                 and runtime_now.astimezone(UTC) >= FORMAL_HEAD_RISK_V25_ACTIVATION_UTC
                 and cutoff.astimezone(UTC) > FORMAL_HEAD_RISK_V25_ACTIVATION_UTC)
-            expected_main = (FORMAL_HEAD_RISK_V25_MODEL if formal_head_risk_v25_active else
+            formal_conditional_v26_active = (
+                formal_head_risk_v25_active
+                and runtime_now.astimezone(UTC) >= FORMAL_CONDITIONAL_V26_ACTIVATION_UTC
+                and cutoff.astimezone(UTC) > FORMAL_CONDITIONAL_V26_ACTIVATION_UTC
+                and any(v.get('phase') == 'exhibition' for v in record['versions']))
+            expected_main = (FORMAL_CONDITIONAL_V26_MODEL if formal_conditional_v26_active else
+                             FORMAL_HEAD_RISK_V25_MODEL if formal_head_risk_v25_active else
                              FORMAL_INSIGHT_V24_MODEL if formal_insight_v24_active else
                              CONDITIONAL_SECOND_MAIN_MODEL if conditional_second_active else LINKED_MAIN_MODEL if linked_active else INTERACTION_ENTRY_MODEL if entry_active else INTERACTION_JUSTIFIED_MODEL if justified_active else
                              INTERACTION_ALIGNED_MODEL if aligned_active else
@@ -1985,7 +2072,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "role_coverage", "role_changes", "head_coverage_control", "postrace_conditional_v13",
                       "postrace_conditional_control", "venue_tactics_v2", "venue_tactics_ab", "point_free_control", "point_free_provenance",
                       "role_skill_shadow", "venue_motor_exhibition_shadow", "interaction_primary",
-                      "three_leg_primary", "formal_insight_v24", "formal_head_risk_v25",
+                      "three_leg_primary", "formal_insight_v24", "formal_head_risk_v25", "formal_conditional_v26",
                       "attack_defence_shadow", "grade_context", "grade_competition_shadow", "strong_field_diagnostic",
                       "coverage_reselection_shadow", "hidden_path_shadow",
                       "exhibition_input_check", "relative_scores_uncalibrated"):

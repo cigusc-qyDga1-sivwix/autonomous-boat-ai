@@ -9,10 +9,20 @@ const deep=x=>JSON.parse(JSON.stringify(x));
 
 const latest=JSON.parse(fs.readFileSync('app/data/live/latest.json','utf8'));
 const raw=deep(latest);
-const old=deep(latest);
+// The live ledger can legitimately contain only baseline snapshots early in
+// the morning. Build an isolated synthetic exhibition fixture in that case;
+// never change or write the real saved ledger.
+if(!raw.forecast_races.some(r=>r.phase==='exhibition')){
+ const prototype=raw.forecast_races.find(r=>r.phase==='baseline');
+ assert.ok(prototype,'integration fixture needs at least one existing baseline');
+ prototype.phase='exhibition';
+ prototype.entry_exhibition_gate={...(prototype.entry_exhibition_gate||{}),final_eligible:true};
+ prototype.exhibition_input_check={verified_before_freeze:true};
+}
+const old=deep(raw);
 old.updated_at_utc=new Date(Date.parse(raw.updated_at_utc)-6*60000).toISOString();
 const exhibit=old.forecast_races.find(r=>r.phase==='exhibition');
-assert.ok(exhibit,'test requires at least one exhibition snapshot');
+assert.ok(exhibit,'synthetic or observed test exhibition fixture must exist');
 exhibit.phase='baseline';
 const verified=raw.forecast_races.filter(r=>r.phase==='exhibition').length;
 const manifest={

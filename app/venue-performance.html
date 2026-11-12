@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>場別累計成績 | BOAT LAB</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,sans-serif;background:#081c2c;color:#e8f5fa}
+body{margin:0;padding:20px;max-width:1120px;margin-inline:auto}a{color:#80e5d5}
+h1{font-size:1.65rem}p{line-height:1.6;color:#b8ced8}
+.controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:18px 0}
+select,button{background:#17374b;color:#fff;border:1px solid #487083;border-radius:9px;padding:10px}
+table{border-collapse:collapse;width:100%;min-width:780px;font-variant-numeric:tabular-nums}
+th,td{padding:11px;border-bottom:1px solid #27475a;text-align:right}
+th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:#102b3c}
+thead th{color:#9edbdf}tbody tr:hover{background:#1a3b4e}
+.wrap{overflow:auto;border:1px solid #315269;border-radius:12px}
+.plus{color:#72e7ae}.minus{color:#ffa4a4}.muted{color:#8ca5b3}
+.summary{padding:14px;background:#123449;border-radius:12px;margin-bottom:16px}
+.warn{color:#ffd493}.foot{font-size:.86rem}
+</style></head><body>
+<p><a href="./index.html">← BOAT LAB</a></p>
+<h1>📊 レース場別・累計成績</h1>
+<p>11月4日以降の発走前固定予想について、GitHubの日別監査集計（<code>app/data/live/audit/YYYY-MM-DD.json</code>）の公式照合済み実績を場別に合算します。江戸川は対象外。</p>
+<div class="controls"><label>並び替え <select id="sort"><option value="profit">累計収支順</option><option value="hit">的中率順</option><option value="roi">回収率順</option><option value="races">照合R数順</option></select></label><button id="refresh">再取得</button></div>
+<div id="status" class="summary" role="status">読み込み中…</div>
+<div class="wrap"><table><thead><tr><th>場</th><th>照合R</th><th>的中R</th><th>的中率</th><th>仮想投資</th><th>仮想払戻</th><th>累計収支</th><th>回収率</th></tr></thead><tbody id="rows"></tbody></table></div>
+<p class="foot">※正式BUYだけの成績ではありません。監査のby_venueに含まれる固定予想全体の集計です。展示前・展示後を分離した正式版成績は別集計が必要です。返還や除外は監査側の集計仕様に従います。未取得日はゼロとして扱いません。実際の投票実績ではありません。</p>
+<script>
+'use strict';
+const VENUES=['桐生','戸田','平和島','多摩川','浜名湖','蒲郡','常滑','津','三国','びわこ','住之江','尼崎','鳴門','丸亀','児島','宮島','徳山','下関','若松','芦屋','福岡','唐津','大村'];
+const start='2026-11-04';
+const yen=n=>Math.round(n).toLocaleString('ja-JP')+'円';
+const pct=(n,d)=>d?(100*n/d).toFixed(1)+'%':'—';
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
+let current=[];
+function days(){
+ const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ const out=[];
+ for(let t=Date.parse(start+'T00:00:00Z');t<=Date.parse(today+'T00:00:00Z')&&out.length<370;t+=86400000)out.push(new Date(t).toISOString().slice(0,10));
+ return out;
+}
+function render(){
+ const sort=document.getElementById('sort').value;
+ const data=current.slice().sort((a,b)=>sort==='hit'?(b.r?b.h/b.r:-1)-(a.r?a.h/a.r:-1):
+ sort==='roi'?(b.stake?b.pay/b.stake:-1)-(a.stake?a.pay/a.stake:-1):
+ sort==='races'?b.r-a.r:(b.pay-b.stake)-(a.pay-a.stake));
+ document.getElementById('rows').innerHTML=data.map(x=>{
+ const profit=x.pay-x.stake;
+ return '<tr><th scope="row">'+esc(x.name)+'</th><td>'+(x.r||'—')+'</td><td>'+(x.r?x.h:'—')+'</td><td>'+pct(x.h,x.r)+'</td><td>'+(x.r?yen(x.stake):'—')+'</td><td>'+(x.r?yen(x.pay):'—')+'</td><td class="'+(profit>=0?'plus':'minus')+'">'+(x.r?(profit>0?'+':'')+yen(profit):'未集計')+'</td><td>'+pct(x.pay,x.stake)+'</td></tr>';
+ }).join('');
+}
+async function load(){
+ const dates=days(),totals=Object.fromEntries(VENUES.map(name=>[name,{name,r:0,h:0,stake:0,pay:0}]));
+ const failures=[],included=[];
+ document.getElementById('status').textContent='日別監査データを取得中…';
+ await Promise.all(dates.map(async day=>{
+  try{
+   const response=await fetch('./data/live/audit/'+day+'.json',{cache:'no-store'});
+   if(!response.ok)throw Error('HTTP '+response.status);
+   const doc=await response.json();
+   if(doc.event_date!==day||!doc.by_venue||typeof doc.by_venue!=='object')throw Error('監査形式不一致');
+   for(const [name,v] of Object.entries(doc.by_venue)){
+    if(!totals[name])continue;
+    const fields=[v.verified_races,v.hits,v.virtual_stake_yen,v.virtual_payout_yen];
+    if(fields.some(x=>!Number.isSafeInteger(x)||x<0)||v.hits>v.verified_races)throw Error(name+'の集計値が不正');
+    const a=totals[name];a.r+=fields[0];a.h+=fields[1];a.stake+=fields[2];a.pay+=fields[3];
+   }
+   included.push(day);
+  }catch(e){failures.push(day+' ('+e.message+')');}
+ }));
+ current=Object.values(totals);render();
+ const all=current.reduce((a,x)=>({r:a.r+x.r,h:a.h+x.h,stake:a.stake+x.stake,pay:a.pay+x.pay}),{r:0,h:0,stake:0,pay:0});
+ const profit=all.pay-all.stake;
+ document.getElementById('status').innerHTML=
+ '<strong>取得 '+included.length+'/'+dates.length+'日・公式照合 '+all.r+'R・的中 '+all.h+'R（'+pct(all.h,all.r)+'）</strong>'+
+ '<div>仮想投資 '+yen(all.stake)+' ／ 払戻 '+yen(all.pay)+' ／ 収支 '+(profit>0?'+':'')+yen(profit)+' ／ 回収率 '+pct(all.pay,all.stake)+'</div>'+
+ '<div class="muted">対象期間 '+esc(start)+'〜'+esc(dates.at(-1))+' ／ データのある場 '+current.filter(x=>x.r).length+'/23</div>'+
+ (failures.length?'<div class="warn">未取得・不正（合算から除外）：'+esc(failures.join('、'))+'</div>':'');
+}
+document.getElementById('sort').addEventListener('change',render);
+document.getElementById('refresh').addEventListener('click',load);
+load();
+</script></body></html>

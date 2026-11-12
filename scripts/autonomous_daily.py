@@ -1987,7 +1987,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "role_skill_shadow", "venue_motor_exhibition_shadow", "interaction_primary",
                       "three_leg_primary", "formal_insight_v24", "formal_head_risk_v25",
                       "attack_defence_shadow", "grade_context", "grade_competition_shadow", "strong_field_diagnostic",
-                      "coverage_reselection_shadow",
+                      "coverage_reselection_shadow", "hidden_path_shadow",
                       "exhibition_input_check", "relative_scores_uncalibrated"):
             if extra in current:
                 r[extra] = current[extra]

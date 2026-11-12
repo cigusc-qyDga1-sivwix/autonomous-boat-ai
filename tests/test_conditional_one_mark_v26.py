@@ -89,3 +89,13 @@ def test_formal_code_holds_future_gate_and_freezes_same_time_control():
     assert "'control_bets': control_bets" in code
     assert "'same_point_count': len(bets) == len(control_bets)" in code
     assert "pre_cutoff_leg_gate.get('final_eligible') is True" in code
+
+def test_v26_upgrade_requires_explicit_live_exhibition_validation():
+    from pathlib import Path
+    source = Path("scripts/autonomous_daily.py").read_text(encoding="utf-8")
+    assert "numeric_exhibition_matches_snapshot(candidate_now, upgrade)" in source
+    assert 'upgrade["exhibition_input_check"] = {' in source
+    assert '"verified_before_freeze": True, "six_boats_matched": 6' in source
+    assert 'v26_input_recheck = bool(' in source
+    assert 'v26展示6艇' not in source or '保存時照合が未確認' in source
+    assert 'final_eligible=False, buy_allowed=False' in source

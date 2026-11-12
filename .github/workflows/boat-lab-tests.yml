@@ -23,6 +23,7 @@ jobs:
       - run: python3 scripts/test_entry_exhibition_gate.py
       - run: python3 -c "import runpy; t=runpy.run_path('tests/test_hidden_path_shadow.py'); [fn() for k,fn in t.items() if k.startswith('test_')]"
       - run: python3 -c "import runpy; t=runpy.run_path('tests/test_hidden_path_audit.py'); [fn() for k,fn in t.items() if k.startswith('test_')]"
+      - run: python3 -c "import runpy; t=runpy.run_path('tests/test_conditional_one_mark_v26.py'); [fn() for k,fn in t.items() if k.startswith('test_')]"
       - run: python3 -m unittest discover -s tests -p test_turn_three_pilot.py
       - run: python3 -m unittest discover -s tests -p test_mikuni_video_autocollect.py
       - run: python3 -m unittest discover -s tests -p test_mikuni_video_motion_pipeline.py

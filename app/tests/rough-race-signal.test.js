@@ -17,6 +17,22 @@ const base={
 const context={mode:'auto-live',formal:true,event_date:'2026-11-12'};
 function assess(changes={},opts=context){return signal.assess({...base,...changes},opts);}
 assert.equal(assess().label,'⚡ 荒れ注意');
+const hidden={version:'hidden-1m-counterfactual-shadow-v0.1',
+ model_role:'research_shadow',not_formal:true,result_data_used:false,
+ status:'PRE_CUTOFF_SHADOW_SWAP_ONLY',
+ frozen_at_utc:base.frozen_at_utc,replacement_candidate:'4-5-1',
+ replacement_victim:'1-2-6',candidates:[
+  {combination:'4-5-1',scenario:'OUTER_ATTACK_FOLLOWER',already_in_formal:false}]};
+const withHidden={...base,hidden_path_shadow:hidden};
+assert.equal(signal.assess(withHidden,context).reasons[0],'隠れ展開候補');
+assert.match(signal.renderDetails(withHidden,context),/4-5-1/);
+assert.match(signal.renderDetails(withHidden,context),/正式買い目には追加・置換していません/);
+assert.equal(signal.renderDetails({...withHidden,phase:'baseline'},context),'');
+assert.equal(signal.renderDetails({...withHidden,hidden_path_shadow:{
+ ...hidden,frozen_at_utc:'2026-11-11T00:00:00Z'}},context),'');
+assert.equal(signal.renderDetails({...withHidden,hidden_path_shadow:{
+ ...hidden,result_data_used:true}},context),'');
+
 assert.match(signal.render(base,context),/1着混戦/);
 assert.match(signal.render(base,context),/荒れ注意/);
 assert.equal(assess({strong_field_diagnostic:{status:'NO_STRONG_FIELD_PARITY_SIGNAL'}}),null,

@@ -2,7 +2,9 @@
 from copy import deepcopy
 from itertools import permutations
 from scripts.conditional_one_mark_v26 import rescore
-from tests.test_hidden_path_shadow import source, FROZEN, CUTOFF
+import runpy
+_fixture = runpy.run_path('tests/test_hidden_path_shadow.py')
+source, FROZEN, CUTOFF = (_fixture[x] for x in ('source', 'FROZEN', 'CUTOFF'))
 
 
 def run(scores=None, racers=None, frozen=FROZEN, cutoff=CUTOFF):

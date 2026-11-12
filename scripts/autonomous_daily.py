@@ -2643,6 +2643,36 @@ def main():
     # A successful GET with no scheduled races still writes a factual empty dashboard.
     write_json(path, ledger)
     write_json(args.out_dir / "latest.json", webapp)
+    # Small read-only forward roster. Each row is derived from the already
+    # frozen forecast, never from unofficial or official postrace results.
+    roster_clock = now if args.input_json else datetime.now(UTC)
+    forward_rows = []
+    for r in webapp["forecast_races"]:
+        cutoff_jst = datetime.fromisoformat(day + 'T' + r['cutoff_jst'] + ':00+09:00')
+        if cutoff_jst <= roster_clock + timedelta(minutes=2):
+            continue
+        v26 = r.get('formal_conditional_v26') or {}
+        forward_rows.append({
+            'venue': r['venue'], 'race': r['race'], 'cutoff_jst': r['cutoff_jst'],
+            'model_version': r['model_version'], 'phase': r['phase'],
+            'classification': r['classification'],
+            'ticket_status': r['ticket_status'],
+            'exhibition_verified': r.get('exhibition_input_check', {}).get('verified_before_freeze') is True,
+            'gate_eligible': r.get('entry_exhibition_gate', {}).get('final_eligible') is True,
+            'sha256': r['sha256'], 'frozen_at_utc': r['frozen_at_utc'],
+            'bets': r['bets'],
+            'new_conditional_status': v26.get('status'),
+            'changed_vs_v25': v26.get('actual_ticket_or_allocation_changed', False),
+            'same_point_count': v26.get('same_point_count'),
+            'v25_control_bets': v26.get('control_bets') if v26 else None,
+            'hidden_path_status': (r.get('hidden_path_shadow') or {}).get('status'),
+        })
+    write_json(args.out_dir / 'assistant-forward-latest.json', {
+        'schema': 'boatlabs.assistant_forward_roster.v1',
+        'event_date': day, 'generated_at_utc': roster_clock.astimezone(UTC).isoformat(),
+        'forecast_races_remaining': len(forward_rows),
+        'research_results_not_used': True, 'no_historical_forecast_overwrite': True,
+        'not_an_actual_purchase': True, 'races': forward_rows})
     # This record is written only by the forecast collector. Result updates
     # cannot make an old exhibition capture look fresh to its watchdog.
     write_json(args.out_dir / "forecast-sync-latest.json", {

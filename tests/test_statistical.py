@@ -176,3 +176,31 @@ def test_chronological_training_evaluation_handles_120_point_main(monkeypatch, v
     assert sum(b['virtual_yen'] for b in picks) == 50000
     assert all(b['virtual_yen'] >= 100 and b['virtual_yen'] % 100 == 0
                for b in picks)
+
+
+
+@pytest.mark.parametrize('count', [12, 13, 16, 20])
+def test_chronological_training_matches_20_point_formal_policy(monkeypatch, count):
+    """The nightly evaluator must not reject already frozen 13-20 point forecasts."""
+    from itertools import permutations
+    from scripts import train_statistical
+    monkeypatch.setattr(train_statistical, 'fit', lambda _: zero_model())
+    older = snapshot('2026-11-01')
+    train = [{'day': '2026-11-01', 'snapshot': older, 'label': [0, 1, 2],
+              'race_key': f'18-{i}', 'payout': 1000} for i in range(100)]
+    current = snapshot('2026-11-03')
+    current['model_version'] = 'four-factor-v2.6-evidence-conditional-pairs-untrained'
+    from itertools import permutations
+    choices = ['-'.join(map(str, p)) for p in permutations(range(1, 7), 3)]
+    current['bets'] = [{'combination': combo, 'virtual_yen': 1000}
+                       for combo in choices[:count]]
+    current['bets'][0]['virtual_yen'] += 50000 - count * 1000
+    report = train_statistical.evaluate(train + [{
+        'day': '2026-11-03', 'snapshot': current, 'label': [0, 1, 2],
+        'race_key': '18-101', 'payout': 1000
+    }])
+    bets = report['folds'][0]['races'][0]['learned_bets']
+    assert len(bets) == count
+    assert sum(b['virtual_yen'] for b in bets) == 50000
+    assert all(b['virtual_yen'] >= 1000 and b['virtual_yen'] % 1000 == 0
+               for b in bets)

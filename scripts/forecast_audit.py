@@ -335,6 +335,7 @@ def _learned_formal_comparison(forecasts, official, alerts, day):
     by_venue = defaultdict(lambda: {"learned": [], "control": []})
     exclusions = Counter()
     total = 0
+    model_meta = {}
     for r in forecasts:
         if r.get("model_version") != "four-factor-learned-v1-conditional-choice-trained":
             continue
@@ -362,6 +363,8 @@ def _learned_formal_comparison(forecasts, official, alerts, day):
                 or not _valid_shadow_tickets(control)):
             exclusions["not_proven_paired_formal"] += 1
             continue
+        model_meta[sha] = {"trained_through": proof.get("trained_through"),
+                           "training_n": proof.get("training_n")}
         pay = official[key]
         main = _shadow_trial_result(r, r["bets"], pay)
         prior = _shadow_trial_result(r, control, pay)
@@ -385,7 +388,8 @@ def _learned_formal_comparison(forecasts, official, alerts, day):
         "matched_verified_races": len(pairs),
         "learned_formal": _metrics(pairs),
         "previous_formal_control": _metrics(old),
-        "by_model_sha": {sha: summary(grp) for sha, grp in sorted(by_sha.items())},
+        "by_model_sha": {sha: {**model_meta.get(sha, {}), **summary(grp)}
+                         for sha, grp in sorted(by_sha.items())},
         "by_venue": {venue: summary(grp) for venue, grp in sorted(by_venue.items())},
         "exclusions": dict(sorted(exclusions.items())),
         "main_predicted_before_cutoff": True,

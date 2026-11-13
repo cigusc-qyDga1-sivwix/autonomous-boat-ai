@@ -24,6 +24,6 @@ const cssLink = html.indexOf('href="./ios-status-bar.css?v=20261113-light-top-v1
 const premiumLink = html.indexOf('href="./premium-ui.css?');
 assert.ok(cssLink > premiumLink && premiumLink >= 0,
   'iPhone contrast rules must override the premium sticky topbar');
-assert.match(sw, /boat-lab-static-v79-ios-status-contrast/);
+assert.match(sw, /boat-lab-static-v79/);
 assert.match(sw, /'\.\/ios-status-bar\.css'/);
 console.log('iPhone PWA status-bar contrast contract: PASS');

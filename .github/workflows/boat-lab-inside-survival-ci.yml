@@ -1,0 +1,36 @@
+name: BOAT LAB inside-survival forward shadow tests
+on:
+  push:
+    branches:
+      - 'research/inside-survival-20261113'
+    paths:
+      - 'scripts/inside_survival_research.py'
+      - 'scripts/learned_formal.py'
+      - 'tests/test_inside_survival_research.py'
+      - '.github/workflows/boat-lab-inside-survival-ci.yml'
+  pull_request:
+    paths:
+      - 'scripts/inside_survival_research.py'
+      - 'scripts/learned_formal.py'
+      - 'tests/test_inside_survival_research.py'
+      - '.github/workflows/boat-lab-inside-survival-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  immutable-precutoff-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prepare test dependencies
+        run: python -m pip install -e '.[test]'
+      - name: Verify 1号艇 attack, defence and second/third survival are distinct
+        run: python -m unittest discover -s tests -p 'test_inside_survival_research.py' -v
+      - name: Check learned formal predictions remain immutable
+        run: python -m pytest -q tests/test_learned_formal.py tests/test_inside_survival_research.py

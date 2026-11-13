@@ -401,6 +401,132 @@ def _learned_formal_comparison(forecasts, official, alerts, day):
     }
 
 
+def _third_place_pilot_report(forecasts, official, alerts, day):
+    """Read-only matched comparison for an actually frozen third-place pilot.
+
+    No hindsight construction. Only official-settled, six-boat exhibition-
+    verified formal forecasts can count. Both selections have the same points,
+    same race, same time, and independent virtual 50,000 yen per model.
+    """
+    formal, trial = [], []
+    groups = defaultdict(lambda: {"formal": [], "trial": []})
+    exclusions = Counter()
+    changed = 0
+    common_pair = 0
+    common_pair_formal_hit = 0
+    common_pair_trial_hit = 0
+    candidates = 0
+
+    def signed_hash(x):
+        return hashlib.sha256(json.dumps(
+            x, sort_keys=True, ensure_ascii=False,
+            separators=(",", ":"), allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+
+    for r in forecasts:
+        shadow = r.get("third_place_pilot")
+        if not isinstance(shadow, dict):
+            continue
+        candidates += 1
+        key = f"{day}|{r.get('venue')}|{r.get('race')}"
+        if key in alerts:
+            exclusions["official_refund_conflict_or_cancellation"] += 1
+            continue
+        eligible, reason = _verify_race(r, official.get(key), day)
+        if not eligible:
+            exclusions[reason] += 1
+            continue
+        proof = r.get("learned_formal") or {}
+        sb = shadow.get("bets")
+        try:
+            good = (
+                r.get("model_version") == "four-factor-learned-v1-conditional-choice-trained"
+                and r.get("ticket_status") == "formal"
+                and r.get("phase") == "exhibition"
+                and (r.get("exhibition_input_check") or {}).get("verified_before_freeze") is True
+                and proof.get("model_role") == "formal_primary"
+                and shadow.get("version") == "third-place-context-v0.1-research-only"
+                and shadow.get("model_role") == "research_shadow"
+                and shadow.get("not_formal") is True
+                and shadow.get("no_additional_stake") is True
+                and shadow.get("formal_bets_unchanged") is True
+                and shadow.get("same_race_same_time") is True
+                and shadow.get("same_point_count") is True
+                and shadow.get("calibrated") is False
+                and shadow.get("result_data_used") is False
+                and shadow.get("odds_used") is False
+                and shadow.get("actual_1m_maneuver_observed") is False
+                and shadow.get("virtual_budget_per_model_yen") == RESEARCH_BUDGET
+                and shadow.get("frozen_at_utc") == r.get("frozen_at_utc")
+                and shadow.get("parent_model_sha256") == proof.get("model_sha256")
+                and isinstance(shadow.get("pilot_model_sha256"), str)
+                and len(shadow["pilot_model_sha256"]) == 64
+                and shadow.get("trained_through") < day
+                and shadow.get("source_main_bets_sha256") == signed_hash({"bets": r["bets"]})
+                and _valid_shadow_tickets(sb)
+                and len(sb) == len(r["bets"])
+            )
+        except (TypeError, ValueError, KeyError, OverflowError):
+            good = False
+        if not good:
+            exclusions["invalid_unmatched_or_unverified_shadow"] += 1
+            continue
+        pay = official[key]
+        main = _shadow_trial_result(r, r["bets"], pay)
+        pilot = _shadow_trial_result(r, sb, pay)
+        formal.append(main)
+        trial.append(pilot)
+        groups[r["venue"]]["formal"].append(main)
+        groups[r["venue"]]["trial"].append(pilot)
+        changed += _ticket_signature(r["bets"]) != _ticket_signature(sb)
+        pair = "-".join(pay["finish"].split("-")[:2])
+        both_have_pair = (
+            any(b["combination"].startswith(pair+"-") for b in r["bets"])
+            and any(b["combination"].startswith(pair+"-") for b in sb)
+        )
+        if both_have_pair:
+            common_pair += 1
+            common_pair_formal_hit += main["stage"] == "hit"
+            common_pair_trial_hit += pilot["stage"] == "hit"
+
+    def summarize(items):
+        f, t = items["formal"], items["trial"]
+        return {
+            "paired_verified_races": len(f),
+            "learned_formal": _metrics(f),
+            "third_place_trial": _metrics(t),
+            "virtual_payout_delta_yen": (
+                sum(x["virtual_payout_yen"] for x in t)
+                - sum(x["virtual_payout_yen"] for x in f)
+            ),
+        }
+
+    return {
+        "protocol": "frozen-third-v01-vs-learned-formal-same-race-same-time",
+        "source": "pre-cutoff SHA-frozen trial + verified official 3連単 result",
+        "trial_not_formal": True,
+        "actual_purchase": False,
+        "candidate_trial_races": candidates,
+        "paired_verified_races": len(formal),
+        "changed_bets_or_allocation_races": changed,
+        "learned_formal": _metrics(formal),
+        "third_place_trial": _metrics(trial),
+        "shared_correct_head_second_opportunities": common_pair,
+        "shared_pair_main_third_hits": common_pair_formal_hit,
+        "shared_pair_trial_third_hits": common_pair_trial_hit,
+        "by_venue": {
+            venue: summarize(g) for venue, g in sorted(groups.items())
+        },
+        "exclusions": dict(sorted(exclusions.items())),
+        "warning": (
+            "Trial is never the formal ticket; pair-specific conditional "
+            "third accuracy is only calculated for shared eligible 1st/2nd "
+            "pairs. Geometric inputs are pre-race proxies, not observed "
+            "maneuvers. No result-based backfill or ticket modification."
+        ),
+    }
+
+
 def _venue_metric_ablation_report(forecasts, official, alerts, day):
     """Results-only daily analysis. No re-scoring or retrospective variants.
 
@@ -1120,6 +1246,9 @@ def analyze(dataset: dict):
     if day >= "2026-11-10":
         report["head_risk_breakpoint"] = _head_risk_breakpoint_report(raw, verified, day)
     report["learned_formal_comparison"] = _learned_formal_comparison(
+        raw, official, alerts, day
+    )
+    report["third_place_pilot_comparison"] = _third_place_pilot_report(
         raw, official, alerts, day
     )
     report["venue_metric_ablation"] = _venue_metric_ablation_report(

@@ -70,7 +70,16 @@ def evaluate(rows):
         for row in test:
             ranked=distributions(row['snapshot'],model)
             # Point count locked to the existing snapshot for a matched comparison.
-            count=len(row['snapshot']['bets']);bets=allocate(ranked,count,point_free=uses_point_free_allocation(row['snapshot'].get('model_version')))
+            snapshot=row['snapshot']
+            count=len(snapshot['bets'])
+            point_free=uses_point_free_allocation(snapshot.get('model_version'))
+            # Match the frozen formal ticket policy. Modern four-factor models
+            # may have 13-20 points; the default allocate() limit of 12 would
+            # crash the nightly training/evaluation workflow.
+            max_points=(20 if row['day'] >= '2026-10-29'
+                        and snapshot.get('model_version', '').startswith('four-factor-')
+                        else 12)
+            bets=allocate(ranked,count,point_free=point_free,max_points=max_points)
             finish='-'.join(str(x+1) for x in row['label']);p=next(x['score'] for x in ranked if x['combination']==finish)
             a=score_bets(bets,row['label'],row['payout'],p);b=score_bets(row['snapshot']['bets'],row['label'],row['payout'])
             a['day']=b['day']=day;a['phase']=b['phase']=row['snapshot']['phase']

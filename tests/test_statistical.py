@@ -112,6 +112,11 @@ def test_prospective_audit_unresolved_not_a_loss_and_source_integrity(tmp_path):
         'source_url':'https://www.boatrace.jp/owpc/pc/race/pay?hd=20261027','finish':'1-2-3','payout_per_100':1000}
     dp.write_text(json.dumps(source));result=audit(data,exp)
     assert result['learned']['n']==1 and result['control']['n']==1
+    source['race_records']['18-1']['official_pay']['finish'] = None
+    dp.write_text(json.dumps(source));result=audit(data,exp)
+    assert result['learned']['n']==0 and result['rejected']==1
+    source['race_records']['18-1']['official_pay']['finish'] = '1-2-3'
+    dp.write_text(json.dumps(source))
     shadow['race_records']['徳山-1'][0]['bets'][0]['virtual_yen']+=1000
     sp.write_text(json.dumps(shadow));result=audit(data,exp)
     assert result['rejected']==1 and result['learned']['n']==0

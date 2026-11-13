@@ -41,6 +41,7 @@ if __package__:
     from .justified_main_points import justified_selection, justified_stakes, VERSION as JUSTIFIED_POINTS_VERSION
     from .conditional_second_primary import diversify as diversify_second_pair
     from .conditional_one_mark_v26 import rescore as rescore_conditional_v26
+    from .learned_formal import load_model as load_learned_model, apply as apply_learned_primary, VERSION as LEARNED_MAIN_MODEL
 else:
     from racer_context import collect as collect_racer_context, validated as validate_racer_context
     from official_pay import fetch_official_pay
@@ -62,6 +63,7 @@ else:
     from justified_main_points import justified_selection, justified_stakes, VERSION as JUSTIFIED_POINTS_VERSION
     from conditional_second_primary import diversify as diversify_second_pair
     from conditional_one_mark_v26 import rescore as rescore_conditional_v26
+    from learned_formal import load_model as load_learned_model, apply as apply_learned_primary, VERSION as LEARNED_MAIN_MODEL
 
 JST = ZoneInfo("Asia/Tokyo")
 UTC = timezone.utc
@@ -122,6 +124,8 @@ THREE_LEG_PRIMARY_ACTIVATION_UTC = datetime.fromisoformat('2026-11-10T01:30:00+0
 VIRTUAL_BUDGET_YEN = 50_000
 MIN_POINTS, MAX_POINTS = 4, 12
 STAKE_UNIT_YEN = 1_000
+# Set only by main() after verifying a fresh, pre-trained model artifact.
+ACTIVE_LEARNED_MODEL = None
 COURSE = [1.75, 1.27, 1.05, 0.90, 0.79, 0.69]
 SAFE_MARGIN_SECONDS = 120  # Avoid a Git commit landing after cutoff.
 
@@ -1725,6 +1729,8 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
         "classification": ("SKIP" if justified_active and interaction_meta["point_policy"]["classification"] == "SKIP"
                            else "WATCH"),  # No calibrated edge or odds; never automatic BUY.
     }
+    if ACTIVE_LEARNED_MODEL is not None and venue != "江戸川":
+        body = apply_learned_primary(body, ACTIVE_LEARNED_MODEL)
     return {**body, "sha256": stable_hash(body)}
 
 
@@ -1869,7 +1875,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 and runtime_now.astimezone(UTC) >= FORMAL_CONDITIONAL_V26_ACTIVATION_UTC
                 and cutoff.astimezone(UTC) > FORMAL_CONDITIONAL_V26_ACTIVATION_UTC
                 and any(v.get('phase') == 'exhibition' for v in record['versions']))
-            expected_main = (FORMAL_CONDITIONAL_V26_MODEL if formal_conditional_v26_active else
+            expected_main = (LEARNED_MAIN_MODEL if ACTIVE_LEARNED_MODEL is not None else
+                             FORMAL_CONDITIONAL_V26_MODEL if formal_conditional_v26_active else
                              FORMAL_HEAD_RISK_V25_MODEL if formal_head_risk_v25_active else
                              FORMAL_INSIGHT_V24_MODEL if formal_insight_v24_active else
                              CONDITIONAL_SECOND_MAIN_MODEL if conditional_second_active else LINKED_MAIN_MODEL if linked_active else INTERACTION_ENTRY_MODEL if entry_active else INTERACTION_JUSTIFIED_MODEL if justified_active else
@@ -1990,10 +1997,15 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 and record["versions"][-1].get("phase") == "exhibition"
                 and (record["versions"][-1].get("exhibition_input_check") or {}).get("verified_before_freeze") is not True
                 and preview_ready)
+            learning_sha_changed = bool(
+                ACTIVE_LEARNED_MODEL is not None and previous_latest
+                and previous_latest.get("model_version") == LEARNED_MAIN_MODEL
+                and (previous_latest.get("learned_formal") or {}).get("model_sha256")
+                    != ACTIVE_LEARNED_MODEL["model_sha256"])
             if (cutoff.date() >= WAKE_PROMOTION_DATE
                     and record["versions"]
                     and (record["versions"][-1].get("model_version") != expected_main
-                         or context_gain or weather_gain or v26_input_recheck)
+                         or context_gain or weather_gain or v26_input_recheck or learning_sha_changed)
                     and upgrade_now.astimezone(JST) < cutoff - timedelta(seconds=margin)):
                 latest_before = record["versions"][-1]
                 phase_to_promote = latest_before["phase"]
@@ -2058,7 +2070,9 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
     # Preserve previous records even if a subsequent source request is incomplete.
     ledger["last_updated_at_utc"] = now.astimezone(UTC).isoformat()
     ledger["source_url"] = source_url
-    ledger["source_note"] = "非公式・数分遅延の可能性あり。予測は未訓練モデル。"
+    ledger["source_note"] = ("非公式・数分遅延の可能性あり。学習済み統計モデルは未校正。"
+                             if ACTIVE_LEARNED_MODEL is not None else
+                             "非公式・数分遅延の可能性あり。学習モデル更新待ち・現行モデル継続。")
     ledger["venues_with_races"] = len(venues_seen)
     latest_races, official_results, unavailable = [], {}, []
     for record in records.values():
@@ -2093,7 +2107,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "three_leg_primary", "formal_insight_v24", "formal_head_risk_v25", "formal_conditional_v26",
                       "attack_defence_shadow", "grade_context", "grade_competition_shadow", "strong_field_diagnostic",
                       "coverage_reselection_shadow", "hidden_path_shadow",
-                      "exhibition_input_check", "relative_scores_uncalibrated"):
+                      "exhibition_input_check", "relative_scores_uncalibrated", "learned_formal"):
             if extra in current:
                 r[extra] = current[extra]
         r["version_count"] = len(versions)
@@ -2124,7 +2138,9 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         "updated_at_utc": ledger["last_updated_at_utc"],
         "forecast_updated_at_utc": ledger["last_updated_at_utc"],
         "timezone": "Asia/Tokyo",
-        "method": ("全国24場・新規予想はv0.7スタート差＋6艇着順連動がメイン"
+        "method": ("学習モデル正式メイン・既存予想は改変せず同条件の旧モデルと比較"
+                   if ACTIVE_LEARNED_MODEL is not None else
+                   "全国24場・新規予想はv0.7スタート差＋6艇着順連動がメイン"
                    "／旧モデル固定分は不変・同時点の旧方式を別枠検証"
                    "／保存モデル別の点数・仮想5万円（v1.5は点数枠なし）"
                    if any(x.get("model_role") == "main" for x in latest_races)
@@ -2147,6 +2163,10 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
             for r in latest_races),
         "weather_adjusted_race_count": sum(bool((r.get("weather_adjustment") or {}).get("applied")) for r in latest_races),
         "exhibition_race_count": sum(r.get("phase")=="exhibition" for r in latest_races),
+        "learned_formal_races": sum(r.get("model_version")==LEARNED_MAIN_MODEL for r in latest_races),
+        "learned_formal_status": ("active" if ACTIVE_LEARNED_MODEL is not None else "awaiting_fresh_model"),
+        "learned_formal_model_sha256": (ACTIVE_LEARNED_MODEL or {}).get("model_sha256"),
+        "learned_formal_trained_through": (ACTIVE_LEARNED_MODEL or {}).get("trained_through"),
         "exhibition_changed_bet_count": sum(bool((r.get("exhibition_change") or {}).get("bets_changed")) for r in latest_races),
         "exhibition_input_mismatch_rejected_this_run": rejected_exhibition_input_mismatch,
         "exhibition_input_verified_race_count": sum(
@@ -2608,6 +2628,8 @@ def main():
         if raw_tactics.get('event_date') != day or not isinstance(raw_tactics.get('races'), dict):
             raise ValueError('Tactics file date or race map mismatch')
         tactics_rows = raw_tactics['races']
+    global ACTIVE_LEARNED_MODEL
+    ACTIVE_LEARNED_MODEL = (load_learned_model(now) if not args.input_json else None)
     ledger, webapp, summary = build(previous, source, now, source_url, nearby_forecasts,
                                      exhibition_rows=research, enforce_wall_clock=not bool(args.input_json),
                                      racer_context_rows=contexts, tactics_rows=tactics_rows,

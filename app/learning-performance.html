@@ -25,6 +25,10 @@ thead th{color:#a2d8e1}.warn{color:#ffde9e}
 <div class="scroll"><table><thead><tr><th>学習最終日 / モデルID</th><th>公式照合R</th><th>学習AI的中率</th><th>旧モデル的中率</th><th>学習AI回収率</th><th>旧モデル回収率</th><th>学習AI－旧モデル払戻差</th></tr></thead><tbody id="models"></tbody></table></div>
 <h2>日別の成績推移</h2>
 <div class="scroll"><table><thead><tr><th>対象日</th><th>公式照合R</th><th>学習AI的中</th><th>旧モデル的中</th><th>学習AI回収率</th><th>旧モデル回収率</th><th>払戻差</th></tr></thead><tbody id="days"></tbody></table></div>
+<h2>🔬 3着残存モデルの前向き検証（研究用）</h2>
+<p>正式学習AIの1着→2着の評価を保ち、3着の残り方だけを変えた試験です。正式買い目や実際の収支を変更しません。</p>
+<div class="scroll"><table><thead><tr><th>照合済みペア</th><th>3連単的中：正式</th><th>3連単的中：研究</th><th>双方の1・2着一致機会</th><th>そのうち3着的中：正式</th><th>そのうち3着的中：研究</th><th>研究－正式払戻差</th></tr></thead><tbody id="third"></tbody></table></div>
+<div class="card"><p class="warn">3着の改善は「両モデルとも1・2着を候補に含めたレース」で比較する。未確認レースを失敗扱いしない。研究用の数値を正式的中率・収支へ混ぜない。</p></div>
 <div class="card"><strong>数字の読み方</strong><p>対象は学習AIで締切前に正式固定した予想のうち、展示6艇の確認・公式結果照合・同条件の旧モデル買い目が揃ったレースのみ。比較される旧モデルは追加購入ではありません。展示前の暫定予想、欠場・返還・未確認データはこの比較に含めません。</p><p class="warn">的中率や回収率が一時的に上がっても、学習による恒常的な優位性を示すものではありません。これらは仮想配分であり実投票成績ではありません。未取得の日付を0R／0円として補完しません。オッズによる期待値判定は未実装です。</p></div>
 <script>
 'use strict';
@@ -92,6 +96,33 @@ async function run(){
   $('models').innerHTML=mrows.length?mrows.map(m=>rowMetrics(
     (m.through||'学習日不明')+' / '+m.sha.slice(0,12)+'…',m.n,m.lm,m.cm)).join(''):
     '<tr><td colspan="7">学習AIの正式予想・公式照合が揃うと集計されます。</td></tr>';
+  const third={n:0,common:0,mainThird:0,trialThird:0,mainHits:0,trialHits:0,
+    mainPayout:0,trialPayout:0};
+  loaded.forEach(r=>{
+   const t=r.third_place_pilot_comparison;
+   if(!t||t.protocol!=='frozen-third-v01-vs-learned-formal-same-race-same-time'
+      ||t.trial_not_formal!==true)return;
+   const n=t.paired_verified_races;
+   if(!Number.isInteger(n)||n<0
+      ||t.learned_formal?.verified_races!==n
+      ||t.third_place_trial?.verified_races!==n
+      ||t.learned_formal?.virtual_stake_yen!==n*50000
+      ||t.third_place_trial?.virtual_stake_yen!==n*50000)return;
+   third.n+=n;
+   third.mainHits+=t.learned_formal.hits;
+   third.trialHits+=t.third_place_trial.hits;
+   third.mainPayout+=t.learned_formal.virtual_payout_yen;
+   third.trialPayout+=t.third_place_trial.virtual_payout_yen;
+   third.common+=t.shared_correct_head_second_opportunities||0;
+   third.mainThird+=t.shared_pair_main_third_hits||0;
+   third.trialThird+=t.shared_pair_trial_third_hits||0;
+  });
+  $('third').innerHTML=third.n?
+    '<tr><td>'+commas(third.n)+'R</td><td>'+third.mainHits+
+    '</td><td>'+third.trialHits+'</td><td>'+third.common+'R</td><td>'+
+    third.mainThird+'</td><td>'+third.trialThird+'</td><td class="'+
+    (third.trialPayout>=third.mainPayout?'good':'bad')+'">'+money(third.trialPayout-third.mainPayout)+'</td></tr>':
+    '<tr><td colspan="7">3着試験モデルの発走前固定・公式結果照合を待っています。</td></tr>';
   $('days').innerHTML=dayRows.filter(x=>x.n>0).sort((a,b)=>b.date.localeCompare(a.date))
     .map(d=>rowMetrics(d.date,d.n,d.lm,d.cm)).join('')||
     '<tr><td colspan="7">正式学習AIの公式照合待ちです。</td></tr>';

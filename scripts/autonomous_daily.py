@@ -2022,7 +2022,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                         continue  # No delayed upgrade, regardless of the initial clock.
                     # v2.6 must never inherit a false formal exhibition gate from
                     # a prior snapshot: verify the actual source AGAIN in this run.
-                    if upgrade.get("model_version") == FORMAL_CONDITIONAL_V26_MODEL:
+                    if upgrade.get("model_version") in (FORMAL_CONDITIONAL_V26_MODEL, LEARNED_MAIN_MODEL):
                         if (phase_to_promote != "exhibition" or not preview_ready
                                 or not numeric_exhibition_matches_snapshot(candidate_now, upgrade)):
                             continue
@@ -2114,11 +2114,12 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         # This is a derived, non-hashed display gate. Do not alter any frozen
         # baseline/exhibition snapshot or re-create SHA with post-race facts.
         r["entry_exhibition_gate"] = summarize_gate(current, local_day)
-        if (r.get("model_version") == FORMAL_CONDITIONAL_V26_MODEL
+        if (r.get("model_version") in (FORMAL_CONDITIONAL_V26_MODEL, LEARNED_MAIN_MODEL)
+                and r.get("phase") == "exhibition"
                 and (r.get("exhibition_input_check") or {}).get("verified_before_freeze") is not True):
             r["entry_exhibition_gate"].update(
                 final_eligible=False, buy_allowed=False,
-                reason="v2.6展示6艇の保存時照合が未確認")
+                reason="展示6艇の保存時照合が未確認（正式学習AIも対象）")
         r["ticket_status"] = ("formal" if r["entry_exhibition_gate"]["final_eligible"] and r.get("classification") != "SKIP" else "provisional")
         if withdrawal:
             r["official_withdrawal"] = withdrawal

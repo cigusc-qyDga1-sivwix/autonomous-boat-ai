@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>展示データの予想寄与 | BOAT LAB</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,sans-serif;background:#081c2c;color:#e8f5fa}
+body{margin:0 auto;padding:18px;max-width:1100px}a{color:#80e5d5}h1{font-size:1.65rem}
+p{color:#b8ced8;line-height:1.65}.small{font-size:.89rem}h2{font-size:1.1rem;margin-top:26px}
+.panel{padding:15px;background:#113246;border:1px solid #35566a;border-radius:13px;margin:16px 0}
+.warn{color:#f7d298}.positive{color:#7de9ae}.negative{color:#ffaca7}
+button{border:1px solid #4a8191;background:#174459;color:white;border-radius:10px;padding:10px 15px;cursor:pointer}
+.wrap{overflow:auto;border:1px solid #35566a;border-radius:12px;margin:12px 0}
+table{border-collapse:collapse;min-width:780px;width:100%;font-variant-numeric:tabular-nums}
+td,th{border-bottom:1px solid #294b5f;padding:12px 10px;text-align:right}
+th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:#102b3c}
+thead th{color:#9fd6e4}.muted{color:#94adba}code{color:#bcdbff}
+.progress{height:7px;background:#315266;border-radius:99px;overflow:hidden;margin-top:4px}
+.fill{background:#71d9c7;height:100%}
+</style></head><body>
+<p><a href="./index.html">← BOAT LAB</a></p>
+<h1>🔬 展示データは本当に効いている？</h1>
+<p>展示タイム・一周・まわり足・直線など、項目を<strong>使った／除いた</strong>予想を、同じレース・同じ時点・同じ仮想5万円で比較する前向き研究です。公式結果照合済みの研究用シャドーだけを集計します。</p>
+<div class="panel"><div id="status" role="status">累積監査データを読み込み中…</div>
+<div style="margin-top:10px"><button type="button" id="refresh">最新の監査を再取得</button></div></div>
+<h2>展示項目ごとの累積比較</h2>
+<div class="wrap"><table><thead><tr><th>展示項目</th><th>同条件の照合R</th><th>検証進捗</th><th>使用時的中率</th><th>除外時的中率</th><th>使用時回収率</th><th>除外時回収率</th><th>払戻差</th></tr></thead><tbody id="metrics"></tbody></table></div>
+<h2>場別の比較内訳</h2>
+<div class="wrap"><table><thead><tr><th>場・項目</th><th>照合R</th><th>使用時的中</th><th>除外時的中</th><th>使用時払戻</th><th>除外時払戻</th><th>払戻差</th></tr></thead><tbody id="venues"></tbody></table></div>
+<div class="panel small">
+<strong>判断基準</strong>
+<p>各項目100Rは比較を始めるための最低限の目安で、効果の証明でも自動昇格の条件でもありません。場別評価にはさらに十分なサンプルが必要です。差が0円でも「展示が不要」とは結論できません。買い目差が存在しても偶然同じ払戻になることがあります。</p>
+<p class="warn">この比較は「展示ありの正式予想 vs 展示前の正式予想」ではなく、展示が反映された同時点の<strong>研究用シャドー同士</strong>の一項目除外比較です。正式予想の買い目、BUY/SKIP判定、仮想収支は変更しません。欠測日を0Rとして補完しません。江戸川は対象外です。</p>
+</div>
+<script src="./exhibition-evidence.js"></script>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const names=BoatExhibitionEvidence.NAMES;
+const fmt=n=>Number(n).toLocaleString('ja-JP');
+const rate=(a,b)=>b>0?(100*a/b).toFixed(1)+'%':'—';
+const money=n=>(n>0?'+':'')+fmt(n)+'円';
+const today=()=>{const parts=Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const p=Object.fromEntries(parts.map(x=>[x.type,x.value]));return [p.year,p.month,p.day].join('-');};
+const allDates=()=>{
+  const end=today(),dates=[];let d=new Date('2026-11-04T00:00:00Z');
+  while(d.toISOString().slice(0,10)<=end){dates.push(d.toISOString().slice(0,10));d.setUTCDate(d.getUTCDate()+1);}
+  return dates;
+};
+let running=false;
+async function run(){
+ if(running)return;running=true;$('refresh').disabled=true;
+ $('status').textContent='公式照合済み監査を集計中…';
+ try{
+  const dates=allDates(),loaded=await Promise.all(dates.map(async date=>{
+   try{
+    const response=await fetch('./data/live/audit/'+date+'.json?nocache='+Date.now(),{cache:'no-store'});
+    if(!response.ok)return null;
+    const report=await response.json();
+    return report?.event_date===date?report:null;
+   }catch(_){return null;}
+  }));
+  const reports=loaded.filter(Boolean),data=BoatExhibitionEvidence.summarize(reports);
+  const miss=dates.length-reports.length;
+  $('status').innerHTML='対象：2026/11/04〜'+today().replaceAll('-','/')+
+   ' ／ 監査取得 '+data.daysLoaded+'日 ／ 同条件比較のある日 '+data.daysApplicable+
+   '日 ／ <b>重複しない公式照合済みシャドー '+fmt(data.verifiedShadowRaces)+'R</b>'+
+   (miss?' <span class="warn">／ 未取得 '+miss+'日（集計対象外）</span>':'')+
+   (data.verifiedShadowRaces<100?'<p class="warn">まだ少数データのため効果の優劣は判定しません。</p>':'<p>100R到達。項目別・場別の検証と頑健性評価は引き続き必要です。</p>');
+  const rows=Object.entries(data.metrics).sort((a,b)=>b[1].with.races-a[1].with.races);
+  $('metrics').innerHTML=rows.length?rows.map(([key,v])=>{
+   const w=v.with,n=v.without,diff=w.payout-n.payout;
+   const progress=Math.min(100,100*w.races/100);
+   return '<tr><td>'+names[key]+'</td><td>'+fmt(w.races)+'</td><td>'+
+    fmt(w.races)+'/100R<div class="progress"><div class="fill" style="width:'+progress+'%"></div></div></td>'+
+    '<td>'+rate(w.hits,w.races)+'</td><td>'+rate(n.hits,n.races)+'</td>'+
+    '<td>'+rate(w.payout,w.stake)+'</td><td>'+rate(n.payout,n.stake)+'</td>'+
+    '<td class="'+(diff>0?'positive':diff<0?'negative':'muted')+'">'+money(diff)+'</td></tr>';
+  }).join(''):'<tr><td colspan="8">照合できる同条件比較はまだありません。</td></tr>';
+  const venues=rows.flatMap(([key,v])=>Object.entries(v.byVenue).map(([venue,item])=>({venue,key,...item})));
+  venues.sort((a,b)=>b.with.races-a.with.races||a.venue.localeCompare(b.venue,'ja'));
+  $('venues').innerHTML=venues.length?venues.map(v=>{
+   const diff=v.with.payout-v.without.payout;
+   return '<tr><td>'+v.venue+'・'+names[v.key]+'</td><td>'+v.with.races+'</td>'+
+    '<td>'+v.with.hits+'</td><td>'+v.without.hits+'</td><td>'+fmt(v.with.payout)+'円</td><td>'+
+    fmt(v.without.payout)+'円</td><td class="'+(diff>0?'positive':diff<0?'negative':'muted')+'">'+money(diff)+'</td></tr>';
+  }).join(''):'<tr><td colspan="7">場別比較はまだありません。</td></tr>';
+ }catch(error){$('status').textContent='集計できませんでした。通信状態と監査ファイルを確認してください。';}
+ finally{running=false;$('refresh').disabled=false;}
+}
+$('refresh').addEventListener('click',run);
+run();
+</script></body></html>

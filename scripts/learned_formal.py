@@ -15,6 +15,7 @@ from pathlib import Path
 from boat_ai.statistical import (
     SCHEMA, FEATURES, digest, distributions, allocate, prepare,
 )
+from scripts.third_place_pilot import load_pilot, frozen_shadow
 
 VERSION = "four-factor-learned-v1-conditional-choice-trained"
 START_DATE = date(2026, 11, 13)
@@ -168,4 +169,12 @@ def apply(snapshot: dict, model: dict) -> dict:
                 "weather_special_shadow", "role_skill_shadow",
                 "venue_motor_exhibition_shadow"):
         result.pop(key, None)
+    # A separately trained, pre-cutoff third-place experiment. Never changes
+    # learned-formal tickets, classification, or the existing 50,000-yen stake.
+    pilot = load_pilot(model, frozen)
+    if pilot is not None:
+        try:
+            result["third_place_pilot"] = frozen_shadow(result, model, pilot)
+        except (ValueError, TypeError, KeyError, OverflowError):
+            pass  # Research-only artifact fails closed; formal remains intact.
     return result

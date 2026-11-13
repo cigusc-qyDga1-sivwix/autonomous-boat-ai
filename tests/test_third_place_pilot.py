@@ -39,6 +39,9 @@ def third_model(m=None):
         "parent_schema": SCHEMA, "parent_model_sha256": m["model_sha256"],
         "role": "research_shadow", "not_formal": True, "calibrated": False,
     }
+    # Nonzero pre-race course-neighbor signal so the shadow differs from
+    # the zero-coefficient formal control in deterministic tests.
+    model["weights"][THIRD_FEATURES.index("third_adjacent_to_second")] = 2.0
     model["model_sha256"] = digest(model)
     return model
 
@@ -106,7 +109,7 @@ def test_stale_parent_mismatch_and_future_training_all_rejected():
     wrong = copy.deepcopy(m)
     wrong["model_sha256"] = "0"*64
     assert not verify_pilot(pilot, wrong, frozen)
-    assert not verify_pilot(pilot, m, datetime.fromisoformat("2026-11-14T10:00:00+00:00"))
+    assert not verify_pilot(pilot, m, datetime.fromisoformat("2026-11-15T10:00:00+00:00"))
     assert not verify_pilot(pilot, m, datetime.fromisoformat("2026-11-12T23:00:00+00:00"))
 
 

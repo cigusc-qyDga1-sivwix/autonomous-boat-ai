@@ -124,3 +124,38 @@ def test_learned_formal_growth_audit_counts_only_actual_frozen_formal():
     report2 = _learned_formal_comparison([snap], {key:pay}, {}, "2026-11-13")
     assert report2["matched_verified_races"] == 0
     assert report2["exclusions"]["not_proven_paired_formal"] == 1
+
+
+def test_inside_survival_research_is_preserved_in_readonly_view(monkeypatch):
+    """A frozen research diagnostic must reach the read-only race view."""
+    from scripts.learned_formal import apply as real_apply
+    monkeypatch.setattr(primary, "ACTIVE_LEARNED_MODEL", model())
+    expected = {
+        "version": "inside-survival-forward-shadow-v0.1",
+        "model_role": "research_shadow",
+        "status": "MISSING_SIX_BOAT_TURN_AND_TIME",
+        "formal_tickets_changed": False,
+        "result_data_used": False,
+    }
+
+    def add_diagnostic(snapshot, stored_model):
+        new = real_apply(snapshot, stored_model)
+        new["inside_survival_research"] = dict(expected)
+        return new
+
+    monkeypatch.setattr(primary, "apply_learned_primary", add_diagnostic)
+    race = {"closed_at": "2026-11-13 12:00:00",
+            "racers": {str(i): {"name": f"選手{i}", "national_win_rate": 5.2,
+                               "motor_top_2_percent": 32.0,
+                               "average_start_timing": .16} for i in range(1, 7)}}
+    payload = {"programs": {"stadiums": {"18": {"races": {"1": race}}}}}
+    ledger, view, _ = primary.build(
+        None, payload, datetime(2026, 11, 13, 10, 0, tzinfo=JST), "fixture")
+    source = ledger["race_records"]["18-1"]["versions"][0]
+    shown = view["forecast_races"][0]
+    assert source["inside_survival_research"] == expected
+    assert shown["inside_survival_research"] == expected
+    assert shown["sha256"] == source["sha256"]
+    assert shown["bets"] == source["bets"]
+    assert source["sha256"] == primary.stable_hash(
+        {k: v for k, v in source.items() if k != "sha256"})

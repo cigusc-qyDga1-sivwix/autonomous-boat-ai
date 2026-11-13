@@ -102,3 +102,25 @@ def test_daily_builder_freezes_learned_versions_without_overwriting(monkeypatch)
     assert status["new_baseline"] == 0
     assert len(again["race_records"]["18-1"]["versions"]) == 1
     assert again["race_records"]["18-1"]["versions"][0]["sha256"] == old_hash
+
+
+def test_learned_formal_growth_audit_counts_only_actual_frozen_formal():
+    from scripts.forecast_audit import _learned_formal_comparison
+    snap = apply(fixture("exhibition"), model())
+    snap.update({"cutoff_jst": "12:00", "ticket_status": "formal"})
+    snap["sha256"] = digest({k:v for k,v in snap.items() if k!="sha256"})
+    pay = {"verified": True, "source": "boatrace_official_pay",
+           "virtual_stake": 50000,
+           "finish": snap["bets"][0]["combination"],
+           "payout_per_100": 1200}
+    key = "2026-11-13|徳山|1"
+    report = _learned_formal_comparison([snap], {key:pay}, {}, "2026-11-13")
+    assert report["matched_verified_races"] == 1
+    assert report["learned_formal"]["hits"] == 1
+    assert report["learned_formal"]["virtual_stake_yen"] == 50000
+    assert model()["model_sha256"] in report["by_model_sha"]
+    assert report["by_model_sha"][model()["model_sha256"]]["trained_through"] == "2026-11-12"
+    snap["ticket_status"] = "provisional"
+    report2 = _learned_formal_comparison([snap], {key:pay}, {}, "2026-11-13")
+    assert report2["matched_verified_races"] == 0
+    assert report2["exclusions"]["not_proven_paired_formal"] == 1

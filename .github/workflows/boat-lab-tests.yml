@@ -40,6 +40,8 @@ jobs:
       - run: node app/tests/formal-v25.test.js
       - run: node app/tests/three-leg-formal.test.js
       - run: node app/tests/venue-metric-ablation.test.js
+      - run: node --check app/exhibition-evidence.js
+      - run: node app/tests/exhibition-evidence.test.js
       - run: python3 -c "import runpy; tests=runpy.run_path('tests/test_venue_tactics_v14.py'); [v() for k,v in tests.items() if k.startswith('test_')]"
       - run: python3 -m unittest discover -s tests -p test_postrace_conditional_v13.py
       - run: node app/tests/venue-surface-v1.test.js

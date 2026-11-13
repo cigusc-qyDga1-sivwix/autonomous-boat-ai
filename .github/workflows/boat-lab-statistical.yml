@@ -6,6 +6,8 @@ on:
     paths:
       - 'boat_ai/statistical.py'
       - 'scripts/train_statistical.py'
+      - 'scripts/third_place_pilot.py'
+      - 'tests/test_third_place_pilot.py'
       - 'scripts/freeze_statistical_shadow.py'
       - 'scripts/audit_statistical_shadow.py'
       - 'tests/test_statistical.py'
@@ -31,9 +33,11 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m pip install -e '.[test,research]'
-      - run: python -m pytest -q tests/test_statistical.py
+      - run: python -m pytest -q tests/test_statistical.py tests/test_third_place_pilot.py
       - name: Train from previous days only and evaluate by held-out date
         run: python -m scripts.train_statistical
+      - name: Train separate conditional-third research model on past dates
+        run: python -m scripts.third_place_pilot
       - name: Freeze current future-race comparisons
         run: |
           python -m scripts.freeze_statistical_shadow
@@ -53,6 +57,7 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
             python -m scripts.train_statistical
+            python -m scripts.third_place_pilot
             python -m scripts.freeze_statistical_shadow
             python -m scripts.audit_statistical_shadow
           done

@@ -39,7 +39,10 @@ test('reject formal or mismatched-time comparisons and invalid stake',()=>{
  const invalid=report();
  invalid.venue_metric_ablation.shadow_only_not_formal=false;
  const bad=report('2026-11-14');
- bad.venue_metric_ablation.per_metric.exhibition_time.with_metric.virtual_stake_yen=1234;
+ bad.venue_metric_ablation.per_metric.exhibition_time.with_metric={
+  ...bad.venue_metric_ablation.per_metric.exhibition_time.with_metric,
+  virtual_stake_yen:1234
+ };
  const data=summarize([invalid,bad]);
  assert.equal(data.daysApplicable,1);
  assert.equal(data.verifiedShadowRaces,2);

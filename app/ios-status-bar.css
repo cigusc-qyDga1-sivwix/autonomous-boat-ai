@@ -1,26 +1,19 @@
 /*
- * BOAT LAB iPhone status-bar contrast fix.
- * A light, solid system-bar/safe-area surface paired with dark iOS glyphs
- * (index.html apple-mobile-web-app-status-bar-style=default).
- *
- * Only the mobile app chrome is themed here; race cards, ticket state,
- * forecasting/settlement, and desktop appearance remain unchanged.
+ * BOAT LAB iPhone status-bar contrast (dark edition).
+ * White iOS clock/battery glyphs are drawn above the deep-navy system bar.
+ * Research cards, odds, tickets, settlements, and desktop theme are untouched.
  */
 :root {
-  --ios-top-surface: #eaf7fb;
-  --ios-top-border: #c9e6ed;
+  --ios-top-surface: #081b33;
+  --ios-top-border: #26465f;
 }
 
-/* The html canvas is the fallback paint underneath the iPhone safe area. */
+/* The page canvas supplies a matching dark color during iOS overscroll. */
 html {
   background-color: var(--ios-top-surface);
 }
 
 @media (max-width: 810px) {
-  /*
-   * Keep rubber-band/overscroll areas soft and readable while leaving
-   * the working dashboard on its existing background color.
-   */
   body {
     background-color: var(--ios-top-surface);
   }
@@ -30,11 +23,64 @@ html {
     background-color: var(--bg, #f5f8fc);
   }
 
-  /* Loaded after premium-ui.css so its sticky white override cannot win. */
+  /*
+   * Standalone iOS black-translucent status glyphs occupy the safe area.
+   * Keep that area inside the navy header, above header controls.
+   * This stylesheet loads after premium-ui.css, avoiding the white override.
+   */
   .topbar {
-    background: linear-gradient(180deg, #eaf7fb 0%, #f4fbfd 100%);
+    background: #081b33;
+    color: #f6fbff;
     border-bottom: 1px solid var(--ios-top-border);
+    padding-top: env(safe-area-inset-top, 0px);
+    height: calc(64px + env(safe-area-inset-top, 0px));
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+    box-shadow: 0 4px 16px rgba(5, 21, 39, .17);
+  }
+
+  .topbar .mobile-brand {
+    color: #f5fbff;
+  }
+
+  .topbar .mobile-brand .mobile-mark,
+  .topbar .mobile-brand span:last-child {
+    color: #57e1d3;
+  }
+
+  .topbar .live-mark {
+    color: #b2e6df;
+  }
+
+  .topbar .live-mark .dot {
+    background: #48d8bb;
+  }
+
+  .topbar .quick-links-menu summary {
+    color: #e0f8f4;
+    background: #15384e;
+    border-color: #3b6172;
+  }
+
+  .topbar .quick-links-menu summary:focus-visible,
+  .topbar .icon-button:focus-visible {
+    outline: 3px solid #8df2df;
+    outline-offset: 2px;
+  }
+
+  .topbar .icon-button {
+    color: #ecf9ff;
+    background: #15384e;
+    border-color: #3b6172;
+  }
+
+  .topbar .icon-button:hover,
+  .topbar .icon-button:active {
+    background: #235065;
+  }
+
+  .topbar .avatar {
+    color: #e0fffb;
+    background: #20516b;
   }
 }

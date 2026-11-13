@@ -1,0 +1,40 @@
+/*
+ * BOAT LAB iPhone status-bar contrast fix.
+ * A light, solid system-bar/safe-area surface paired with dark iOS glyphs
+ * (index.html apple-mobile-web-app-status-bar-style=default).
+ *
+ * Only the mobile app chrome is themed here; race cards, ticket state,
+ * forecasting/settlement, and desktop appearance remain unchanged.
+ */
+:root {
+  --ios-top-surface: #eaf7fb;
+  --ios-top-border: #c9e6ed;
+}
+
+/* The html canvas is the fallback paint underneath the iPhone safe area. */
+html {
+  background-color: var(--ios-top-surface);
+}
+
+@media (max-width: 810px) {
+  /*
+   * Keep rubber-band/overscroll areas soft and readable while leaving
+   * the working dashboard on its existing background color.
+   */
+  body {
+    background-color: var(--ios-top-surface);
+  }
+
+  .shell,
+  .workspace {
+    background-color: var(--bg, #f5f8fc);
+  }
+
+  /* Loaded after premium-ui.css so its sticky white override cannot win. */
+  .topbar {
+    background: linear-gradient(180deg, #eaf7fb 0%, #f4fbfd 100%);
+    border-bottom: 1px solid var(--ios-top-border);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}

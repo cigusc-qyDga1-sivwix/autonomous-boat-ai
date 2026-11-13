@@ -16,6 +16,7 @@ from boat_ai.statistical import (
     SCHEMA, FEATURES, digest, distributions, allocate, prepare,
 )
 from scripts.third_place_pilot import load_pilot, frozen_shadow
+from scripts.inside_survival_research import evaluate as evaluate_inside_survival
 
 VERSION = "four-factor-learned-v1-conditional-choice-trained"
 START_DATE = date(2026, 11, 13)
@@ -177,4 +178,19 @@ def apply(snapshot: dict, model: dict) -> dict:
             result["third_place_pilot"] = frozen_shadow(result, model, pilot)
         except (ValueError, TypeError, KeyError, OverflowError):
             pass  # Research-only artifact fails closed; formal remains intact.
+    # Independent pre-cutoff lane-1 outcome/survival hypotheses.
+    # Diagnostic only: all formal 3連単 bets, allocations, and model SHA stay put.
+    if snapshot.get("phase") == "exhibition":
+        try:
+            result["inside_survival_research"] = evaluate_inside_survival(
+                snapshot, ranked, bets)
+        except (ValueError, TypeError, KeyError, OverflowError):
+            result["inside_survival_research"] = {
+                "version": "inside-survival-forward-shadow-v0.1",
+                "model_role": "research_shadow",
+                "status": "ERROR_FAIL_CLOSED",
+                "formal_tickets_changed": False,
+                "result_data_used": False,
+                "calibrated": False,
+            }
     return result

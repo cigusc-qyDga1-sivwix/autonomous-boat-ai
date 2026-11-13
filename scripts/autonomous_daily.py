@@ -2107,7 +2107,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "three_leg_primary", "formal_insight_v24", "formal_head_risk_v25", "formal_conditional_v26",
                       "attack_defence_shadow", "grade_context", "grade_competition_shadow", "strong_field_diagnostic",
                       "coverage_reselection_shadow", "hidden_path_shadow",
-                      "exhibition_input_check", "relative_scores_uncalibrated", "learned_formal"):
+                      "exhibition_input_check", "relative_scores_uncalibrated", "learned_formal", "third_place_pilot"):
             if extra in current:
                 r[extra] = current[extra]
         r["version_count"] = len(versions)

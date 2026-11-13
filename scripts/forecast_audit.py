@@ -325,6 +325,82 @@ def _shadow_trial_result(snapshot, bets, payout):
     }
 
 
+def _learned_formal_comparison(forecasts, official, alerts, day):
+    """Compare ONLY pre-cutoff official learned main vs same-input old control.
+
+    Use already frozen tickets, never retrofit the learning algorithm to past
+    results. Model SHA is necessary to see whether later trained versions win.
+    """
+    by_sha = defaultdict(lambda: {"learned": [], "control": []})
+    by_venue = defaultdict(lambda: {"learned": [], "control": []})
+    exclusions = Counter()
+    total = 0
+    model_meta = {}
+    for r in forecasts:
+        if r.get("model_version") != "four-factor-learned-v1-conditional-choice-trained":
+            continue
+        total += 1
+        proof = r.get("learned_formal") or {}
+        key = f"{day}|{r.get('venue')}|{r.get('race')}"
+        if key in alerts:
+            exclusions["official_conflict_refund_or_cancel"] += 1
+            continue
+        eligible, reason = _verify_race(r, official.get(key), day)
+        if not eligible:
+            exclusions[reason] += 1
+            continue
+        sha = proof.get("model_sha256")
+        control = proof.get("control_bets")
+        if (r.get("ticket_status") != "formal"
+                or proof.get("model_role") != "formal_primary"
+                or proof.get("same_input_same_time") is not True
+                or proof.get("same_point_count") is not True
+                or proof.get("input_frozen_at_utc") != r.get("frozen_at_utc")
+                or proof.get("result_data_used") is not False
+                or proof.get("odds_used") is not False
+                or not isinstance(sha, str) or len(sha) != 64
+                or not isinstance(control, list) or len(control) != len(r["bets"])
+                or not _valid_shadow_tickets(control)):
+            exclusions["not_proven_paired_formal"] += 1
+            continue
+        model_meta[sha] = {"trained_through": proof.get("trained_through"),
+                           "training_n": proof.get("training_n")}
+        pay = official[key]
+        main = _shadow_trial_result(r, r["bets"], pay)
+        prior = _shadow_trial_result(r, control, pay)
+        for dest in (by_sha[sha], by_venue[r["venue"]]):
+            dest["learned"].append(main)
+            dest["control"].append(prior)
+    pairs = [s for group in by_sha.values() for s in group["learned"]]
+    old = [s for group in by_sha.values() for s in group["control"]]
+    def summary(group):
+        main, ctrl = group["learned"], group["control"]
+        return {
+            "matched_verified_races": len(main),
+            "learned_formal": _metrics(main),
+            "previous_formal_control": _metrics(ctrl),
+            "payout_delta_yen": sum(x["virtual_payout_yen"] for x in main)
+                              - sum(x["virtual_payout_yen"] for x in ctrl),
+        }
+    return {
+        "protocol": "forward-frozen-user-authorized-learned-main-vs-old-control-v1",
+        "new_learned_forecasts": total,
+        "matched_verified_races": len(pairs),
+        "learned_formal": _metrics(pairs),
+        "previous_formal_control": _metrics(old),
+        "by_model_sha": {sha: {**model_meta.get(sha, {}), **summary(grp)}
+                         for sha, grp in sorted(by_sha.items())},
+        "by_venue": {venue: summary(grp) for venue, grp in sorted(by_venue.items())},
+        "exclusions": dict(sorted(exclusions.items())),
+        "main_predicted_before_cutoff": True,
+        "no_result_used_in_forecast": True,
+        "actual_purchase": False,
+        "warning": ("Only exhibition-confirmed formal forecasts with official verified "
+                    "results and source-matched, pre-cutoff control bets. "
+                    "No proof of profitable edge or calibration."),
+    }
+
+
 def _venue_metric_ablation_report(forecasts, official, alerts, day):
     """Results-only daily analysis. No re-scoring or retrospective variants.
 
@@ -1043,6 +1119,9 @@ def analyze(dataset: dict):
     }
     if day >= "2026-11-10":
         report["head_risk_breakpoint"] = _head_risk_breakpoint_report(raw, verified, day)
+    report["learned_formal_comparison"] = _learned_formal_comparison(
+        raw, official, alerts, day
+    )
     report["venue_metric_ablation"] = _venue_metric_ablation_report(
         raw, official, alerts, day
     )

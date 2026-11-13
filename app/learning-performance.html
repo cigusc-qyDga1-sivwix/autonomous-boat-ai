@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>学習AIの成長記録 | BOAT LAB</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color-scheme:dark;background:#081d2c;color:#e9f5fa}
+body{padding:20px;max-width:1100px;margin:0 auto}a{color:#89e5d7}
+h1{font-size:1.7rem}h2{font-size:1.14rem;margin-top:28px}
+p{line-height:1.6;color:#b4cad8}.muted{color:#93aebc}.good{color:#6be8ad}.bad{color:#ffa8a6}
+.card{background:#123247;border:1px solid #35566b;border-radius:13px;padding:16px;margin:14px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.metric{background:#174056;border-radius:10px;padding:13px}.metric b{display:block;font-size:1.38rem}.metric small{color:#b7d0d9}
+button{background:#20465b;border:1px solid #47788d;border-radius:8px;color:white;padding:10px 15px}
+.scroll{overflow:auto;border:1px solid #315267;border-radius:11px;margin:12px 0}
+table{border-collapse:collapse;width:100%;min-width:780px;font-variant-numeric:tabular-nums}
+th,td{padding:11px;text-align:right;border-bottom:1px solid #2a4b5d}
+th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:#102c3d}
+thead th{color:#a2d8e1}.warn{color:#ffde9e}
+</style></head><body>
+<p><a href="./index.html">← BOAT LAB</a></p>
+<h1>🧠 学習AIの成長記録</h1>
+<p>2026年11月13日以降、学習済みモデルを使って<strong>展示確認後・締切前に正式固定</strong>した予想を、公式3連単結果と照合します。各レースは同時点の旧モデルと同じ点数・仮想5万円で比較。結果を見た後の再予想は含めません。</p>
+<div class="card"><div id="status" role="status">日別監査を取得しています…</div><p><button id="refresh">↻ 最新データを再取得</button></p></div>
+<div class="grid" id="summary"></div>
+<h2>モデル更新ごとの成績</h2>
+<div class="scroll"><table><thead><tr><th>学習最終日 / モデルID</th><th>公式照合R</th><th>学習AI的中率</th><th>旧モデル的中率</th><th>学習AI回収率</th><th>旧モデル回収率</th><th>学習AI－旧モデル払戻差</th></tr></thead><tbody id="models"></tbody></table></div>
+<h2>日別の成績推移</h2>
+<div class="scroll"><table><thead><tr><th>対象日</th><th>公式照合R</th><th>学習AI的中</th><th>旧モデル的中</th><th>学習AI回収率</th><th>旧モデル回収率</th><th>払戻差</th></tr></thead><tbody id="days"></tbody></table></div>
+<div class="card"><strong>数字の読み方</strong><p>対象は学習AIで締切前に正式固定した予想のうち、展示6艇の確認・公式結果照合・同条件の旧モデル買い目が揃ったレースのみ。比較される旧モデルは追加購入ではありません。展示前の暫定予想、欠場・返還・未確認データはこの比較に含めません。</p><p class="warn">的中率や回収率が一時的に上がっても、学習による恒常的な優位性を示すものではありません。これらは仮想配分であり実投票成績ではありません。未取得の日付を0R／0円として補完しません。オッズによる期待値判定は未実装です。</p></div>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const commas=x=>Number(x||0).toLocaleString('ja-JP');
+const pct=(a,b)=>b?((a/b)*100).toFixed(1)+'%':'—';
+const money=x=>(x>0?'+':'')+commas(x)+'円';
+function today(){
+ const p=Object.fromEntries(Intl.DateTimeFormat('en-US',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).map(v=>[v.type,v.value]));
+ return [p.year,p.month,p.day].join('-');
+}
+function dates(){
+ const out=[],end=today(),d=new Date('2026-11-13T00:00:00Z');
+ while(d.toISOString().slice(0,10)<=end){out.push(d.toISOString().slice(0,10));d.setUTCDate(d.getUTCDate()+1);}
+ return out;
+}
+const empty=()=>({n:0,hits:0,stake:0,payout:0});
+function add(t,d){if(!d||!Number.isInteger(d.verified_races)||d.verified_races<0)return;
+ t.n+=d.verified_races;t.hits+=d.hits||0;t.stake+=d.virtual_stake_yen||0;t.payout+=d.virtual_payout_yen||0;}
+function rowMetrics(title,n,learned,old){
+ const delta=learned.payout-old.payout;
+ return '<tr><td>'+title+'</td><td>'+commas(n)+'</td><td>'+pct(learned.hits,n)+'</td><td>'+pct(old.hits,n)+'</td>'+
+ '<td>'+pct(learned.payout,learned.stake)+'</td><td>'+pct(old.payout,old.stake)+'</td>'+
+ '<td class="'+(delta>0?'good':delta<0?'bad':'muted')+'">'+money(delta)+'</td></tr>';
+}
+let busy=false;
+async function run(){
+ if(busy)return;busy=true;$('refresh').disabled=true;
+ try{
+  const all=dates(),reports=await Promise.all(all.map(async d=>{
+   try{const r=await fetch('./data/live/audit/'+d+'.json?fresh='+Date.now(),{cache:'no-store'});
+       if(!r.ok)return null;const doc=await r.json();return doc?.event_date===d?doc:null;}
+   catch(_){return null;}
+  }));
+  const loaded=reports.filter(Boolean),missing=all.length-loaded.length,models={};
+  let learned=empty(),old=empty(),finished=0,invalid=0;
+  const dayRows=[];
+  loaded.forEach(r=>{
+   const c=r.learned_formal_comparison;
+   if(!c||c.protocol!=='forward-frozen-user-authorized-learned-main-vs-old-control-v1')return;
+   finished++;
+   const lm=empty(),cm=empty();
+   add(lm,c.learned_formal);add(cm,c.previous_formal_control);
+   if(lm.n!==cm.n){invalid++;return;}
+   add(learned,c.learned_formal);add(old,c.previous_formal_control);
+   dayRows.push({date:r.event_date,n:lm.n,lm,cm});
+   Object.entries(c.by_model_sha||{}).forEach(([sha,m])=>{
+    if(!/^[0-9a-f]{64}$/.test(sha))return;
+    const n=m.matched_verified_races||0;
+    if(n!==m.learned_formal?.verified_races||n!==m.previous_formal_control?.verified_races)return;
+    if(!models[sha])models[sha]={sha,through:m.trained_through,n:0,lm:empty(),cm:empty()};
+    models[sha].n+=n;add(models[sha].lm,m.learned_formal);add(models[sha].cm,m.previous_formal_control);
+   });
+  });
+  $('status').innerHTML='対象：2026/11/13〜'+today()+' ／ 監査取得 '+loaded.length+'日 ／ 学習AI比較 '+finished+'日'+
+   (missing?' <span class="warn">／ 監査未取得 '+missing+'日</span>':'')+
+   (invalid?' <span class="warn">／ 整合しない監査 '+invalid+'日を除外</span>':'');
+  const tile=(label,value)=>'<div class="metric"><small>'+label+'</small><b>'+value+'</b></div>';
+  $('summary').innerHTML=tile('学習AI 公式照合',commas(learned.n)+'R')+
+   tile('学習AI 的中率',pct(learned.hits,learned.n))+
+   tile('学習AI 回収率',pct(learned.payout,learned.stake))+
+   tile('旧モデル回収率',pct(old.payout,old.stake))+
+   tile('学習AI－旧モデル払戻差',money(learned.payout-old.payout));
+  const mrows=Object.values(models).sort((a,b)=>(b.through||'').localeCompare(a.through||''));
+  $('models').innerHTML=mrows.length?mrows.map(m=>rowMetrics(
+    (m.through||'学習日不明')+' / '+m.sha.slice(0,12)+'…',m.n,m.lm,m.cm)).join(''):
+    '<tr><td colspan="7">学習AIの正式予想・公式照合が揃うと集計されます。</td></tr>';
+  $('days').innerHTML=dayRows.filter(x=>x.n>0).sort((a,b)=>b.date.localeCompare(a.date))
+    .map(d=>rowMetrics(d.date,d.n,d.lm,d.cm)).join('')||
+    '<tr><td colspan="7">正式学習AIの公式照合待ちです。</td></tr>';
+ }catch(e){$('status').textContent='監査データを取得できません。後ほど再取得してください。';}
+ finally{busy=false;$('refresh').disabled=false;}
+}
+$('refresh').addEventListener('click',run);run();
+</script></body></html>

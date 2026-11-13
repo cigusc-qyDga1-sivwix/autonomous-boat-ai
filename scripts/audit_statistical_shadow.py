@@ -41,7 +41,9 @@ def audit(data_dir=Path('app/data/live'),shadow_dir=Path('app/data/experiments')
             official=record.get('official_pay') or {}
             if official.get('verified') is not True or official.get('source')!='boatrace_official_pay':unresolved+=1;continue
             finish=official.get('finish','')
-            if len(finish)!=5 or len(set(finish.split('-')))!=3 or any(len(c)!=1 or c not in '123456' for c in finish.split('-')):rejected+=1;continue
+            # A verified result entry can still have no 3連単 finish (e.g. cancelled).
+            # Never throw, and never count such a race as a loss or a hit.
+            if not isinstance(finish,str) or len(finish)!=5 or len(set(finish.split('-')))!=3 or any(len(c)!=1 or c not in '123456' for c in finish.split('-')):rejected+=1;continue
             if official.get('source_url')!='https://www.boatrace.jp/owpc/pc/race/pay?hd='+day.replace('-',''):rejected+=1;continue
             payout=official.get('payout_per_100')
             if not isinstance(payout,int) or isinstance(payout,bool) or payout<100:rejected+=1;continue

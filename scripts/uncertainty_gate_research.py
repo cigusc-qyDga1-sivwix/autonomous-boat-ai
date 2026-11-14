@@ -82,6 +82,6 @@ def evaluate(snapshot: dict) -> dict:
         "snapshot_frozen_at_utc": snapshot["frozen_at_utc"],
         "cutoff_iso_jst": snapshot["cutoff_iso_jst"],
         "hypothesis": "Multiple independent uncertainties can undermine exact 3連単 ranking",
-        "research_policy": "Exclude only from CLEAN forward training cohort; retain in separate SKIP audit cohort",
+        "research_policy": "Separate from clean-candidate research cohort for comparison only; never exclude from training or formal bets without forward validation",
         "threshold_policy": "F>=2 yields 2 risk points; each other independent signal 1; skip threshold >=2",
     }

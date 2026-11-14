@@ -30,16 +30,38 @@ jobs:
           python-version: '3.11'
       - name: Test independent video candidate contract (zero production imports)
         run: |
-          python -m unittest discover -s vision_ai/tests -p 'test_*.py' -v
+          python -S -m vision_ai.run_tests
           python -m compileall -q vision_ai/
       - name: Confirm production imports are absent
         run: |
           python - <<'PY'
           from pathlib import Path
-          paths = list(Path("vision_ai").glob("*.py"))
-          forbidden = ("from scripts.", "from app.", "import scripts.", "from boat_ai.")
+          import ast
+          paths = list(Path("vision_ai").rglob("*.py"))
           for path in paths:
-              source = path.read_text(encoding="utf-8")
-              assert not any(x in source for x in forbidden), path
+              for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                  modules = [n.name for n in node.names] if isinstance(node, ast.Import) else []
+                  if isinstance(node, ast.ImportFrom) and node.level == 0:
+                      modules.append(node.module or "")
+                  assert not any(m.split(".")[0] in {"scripts", "app", "boat_ai"} for m in modules), path
           print("isolated vision module: no production imports")
           PY
+
+  independent-vision-decoder-cv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install required independent media runtime
+        run: |
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends ffmpeg
+          fi
+          python -m pip install --disable-pip-version-check numpy==1.26.4 opencv-python-headless==4.11.0.86
+      - name: Decode generated video and measure candidate tracking errors (no skips)
+        run: python -m vision_ai.run_tests --cv
+

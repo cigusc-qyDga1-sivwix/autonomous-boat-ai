@@ -17,6 +17,16 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+        with:
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/forecast_audit.py
+            /scripts/uncertainty_gate_research.py
+            /scripts/audit_unpredictable_20261114.py
+            /tests/test_uncertainty_gate_research.py
+            /app/data/live/2026-11-14.json
+            /app/data/live/audit/2026-11-14.json
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'

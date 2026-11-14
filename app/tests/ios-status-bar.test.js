@@ -27,6 +27,6 @@ const cssLink = html.indexOf('href="./ios-status-bar.css?v=20261113-dark-top-v2"
 const premiumLink = html.indexOf('href="./premium-ui.css?');
 assert.ok(cssLink > premiumLink && premiumLink >= 0,
   'iPhone dark header rules must override the premium sticky topbar');
-assert.match(sw, /boat-lab-static-v80/);
+assert.match(sw, /boat-lab-static-v81/);
 assert.match(sw, /'\.\/ios-status-bar\.css'/);
 console.log('iPhone PWA dark status-bar contrast contract: PASS');

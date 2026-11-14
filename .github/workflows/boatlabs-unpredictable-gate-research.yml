@@ -1,0 +1,46 @@
+name: BOAT LAB unpredictable-race gate retrospective research
+on:
+  pull_request:
+    paths:
+      - 'scripts/uncertainty_gate_research.py'
+      - 'scripts/audit_unpredictable_20261114.py'
+      - 'tests/test_uncertainty_gate_research.py'
+      - '.github/workflows/boatlabs-unpredictable-gate-research.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  study-november-14:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /scripts/forecast_audit.py
+            /scripts/uncertainty_gate_research.py
+            /scripts/audit_unpredictable_20261114.py
+            /tests/test_uncertainty_gate_research.py
+            /app/data/live/2026-11-14.json
+            /app/data/live/audit/2026-11-14.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test outcome-blind pre-cutoff gate
+        run: python -m unittest discover -s tests -p test_uncertainty_gate_research.py -v
+      - name: Audit all verified November 14 races against the frozen ledger
+        run: |
+          python -m scripts.audit_unpredictable_20261114 \
+            --day 2026-11-14 \
+            --out "$RUNNER_TEMP/boatlabs-2026-11-14-risk-research.json"
+      - name: Publish read-only retrospective research JSON as a CI artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boatlabs-2026-11-14-risk-research
+          path: ${{ runner.temp }}/boatlabs-2026-11-14-risk-research.json
+          retention-days: 30

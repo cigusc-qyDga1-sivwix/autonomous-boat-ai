@@ -36,7 +36,7 @@ def study(ledger: dict, baseline_audit: dict | None = None) -> dict:
         raw.setdefault("venue", rec.get("venue"))
         raw.setdefault("race", rec.get("race"))
         raw.setdefault("cutoff_jst", rec.get("cutoff_jst"))
-        valid, reason = _verify_race(raw, pay, day)
+        valid, reason = _verify_race(raw, {**pay, "virtual_stake": BUDGET} if isinstance(pay, dict) else None, day)
         if not valid:
             withheld[reason] += 1
             continue

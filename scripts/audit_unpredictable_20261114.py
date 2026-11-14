@@ -93,9 +93,9 @@ def study(ledger: dict, baseline_audit: dict | None = None) -> dict:
             "claim improvement or automatically remove any race from formal stats."
         ),
         "cohort_policy": {
-            "KEEP_SHADOW": "clean cohort candidate",
+            "KEEP_SHADOW": "low-signal comparison group, not proven predictable",
             "WATCH_SHADOW": "uncertain cohort: forward comparison",
-            "SKIP_SHADOW": "high-risk cohort, separately audited; exclude from clean learning only",
+            "SKIP_SHADOW": "high-risk trial group, separately audited; do not exclude from training or formal forecasts yet",
             "HOLD_*": "unusable/incomplete pre-cutoff exhibition evidence",
         },
         "all_eligible": all_metrics,

@@ -734,6 +734,7 @@
      <div class="detail-header"><div><div class="page-eyebrow">FORECAST DETAILS / ${escape(data.event_date)}</div><h1 class="detail-title">${escape(r.venue)} ${r.race}R <span style="font-size:17px;vertical-align:middle">${pill(r.classification)}</span></h1><div class="detail-sub">締切予定 ${escape(r.cutoff_jst)} JST　 ·　 ${r.phase==='exhibition'?'展示数値反映':r.phase==='baseline'?'展示前':'保存済み'}・結果未使用</div></div><button class="btn btn-primary" data-action="copy-bets" data-race="${escape(r.venue)}|${r.race}">${isFormalTicket(r)?'⎘ 正式買い目をコピー':'⎘ 暫定買い目をコピー'}</button></div>
     ${ticketBanner(r)}
     ${learnedFormalPanel(r)}
+    ${window.BoatWinnerPartnerMap?.render(r,{formal:isFormalTicket(r)})||''}
     ${ticketBlock}
     ${window.BoatRaceScenario?.render(r)||''}
     ${window.BoatHeadShareChart?.render(r)||''}

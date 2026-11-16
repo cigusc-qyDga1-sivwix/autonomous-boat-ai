@@ -135,13 +135,13 @@ assert.match(html,/20261117-postcutoff10-v1/);
 
 assert.match(js,/phase==='shadow'\?'shadow':'pending'/);
 
-assert.match(js,/recent\\.slice\\(0,6\\)\\.map\\(raceCard\\)/);
-assert.match(js,/recentShown\\.map\\(raceCard\\)/);
-assert.match(js,/visibleAroundCutoff\\(r,state\\.data\\.event_date,nowMs\\(\\)\\)/);
+assert.ok(js.includes('recent.slice(0,6).map(raceCard)'));
+assert.ok(js.includes('recentShown.map(raceCard)'));
+assert.ok(js.includes('visibleAroundCutoff(r,state.data.event_date,nowMs())'));
 assert.match(js,/締切後10分｜保存済み予想/);
 assert.match(js,/新規投票不可/);
-assert.match(css,/\\.v2-race\\.is-closed-recent\\{opacity:1/);
-assert.match(css,/\\.v2-recent-note/);
+assert.ok(css.includes('.v2-race.is-closed-recent{opacity:1'));
+assert.ok(css.includes('.v2-recent-note'));
 const homeSource=js.slice(js.indexOf('function home(){'),js.indexOf('function filterRaces(){'));
 assert.ok(homeSource.indexOf('v2-section-heading')<homeSource.indexOf('v2-metrics'),'homepage displays near-term races before metrics');
 assert.match(css,/--ink:#142a3e/);

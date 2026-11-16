@@ -45,6 +45,7 @@ if __package__:
     from .conditional_second_primary import diversify as diversify_second_pair
     from .conditional_one_mark_v26 import rescore as rescore_conditional_v26
     from .learned_formal import load_model as load_learned_model, apply as apply_learned_primary, VERSION as LEARNED_MAIN_MODEL
+    from .learned_conditional_shadow import build as build_learned_conditional_shadow
 else:
     from racer_context import collect as collect_racer_context, validated as validate_racer_context
     from official_pay import fetch_official_pay
@@ -70,6 +71,7 @@ else:
     from conditional_second_primary import diversify as diversify_second_pair
     from conditional_one_mark_v26 import rescore as rescore_conditional_v26
     from learned_formal import load_model as load_learned_model, apply as apply_learned_primary, VERSION as LEARNED_MAIN_MODEL
+    from learned_conditional_shadow import build as build_learned_conditional_shadow
 
 JST = ZoneInfo("Asia/Tokyo")
 UTC = timezone.utc
@@ -1951,6 +1953,14 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                         "source": selected_source,
                         "no_result_or_payout_used": True,
                     }
+                    if new.get("model_version") == LEARNED_MAIN_MODEL and ACTIVE_LEARNED_MODEL is not None:
+                        # Freeze research-only pair alternatives after verified
+                        # six-boat input/output matching, never from results.
+                        try:
+                            new["learned_conditional_shadow"] = build_learned_conditional_shadow(
+                                new, ACTIVE_LEARNED_MODEL)
+                        except (ValueError, KeyError, TypeError, OverflowError):
+                            pass
                     new["sha256"] = stable_hash({k: v for k, v in new.items() if k != "sha256"})
                     before = record["versions"][-1] if record["versions"] else None
                     if before:
@@ -2045,6 +2055,14 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                             "original_metrics_matched": sorted((candidate_now.get("_exhibition_original") or {}).keys()),
                             "source": selected_source, "no_result_or_payout_used": True,
                         }
+                    if (upgrade.get("model_version") == LEARNED_MAIN_MODEL
+                            and phase_to_promote == "exhibition"
+                            and ACTIVE_LEARNED_MODEL is not None):
+                        try:
+                            upgrade["learned_conditional_shadow"] = build_learned_conditional_shadow(
+                                upgrade, ACTIVE_LEARNED_MODEL)
+                        except (ValueError, KeyError, TypeError, OverflowError):
+                            pass
                     # Unique immutable record, not a rewrite of earlier SHA.
                     upgrade["model_upgrade"] = {
                         "previous_sha256": latest_before["sha256"],
@@ -2121,7 +2139,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "attack_defence_shadow", "grade_context", "grade_competition_shadow", "strong_field_diagnostic",
                       "coverage_reselection_shadow", "hidden_path_shadow",
                       "exhibition_input_check", "relative_scores_uncalibrated", "learned_formal", "third_place_pilot",
-                      "inside_survival_research"):
+                      "inside_survival_research", "learned_conditional_shadow"):
             if extra in current:
                 r[extra] = current[extra]
         r["version_count"] = len(versions)

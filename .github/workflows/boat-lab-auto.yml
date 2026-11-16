@@ -313,7 +313,7 @@ jobs:
         run: |
           set -euo pipefail
           DAY="$(TZ=Asia/Tokyo date +%F)"
-          if [ "$DAY" < "2026-11-17" ]; then exit 0; fi
+          if [[ "$DAY" < "2026-11-17" ]]; then exit 0; fi
           TRIAL="app/data/experiments/buy-shadow-$DAY.json"
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git config user.name 'github-actions[bot]'

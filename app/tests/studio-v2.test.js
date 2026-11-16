@@ -54,6 +54,22 @@ assert.equal(v2.officialOutcome(r,{...source,official_results:{[key]:{...officia
 assert.equal(v2.officialOutcome(r,{...source,settlement_alerts:{[key]:{status:'conflict'}}}),null);
 assert.equal(v2.officialOutcome(r,{...source,official_results:{[key]:{...official,source:'user_input'}}}),null);
 
+
+// Verified official dividends, with exact yen accounting for frozen virtual stakes.
+assert.deepEqual(v2.virtualSettlement(r,source),{stakeYen:50000,payoutYen:165000,profitYen:115000,officialPayoutPer100:550});
+assert.deepEqual(v2.virtualSettlement(r,{...source,official_results:{[key]:{...official,finish:'3-1-4'}}}),
+  {stakeYen:50000,payoutYen:0,profitYen:-50000,officialPayoutPer100:550});
+assert.deepEqual(v2.virtualSettlement({...r,bets:[...r.bets,{combination:'1-3-4',virtual_yen:1000}]},source),
+  {stakeYen:51000,payoutYen:170500,profitYen:119500,officialPayoutPer100:550});
+assert.equal(v2.virtualSettlement({...r,bets:[{combination:'1-3-4',virtual_yen:105}]},source),null);
+assert.equal(v2.virtualSettlement({...r,bets:[{combination:'1-3-4',virtual_yen:-100}]},source),null);
+assert.equal(v2.virtualSettlement({...r,bets:[{combination:'1-3-4',virtual_yen:0}]},source),null);
+assert.equal(v2.virtualSettlement({...r,bets:[{combination:'1-3-4',virtual_yen:100},{combination:'invalid',virtual_yen:100}]},source),null);
+assert.equal(v2.virtualSettlement(r,{...source,official_results:{[key]:{...official,refunded_boats:[5]}}}),null);
+assert.equal(v2.virtualSettlement(r,{...source,settlement_alerts:{[key]:{status:'conflict'}}}),null);
+assert.equal(v2.virtualSettlement(r,{...source,official_results:{[key]:{...official,verified:false}}}),null);
+assert.equal(v2.virtualSettlement({...r,bets:[{combination:'1-3-4',virtual_yen:9007199254740900}]},source),null);
+
 assert.match(html,/<meta name="color-scheme" content="light">/);
 assert.match(html,/name="apple-mobile-web-app-status-bar-style" content="black-translucent"/);
 assert.match(html,/studio-v2\.css/);
@@ -67,6 +83,10 @@ assert.match(html,/data-tab="forecasts"/);
 assert.match(html,/data-tab="results"/);
 assert.match(html,/data-tab="research"/);
 assert.match(css,/\.v2-bottom-nav/);
+assert.match(css,/\.v2-settlement-main strong/);
+assert.match(js,/metric\('仮想払戻総額'/);
+assert.match(js,/公式3連単配当（100円あたり）/);
+assert.match(js,/virtualSettlement\(r,state\.data\)/);
 assert.match(css,/@media\(max-width:760px\)/);
 assert.match(css,/@media\(prefers-reduced-motion:reduce\)/);
 assert.match(html,/class="v2-skip" href="#content"/);

@@ -160,7 +160,7 @@ def frozen_preview_fallback(document, day):
         if venue not in VENUES or venue == "江戸川" or type(race) is not int or not 1 <= race <= 12:
             continue
         clock = r.get("cutoff_jst")
-        if not isinstance(clock, str) or not re.fullmatch(r"(?:[01]\\d|2[0-3]):[0-5]\\d", clock):
+        if not isinstance(clock, str) or not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", clock):
             continue
         cutoff = datetime(day.year, day.month, day.day, int(clock[:2]), int(clock[3:]), tzinfo=JST)
         frozen = _time(r.get("frozen_at_utc"))

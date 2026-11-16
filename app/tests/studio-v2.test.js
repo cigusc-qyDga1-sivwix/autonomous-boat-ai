@@ -78,6 +78,17 @@ assert.match(html,/src="\.\/ticket-policy\.js"/);
 assert.doesNotMatch(html,/src="\.\/app\.js"/);
 assert.doesNotMatch(html,/premium-ui\.css|high-contrast-safe\.css|midnight-racing\.css/);
 assert.match(html,/id="race-dialog"/);
+assert.match(html,/v2-skeleton-grid/);
+assert.match(html,/aria-busy="true"/);
+assert.match(html,/v2-preview-flag/);
+assert.match(js,/fetchWithTimeout/);
+assert.match(js,/id="classification-filter"/);
+assert.match(js,/data-result-phase/);
+assert.match(js,/evidencePanel/);
+assert.match(js,/previousDialogFocus/);
+assert.match(css,/\.v2-skeleton-grid/);
+assert.match(css,/\.v2-evidence-checks/);
+
 assert.match(html,/data-tab="home"/);
 assert.match(html,/data-tab="forecasts"/);
 assert.match(html,/data-tab="results"/);

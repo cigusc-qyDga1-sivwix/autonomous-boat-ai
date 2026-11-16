@@ -52,7 +52,7 @@ function normalize(payload){
  if(!payload||!validDay(payload.event_date)||payload.mode!=='auto-live'||!Array.isArray(payload.forecast_races)||payload.forecast_races.length>300)
    throw new Error('正式な自動予想データを確認できませんでした');
  const races=payload.forecast_races.filter(validRace);
- if(races.length===0)throw new Error('買い目付きの発走前固定レースがありません');
+ // Empty auto-live days are valid: show an honest 0R state, not a load failure.
  return {...payload,forecast_races:races};
 }
 const engine={money,percent,validDay,validClock,jstDay,jstStamp,cutoffMs,sumBets,validRace,validCombo,frozenStatus,verifiedOfficial,officialOutcome,racePhase,normalize,raceOrder};
@@ -111,7 +111,7 @@ function phaseChip(r){
 function raceCard(r){
  const phase=racePhase(r,state.data,ticketPolicy),time=timeState(r),closed=time.startsWith('closed');
  const stake=sumBets(r),id=state.data.forecast_races.indexOf(r);
- const timeText=time==='urgent'?'締切間近':closed?'締切済み（保存記録）':'締切予定';
+ const timeText=time==='archive'?'過去の固定記録':time==='urgent'?'締切間近':closed?'締切済み（保存記録）':'締切予定';
  const label=(r.classification==='BUY'?'BUY分類':r.classification==='SKIP'?'SKIP分類':'WATCH分類');
  const scenario=typeof r.scenario==='string'&&r.scenario.trim()?'<div class="v2-subtle">展開仮説：'+escapeHTML(r.scenario.slice(0,90))+'</div>':'';
  return '<article class="v2-race is-'+(phase==='formal'?'formal':'pending')+(closed?' is-closed':'')+'">'+
@@ -146,7 +146,9 @@ function home(){
  const data=state.data,rs=allRaces(),formals=getFormal(),current=isToday();
  const upcoming=current?rs.filter(r=>cutoffMs(data.event_date,r.cutoff_jst)>nowMs()):[];
  const recent=current?rs.filter(r=>{const d=nowMs()-cutoffMs(data.event_date,r.cutoff_jst);return d>=0&&d<600000&&r.classification!=='SKIP'}):[];
- const priority=[...upcoming.filter(r=>frozenStatus(r,data,ticketPolicy)),...upcoming.filter(r=>!frozenStatus(r,data,ticketPolicy))].slice(0,4);
+ // Chronological priority is non-negotiable: a pending near-cutoff race must
+ // never disappear behind a later formal card.
+ const priority=upcoming.slice(0,4);
  const due=upcoming[0]?.cutoff_jst||'—';
  const official=resultMetrics();
  return title('RACE CONTROL / 2.0','今日の予想を、迷わず確認','発走前に固定した買い目・表示区分・公式照合を一画面に。')+

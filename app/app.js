@@ -321,10 +321,12 @@
       frozen?'発走前に取得した周辺気象予報':'最新取得分の周辺気象予報（発走前予想には未反映）';
     const windSource=selected.wind_source==='open-meteo-jma'?'気象庁MSM/GSM近隣モデル予報':
       selected.wind_source==='boatrace_preview'?'展示時の場内情報':'未確認・その他';
-    const waveSource=siteWave?'BoatraceCSV場内波高（時刻検証済み）':
+    const officialWave=siteWave&&selected.wave_source==='boatrace_official_beforeinfo_wave';
+    const waveSource=officialWave?'BOATRACE公式直前情報':siteWave?'BoatraceCSV場内波高（時刻検証済み）':
       selected.wave_source==='boatrace_preview_timestamp_unverified'?'展示時の場内情報（時刻未検証）':
       selected.wave_height!=null?'展示時の場内情報（時刻未検証）':'未取得';
     const waveObserved=siteWave?selected.wave_observed_at_jst:'';
+    const waveObservation=waveObserved?formatJst(waveObserved):officialWave?selected.wave_observation_label:'';
     const wind=selected.wind_speed!=null?escape(selected.wind_speed)+'m/s':'未取得';
     const dir=selected.wind_direction_degrees!=null?escape(selected.wind_direction_degrees)+'°':selected.wind_direction_number!=null?'方向コード'+escape(selected.wind_direction_number):'未取得';
     const gust=selected.wind_gust!=null?escape(selected.wind_gust)+'m/s':'—';
@@ -346,7 +348,7 @@
         <span><b>${temp}</b><small>気温</small></span>
         <span><b>${rain}</b><small>降水量</small></span>
       </div>
-      <p>風：${escape(windSource)} ／ 波高：${escape(waveSource)}${waveObserved?' ／ 波高観測 '+escape(formatJst(waveObserved)):''}</p>
+      <p>風：${escape(windSource)} ／ 波高：${escape(waveSource)}${waveObservation?' ／ 波高観測 '+escape(waveObservation):''}${officialWave&&selected.wave_source_captured_at_jst?' ／ 取得 '+escape(formatJst(selected.wave_source_captured_at_jst)):''}</p>
       <p>${escape(status)} ${escape(adjusted?.why||'')} ${issued?'（予報取得 '+escape(issued)+'）':''}</p>
       <p class="race-weather-caution">${siteWave?'場内波高は締切前に取得・時刻検証済み。ただし風速・風向は別情報源であり、当日のレース水面実測と同一ではありません。':observed?'場内観測は展示時点の値であり、レース本番時の実測を保証しません。':'周辺予報は会場水面の現地実測ではありません。'} 風向の角度と追い風・向かい風のコース相対方向は未検証。潮位・潮流は正式予想に未反映。
       ${['open-meteo','open-meteo-jma'].includes(selected.source)?'<a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Weather data by Open-Meteo.com (CC BY 4.0) ↗</a>':''}</p>

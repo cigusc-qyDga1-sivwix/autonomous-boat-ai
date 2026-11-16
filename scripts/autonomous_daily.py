@@ -24,7 +24,10 @@ if __package__:
     from .racer_context import collect as collect_racer_context, validated as validate_racer_context
     from .official_pay import fetch_official_pay
     from .venue_weather import fetch_weather, weather_at, VENUE_POINTS
-    from .weather_live_bridge import collect_today as collect_live_weather, wave_for_race
+    from .weather_live_bridge import (
+        collect_today as collect_live_weather, wave_for_race,
+        OFFICIAL_WAVE_SOURCE, OFFICIAL_WAVE_EVIDENCE, WAVE_TARGET_MARGIN,
+    )
     from .venue_weather_special_shadow import rescore as rescore_site_weather_shadow
     from .attack_defense_shadow import rescore as rescore_attack_defence_shadow
     from .hidden_path_shadow import analyze as analyze_hidden_path
@@ -46,7 +49,10 @@ else:
     from racer_context import collect as collect_racer_context, validated as validate_racer_context
     from official_pay import fetch_official_pay
     from venue_weather import fetch_weather, weather_at, VENUE_POINTS
-    from weather_live_bridge import collect_today as collect_live_weather, wave_for_race
+    from weather_live_bridge import (
+        collect_today as collect_live_weather, wave_for_race,
+        OFFICIAL_WAVE_SOURCE, OFFICIAL_WAVE_EVIDENCE, WAVE_TARGET_MARGIN,
+    )
     from venue_weather_special_shadow import rescore as rescore_site_weather_shadow
     from attack_defense_shadow import rescore as rescore_attack_defence_shadow
     from hidden_path_shadow import analyze as analyze_hidden_path
@@ -532,7 +538,8 @@ def weather_for_prediction(race: dict, nearby_forecast: dict | None,
         }
     else:
         selected = None
-    if site_wave and site_wave.get("wave_evidence_quality") == "fresh_pre_cutoff_onsite_snapshot":
+    if site_wave and site_wave.get("wave_evidence_quality") in (
+            "fresh_pre_cutoff_onsite_snapshot", OFFICIAL_WAVE_EVIDENCE):
         # WEATHER LAB's time-checked on-site wave is independent of regional
         # wind: its field-level source overrides ONLY the wave, never direction.
         measured = number(site_wave.get("wave_height"))
@@ -1754,7 +1761,10 @@ def safe_to_append_pre_cutoff(snapshot: dict, cutoff: datetime, margin_seconds: 
         frozen = datetime.fromisoformat(snapshot["frozen_at_utc"])
         if frozen.tzinfo is None or observed_now.tzinfo is None:
             return False
-        limit = cutoff - timedelta(seconds=margin_seconds)
+        margin = timedelta(seconds=margin_seconds)
+        if (snapshot.get("weather_used") or {}).get("wave_source") == OFFICIAL_WAVE_SOURCE:
+            margin = max(margin, WAVE_TARGET_MARGIN)
+        limit = cutoff - margin
         return frozen < limit and observed_now < limit
     except (KeyError, ValueError, TypeError, AttributeError):
         return False
@@ -1986,6 +1996,9 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 previous_latest and previous_latest.get("phase") == "exhibition"
                 and previous_latest.get("model_version") == expected_main
                 and latest_wave is not None
+                and not (latest_wave["wave_source"] == OFFICIAL_WAVE_SOURCE
+                         and previous_weather.get("wave_observed_at_jst")
+                         and previous_weather.get("wave_source") != OFFICIAL_WAVE_SOURCE)
                 and (previous_weather.get("wave_source") != latest_wave["wave_source"]
                      or (number(previous_weather.get("wave_height")) is not None
                          and abs(number(previous_weather["wave_height"]) -
@@ -2596,13 +2609,26 @@ def main():
         code for code, stadium in ((source.get("programs") or {}).get("stadiums") or {}).items()
         if code in VENUES and isinstance(stadium, dict) and stadium.get("races")
     ]
+    official_targets = []
+    for code in active:
+        if code == "3":
+            continue
+        races = source["programs"]["stadiums"][code]["races"]
+        if not isinstance(races, dict):
+            continue
+        for race_number, race in races.items():
+            if not race_number.isdigit() or not 1 <= int(race_number) <= 12 or not isinstance(race, dict):
+                continue
+            cutoff = cutoff_of(race)
+            if cutoff is not None:
+                official_targets.append((code, int(race_number), cutoff))
     nearby_forecasts = {}
     weather_site_wave = None
     weather_bridge_status = {"status": "fixture_skipped"}
     weather_error = None
     if not args.input_json:
         try:
-            nearby_forecasts, weather_site_wave, weather_bridge_status = collect_live_weather(active, now)
+            nearby_forecasts, weather_site_wave, weather_bridge_status = collect_live_weather(active, now, official_targets)
         except Exception as exc:
             weather_error = type(exc).__name__
             weather_bridge_status = {"status": "unavailable", "reason": weather_error}

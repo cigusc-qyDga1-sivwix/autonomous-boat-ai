@@ -196,3 +196,33 @@ def test_weather_after_cutoff_never_revises_the_formal_history():
                                 site_wave_snapshot=wave_doc())
     assert second["race_records"]["18-1"]["versions"] == history
     assert result["new_weather_revisions"] == 0
+
+
+def test_official_wave_retains_prior_race_label_and_rejects_late_reflection():
+    from scripts.weather_live_bridge import OFFICIAL_WAVE_SOURCE, parse_official_wave
+
+    captured = CUTOFF - timedelta(minutes=8)
+    page = (
+        '<p class="weather1_title">水面気象情報　1R時点</p>'
+        '<span>波高</span><span class="weather1_bodyUnitLabelData">0cm</span>'
+    )
+    wave = parse_official_wave(page, 2, captured)
+    assert wave["wave_height"] == 0
+    assert wave["wave_source"] == OFFICIAL_WAVE_SOURCE
+    assert wave["wave_observation_label"] == "1R時点"
+    assert wave["wave_observed_at_jst"] is None
+    assert parse_official_wave(page, 3, captured) is None
+    assert parse_official_wave(page, 2, captured).get("wind_speed") is None
+    assert parse_official_wave(page.replace("1R時点", "09:15現在"), 2, captured) is None
+    assert parse_official_wave(page.replace("1R時点", "09:45現在"), 2, captured) is not None
+
+    snapshot = {"official_waves": {"18-2": {**wave, "cutoff_at": CUTOFF.isoformat()}}}
+    selected = wave_for_race(snapshot, "18", 2, CUTOFF, captured)
+    _, weather = A.weather_for_prediction({}, {"wind_speed": 7.1}, selected)
+    assert weather["wave_height"] == 0 and weather["wind_speed"] == 7.1
+    assert wave_for_race(snapshot, "18", 2, CUTOFF, CUTOFF - timedelta(minutes=4)) is None
+    assert wave_for_race(snapshot, "18", 2, CUTOFF + timedelta(minutes=1), captured) is None
+
+    forecast = {"frozen_at_utc": captured.isoformat(), "weather_used": weather}
+    assert A.safe_to_append_pre_cutoff(forecast, CUTOFF, 180, captured)
+    assert not A.safe_to_append_pre_cutoff(forecast, CUTOFF, 180, CUTOFF - timedelta(minutes=4))

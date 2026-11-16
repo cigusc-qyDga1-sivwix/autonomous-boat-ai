@@ -11,6 +11,8 @@ on:
       - 'app/data/statistical/third-place-pilot-latest.json'
       - 'scripts/conditional_second_primary.py'
       - 'scripts/weather_live_bridge.py'
+      - 'scripts/preview_field_coverage.py'
+      - 'tests/test_preview_field_coverage.py'
       - 'scripts/collect_site_weather_research.py'
       - 'tests/test_collect_site_weather_research.py'
       - 'scripts/venue_weather.py'
@@ -357,6 +359,11 @@ jobs:
             if git diff --cached --quiet; then break; fi
             git commit -m 'research: revalidate conditional-second shadow after rebase'
           done
+      - name: Audit all six boats' preview-field completeness (research only)
+        continue-on-error: true
+        run: |
+          python -m scripts.preview_field_coverage
+          python -m json.tool app/data/exhibition-preview-evidence/latest.json > /dev/null
       - name: Run slower retrospective research after shadow publication
         continue-on-error: true
         run: |
@@ -410,6 +417,7 @@ jobs:
           set -euo pipefail
           git add app/data/experiments/ app/data/exhibition/ app/data/statistical/prospective-audit.json
           if [ -d app/data/weather-research ]; then git add app/data/weather-research/; fi
+          if [ -d app/data/exhibition-preview-evidence ]; then git add app/data/exhibition-preview-evidence/; fi
           if ! git diff --cached --quiet; then
             git commit -m 'research: publish separate post-forecast trial evidence'
             for attempt in 1 2 3; do
@@ -441,6 +449,8 @@ jobs:
               # separate boat-lab-statistical workflow.
               git add app/data/experiments/ app/data/exhibition/ app/data/statistical/prospective-audit.json
               if [ -d app/data/weather-research ]; then git add app/data/weather-research/; fi
+              python -m scripts.preview_field_coverage || echo '::warning::Preview completeness monitor unavailable'
+              if [ -d app/data/exhibition-preview-evidence ]; then git add app/data/exhibition-preview-evidence/; fi
               if git diff --cached --quiet; then
                 echo 'No new shadow trial evidence'
                 break

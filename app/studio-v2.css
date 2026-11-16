@@ -262,3 +262,31 @@ body{font-size:16px;line-height:1.55}
  .v2-lane{width:27px;height:30px;font-size:15px}
  .v2-race .v2-pick,.v2-detail-list .v2-pick{gap:6px;padding:8px}
 }
+/* Results: official trifecta dividend and stake-weighted virtual returns. */
+.v2-result-card{display:block;padding:16px}
+.v2-result-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.v2-result-outcome{display:flex;flex-direction:column;gap:3px;flex-shrink:0}
+.v2-result-finish-label{font-size:12px;color:#506b7d;font-weight:750}
+.v2-settlement{display:grid;grid-template-columns:minmax(140px,1fr) minmax(0,1.45fr);gap:13px;margin-top:14px;border-top:1px solid #dce7ed;padding-top:14px}
+.v2-settlement-main{display:flex;flex-direction:column;justify-content:center;gap:3px;background:#f0f7f5;border:1px solid #cbe0d9;border-radius:11px;padding:12px}
+.v2-settlement-main span{font-size:13px;color:#385e56;font-weight:850}
+.v2-settlement-main strong{font-size:clamp(22px,2.8vw,29px);font-weight:950;color:#0a524a;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.v2-settlement-details{display:grid;gap:9px;align-content:center}
+.v2-settlement-details>div{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.v2-settlement-details span{font-size:12px;color:#4b6879;line-height:1.45}
+.v2-settlement-details strong{font-size:15px;color:#1c3d51;font-variant-numeric:tabular-nums;white-space:nowrap}
+.v2-settlement-details strong.v2-profit-plus{color:#075d49}
+.v2-settlement-details strong.v2-profit-minus{color:#983346}
+.v2-result-actions{display:flex;justify-content:flex-end;margin-top:13px}
+@media(max-width:760px){
+ .v2-result-card{padding:15px}
+ .v2-settlement{grid-template-columns:1fr;gap:10px}
+ .v2-settlement-main strong{font-size:27px}
+ .v2-settlement-details span{font-size:13px}
+ .v2-settlement-details strong{font-size:16px}
+}
+@media(max-width:380px){
+ .v2-result-head{flex-wrap:wrap}
+ .v2-result-outcome{flex-direction:row;align-items:baseline;gap:8px}
+ .v2-settlement-details>div{flex-wrap:wrap;gap:3px}
+}

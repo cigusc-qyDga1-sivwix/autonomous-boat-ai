@@ -47,6 +47,25 @@ const officialOutcome=(r,data)=>{
  const hit=r.bets.some(b=>b.combination===v.finish);
  return {finish:v.finish,hit,payoutPer100:v.payout_per_100,source:v.source};
 };
+
+/* Official dividend per 100 yen × immutable virtual ticket stake (display only). */
+const virtualSettlement=(r,data)=>{
+ const official=verifiedOfficial(r,data);
+ if(!official||!Array.isArray(r?.bets)||r.bets.length===0)return null;
+ let stake=0n,winningStake=0n;
+ for(const bet of r.bets){
+   if(!validCombo(bet?.combination)||!Number.isSafeInteger(bet?.virtual_yen)||
+      bet.virtual_yen<0||bet.virtual_yen%100!==0)return null;
+   const amount=BigInt(bet.virtual_yen);
+   stake+=amount;
+   if(bet.combination===official.finish)winningStake+=amount;
+ }
+ if(stake<=0n)return null;
+ const payout=winningStake*BigInt(official.payout_per_100)/100n;
+ const profit=payout-stake,max=BigInt(Number.MAX_SAFE_INTEGER);
+ if(stake>max||payout>max||profit>max||profit< -max)return null;
+ return {stakeYen:Number(stake),payoutYen:Number(payout),profitYen:Number(profit),officialPayoutPer100:official.payout_per_100};
+};
 const racePhase=(r,data,policy)=>frozenStatus(r,data,policy)?'formal':r.classification==='SKIP'?'shadow':'pending';
 function normalize(payload){
  if(!payload||!validDay(payload.event_date)||payload.mode!=='auto-live'||!Array.isArray(payload.forecast_races)||payload.forecast_races.length>300)
@@ -55,7 +74,7 @@ function normalize(payload){
  // Empty auto-live days are valid: show an honest 0R state, not a load failure.
  return {...payload,forecast_races:races};
 }
-const engine={money,percent,validDay,validClock,jstDay,jstStamp,cutoffMs,sumBets,validRace,validCombo,frozenStatus,verifiedOfficial,officialOutcome,racePhase,normalize,raceOrder};
+const engine={money,percent,validDay,validClock,jstDay,jstStamp,cutoffMs,sumBets,validRace,validCombo,frozenStatus,verifiedOfficial,officialOutcome,virtualSettlement,racePhase,normalize,raceOrder};
 root.BoatLabV2=engine;
 if(typeof module==='object'&&module.exports)module.exports=engine;
 if(typeof document==='undefined')return;
@@ -219,20 +238,30 @@ function results(){
   (!a?'<div class="v2-alert">公式照合監査を読み込めていません。未確認値は表示しません。</div>':'')+
   '<div class="v2-metrics">'+metric('正式・公式照合',o?o.verified_races+'R':'—',auditSource)+
   metric('3連単的中',o?o.hits+'R':'—',o?percent(o.hit_rate):'未集計','primary')+
+  metric('仮想払戻総額',o&&Number.isSafeInteger(o.virtual_payout_yen)&&o.virtual_payout_yen>=0?money(o.virtual_payout_yen):'—','正式・公式照合済み')+
   metric('仮想回収率',o?percent(o.return_rate):'—','実投票の収支ではありません')+
   metric('仮想収支',formatProfit,'照合済みのみ')+'</div>'+
   '<div class="v2-section-heading"><div><h2>公式確認済みの着順</h2><p>返還・欠場・照合不一致は、この簡易一覧では的中/不的中に断定しません。</p></div></div>'+
   '<div class="v2-results-list">'+(verified.length?verified.map(({r,out})=>{
     const id=state.data.forecast_races.indexOf(r);
     const label=frozenStatus(r,state.data,ticketPolicy)?'正式固定':'暫定・研究';
-    return '<article class="v2-result-card"><div><div class="v2-result-name">'+escapeHTML(r.venue)+' '+r.race+'R <span class="v2-chip '+(out.hit?'hit':'miss')+'">'+(out.hit?'的中':'不的中')+'</span></div>'+
-    '<p>'+escapeHTML(r.cutoff_jst)+' JST · '+label+'</p></div>'+
-    '<div class="v2-result-outcome">'+escapeHTML(out.finish)+
-    '<small><button class="v2-secondary-btn" data-open-race="'+id+'" type="button">保存買い目を見る</button></small></div></article>';
+    const settlement=virtualSettlement(r,state.data);
+    const payout=settlement?money(settlement.payoutYen):'算定保留';
+    const profit=settlement?(settlement.profitYen>0?'+':'')+money(settlement.profitYen):'—';
+    return '<article class="v2-result-card">'+
+      '<div class="v2-result-head"><div><div class="v2-result-name">'+escapeHTML(r.venue)+' '+r.race+'R <span class="v2-chip '+(out.hit?'hit':'miss')+'">'+(out.hit?'的中':'不的中')+'</span></div>'+
+      '<p>'+escapeHTML(r.cutoff_jst)+' JST · '+label+'</p></div>'+
+      '<div class="v2-result-outcome"><span class="v2-result-finish-label">公式着順</span>'+escapeHTML(out.finish)+'</div></div>'+
+      '<div class="v2-settlement"><div class="v2-settlement-main"><span>仮想払戻</span><strong>'+payout+'</strong></div>'+
+      '<div class="v2-settlement-details"><div><span>公式3連単配当（100円あたり）</span><strong>'+money(out.payoutPer100)+'</strong></div>'+
+      '<div><span>仮想投資</span><strong>'+(settlement?money(settlement.stakeYen):'—')+'</strong></div>'+
+      '<div><span>差引収支</span><strong class="'+(settlement?(settlement.profitYen>=0?'v2-profit-plus':'v2-profit-minus'):'')+'">'+profit+'</strong></div></div></div>'+
+      '<div class="v2-result-actions"><button class="v2-secondary-btn" data-open-race="'+id+'" type="button">保存買い目を見る</button></div></article>';
   }).join(''):'<div class="v2-empty"><strong>個別レースの公式照合記録がありません。</strong>公開状況と監査の取得時刻を確認してください。</div>')+'</div>'+
   (settled.length>state.resultShown?'<div class="v2-cta-row"><button class="v2-secondary-btn" type="button" data-load-more="results">さらに'+Math.min(20,settled.length-state.resultShown)+'Rを表示</button></div>':'')+
   '<div class="v2-evidence">対象日 '+escapeHTML(state.data.event_date)+' · '+escapeHTML(jstStamp(a?.official_evidence_at_utc))+
   '。上部の成績は監査済み<b>正式予想のみ</b>、個別一覧は公式結果が揃った全区分の保存記録を示します。'+
+  '公式3連単配当は100円あたり。各レースの仮想払戻と収支は保存済み買い目の配分で算出。金額が検証不能なら算定保留とし、実投票の収支とは区別します。'+
   '除外条件や返還の扱いが異なるため、一覧表示件数と正式成績の母数は一致するとは限りません。</div>';
 }
 function research(){
@@ -283,7 +312,7 @@ function openRace(index){
   '<div class="v2-dialog-summary"><span>合計 '+bets.length+'点（仮想）</span><strong>'+money(sumBets(r))+'</strong></div>'+
   note+'<div class="v2-evidence">予想固定 '+escapeHTML(frozen)+'<br>SHA：<code>'+escapeHTML(r.sha256||'未確認')+'</code><br>'+
   'モデル：'+escapeHTML(r.model_version||'未確認')+'<br>分類：'+escapeHTML(r.classification||'未確認')+'</div>'+
-  (official?'<p class="v2-dialog-legal">公式結果：<b>'+escapeHTML(official.finish)+'</b>（'+(official.hit?'この保存買い目で的中':'この保存買い目では不的中')+'）</p>':
+  (official?'<p class="v2-dialog-legal">公式結果：<b>'+escapeHTML(official.finish)+'</b>（'+(official.hit?'この保存買い目で的中':'この保存買い目では不的中')+'）・公式配当 <b>'+money(official.payoutPer100)+'</b>／100円・仮想払戻 <b>'+(virtualSettlement(r,state.data)?money(virtualSettlement(r,state.data).payoutYen):'算定保留')+'</b></p>':
     '<p class="v2-dialog-legal">公式照合未完了／返還・欠場などの保留がある場合は、的中判定を表示しません。</p>')+
   '<div class="v2-dialog-actions"><button class="v2-detail-btn" type="button" data-copy-race="'+index+'">買い目をコピー</button>'+
   '<button class="v2-secondary-btn" type="button" data-close-dialog>閉じる</button></div>'+

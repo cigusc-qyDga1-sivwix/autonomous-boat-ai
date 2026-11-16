@@ -80,7 +80,7 @@ if(typeof module==='object'&&module.exports)module.exports=engine;
 if(typeof document==='undefined')return;
 
 const $=id=>document.getElementById(id);
-const state={tab:'home',forecastFilter:'formal',scope:'upcoming',venue:'全場',search:'',shown:20,resultShown:20,weatherVenue:'',data:null,audit:null,windEvidence:null,source:'Pages',loading:false,requestId:0};
+const state={tab:'home',forecastFilter:'formal',scope:'upcoming',venue:'全場',search:'',shown:20,resultShown:20,weatherVenue:'',data:null,audit:null,windEvidence:null,previewEvidence:null,source:'Pages',loading:false,requestId:0};
 const ticketPolicy=root.BoatTicketPolicy;
 let toastTimeout=null;
 function toast(message){
@@ -289,6 +289,21 @@ function dailyLearning(){
 }
 
 
+
+function previewFeatureCoverage(){
+ const d=state.previewEvidence;
+ if(!d||d.event_date!==state.data?.event_date||d.schema!=='boatlabs.openapi-preview-field-coverage.v1')
+  return '<section class="v2-learning"><h2>展示情報の取得品質</h2><p>今日の項目別監査データは未確認。取得済みと推測して表示しません。</p></section>';
+ const s=d.totals||{},six=s.six_of_six||{},wx=s.weather_present||{};
+ const n=v=>Number.isInteger(v)?String(v):'—';
+ const status=d.fetch_status==='ok'?'取得元に接続済み':'取得元が利用できず、保存済み記録を保持';
+ return '<section class="v2-learning"><div class="v2-learning-heading"><h2>展示情報の取得品質</h2><span class="v2-chip shadow">研究用・未採用</span></div>'+
+ '<p>'+escapeHTML(status)+'。締切前に取得したレース <b>'+n(s.races)+'R</b>／6艇の進入・展示ST・タイムが完備 <b>'+n(s.six_boat_ready)+'R</b>。</p>'+
+ '<p>6艇完備の内訳：展示タイム <b>'+n(six.exhibition_time)+'R</b>、ST <b>'+n(six.start_timing)+'R</b>、チルト <b>'+n(six.tilt_adjustment)+'R</b>、体重 <b>'+n(six.weight)+'R</b>、重量調整 <b>'+n(six.weight_adjustment)+'R</b>、部品交換欄 <b>'+n(six.parts)+'R</b>。</p>'+
+ '<p>場内直前情報：風向 <b>'+n(wx.wind_direction_number)+'R</b>、風速 <b>'+n(wx.wind_speed)+'R</b>、波高 <b>'+n(wx.wave_height)+'R</b>、水温 <b>'+n(wx.water_temperature)+'R</b>。</p>'+
+ '<p class="v2-subtle">取得確認 '+escapeHTML(jstStamp(d.checked_at_utc))+'。部品交換欄の欠損は「交換なし」とみなさない。非公式APIの定期スナップショットであり、元の観測時刻の保証はありません。'+
+ '<a href="./data/exhibition-preview-evidence/latest.json" target="_blank" rel="noopener noreferrer">場別の詳細</a></p></section>';
+}
 function onsiteWeatherCaptureStatus(){
  const w=state.windEvidence;
  if(!w||w.event_date!==state.data?.event_date||
@@ -346,6 +361,7 @@ function venueWeatherLearning(){
 function research(){
  return title('LEARNING & EVIDENCE','研究・検証','研究用シャドーと正式予想を分離して参照する。')+
   dailyLearning()+
+  previewFeatureCoverage()+
   onsiteWeatherCaptureStatus()+
   venueWeatherLearning()+
   '<div class="v2-info-list">'+
@@ -445,18 +461,21 @@ async function load(){
  state.loading=true;const id=++state.requestId;
  $('refresh').disabled=true;signal('最新データ取得中');
  try{
-  const [dataResponse,auditResponse,windEvidenceResponse]=await Promise.all([
+  const [dataResponse,auditResponse,windEvidenceResponse,previewEvidenceResponse]=await Promise.all([
    fetch('./data/live/latest.json',{cache:'no-store'}),
    fetch('./data/live/audit-latest.json',{cache:'no-store'}).catch(()=>null),
-   fetch('./data/weather-research/latest.json',{cache:'no-store'}).catch(()=>null)
+   fetch('./data/weather-research/latest.json',{cache:'no-store'}).catch(()=>null),
+   fetch('./data/exhibition-preview-evidence/latest.json',{cache:'no-store'}).catch(()=>null)
   ]);
   if(!dataResponse.ok)throw new Error('予想データ HTTP '+dataResponse.status);
   const data=normalize(await dataResponse.json());
-  let audit=null,windEvidence=null;
+  let audit=null,windEvidence=null,previewEvidence=null;
   if(auditResponse?.ok){try{audit=await auditResponse.json()}catch{}}
   if(windEvidenceResponse?.ok){try{windEvidence=await windEvidenceResponse.json()}catch{}}
+  if(previewEvidenceResponse?.ok){try{previewEvidence=await previewEvidenceResponse.json()}catch{}}
   if(id!==state.requestId)return;
   state.windEvidence=windEvidence;
+  state.previewEvidence=previewEvidence;
   // Pages may lag GitHub main; do not roll back a newer frozen forecast.
   const held=state.data;
   const dataTime=Date.parse(data.updated_at_utc),heldTime=Date.parse(held?.updated_at_utc);

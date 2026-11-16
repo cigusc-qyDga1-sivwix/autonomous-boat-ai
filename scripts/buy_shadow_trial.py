@@ -7,6 +7,7 @@ positive expected value, profitability, or a recommendation to wager.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -122,8 +123,11 @@ def freeze(payload, now, previous=None):
             continue  # A decision never changes after its initial freeze.
         decision, reason = classify(race)
         head = race.get("head_course_shares") or []
-        top_lane = head[0].get("lane") if isinstance(head, list) and head and isinstance(head[0], dict) else None
-        records.append({
+        eligible_heads = [row for row in head if isinstance(row, dict)
+                          and isinstance(row.get("relative_share"), (int, float))
+                          and math.isfinite(row["relative_share"])]
+        top_lane = max(eligible_heads, key=lambda x: x["relative_share"]).get("lane") if eligible_heads else None
+        decision_entry = {
             "race_id": key,
             "event_date": day,
             "venue": race["venue"],
@@ -142,7 +146,10 @@ def freeze(payload, now, previous=None):
             "bet_combinations": [b["combination"] for b in race["bets"]],
             "original_classification": race["classification"],
             "research_only": True,
-        })
+        }
+        canonical = json.dumps(decision_entry, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+        decision_entry["decision_sha256"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        records.append(decision_entry)
         seen.add(key)
     records.sort(key=lambda r: (r["cutoff_jst"], r["venue"], r["race"]))
     return {

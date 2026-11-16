@@ -80,7 +80,7 @@ if(typeof module==='object'&&module.exports)module.exports=engine;
 if(typeof document==='undefined')return;
 
 const $=id=>document.getElementById(id);
-const state={tab:'home',forecastFilter:'formal',scope:'upcoming',venue:'全場',search:'',shown:20,resultShown:20,data:null,audit:null,loading:false,requestId:0};
+const state={tab:'home',forecastFilter:'formal',scope:'upcoming',venue:'全場',search:'',shown:20,resultShown:20,data:null,audit:null,source:'Pages',loading:false,requestId:0};
 const ticketPolicy=root.BoatTicketPolicy;
 let toastTimeout=null;
 function toast(message){
@@ -293,7 +293,7 @@ function render(){
  const pages={home,forecasts,results,research};
  main.innerHTML=pages[state.tab]();
  updateNav();
- signal(isToday()?'発走前記録を表示':'過去の記録',isToday()?'current':'');
+ signal(isToday()?(state.source==='GitHub main'?'GitHub最新台帳':'発走前記録を表示'):'過去の記録',isToday()?'current':'');
 }
 function openRace(index){
  const r=state.data?.forecast_races?.[index];
@@ -332,6 +332,32 @@ async function copyRace(index){
   await navigator.clipboard.writeText(txt);toast('保存済み買い目をコピーしました');
  }catch{toast('自動コピーできません。画面で買い目をご確認ください');}
 }
+
+let canonicalBusy=false;
+/* Reuse the old app's read-only canonical immutable forecast feed. */
+async function pollCanonicalForecast(){
+ const client=root.BoatCanonicalExhibitionFeed;
+ if(!client||canonicalBusy||!state.data||document.hidden)return {state:'skipped'};
+ canonicalBusy=true;
+ try{
+  const check=await client.check({current:state.data});
+  if(check.state!=='newer')return check;
+  const incoming=normalize(check.payload);
+  const held=state.data;
+  const oldTime=Date.parse(held?.updated_at_utc),newTime=Date.parse(incoming.updated_at_utc);
+  if(incoming.event_date<held.event_date||
+     (incoming.event_date===held.event_date&&
+      Number.isFinite(oldTime)&&(!Number.isFinite(newTime)||newTime<=oldTime)))
+      return {state:'older'};
+  state.data=incoming;state.source='GitHub main';
+  if(!isToday()||incoming.forecast_races.every(r=>cutoffMs(incoming.event_date,r.cutoff_jst)<=nowMs()))state.scope='all';
+  render();
+  return {state:'applied'};
+ }catch(error){
+  // Never replace a last good frozen forecast when GitHub/CDN is unavailable.
+  return {state:'unavailable',reason:String(error?.message||error)};
+ }finally{canonicalBusy=false;}
+}
 async function load(){
  if(state.loading)return;
  state.loading=true;const id=++state.requestId;
@@ -346,8 +372,15 @@ async function load(){
   let audit=null;
   if(auditResponse?.ok){try{audit=await auditResponse.json()}catch{}}
   if(id!==state.requestId)return;
-  state.data=data;state.audit=audit;
-  if(!isToday()||data.forecast_races.every(r=>cutoffMs(data.event_date,r.cutoff_jst)<=nowMs()))state.scope='all';
+  // Pages may lag GitHub main; do not roll back a newer frozen forecast.
+  const held=state.data;
+  const dataTime=Date.parse(data.updated_at_utc),heldTime=Date.parse(held?.updated_at_utc);
+  const rollback=!!held&&(data.event_date<held.event_date||
+    (data.event_date===held.event_date&&Number.isFinite(heldTime)&&
+     (!Number.isFinite(dataTime)||dataTime<heldTime)));
+  if(!rollback){state.data=data;state.source='Pages';}
+  if(audit?.event_date===state.data?.event_date)state.audit=audit;
+  if(!isToday()||state.data.forecast_races.every(r=>cutoffMs(state.data.event_date,r.cutoff_jst)<=nowMs()))state.scope='all';
   render();
  }catch(error){
   if(!state.data){
@@ -358,7 +391,7 @@ async function load(){
   }else{
    signal('データ更新失敗','alert');toast('更新に失敗しました。前回取得した表示を維持します');
   }
- }finally{state.loading=false;$('refresh').disabled=false;}
+ }finally{state.loading=false;$('refresh').disabled=false;if(state.data)void pollCanonicalForecast();}
 }
 document.addEventListener('click',event=>{
  const target=event.target;
@@ -414,8 +447,10 @@ void load();
 // Re-fetch real source snapshots at a moderate interval, matching the
 // existing PWA's foreground refresh policy. No write, no local fallback.
 setInterval(()=>{if(!document.hidden&&!state.loading)void load()},300000);
+setInterval(()=>{if(!document.hidden)void pollCanonicalForecast()},60000);
 setInterval(()=>{if(!document.hidden&&state.data&&['home','forecasts'].includes(state.tab))render()},60000);
 document.addEventListener('visibilitychange',()=>{
  if(!document.hidden&&!state.loading)void load();
+ if(!document.hidden)void pollCanonicalForecast();
 });
 })(typeof window==='undefined'?globalThis:window);

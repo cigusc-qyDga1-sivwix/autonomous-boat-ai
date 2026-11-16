@@ -100,6 +100,14 @@ assert.ok(homeSource.indexOf('v2-section-heading')<homeSource.indexOf('v2-metric
 assert.match(css,/--ink:#142a3e/);
 assert.match(css,/--white:#fff/);
 assert.match(js,/cache:'no-store'/);
+assert.match(html,/canonical-exhibition-feed\.js\?v=20261116-canonical-v1/);
+assert.ok(html.indexOf('canonical-exhibition-feed.js')<html.indexOf('studio-v2.js'),'canonical helper loads first');
+assert.match(js,/const client=root\.BoatCanonicalExhibitionFeed;/);
+assert.match(js,/client\.check\(\{current:state\.data\}\)/);
+assert.match(js,/setInterval\(\(\)=>\{if\(!document\.hidden\)void pollCanonicalForecast\(\)\},60000\)/);
+assert.match(js,/if\(!rollback\)\{state\.data=data;state\.source='Pages';\}/);
+assert.match(js,/if\(state\.data\)void pollCanonicalForecast\(\)/);
+
 assert.match(js,/setInterval\(\(\)=>\{if\(!document\.hidden&&!state\.loading\)void load\(\)\},300000\)/);
 assert.match(js,/document\.addEventListener\('visibilitychange'/);
 assert.match(js,/showModal\(\)/);

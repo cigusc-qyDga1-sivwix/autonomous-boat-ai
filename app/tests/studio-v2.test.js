@@ -72,6 +72,8 @@ assert.match(css,/@media\(prefers-reduced-motion:reduce\)/);
 assert.match(css,/--ink:#142a3e/);
 assert.match(css,/--white:#fff/);
 assert.match(js,/cache:'no-store'/);
+assert.match(js,/setInterval\(\(\)=>\{if\(!document\.hidden&&!state\.loading\)void load\(\)\},300000\)/);
+assert.match(js,/document\.addEventListener\('visibilitychange'/);
 assert.match(js,/showModal\(\)/);
 assert.doesNotMatch(js,/fetch\([^)]*boatrace\.jp/);
 assert.doesNotMatch(js,/localStorage\.setItem|fetch\([^)]*method:'POST'/);

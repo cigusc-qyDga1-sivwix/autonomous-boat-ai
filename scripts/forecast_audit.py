@@ -16,8 +16,10 @@ from pathlib import Path
 
 try:
     from .head_focus_learning import inspect as inspect_head_focus
+    from .venue_weather_learning import inspect as inspect_venue_weather
 except ImportError:
     from head_focus_learning import inspect as inspect_head_focus
+    from venue_weather_learning import inspect as inspect_venue_weather
 
 JST = timezone(timedelta(hours=9))
 RESEARCH_BUDGET = 50_000
@@ -1459,6 +1461,7 @@ def analyze(dataset: dict):
         "unhit_examples": race_examples[:30],
     }
     report["head_focus_learning"] = inspect_head_focus(raw, verified)
+    report["venue_weather_learning"] = inspect_venue_weather(raw, verified)
     if day >= "2026-11-10":
         report["head_risk_breakpoint"] = _head_risk_breakpoint_report(raw, verified, day)
     report["learned_formal_comparison"] = _learned_formal_comparison(

@@ -80,7 +80,7 @@ if(typeof module==='object'&&module.exports)module.exports=engine;
 if(typeof document==='undefined')return;
 
 const $=id=>document.getElementById(id);
-const state={tab:'home',forecastFilter:'formal',scope:'upcoming',venue:'全場',search:'',shown:20,resultShown:20,weatherVenue:'',data:null,audit:null,windEvidence:null,source:'Pages',loading:false,requestId:0};
+const state={tab:'home',forecastFilter:'formal',scope:'upcoming',venue:'全場',classification:'all',resultPhase:'all',search:'',shown:20,resultShown:20,weatherVenue:'',data:null,audit:null,windEvidence:null,source:'Pages',loading:false,requestId:0};
 const ticketPolicy=root.BoatTicketPolicy;
 let toastTimeout=null;
 function toast(message){
@@ -192,6 +192,7 @@ function filterRaces(){
  if(state.forecastFilter==='formal')rs=rs.filter(r=>frozenStatus(r,state.data,ticketPolicy));
  if(state.forecastFilter==='research')rs=rs.filter(r=>!frozenStatus(r,state.data,ticketPolicy));
  if(state.venue!=='全場')rs=rs.filter(r=>r.venue===state.venue);
+ if(state.classification!=='all')rs=rs.filter(r=>r.classification===state.classification);
  if(state.search.trim()){
   const query=state.search.trim().toLowerCase();
   rs=rs.filter(r=>(r.venue+' '+r.race+'R '+r.cutoff_jst+' '+r.classification).toLowerCase().includes(query));
@@ -220,19 +221,22 @@ function forecasts(){
   '<button data-scope="upcoming" type="button"'+active(state.scope,'upcoming')+'>これから</button>'+
   '<button data-scope="all" type="button"'+active(state.scope,'all')+'>全記録</button></div>'+
   '<label class="v2-filter-label">開催場 <select id="venue-filter" aria-label="開催場で絞る">'+selectable+'</select></label>'+
+  '<label class="v2-filter-label">分類 <select id="classification-filter" aria-label="BUY・WATCH・SKIP分類で絞る">'+
+  ['all','BUY','WATCH','SKIP'].map(v=>'<option value="'+v+'"'+(state.classification===v?' selected':'')+'>'+(v==='all'?'全分類':v)+'</option>').join('')+'</select></label>'+
   '<input id="race-search" class="v2-search" type="search" placeholder="場名・R・締切を検索" aria-label="レース検索" value="'+escapeHTML(state.search)+'"></div>'+
   '<div class="v2-count">'+filtered.length+'R 該当 / '+all.length+'R 保存。'+(state.scope==='upcoming'?'締切前のみ':'締切済みの記録を含む')+'</div>'+
   '<div class="v2-grid">'+(filtered.length?filtered.slice(0,state.shown).map(raceCard).join(''):
   '<div class="v2-empty"><strong>条件に合う予想はありません。</strong>表示区分・開催場・「全記録」の設定を変えて確認してください。</div>')+'</div>'+
   (filtered.length>state.shown?'<div class="v2-cta-row"><button class="v2-secondary-btn" data-load-more="forecasts" type="button">さらに'+Math.min(20,filtered.length-state.shown)+'Rを表示（残り'+(filtered.length-state.shown)+'R）</button></div>':'')+
-  '<p class="v2-subtle">表示は保存済み買い目の読み取り専用。画面の絞り込みや並べ替えでは予想を再計算しません。</p>';
+  '<p class="v2-subtle">BUY／WATCH／SKIPは予想時の分類で、正式や自信度の保証ではありません。対象日は最新公開分のみ。絞り込みで再計算しません。</p>';
 }
 function results(){
  const a=validAudit(),o=resultMetrics();
  const auditSource=a?'監査ファイルの公式照合済みデータ':'同じ対象日の公式監査が取得できていません';
  const settled=allRaces().map(r=>({r,out:officialOutcome(r,state.data)})).filter(x=>x.out);
  settled.sort((a,b)=>raceOrder(b.r,a.r));
- const verified=settled.slice(0,state.resultShown);
+ const visibleSettled=settled.filter(({r})=>state.resultPhase==='all'||(frozenStatus(r,state.data,ticketPolicy)?'formal':'research')===state.resultPhase);
+ const verified=visibleSettled.slice(0,state.resultShown);
  const formatProfit=o?((o.virtual_profit_yen>0?'+':'')+money(o.virtual_profit_yen)):'—';
  return title('OFFICIAL SETTLEMENT','結果・成績','公式照合済みの固定予想だけで検証。研究と実投票を混同しません。')+
   (!a?'<div class="v2-alert">公式照合監査を読み込めていません。未確認値は表示しません。</div>':'')+
@@ -241,6 +245,8 @@ function results(){
   metric('仮想払戻総額',o&&Number.isSafeInteger(o.virtual_payout_yen)&&o.virtual_payout_yen>=0?money(o.virtual_payout_yen):'—','正式・公式照合済み')+
   metric('仮想回収率',o?percent(o.return_rate):'—','実投票の収支ではありません')+
   metric('仮想収支',formatProfit,'照合済みのみ')+'</div>'+
+  '<div class="v2-filters v2-result-filters" role="group" aria-label="公式照合一覧の表示区分"><span class="v2-filter-caption">個別一覧</span><div class="v2-segments">'+
+  ['formal','research','all'].map((v,i)=>'<button type="button" data-result-phase="'+v+'" aria-pressed="'+(state.resultPhase===v)+'" class="'+(state.resultPhase===v?'is-active':'')+'">'+['正式のみ','暫定・研究','すべて'][i]+'</button>').join('')+'</div><span class="v2-filter-caption">'+visibleSettled.length+'R 該当</span></div>'+
   '<div class="v2-section-heading"><div><h2>公式確認済みの着順</h2><p>返還・欠場・照合不一致は、この簡易一覧では的中/不的中に断定しません。</p></div></div>'+
   '<div class="v2-results-list">'+(verified.length?verified.map(({r,out})=>{
     const id=state.data.forecast_races.indexOf(r);
@@ -251,14 +257,14 @@ function results(){
     return '<article class="v2-result-card">'+
       '<div class="v2-result-head"><div><div class="v2-result-name">'+escapeHTML(r.venue)+' '+r.race+'R <span class="v2-chip '+(out.hit?'hit':'miss')+'">'+(out.hit?'的中':'不的中')+'</span></div>'+
       '<p>'+escapeHTML(r.cutoff_jst)+' JST · '+label+'</p></div>'+
-      '<div class="v2-result-outcome"><span class="v2-result-finish-label">公式着順</span>'+escapeHTML(out.finish)+'</div></div>'+
+      '<div class="v2-result-outcome"><span class="v2-result-finish-label">公式着順</span>'+formatPicks(out.finish)+'</div></div>'+
       '<div class="v2-settlement"><div class="v2-settlement-main"><span>仮想払戻</span><strong>'+payout+'</strong></div>'+
       '<div class="v2-settlement-details"><div><span>公式3連単配当（100円あたり）</span><strong>'+money(out.payoutPer100)+'</strong></div>'+
       '<div><span>仮想投資</span><strong>'+(settlement?money(settlement.stakeYen):'—')+'</strong></div>'+
       '<div><span>差引収支</span><strong class="'+(settlement?(settlement.profitYen>=0?'v2-profit-plus':'v2-profit-minus'):'')+'">'+profit+'</strong></div></div></div>'+
       '<div class="v2-result-actions"><button class="v2-secondary-btn" data-open-race="'+id+'" type="button">保存買い目を見る</button></div></article>';
   }).join(''):'<div class="v2-empty"><strong>個別レースの公式照合記録がありません。</strong>公開状況と監査の取得時刻を確認してください。</div>')+'</div>'+
-  (settled.length>state.resultShown?'<div class="v2-cta-row"><button class="v2-secondary-btn" type="button" data-load-more="results">さらに'+Math.min(20,settled.length-state.resultShown)+'Rを表示</button></div>':'')+
+  (visibleSettled.length>state.resultShown?'<div class="v2-cta-row"><button class="v2-secondary-btn" type="button" data-load-more="results">さらに'+Math.min(20,visibleSettled.length-state.resultShown)+'Rを表示</button></div>':'')+
   '<div class="v2-evidence">対象日 '+escapeHTML(state.data.event_date)+' · '+escapeHTML(jstStamp(a?.official_evidence_at_utc))+
   '。上部の成績は監査済み<b>正式予想のみ</b>、個別一覧は公式結果が揃った全区分の保存記録を示します。'+
   '公式3連単配当は100円あたり。各レースの仮想払戻と収支は保存済み買い目の配分で算出。金額が検証不能なら算定保留とし、実投票の収支とは区別します。'+
@@ -497,6 +503,12 @@ document.addEventListener('click',event=>{
  const scope=target.closest('[data-scope]');
  if(scope){if(!['upcoming','all'].includes(scope.dataset.scope))return;
   state.scope=scope.dataset.scope;state.shown=20;render();return;}
+ const resultMode=target.closest('[data-result-phase]');
+ if(resultMode){
+  const next=resultMode.dataset.resultPhase;
+  if(!['formal','research','all'].includes(next))return;
+  state.resultPhase=next;state.resultShown=20;render();return;
+ }
  const more=target.closest('[data-load-more]');
  if(more){if(more.dataset.loadMore==='forecasts')state.shown+=20;
   else if(more.dataset.loadMore==='results')state.resultShown+=20;
@@ -511,6 +523,10 @@ document.addEventListener('click',event=>{
 document.addEventListener('change',e=>{
  if(e.target?.id==='venue-filter'){
   state.venue=e.target.value;state.shown=20;render();
+ }
+ if(e.target?.id==='classification-filter'){
+  if(!['all','BUY','WATCH','SKIP'].includes(e.target.value))return;
+  state.classification=e.target.value;state.shown=20;render();
  }
 });
 document.addEventListener('change',e=>{if(e.target?.id==='weather-venue-filter'){state.weatherVenue=e.target.value;render();}});

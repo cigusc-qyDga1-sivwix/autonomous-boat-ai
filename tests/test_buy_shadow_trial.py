@@ -93,6 +93,14 @@ class ProspectiveTrialTest(unittest.TestCase):
         results["official_results"][key] = {**official, "refunded_boats": [5]}
         self.assertEqual(evaluate(shadow, results)["cohorts"]["BUY"]["unresolved"], 1)
 
+    def test_modified_decision_proof_rejected(self):
+        shadow = freeze(payload(example_race()), NOW)
+        shadow["entries"][0]["decision"] = "SKIP"
+        with self.assertRaises(ValueError):
+            evaluate(shadow, payload(example_race()))
+        with self.assertRaises(ValueError):
+            freeze(payload(example_race()), NOW, shadow)
+
     def test_wrong_trial_day_rejected(self):
         shadow = freeze(payload(example_race()), NOW)
         with self.assertRaises(ValueError):

@@ -264,8 +264,32 @@ function results(){
   '公式3連単配当は100円あたり。各レースの仮想払戻と収支は保存済み買い目の配分で算出。金額が検証不能なら算定保留とし、実投票の収支とは区別します。'+
   '除外条件や返還の扱いが異なるため、一覧表示件数と正式成績の母数は一致するとは限りません。</div>';
 }
+function dailyLearning(){
+ const a=validAudit(),review=a?.head_focus_learning,formal=review?.formal;
+ const legacy=a?.learned_formal_comparison;
+ const pilot=a?.third_place_pilot_comparison;
+ if(!formal?.verified_races)
+  return '<section class="v2-learning"><h2>今日の学習監査</h2><p>研究用の公式照合データがまだありません。未確認レースは失敗として数えません。</p></section>';
+ const fmt=(v)=>Number.isInteger(v)?String(v):'—';
+ const old=legacy?.previous_formal_control,learned=legacy?.learned_formal;
+ const matched=Number.isInteger(legacy?.matched_verified_races)?legacy.matched_verified_races:0;
+ const comparison=matched>0&&learned&&old?'<p>同一の発走前固定入力・'+fmt(matched)+'R：学習済みモデル <b>'+fmt(learned.hits)+'的中</b>／旧モデル '+fmt(old.hits)+'的中。改善は参考値であり、確率校正や収益性は未証明。</p>':'';
+ const formalPilot=pilot?.learned_formal,shadow=pilot?.third_place_trial;
+ const thirdPilot=pilot?.paired_verified_races>0&&formalPilot&&shadow?
+   '<p>3着研究：同じ'+fmt(pilot.paired_verified_races)+'Rで正式'+fmt(formalPilot.hits)+'的中、研究'+fmt(shadow.hits)+'的中。研究結果は正式成績に含めません。</p>':'';
+ const cohorts=review.cohorts||{},multi=cohorts['2_or_more'],zero=cohorts['0'];
+ const cells=multi&&zero?
+   '<p>発走前の1号艇不利候補が複数ある条件：'+fmt(multi.verified_races)+'R中、1号艇以外勝利 '+fmt(multi.outside_wins)+'R。'+
+   '不利候補なし：'+fmt(zero.verified_races)+'R中、1号艇以外勝利 '+fmt(zero.outside_wins)+'R。小標本・相関であり、買い目には未使用。</p>':'';
+ return '<section class="v2-learning"><div class="v2-learning-heading"><h2>今日の学習監査</h2><span class="v2-chip shadow">研究・未採用</span></div>'+
+   '<p>公式照合済みの<b>正式・展示反映 '+fmt(formal.verified_races)+'R</b>を対象。最上位買い目が1号艇頭 '+fmt(formal.first_ticket_head1)+'R、実際の1号艇勝利 '+fmt(formal.lane1_wins)+'R、1号艇以外の1着抜け '+fmt(formal.outside_win_head_misses)+'R。</p>'+
+   '<p>2着抜け '+fmt(formal.second_misses)+'R／3着抜け '+fmt(formal.third_misses)+'R。結果を見てから予想を修正せず、翌日以降の検証に使います。</p>'+
+   cells+comparison+thirdPilot+
+   '<p class="v2-subtle">出典：発走前固定SHA＋公式払戻。1日分の相関は勝因の証明ではなく、正式ロジックの自動変更にも使いません。</p></section>';
+}
 function research(){
  return title('LEARNING & EVIDENCE','研究・検証','研究用シャドーと正式予想を分離して参照する。')+
+  dailyLearning()+
   '<div class="v2-info-list">'+
   '<article class="v2-info-tile"><h3>🧠 学習AIの成長</h3><p>正式モデルの推移、前向き比較、同一条件での検証を確認。学習しただけでは精度向上と判定しません。</p><a href="./learning-performance.html">成長記録を見る →</a></article>'+
   '<article class="v2-info-tile"><h3>🌊 WEATHER LAB</h3><p>場内波高・周辺風・予報を区別し、取得時刻と予想への反映を監査。</p><a href="./weather/">気象研究を見る →</a></article>'+

@@ -236,6 +236,9 @@ def main():
     if args.mode == "freeze":
         now = datetime.now(UTC)
         day = now.astimezone(JST).date().isoformat()
+        if day < START_DAY or payload.get("event_date") != day:
+            print(json.dumps({"status": "source_not_current_or_trial_not_started", "day": day}))
+            return
         target = args.out or Path(f"app/data/experiments/buy-shadow-{day}.json")
         prior = _read(target) if target.exists() else None
         result = freeze(payload, now, prior)

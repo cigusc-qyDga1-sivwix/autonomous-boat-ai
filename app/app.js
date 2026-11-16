@@ -1533,7 +1533,7 @@
       state.resultVenue=getVenues()[0];render();
       window.BoatExhibitionAudit?.load(data.event_date).then(()=>{if(data?.event_date)render()}).catch(()=>{});
       window.BoatMobileRaceNav?.installSwipe(el('main'),()=>goBack());
-      if('serviceWorker' in navigator&&['https:','http:'].includes(location.protocol))navigator.serviceWorker.register('./service-worker.js').catch(()=>{});
+      if('serviceWorker' in navigator&&['https:','http:'].includes(location.protocol))navigator.serviceWorker.register('./service-worker.js',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{});
       if(typeof setInterval==='function'){
         setInterval(reloadLiveIfNew,300000);
         // Frequent, low-bandwidth exhibition freshness detection while visible.

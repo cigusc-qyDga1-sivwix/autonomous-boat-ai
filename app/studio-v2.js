@@ -80,7 +80,7 @@ if(typeof module==='object'&&module.exports)module.exports=engine;
 if(typeof document==='undefined')return;
 
 const $=id=>document.getElementById(id);
-const state={tab:'home',forecastFilter:'formal',scope:'upcoming',venue:'全場',search:'',shown:20,resultShown:20,weatherVenue:'',data:null,audit:null,source:'Pages',loading:false,requestId:0};
+const state={tab:'home',forecastFilter:'formal',scope:'upcoming',venue:'全場',search:'',shown:20,resultShown:20,weatherVenue:'',data:null,audit:null,windEvidence:null,source:'Pages',loading:false,requestId:0};
 const ticketPolicy=root.BoatTicketPolicy;
 let toastTimeout=null;
 function toast(message){
@@ -288,6 +288,20 @@ function dailyLearning(){
    '<p class="v2-subtle">出典：発走前固定SHA＋公式払戻。1日分の相関は勝因の証明ではなく、正式ロジックの自動変更にも使いません。</p></section>';
 }
 
+
+function onsiteWeatherCaptureStatus(){
+ const w=state.windEvidence;
+ if(!w||w.event_date!==state.data?.event_date||
+    w.schema!=='boatlabs.site-weather-precursor-evidence.v1')
+  return '<div class="v2-evidence"><b>場内気象の時刻付き収集：</b>データ未確認。風向・風速を取得したとは表示しません。</div>';
+ const valid=Number.isInteger(w.saved_races)&&w.saved_races>=0?w.saved_races:null;
+ const count=valid===null?'—':String(valid)+'R';
+ const sourceState=w.provider_status==='ok'?'取得元に接続済み':'取得元未確認（'+escapeHTML(w.provider_status||'不明')+'）';
+ return '<div class="v2-evidence"><b>場内の風向・風速・波高（研究用）：</b>'+escapeHTML(count)+
+  '／'+sourceState+'。取得確認 '+escapeHTML(jstStamp(w.checked_at_utc))+'。'+
+  '風向は元データのコードを保管する段階で、向かい風・追い風の補正には未使用。'+
+  '<a href="./data/weather-research/latest.json" target="_blank" rel="noopener noreferrer">取得証拠JSONを確認</a></div>';
+}
 function venueWeatherLearning(){
  const audit=validAudit()?.venue_weather_learning,sites=audit?.by_venue;
  if(!sites||audit.research_only!==true)return '<section class="v2-weather-study"><h2>場別 × 気象研究</h2><p>公式照合済みの場別・気象研究は未公開です。欠損は推測で補いません。</p></section>';
@@ -332,6 +346,7 @@ function venueWeatherLearning(){
 function research(){
  return title('LEARNING & EVIDENCE','研究・検証','研究用シャドーと正式予想を分離して参照する。')+
   dailyLearning()+
+  onsiteWeatherCaptureStatus()+
   venueWeatherLearning()+
   '<div class="v2-info-list">'+
   '<article class="v2-info-tile"><h3>🧠 学習AIの成長</h3><p>正式モデルの推移、前向き比較、同一条件での検証を確認。学習しただけでは精度向上と判定しません。</p><a href="./learning-performance.html">成長記録を見る →</a></article>'+
@@ -430,15 +445,18 @@ async function load(){
  state.loading=true;const id=++state.requestId;
  $('refresh').disabled=true;signal('最新データ取得中');
  try{
-  const [dataResponse,auditResponse]=await Promise.all([
+  const [dataResponse,auditResponse,windEvidenceResponse]=await Promise.all([
    fetch('./data/live/latest.json',{cache:'no-store'}),
-   fetch('./data/live/audit-latest.json',{cache:'no-store'}).catch(()=>null)
+   fetch('./data/live/audit-latest.json',{cache:'no-store'}).catch(()=>null),
+   fetch('./data/weather-research/latest.json',{cache:'no-store'}).catch(()=>null)
   ]);
   if(!dataResponse.ok)throw new Error('予想データ HTTP '+dataResponse.status);
   const data=normalize(await dataResponse.json());
-  let audit=null;
+  let audit=null,windEvidence=null;
   if(auditResponse?.ok){try{audit=await auditResponse.json()}catch{}}
+  if(windEvidenceResponse?.ok){try{windEvidence=await windEvidenceResponse.json()}catch{}}
   if(id!==state.requestId)return;
+  state.windEvidence=windEvidence;
   // Pages may lag GitHub main; do not roll back a newer frozen forecast.
   const held=state.data;
   const dataTime=Date.parse(data.updated_at_utc),heldTime=Date.parse(held?.updated_at_utc);

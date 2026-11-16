@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#101f34">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="BOAT LAB 2.0 — 発走前固定予想と公式結果の読み取り専用ダッシュボード">
+  <link rel="icon" type="image/svg+xml" href="./icons/mark.svg">
+  <link rel="stylesheet" href="./studio-v2.css?v=20261116-preview-1">
+  <title>BOAT LAB 2.0 | Preview</title>
+</head>
+<body>
+  <div class="v2-app">
+    <header class="v2-topbar">
+      <div class="v2-topbar-inner">
+        <a class="v2-brand" href="./studio-v2.html" aria-label="BOAT LAB 2.0 ホーム">
+          <span class="v2-brand-symbol" aria-hidden="true">≋</span>
+          <span class="v2-brand-name">BOAT <b>LAB</b><small>2.0 PREVIEW</small></span>
+        </a>
+        <div class="v2-top-actions">
+          <span id="connection" class="v2-connection"><span class="v2-signal" aria-hidden="true"></span>データ確認中</span>
+          <button id="refresh" class="v2-refresh" type="button" aria-label="最新データを再取得" title="再読み込み">↻ <span>更新</span></button>
+        </div>
+      </div>
+    </header>
+
+    <div class="v2-shell">
+      <aside class="v2-sidebar" aria-label="メインナビゲーション">
+        <span class="v2-side-caption">WORKSPACE</span>
+        <nav class="v2-side-nav" aria-label="メインメニュー">
+          <button class="v2-nav-link is-active" data-tab="home" type="button" aria-current="page"><span aria-hidden="true">▦</span> ホーム</button>
+          <button class="v2-nav-link" data-tab="forecasts" type="button"><span aria-hidden="true">☷</span> 予想</button>
+          <button class="v2-nav-link" data-tab="results" type="button"><span aria-hidden="true">✓</span> 結果</button>
+          <button class="v2-nav-link" data-tab="research" type="button"><span aria-hidden="true">◇</span> 研究</button>
+        </nav>
+        <div class="v2-side-foot">
+          <p>READ ONLY</p>
+          <small>発走前固定予想は再計算・上書きしません。</small>
+          <a href="./index.html">現行アプリを開く ↗</a>
+        </div>
+      </aside>
+
+      <main id="content" class="v2-content" tabindex="-1" aria-live="off">
+        <section class="v2-loading" role="status"><div class="v2-spinner" aria-hidden="true"></div><h1>BOAT LAB 2.0</h1><p>発走前固定予想を読み込んでいます…</p></section>
+      </main>
+    </div>
+
+    <nav class="v2-bottom-nav" aria-label="モバイルナビゲーション">
+      <button class="is-active" data-tab="home" aria-current="page" type="button"><span aria-hidden="true">▦</span><small>ホーム</small></button>
+      <button data-tab="forecasts" type="button"><span aria-hidden="true">☷</span><small>予想</small></button>
+      <button data-tab="results" type="button"><span aria-hidden="true">✓</span><small>結果</small></button>
+      <button data-tab="research" type="button"><span aria-hidden="true">◇</span><small>研究</small></button>
+    </nav>
+  </div>
+  <dialog id="race-dialog" class="v2-dialog" aria-label="レースの予想詳細">
+    <div id="dialog-content"></div>
+  </dialog>
+  <div id="notification" role="status" aria-live="polite" class="v2-toast"></div>
+  <script src="./ticket-policy.js"></script>
+  <script src="./studio-v2.js?v=20261116-preview-1" defer></script>
+</body>
+</html>

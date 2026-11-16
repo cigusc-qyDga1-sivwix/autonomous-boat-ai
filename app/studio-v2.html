@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="description" content="BOAT LAB 2.0 — 発走前固定予想と公式結果の読み取り専用ダッシュボード">
   <link rel="icon" type="image/svg+xml" href="./icons/mark.svg">
-  <link rel="stylesheet" href="./studio-v2.css?v=20261116-venue-weather-v1">
+  <link rel="stylesheet" href="./studio-v2.css?v=20261116-venue-weather-v1-ux2">
   <title>BOAT LAB 2.0 | Preview</title>
 </head>
 <body>
@@ -22,7 +22,7 @@
           <span class="v2-brand-name">BOAT <b>LAB</b><small>2.0 PREVIEW</small></span>
         </a>
         <div class="v2-top-actions">
-          <span id="connection" class="v2-connection"><span class="v2-signal" aria-hidden="true"></span>データ確認中</span>
+          <span class="v2-preview-flag" aria-label="読み取り専用プレビュー">READ ONLY</span><span id="connection" class="v2-connection" role="status" aria-live="polite"><span class="v2-signal" aria-hidden="true"></span>データ確認中</span>
           <button id="refresh" class="v2-refresh" type="button" aria-label="最新データを再取得" title="再読み込み">↻ <span>更新</span></button>
         </div>
       </div>
@@ -44,8 +44,14 @@
         </div>
       </aside>
 
-      <main id="content" class="v2-content" tabindex="-1" aria-live="off">
-        <section class="v2-loading" role="status"><div class="v2-spinner" aria-hidden="true"></div><h1>BOAT LAB 2.0</h1><p>発走前固定予想を読み込んでいます…</p></section>
+      <main id="content" class="v2-content" tabindex="-1" aria-live="off" aria-busy="true">
+        <section class="v2-loading" role="status" aria-live="polite" aria-label="発走前固定予想を読み込んでいます">
+          <div class="v2-loading-intro"><div class="v2-spinner" aria-hidden="true"></div><h1>BOAT LAB 2.0</h1><p>発走前固定予想を読み込んでいます…</p></div>
+          <div class="v2-skeleton-grid" aria-hidden="true">
+            <div class="v2-skeleton-card"><span class="v2-skeleton-line is-short"></span><span class="v2-skeleton-line is-title"></span><span class="v2-skeleton-line"></span><span class="v2-skeleton-line"></span></div>
+            <div class="v2-skeleton-card"><span class="v2-skeleton-line is-short"></span><span class="v2-skeleton-line is-title"></span><span class="v2-skeleton-line"></span><span class="v2-skeleton-line"></span></div>
+          </div>
+        </section>
       </main>
     </div>
 
@@ -62,6 +68,6 @@
   <div id="notification" role="status" aria-live="polite" class="v2-toast"></div>
   <script src="./ticket-policy.js"></script>
   <script src="./canonical-exhibition-feed.js?v=20261116-canonical-v1" defer></script>
-  <script src="./studio-v2.js?v=20261116-weather-capture-v2" defer></script>
+  <script src="./studio-v2.js?v=20261116-weather-capture-v2-ux2" defer></script>
 </body>
 </html>

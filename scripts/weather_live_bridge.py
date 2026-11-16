@@ -7,10 +7,13 @@ The bridge never writes weather values into earlier immutable forecasts.
 """
 from __future__ import annotations
 
+import re
 import sys
+from html import unescape
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,6 +34,65 @@ MAX_JMA_ACQUISITION_AGE = timedelta(minutes=6)
 MAX_WAVE_CAPTURE_AGE = timedelta(minutes=15)
 MAX_WAVE_OBSERVATION_AGE = timedelta(minutes=20)
 WAVE_SOURCE = "weather_lab_boatracecsv_previews_sui"
+OFFICIAL_WAVE_SOURCE = "boatrace_official_beforeinfo_wave"
+OFFICIAL_WAVE_EVIDENCE = "official_pre_cutoff_wave_with_observation_label"
+WAVE_TARGET_MARGIN = timedelta(minutes=5)
+
+
+def parse_official_wave(page, race_number, captured):
+    block = re.search(r'<p class="weather1_title">([^<]*)</p>(.{0,7000})',
+                      page, re.DOTALL)
+    if block is None:
+        return None
+    label = unescape(block[1]).strip().removeprefix("水面気象情報").strip()
+    wave = re.search(r'波高</span>\s*<span[^>]*>\s*(\d{1,3})\s*cm\s*</span>', block[2])
+    if wave is None or int(wave[1]) > 150:
+        return None
+    local = captured.astimezone(JST)
+    clock = re.fullmatch(r'([01]?\d|2[0-3]):([0-5]\d)現在', label)
+    reference = re.fullmatch(r'(1[0-2]|[1-9])R時点', label)
+    observed = None
+    if clock:
+        observed = local.replace(hour=int(clock[1]), minute=int(clock[2]),
+                                 second=0, microsecond=0)
+        if not timedelta(0) <= local - observed <= MAX_WAVE_OBSERVATION_AGE:
+            return None
+    elif not reference or int(reference[1]) not in (race_number - 1, race_number):
+        return None
+    return {
+        "wave_height": float(wave[1]),
+        "wave_source": OFFICIAL_WAVE_SOURCE,
+        "wave_site_observed": True,
+        "wave_source_captured_at_jst": local.isoformat(),
+        "wave_observed_at_jst": observed.isoformat() if observed else None,
+        "wave_observation_label": label,
+        "wave_collected_at_utc": captured.astimezone(UTC).isoformat(),
+        "wave_evidence_quality": OFFICIAL_WAVE_EVIDENCE,
+        "tide_current_integrated": False,
+    }
+
+
+def fetch_official_wave(target):
+    venue, race_number, cutoff = target
+    url = ("https://www.boatrace.jp/owpc/pc/race/beforeinfo"
+           f"?rno={race_number}&jcd={int(venue):02}&hd={cutoff.astimezone(JST):%Y%m%d}")
+    try:
+        request = Request(url, headers={"User-Agent": "BOAT LAB weather monitor",
+                                        "Cache-Control": "no-cache"})
+        with urlopen(request, timeout=12) as response:
+            if response.geturl() != url:
+                return None
+            page = response.read(500_000).decode("utf-8")
+    except (OSError, UnicodeError):
+        return None
+    captured = datetime.now(UTC)
+    if captured > cutoff - WAVE_TARGET_MARGIN:
+        return None
+    evidence = parse_official_wave(page, race_number, captured)
+    if evidence is None:
+        return None
+    return {**evidence, "wave_source_url": url, "cutoff_at": cutoff.isoformat()}
+
 
 
 def _timestamp(raw):
@@ -93,7 +155,7 @@ def jma_as_nearby(document, active_codes, at):
     return result
 
 
-def collect_today(active_codes, at):
+def collect_today(active_codes, at, official_targets=()):
     """Concurrent provider calls; failure never blocks the old base model.
 
     Wave source is collected *now*, not read from the retrospective/weather-lab
@@ -108,7 +170,22 @@ def collect_today(active_codes, at):
 
     def wave_task():
         source, url, error = download_sui(day)
-        return build_sui(source, datetime.now(UTC), day, source_url=url, fetch_error=error)
+        checked = datetime.now(UTC)
+        snapshot = build_sui(source, checked, day, source_url=url, fetch_error=error)
+        targets = [
+            (venue, race, cutoff) for venue, race, cutoff in official_targets
+            if venue in active and venue != "3" and cutoff.astimezone(JST).date() == day
+            and WAVE_TARGET_MARGIN < cutoff - checked <= timedelta(minutes=15)
+            and wave_for_race(snapshot, venue, race, cutoff, checked) is None
+        ]
+        if targets:
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                snapshot["official_waves"] = {
+                    f"{venue}-{race}": evidence
+                    for (venue, race, _), evidence in zip(targets, pool.map(fetch_official_wave, targets))
+                    if evidence is not None
+                }
+        return snapshot
 
     def jma_task():
         document = fetch_jma(datetime.now(UTC))
@@ -140,7 +217,8 @@ def collect_today(active_codes, at):
                  for code in active if regional.get(code) or grid.get(code)}
     wave = output.get("wave")
     status = {
-        "status": "ok" if forecasts or (wave and wave.get("races")) else "unavailable",
+        "status": "ok" if forecasts or (wave and (wave.get("races") or wave.get("official_waves"))) else "unavailable",
+        "official_wave_snapshots_collected": len((wave or {}).get("official_waves") or {}),
         "jma_grid_venues": len(regional),
         "grid_fallback_venues": len([c for c in forecasts if c not in regional]),
         "onsite_wave_snapshots_collected": len((wave or {}).get("races") or []),
@@ -153,6 +231,26 @@ def collect_today(active_codes, at):
 
 
 def wave_for_race(snapshot, venue_code, race_number, cutoff, at):
+    csv_wave = csv_wave_for_race(snapshot, venue_code, race_number, cutoff, at)
+    if csv_wave is not None:
+        return csv_wave
+    if not isinstance(snapshot, dict) or at.tzinfo is None or cutoff.tzinfo is None:
+        return None
+    if venue_code == "3" or at > cutoff - WAVE_TARGET_MARGIN:
+        return None
+    official = (snapshot.get("official_waves") or {}).get(f"{venue_code}-{race_number}")
+    if official is None or _timestamp(official.get("cutoff_at")) != cutoff:
+        return None
+    captured = _timestamp(official.get("wave_collected_at_utc"))
+    observed = _timestamp(official.get("wave_observed_at_jst"))
+    if captured is None or not timedelta(0) <= at - captured <= timedelta(minutes=6):
+        return None
+    if observed is not None and at - observed > MAX_WAVE_OBSERVATION_AGE:
+        return None
+    return {key: value for key, value in official.items() if key != "cutoff_at"}
+
+
+def csv_wave_for_race(snapshot, venue_code, race_number, cutoff, at):
     """Accept only truly live, time-matched wave evidence with 3-min cutoff room."""
     if not isinstance(snapshot, dict) or not isinstance(venue_code, str):
         return None

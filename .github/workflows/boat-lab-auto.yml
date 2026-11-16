@@ -364,6 +364,37 @@ jobs:
         run: |
           python -m scripts.preview_field_coverage
           python -m json.tool app/data/exhibition-preview-evidence/latest.json > /dev/null
+      # Independent BUY/WATCH/SKIP study: never changes formal classifications
+      # or tickets. First decision is recorded while cutoff is still ahead.
+      - name: Freeze research-only BUY candidates before cutoff
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          DAY="$(TZ=Asia/Tokyo date +%F)"
+          if [[ "$DAY" < "2026-11-17" ]]; then exit 0; fi
+          TRIAL="app/data/experiments/buy-shadow-$DAY.json"
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.name 'github-actions[bot]'
+          python -m unittest discover -s tests -p test_buy_shadow_trial.py -q
+          for attempt in 1 2 3; do
+            python -m scripts.buy_shadow_trial freeze --input app/data/live/latest.json --out "$TRIAL"
+            if [ ! -f "$TRIAL" ]; then break; fi
+            git add "$TRIAL"
+            if git diff --cached --quiet; then break; fi
+            git commit -m 'research: freeze pre-cutoff BUY shadow decisions'
+            if git push origin HEAD:main; then
+              echo 'BUY research shadow saved separately from formal predictions'
+              break
+            fi
+            if [ "$attempt" = 3 ]; then
+              echo '::warning::BUY shadow could not be saved; formal predictions unaffected'
+              break
+            fi
+            git fetch origin main
+            git reset --hard origin/main
+            # Never backdate or reconstruct newly expired races after a failed push.
+          done
       - name: Run slower retrospective research after shadow publication
         continue-on-error: true
         run: |

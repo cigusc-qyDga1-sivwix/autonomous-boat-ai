@@ -66,12 +66,17 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
             python -m scripts.refresh_official_results | tee official-result-status.json
-            if git diff --quiet -- app/data/live/; then
-              echo "No new verified result in the latest official response"
+            # Research evaluation is official-only and never rewrites pre-cutoff labels.
+            python -m scripts.buy_shadow_trial evaluate --input app/data/live/latest.json || echo '::warning::BUY research audit unavailable'
+            if git diff --quiet -- app/data/live/ app/data/experiments/buy-shadow-eval-latest.json; then
+              echo "No new verified result or independent BUY research audit"
               break
             fi
             git add app/data/live/
-            git commit -m 'results: publish newly verified official payouts'
+            if [ -f app/data/experiments/buy-shadow-eval-latest.json ]; then
+              git add app/data/experiments/buy-shadow-eval-latest.json
+            fi
+            git commit -m 'results: publish verified official payouts and independent BUY audit'
             if git push origin HEAD:main; then
               changed=true
               break

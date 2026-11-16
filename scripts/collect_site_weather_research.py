@@ -139,6 +139,73 @@ def parse(csv_text, day, now, *, source_url):
     return evidence, counts
 
 
+
+def frozen_preview_fallback(document, day):
+    """Previous model's already-frozen weather values, NEVER a timed site sensor.
+
+    The provider's wind source is from BOATRACE preview, but its original
+    weather observation timestamp was not supplied. The freeze is proof of
+    pre-race availability only, not proof of a fresh 5-minute measurement.
+    """
+    if not isinstance(document, dict) or document.get("mode") != "auto-live" or document.get("event_date") != day.isoformat():
+        return {}
+    rows = document.get("forecast_races")
+    if not isinstance(rows, list):
+        return {}
+    found = {}
+    for r in rows[:288]:
+        if not isinstance(r, dict) or r.get("phase") != "exhibition" or r.get("ticket_status") != "formal":
+            continue
+        venue, race = r.get("venue"), r.get("race")
+        if venue not in VENUES or venue == "江戸川" or type(race) is not int or not 1 <= race <= 12:
+            continue
+        clock = r.get("cutoff_jst")
+        if not isinstance(clock, str) or not re.fullmatch(r"(?:[01]\\d|2[0-3]):[0-5]\\d", clock):
+            continue
+        cutoff = datetime(day.year, day.month, day.day, int(clock[:2]), int(clock[3:]), tzinfo=JST)
+        frozen = _time(r.get("frozen_at_utc"))
+        if frozen is None or frozen >= cutoff - MARGIN or frozen.astimezone(JST).date() != day:
+            continue
+        weather = r.get("weather_used")
+        if not isinstance(weather, dict) or weather.get("site_observed") is not True or weather.get("wind_source") != "boatrace_preview":
+            continue
+        speed = _amount(weather.get("wind_speed"), 0, 65)
+        wave = _amount(weather.get("wave_height"), 0, 150)
+        if speed is None and wave is None:
+            continue
+        direction = weather.get("wind_direction_number")
+        direction = (str(int(direction)) if type(direction) in (int, float) and
+                     math.isfinite(direction) and 0 <= direction <= 999 and
+                     direction == int(direction) else None)
+        source_sha = r.get("sha256")
+        if not isinstance(source_sha, str) or not re.fullmatch("[0-9a-f]{64}", source_sha):
+            continue
+        code = VENUES.index(venue) + 1
+        data = {
+            "venue_code": f"{code:02d}", "venue": venue, "race": race,
+            "cutoff_jst": clock, "race_code": f"{day:%Y%m%d}{code:02d}{race:02d}",
+            "wind_speed_mps": speed, "wind_direction_raw": direction,
+            "wave_height_cm": wave,
+            "wind_direction_status": "raw_code_unmapped" if direction is not None else "unavailable",
+            "relative_wind_verified": False, "tide_verified": False,
+            "source": "boatrace_preview_frozen_snapshot",
+            "source_url": None, "source_captured_at_jst": None,
+            "observed_at_jst": None, "snapshot_frozen_at_utc": frozen.astimezone(UTC).isoformat(),
+            "original_observation_clock_verified": False,
+            "source_snapshot_sha256": source_sha,
+            "source_acquired_before_cutoff": False,
+            "source_value_frozen_before_cutoff": True,
+            "formal_input": False, "research_only": True,
+        }
+        data["evidence_sha256"] = hashlib.sha256(
+            json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        key = f"{day.isoformat()}|{venue}|{race}"
+        prior = found.get(key)
+        if prior is None or _time(data["snapshot_frozen_at_utc"]) > _time(prior["snapshot_frozen_at_utc"]):
+            found[key] = data
+    return found
+
 def merge_document(current, prior, day, now, *, source_url, error=None, rejects=None):
     if now.tzinfo is None or day != now.astimezone(JST).date():
         raise ValueError("Live day only")
@@ -148,10 +215,19 @@ def merge_document(current, prior, day, now, *, source_url, error=None, rejects=
     for key, value in current.items():
         original = combined.get(key)
         if original is not None and original.get("evidence_sha256") != value["evidence_sha256"]:
-            # Preserve earliest source snapshot, quarantine instead of overwriting.
-            conflicts[key] = {"prior_sha256": original.get("evidence_sha256"),
-                              "incoming_sha256": value["evidence_sha256"]}
-            continue
+            # An independently timestamped provider reading may replace the
+            # less-proven frozen-forecast fallback; keep the prior SHA in audit.
+            if (original.get("source") == "boatrace_preview_frozen_snapshot"
+                    and value.get("source") == "boatracecsv_previews_sui"
+                    and value.get("wind_speed_mps") is not None):
+                value = {**value, "supersedes_research_sha256": original.get("evidence_sha256")}
+            elif (original.get("source") == "boatracecsv_previews_sui"
+                  and value.get("source") == "boatrace_preview_frozen_snapshot"):
+                continue
+            else:
+                conflicts[key] = {"prior_sha256": original.get("evidence_sha256"),
+                                  "incoming_sha256": value["evidence_sha256"]}
+                continue
         combined[key] = value
     return {
         "schema": SCHEMA, "event_date": day.isoformat(),
@@ -182,7 +258,7 @@ def _write(path, data):
     temporary.replace(path)
 
 
-def run(out_dir=Path("app/data/weather-research"), now=None, downloader=download_sui):
+def run(out_dir=Path("app/data/weather-research"), now=None, downloader=download_sui, frozen_path=None):
     now = now or datetime.now(UTC)
     if now.tzinfo is None:
         raise ValueError("Aware UTC now required")
@@ -192,12 +268,24 @@ def run(out_dir=Path("app/data/weather-research"), now=None, downloader=download
     if captured.astimezone(JST).date() != day:
         raise ValueError("JST date changed during capture")
     records, rejected = parse(raw, day, captured, source_url=url)
+    frozen = {}
+    if frozen_path is not None and frozen_path.exists():
+        try:
+            frozen = frozen_preview_fallback(json.loads(frozen_path.read_text(encoding="utf-8")), day)
+        except (OSError, ValueError):
+            pass
+    # Source-timed SUI wins when both fields exist; the frozen preview is only
+    # a correctly labeled fallback, never disguised as a 5-min measurement.
+    records = {**frozen, **records}
     target = out_dir / f"{day.isoformat()}.json"
     try:
         prior = json.loads(target.read_text(encoding="utf-8")) if target.exists() else {}
     except (OSError, ValueError):
         prior = {}
     doc = merge_document(records, prior, day, captured, source_url=url, error=error, rejects=rejected)
+    doc["frozen_preview_fallback_found"] = len(frozen)
+    doc["direct_sui_provenance_count"] = sum(v["source"] == "boatracecsv_previews_sui" for v in records.values())
+    doc["frozen_preview_only_count"] = sum(v["source"] == "boatrace_preview_frozen_snapshot" for v in doc["records"].values())
     _write(target, doc)
     _write(out_dir / "latest.json", doc)
     return doc
@@ -207,7 +295,7 @@ def main():
     parser = argparse.ArgumentParser(description="Pre-cutoff on-site wind/wave capture; no formal forecast effects")
     parser.add_argument("--out-dir", type=Path, default=Path("app/data/weather-research"))
     args = parser.parse_args()
-    d = run(out_dir=args.out_dir)
+    d = run(out_dir=args.out_dir, frozen_path=Path("app/data/live/latest.json"))
     print(json.dumps({"date": d["event_date"], "source": d["provider_status"],
                       "admitted": d["admitted_this_check"], "saved": d["saved_races"],
                       "conflicts": len(d["conflicts_this_check"])}, ensure_ascii=False))

@@ -325,6 +325,113 @@ def _shadow_trial_result(snapshot, bets, payout):
     }
 
 
+def _learned_conditional_shadow_report(forecasts, official, alerts, day):
+    """Read-only same-time learned-main vs v2.6 pair shadow. No retrofitting."""
+    formal, alternative = [], []
+    by_venue = defaultdict(lambda: {"formal": [], "shadow": []})
+    exclusions = Counter()
+    frozen_count = 0
+    changed_count = 0
+
+    def hashed(value):
+        return hashlib.sha256(json.dumps(
+            value, sort_keys=True, ensure_ascii=False,
+            separators=(",", ":"), allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+
+    for r in forecasts:
+        proof = r.get("learned_conditional_shadow")
+        if not isinstance(proof, dict):
+            continue
+        frozen_count += 1
+        key = f"{day}|{r.get('venue')}|{r.get('race')}"
+        if key in alerts:
+            exclusions["official_conflict_refund_or_cancel"] += 1
+            continue
+        ok, reason = _verify_race(r, official.get(key), day)
+        if not ok:
+            exclusions[reason] += 1
+            continue
+        main, control, trial = r.get("bets"), proof.get("control_bets"), proof.get("shadow_bets")
+        try:
+            integrity = (
+                r.get("ticket_status") == "formal"
+                and r.get("model_version") == "four-factor-learned-v1-conditional-choice-trained"
+                and proof.get("model_role") == "research_shadow"
+                and proof.get("version") == "learned-conditional-pair-shadow-v0.1"
+                and proof.get("model_sha256") == (r.get("learned_formal") or {}).get("model_sha256")
+                and proof.get("frozen_at_utc") == r.get("frozen_at_utc")
+                and proof.get("same_input_same_time") is True
+                and proof.get("same_point_count") is True
+                and proof.get("head_marginals_preserved") is True
+                and proof.get("formal_tickets_changed") is False
+                and proof.get("official_results_used") is False
+                and proof.get("odds_used") is False
+                and proof.get("virtual_stake_yen_each") == RESEARCH_BUDGET
+                and (r.get("exhibition_input_check") or {}).get("verified_before_freeze") is True
+                and (r.get("exhibition_input_check") or {}).get("six_boats_matched") == 6
+                and isinstance(main, list) and isinstance(control, list)
+                and isinstance(trial, list) and len(main) == len(control) == len(trial)
+                and _valid_shadow_tickets(control) and _valid_shadow_tickets(trial)
+                and _ticket_signature(main) == _ticket_signature(control)
+                and proof.get("shadow_bets_sha256") == hashed(trial)
+                and proof.get("source_snapshot_sha256") == hashed({
+                    "racers": r.get("racers"),
+                    "exhibition_origin": r.get("exhibition_origin"),
+                    "exhibition_input_check": r.get("exhibition_input_check"),
+                })
+            )
+        except (TypeError, ValueError, KeyError, OverflowError):
+            integrity = False
+        if not integrity:
+            exclusions["unproven_or_modified_shadow"] += 1
+            continue
+        pay = official[key]
+        m = _shadow_trial_result(r, main, pay)
+        a = _shadow_trial_result(r, trial, pay)
+        formal.append(m)
+        alternative.append(a)
+        by_venue[r["venue"]]["formal"].append(m)
+        by_venue[r["venue"]]["shadow"].append(a)
+        changed_count += _ticket_signature(main) != _ticket_signature(trial)
+
+    def comparison(main, shadow):
+        return {
+            "matched_races": len(main),
+            "formal": _metrics(main),
+            "research_shadow": _metrics(shadow),
+            "head_misses_recovered": sum(
+                x["stage"] == "head_miss" and y["stage"] != "head_miss"
+                for x, y in zip(main, shadow)
+            ),
+            "new_head_misses": sum(
+                x["stage"] != "head_miss" and y["stage"] == "head_miss"
+                for x, y in zip(main, shadow)
+            ),
+            "second_misses_recovered": sum(
+                x["stage"] == "second_miss" and y["stage"] != "second_miss"
+                for x, y in zip(main, shadow)
+            ),
+            "new_second_misses": sum(
+                x["stage"] != "second_miss" and y["stage"] == "second_miss"
+                for x, y in zip(main, shadow)
+            ),
+        }
+
+    return {
+        "protocol": "precutoff-learned-main-vs-head-preserved-v26-shadow-v0.1",
+        "frozen_shadows": frozen_count,
+        "changed_ticket_pairs": changed_count,
+        **comparison(formal, alternative),
+        "by_venue": {venue: comparison(group["formal"], group["shadow"])
+                     for venue, group in sorted(by_venue.items())},
+        "exclusions": dict(sorted(exclusions.items())),
+        "formal_performance_changed": False,
+        "no_hindsight": True,
+        "warning": "Research only; compare 100+ future matched races before considering promotion.",
+    }
+
+
 def _learned_formal_comparison(forecasts, official, alerts, day):
     """Compare ONLY pre-cutoff official learned main vs same-input old control.
 
@@ -1246,6 +1353,9 @@ def analyze(dataset: dict):
     if day >= "2026-11-10":
         report["head_risk_breakpoint"] = _head_risk_breakpoint_report(raw, verified, day)
     report["learned_formal_comparison"] = _learned_formal_comparison(
+        raw, official, alerts, day
+    )
+    report["learned_conditional_shadow_comparison"] = _learned_conditional_shadow_report(
         raw, official, alerts, day
     )
     report["third_place_pilot_comparison"] = _third_place_pilot_report(

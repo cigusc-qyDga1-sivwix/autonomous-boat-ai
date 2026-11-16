@@ -229,7 +229,8 @@ def run(directory=Path("app/data/exhibition-preview-evidence"),now=None,fetcher=
     day=now.astimezone(JST).date()
     url=f"{SOURCE}/{day:%Y}/{day:%Y%m%d}.json"
     status="ok"
-    if fetcher is None:
+    live_provider=fetcher is None
+    if live_provider:
         def fetcher(url):
             request=Request(url,headers={"User-Agent":"BOAT-LAB-field-coverage-research/1.0"})
             with urlopen(request,timeout=15) as response:
@@ -239,12 +240,12 @@ def run(directory=Path("app/data/exhibition-preview-evidence"),now=None,fetcher=
                 return json.loads(body)
     try:
         payload=fetcher(url)
-        checked=datetime.now(UTC) if fetcher.__name__=="fetcher" else now
+        checked=datetime.now(UTC) if live_provider else now
         if checked.astimezone(JST).date()!=day:
             raise ValueError("Day changed during fetch")
         current,diagnostics=extract(payload,checked)
     except (OSError,HTTPError,URLError,TimeoutError,ValueError,TypeError) as exc:
-        checked=datetime.now(UTC) if fetcher.__name__=="fetcher" else now
+        checked=datetime.now(UTC) if live_provider else now
         current,diagnostics={},{"fetch_error":type(exc).__name__}
         status="unavailable"
     target=directory/f"{day.isoformat()}.json"

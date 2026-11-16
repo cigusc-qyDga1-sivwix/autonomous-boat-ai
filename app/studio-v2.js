@@ -297,8 +297,8 @@ function venueWeatherLearning(){
  const ratio=(x,total)=>total>0?(100*x/total).toFixed(1)+'%':'—';
  const windLabels={site_preview_unverified_timestamp:'場内展示値／時刻未検証',nearby_grid_forecast:'周辺格子予報',source_unverified:'出典不明'};
  const waveLabels={site_wave_time_verified:'場内波高／時刻照合済',preview_wave_timestamp_unverified:'展示波高／時刻未検証',source_unverified:'出典不明'};
- const wb={under_4:'4m/s未満',4_to_under_6:'4～6m/s',6_to_under_8:'6～8m/s',8_plus:'8m/s以上'};
- const vb={under_4:'4cm未満',4_to_under_8:'4～8cm',8_plus:'8cm以上'};
+ const wb={under_4:'4m/s未満','4_to_under_6':'4～6m/s','6_to_under_8':'6～8m/s','8_plus':'8m/s以上'};
+ const vb={under_4:'4cm未満','4_to_under_8':'4～8cm','8_plus':'8cm以上'};
  const build=(sets,sources,bands)=>{
   let rows=[];
   for(const [source,group] of Object.entries(sets||{})){

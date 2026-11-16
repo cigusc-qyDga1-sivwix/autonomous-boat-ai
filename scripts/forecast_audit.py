@@ -325,6 +325,109 @@ def _shadow_trial_result(snapshot, bets, payout):
     }
 
 
+def _learned_exhibition_effect_report(forecasts, official, alerts, day):
+    """Prospective identical-model exhibition vs no-exhibition freeze.
+
+    NEVER regenerate past hypothetical rankings. The no-exhibition ablation
+    must have been generated and hashed before the race in its live snapshot.
+    """
+    grouped = defaultdict(lambda: {"formal": [], "no_exhibition": []})
+    exclusions = Counter()
+    total = 0
+    changed = 0
+
+    def sha(value):
+        return hashlib.sha256(json.dumps(
+            value, sort_keys=True, ensure_ascii=False,
+            separators=(",", ":"), allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+
+    for row in forecasts:
+        a = row.get("learned_exhibition_ablation")
+        if not isinstance(a, dict):
+            continue
+        total += 1
+        key = f"{day}|{row.get('venue')}|{row.get('race')}"
+        if key in alerts:
+            exclusions["official_conflict_or_refund"] += 1
+            continue
+        ok, reason = _verify_race(row, official.get(key), day)
+        if not ok:
+            exclusions[reason] += 1
+            continue
+        formal = row.get("bets")
+        control = a.get("formal_bets")
+        shadow = a.get("no_exhibition_bets")
+        try:
+            good = (
+                row.get("ticket_status") == "formal"
+                and row.get("model_version") == "four-factor-learned-v1-conditional-choice-trained"
+                and a.get("version") == "learned-exhibition-effect-shadow-v0.1"
+                and a.get("model_role") == "research_shadow"
+                and a.get("model_sha256") == (row.get("learned_formal") or {}).get("model_sha256")
+                and a.get("frozen_at_utc") == row.get("frozen_at_utc")
+                and a.get("same_model_same_time") is True
+                and a.get("same_point_count") is True
+                and a.get("formal_tickets_changed") is False
+                and a.get("official_result_used") is False
+                and a.get("odds_used") is False
+                and a.get("not_a_historical_frozen_baseline") is True
+                and a.get("virtual_budget_yen_each") == RESEARCH_BUDGET
+                and (row.get("exhibition_input_check") or {}).get("verified_before_freeze") is True
+                and (row.get("exhibition_input_check") or {}).get("six_boats_matched") == 6
+                and isinstance(formal, list) and isinstance(control, list)
+                and isinstance(shadow, list)
+                and len(formal) == len(control) == len(shadow)
+                and _valid_shadow_tickets(control) and _valid_shadow_tickets(shadow)
+                and _ticket_signature(formal) == _ticket_signature(control)
+                and a.get("formal_bets_sha256") == sha(control)
+                and a.get("no_exhibition_bets_sha256") == sha(shadow)
+                and a.get("source_snapshot_sha256") == sha({
+                    "racers": row.get("racers"),
+                    "exhibition_origin": row.get("exhibition_origin"),
+                    "exhibition_input_check": row.get("exhibition_input_check"),
+                })
+            )
+        except (TypeError, ValueError, KeyError, OverflowError):
+            good = False
+        if not good:
+            exclusions["unproven_or_modified_ablation"] += 1
+            continue
+        p = official[key]
+        f = _shadow_trial_result(row, formal, p)
+        e = _shadow_trial_result(row, shadow, p)
+        grouped[row["venue"]]["formal"].append(f)
+        grouped[row["venue"]]["no_exhibition"].append(e)
+        changed += _ticket_signature(formal) != _ticket_signature(shadow)
+
+    def measures(a, b):
+        return {
+            "matched_races": len(a),
+            "with_exhibition_formal": _metrics(a),
+            "without_exhibition_research": _metrics(b),
+            "hits_delta_exhibition_minus_without": sum(x["stage"] == "hit" for x in a)
+                                                  - sum(x["stage"] == "hit" for x in b),
+            "payout_delta_exhibition_minus_without": sum(x["virtual_payout_yen"] for x in a)
+                                                    - sum(x["virtual_payout_yen"] for x in b),
+        }
+    formals = [x for g in grouped.values() for x in g["formal"]]
+    without = [x for g in grouped.values() for x in g["no_exhibition"]]
+    return {
+        "protocol": "forward-only-same-model-same-time-exhibition-ablation-v0.1",
+        "frozen_ablation_forecasts": total,
+        "official_matched_ticket_change_races": changed,
+        **measures(formals, without),
+        "by_venue": {venue: measures(g["formal"], g["no_exhibition"])
+                     for venue, g in sorted(grouped.items())},
+        "exclusions": dict(sorted(exclusions.items())),
+        "not_a_historical_baseline": True,
+        "historical_formal_forecasts_modified": False,
+        "no_hindsight_reconstruction": True,
+        "warning": ("This is a same-time ablation of exhibition inputs, not a "
+                    "previously frozen baseline and not evidence of calibrated edge."),
+    }
+
+
 def _learned_conditional_shadow_report(forecasts, official, alerts, day):
     """Read-only same-time learned-main vs v2.6 pair shadow. No retrofitting."""
     formal, alternative = [], []
@@ -1353,6 +1456,9 @@ def analyze(dataset: dict):
     if day >= "2026-11-10":
         report["head_risk_breakpoint"] = _head_risk_breakpoint_report(raw, verified, day)
     report["learned_formal_comparison"] = _learned_formal_comparison(
+        raw, official, alerts, day
+    )
+    report["learned_exhibition_effect_comparison"] = _learned_exhibition_effect_report(
         raw, official, alerts, day
     )
     report["learned_conditional_shadow_comparison"] = _learned_conditional_shadow_report(

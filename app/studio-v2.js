@@ -17,6 +17,17 @@ const jstStamp=value=>{
  return Number.isFinite(d.getTime())?new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(d)+' JST':'時刻未確認';
 };
 const cutoffMs=(day,clock)=>validDay(day)&&validClock(clock)?Date.parse(day+'T'+clock+':00+09:00'):NaN;
+// A forecast remains visible for ten minutes AFTER its published cutoff.
+// This controls display only: it cannot create or revise a frozen prediction.
+const POST_CUTOFF_GRACE_MS=10*60000;
+const recentCutoff=(r,day,now)=>{
+ const cutoff=cutoffMs(day,r?.cutoff_jst);
+ return Number.isFinite(cutoff)&&now>=cutoff&&now<=cutoff+POST_CUTOFF_GRACE_MS;
+};
+const visibleAroundCutoff=(r,day,now)=>{
+ const cutoff=cutoffMs(day,r?.cutoff_jst);
+ return Number.isFinite(cutoff)&&(cutoff>now||recentCutoff(r,day,now));
+};
 const sumBets=r=>(Array.isArray(r?.bets)?r.bets:[]).reduce((n,x)=>n+(Number.isSafeInteger(x.virtual_yen)&&x.virtual_yen>=0?x.virtual_yen:0),0);
 const validRace=r=>r&&typeof r.venue==='string'&&r.venue.length<=50&&Number.isInteger(r.race)&&r.race>=1&&r.race<=12&&validClock(r.cutoff_jst)&&Array.isArray(r.bets)&&r.bets.length>0;
 const validCombo=combo=>typeof combo==='string'&&/^[1-6]-[1-6]-[1-6]$/.test(combo)&&new Set(combo.split('-')).size===3;
@@ -74,7 +85,7 @@ function normalize(payload){
  // Empty auto-live days are valid: show an honest 0R state, not a load failure.
  return {...payload,forecast_races:races};
 }
-const engine={money,percent,validDay,validClock,jstDay,jstStamp,cutoffMs,sumBets,validRace,validCombo,frozenStatus,verifiedOfficial,officialOutcome,virtualSettlement,racePhase,normalize,raceOrder};
+const engine={money,percent,validDay,validClock,jstDay,jstStamp,cutoffMs,sumBets,validRace,validCombo,frozenStatus,verifiedOfficial,officialOutcome,virtualSettlement,racePhase,normalize,raceOrder,recentCutoff,visibleAroundCutoff,POST_CUTOFF_GRACE_MS};
 root.BoatLabV2=engine;
 if(typeof module==='object'&&module.exports)module.exports=engine;
 if(typeof document==='undefined')return;
@@ -109,7 +120,7 @@ function timeState(r){
  const diff=ms-nowMs();
  if(!isToday())return 'archive';
  if(diff>0)return diff<=10*60000?'urgent':'upcoming';
- if(diff>=-10*60000)return 'closed-recent';
+ if(recentCutoff(r,state.data.event_date,nowMs()))return 'closed-recent';
  return 'closed';
 }
 function formatPicks(combo){
@@ -130,12 +141,14 @@ function phaseChip(r){
 function raceCard(r){
  const phase=racePhase(r,state.data,ticketPolicy),time=timeState(r),closed=time.startsWith('closed');
  const stake=sumBets(r),id=state.data.forecast_races.indexOf(r);
- const timeText=time==='archive'?'過去の固定記録':time==='urgent'?'締切間近':closed?'締切済み（保存記録）':'締切予定';
+ const timeText=time==='archive'?'過去の固定記録':time==='urgent'?'締切間近':time==='closed-recent'?'締切後10分間・保存中':closed?'締切済み（保存記録）':'締切予定';
+ const recentRemaining=time==='closed-recent'?Math.max(0,Math.ceil((cutoffMs(state.data.event_date,r.cutoff_jst)+POST_CUTOFF_GRACE_MS-nowMs())/60000)):0;
+ const closedNote=time==='closed-recent'?'<p class="v2-recent-note">締切済み・新規投票不可／固定した予想をあと'+recentRemaining+'分表示</p>':'';
  const label=(r.classification==='BUY'?'BUY分類':r.classification==='SKIP'?'SKIP分類':'WATCH分類');
- return '<article class="v2-race is-'+(phase==='formal'?'formal':'pending')+(closed?' is-closed':'')+(time==='urgent'?' is-urgent':'')+'">'+
+ return '<article class="v2-race is-'+(phase==='formal'?'formal':'pending')+(closed?' is-closed':'')+(time==='closed-recent'?' is-closed-recent':'')+(time==='urgent'?' is-urgent':'')+'">'+
    '<div class="v2-race-head"><div><h3 class="v2-race-name">'+escapeHTML(r.venue)+' '+r.race+'R</h3>'+
    '<div class="v2-race-deadline"><span>締切</span><strong>'+escapeHTML(r.cutoff_jst)+'</strong><span class="v2-time-status">'+timeText+'</span></div>'+'<p class="v2-race-meta">'+label+' · JST</p></div>'+phaseChip(r)+'</div>'+
-   '<div class="v2-picks">'+pickRows(r)+'</div>'+
+   closedNote+'<div class="v2-picks">'+pickRows(r)+'</div>'+
    '<div class="v2-race-foot"><small>上位'+Math.min(r.bets.length,3)+'点 / 全'+r.bets.length+'点・仮想'+money(stake)+'</small>'+
    '<button type="button" class="v2-detail-btn" data-open-race="'+id+'" aria-label="'+escapeHTML(r.venue+' '+r.race+'Rの全買い目を表示')+'">全買い目</button></div></article>';
 }
@@ -162,7 +175,7 @@ function freshAlert(){
 function home(){
  const data=state.data,rs=allRaces(),formals=getFormal(),current=isToday();
  const upcoming=current?rs.filter(r=>cutoffMs(data.event_date,r.cutoff_jst)>nowMs()):[];
- const recent=current?rs.filter(r=>{const d=nowMs()-cutoffMs(data.event_date,r.cutoff_jst);return d>=0&&d<600000&&r.classification!=='SKIP'}):[];
+ const recent=current?rs.filter(r=>recentCutoff(r,data.event_date,nowMs())).sort((a,b)=>raceOrder(b,a)):[];
  // Chronological priority is non-negotiable: a pending near-cutoff race must
  // never disappear behind a later formal card.
  const priority=upcoming.slice(0,4);
@@ -175,10 +188,15 @@ function home(){
   freshAlert()+
   '<div class="v2-section-heading"><div><h2>'+ (upcoming.length?'直近の予想':'直近レースの状況')+'</h2><p>正式と暫定を混ぜず、表示順だけを整理</p></div>'+
   '<button type="button" class="v2-text-action" data-tab="forecasts">予想一覧を見る →</button></div>'+
-  (recent.length?'<div class="v2-alert is-neutral">締切後10分の保存済み予想：'+recent.length+'R。新規投票不可・買い目は変更しません。</div>':'')+
-  '<div class="v2-grid">'+(priority.length?priority.map(raceCard).join(''):
+  (recent.length?'<div class="v2-alert is-neutral">締切後10分以内の保存済み予想：'+recent.length+'R。締切済み・新規投票不可。買い目は固定時のままです。</div>':'')+
+  '<div class="v2-grid">'+(priority.length?priority.map(raceCard).join(''):recent.length?'': 
     '<div class="v2-empty"><strong>現在、これから締切を迎えるレースはありません。</strong>保存済みの予想は「予想」タブで全レースを確認できます。'+
     '<div class="v2-cta-row"><button class="v2-detail-btn" data-tab="forecasts" data-show-all="true">全レースの記録</button></div></div>')+'</div>'+
+  (recent.length?'<section class="v2-recent-section" aria-label="締切後10分の固定予想">'+
+    '<div class="v2-section-heading"><div><h2>締切後10分｜保存済み予想</h2><p>締切済みのレースも直前の買い目を確認できます（投票不可）</p></div></div>'+
+    '<div class="v2-grid">'+recent.slice(0,6).map(raceCard).join('')+'</div>'+
+    (recent.length>6?'<div class="v2-cta-row"><button type="button" class="v2-secondary-btn" data-tab="forecasts">他の保存済み予想を見る（'+(recent.length-6)+'R）</button></div>':'')+
+    '</section>':'')+
   '<div class="v2-metrics">'+
   metric('固定予想',rs.length+'R','読み取り専用')+
   metric('展示反映・正式',formals.length+'R','6艇の展示照合＋締切前固定','primary')+
@@ -197,13 +215,17 @@ function filterRaces(){
   rs=rs.filter(r=>(r.venue+' '+r.race+'R '+r.cutoff_jst+' '+r.classification).toLowerCase().includes(query));
  }
  if(state.scope==='upcoming'){
-  rs=isToday()?rs.filter(r=>cutoffMs(state.data.event_date,r.cutoff_jst)>nowMs()):[];
+  rs=isToday()?rs.filter(r=>visibleAroundCutoff(r,state.data.event_date,nowMs())):[];
  }
  return rs;
 }
 function forecasts(){
  const all=allRaces(),formals=getFormal(),venues=[...new Set(all.map(r=>r.venue))].sort((a,b)=>a.localeCompare(b,'ja'));
  const filtered=filterRaces();
+ // Keep recently closed forecasts immediately accessible, even when the
+ // next dozens of future races would otherwise push them below the fold.
+ const recentShown=state.scope==='upcoming'?filtered.filter(r=>recentCutoff(r,state.data.event_date,nowMs())).sort((a,b)=>raceOrder(b,a)):[];
+ const futureShown=state.scope==='upcoming'?filtered.filter(r=>!recentCutoff(r,state.data.event_date,nowMs())):filtered;
  const active=(value,target)=>value===target?' class="is-active" aria-pressed="true"':' aria-pressed="false"';
  const selectable=['全場',...venues].map(v=>'<option value="'+escapeHTML(v)+'"'+(state.venue===v?' selected':'')+'>'+escapeHTML(v)+'</option>').join('');
  return title('PREDICTION DESK','予想・買い目','締切・展示反映・仮想配分を確認。正式と暫定は別表示。')+
@@ -217,14 +239,17 @@ function forecasts(){
   '<button data-forecast-filter="research" type="button"'+active(state.forecastFilter,'research')+'>暫定・研究</button>'+
   '<button data-forecast-filter="all" type="button"'+active(state.forecastFilter,'all')+'>すべて</button></div>'+
   '<div class="v2-segments" role="group" aria-label="開催の絞込">'+
-  '<button data-scope="upcoming" type="button"'+active(state.scope,'upcoming')+'>これから</button>'+
+  '<button data-scope="upcoming" type="button"'+active(state.scope,'upcoming')+'>締切前＋10分</button>'+
   '<button data-scope="all" type="button"'+active(state.scope,'all')+'>全記録</button></div>'+
   '<label class="v2-filter-label">開催場 <select id="venue-filter" aria-label="開催場で絞る">'+selectable+'</select></label>'+
   '<input id="race-search" class="v2-search" type="search" placeholder="場名・R・締切を検索" aria-label="レース検索" value="'+escapeHTML(state.search)+'"></div>'+
-  '<div class="v2-count">'+filtered.length+'R 該当 / '+all.length+'R 保存。'+(state.scope==='upcoming'?'締切前のみ':'締切済みの記録を含む')+'</div>'+
-  '<div class="v2-grid">'+(filtered.length?filtered.slice(0,state.shown).map(raceCard).join(''):
-  '<div class="v2-empty"><strong>条件に合う予想はありません。</strong>表示区分・開催場・「全記録」の設定を変えて確認してください。</div>')+'</div>'+
-  (filtered.length>state.shown?'<div class="v2-cta-row"><button class="v2-secondary-btn" data-load-more="forecasts" type="button">さらに'+Math.min(20,filtered.length-state.shown)+'Rを表示（残り'+(filtered.length-state.shown)+'R）</button></div>':'')+
+  '<div class="v2-count">'+filtered.length+'R 該当 / '+all.length+'R 保存。'+(state.scope==='upcoming'?'締切前と締切後10分の予想':'締切済みの記録を含む')+'</div>'+
+  (recentShown.length?'<section class="v2-recent-section" aria-label="締切後10分の固定予想">'+
+    '<div class="v2-section-heading"><div><h2>締切後10分｜保存済み予想（'+recentShown.length+'R）</h2><p>新規投票不可・発走前の固定買い目をそのまま表示</p></div></div>'+
+    '<div class="v2-grid">'+recentShown.map(raceCard).join('')+'</div></section>':'')+
+  '<div class="v2-grid">'+(futureShown.length?futureShown.slice(0,state.shown).map(raceCard).join(''):
+    recentShown.length?'':'<div class="v2-empty"><strong>条件に合う予想はありません。</strong>表示区分・開催場・「全記録」の設定を変えて確認してください。</div>')+'</div>'+
+  (futureShown.length>state.shown?'<div class="v2-cta-row"><button class="v2-secondary-btn" data-load-more="forecasts" type="button">さらに'+Math.min(20,futureShown.length-state.shown)+'Rを表示（残り'+(futureShown.length-state.shown)+'R）</button></div>':'')+
   '<p class="v2-subtle">表示は保存済み買い目の読み取り専用。画面の絞り込みや並べ替えでは予想を再計算しません。</p>';
 }
 function results(){
@@ -448,7 +473,7 @@ async function pollCanonicalForecast(){
       Number.isFinite(oldTime)&&(!Number.isFinite(newTime)||newTime<=oldTime)))
       return {state:'older'};
   state.data=incoming;state.source='GitHub main';
-  if(!isToday()||incoming.forecast_races.every(r=>cutoffMs(incoming.event_date,r.cutoff_jst)<=nowMs()))state.scope='all';
+  if(!isToday()||incoming.forecast_races.every(r=>!visibleAroundCutoff(r,incoming.event_date,nowMs())))state.scope='all';
   render();
   return {state:'applied'};
  }catch(error){
@@ -484,7 +509,7 @@ async function load(){
      (!Number.isFinite(dataTime)||dataTime<heldTime)));
   if(!rollback){state.data=data;state.source='Pages';}
   if(audit?.event_date===state.data?.event_date)state.audit=audit;
-  if(!isToday()||state.data.forecast_races.every(r=>cutoffMs(state.data.event_date,r.cutoff_jst)<=nowMs()))state.scope='all';
+  if(!isToday()||state.data.forecast_races.every(r=>!visibleAroundCutoff(r,state.data.event_date,nowMs())))state.scope='all';
   render();
  }catch(error){
   if(!state.data){

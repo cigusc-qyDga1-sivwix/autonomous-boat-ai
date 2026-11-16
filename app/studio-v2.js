@@ -189,7 +189,7 @@ function home(){
   '<div class="v2-section-heading"><div><h2>'+ (upcoming.length?'直近の予想':'直近レースの状況')+'</h2><p>正式と暫定を混ぜず、表示順だけを整理</p></div>'+
   '<button type="button" class="v2-text-action" data-tab="forecasts">予想一覧を見る →</button></div>'+
   (recent.length?'<div class="v2-alert is-neutral">締切後10分以内の保存済み予想：'+recent.length+'R。締切済み・新規投票不可。買い目は固定時のままです。</div>':'')+
-  '<div class="v2-grid">'+(priority.length?priority.map(raceCard).join(''):
+  '<div class="v2-grid">'+(priority.length?priority.map(raceCard).join(''):recent.length?'': 
     '<div class="v2-empty"><strong>現在、これから締切を迎えるレースはありません。</strong>保存済みの予想は「予想」タブで全レースを確認できます。'+
     '<div class="v2-cta-row"><button class="v2-detail-btn" data-tab="forecasts" data-show-all="true">全レースの記録</button></div></div>')+'</div>'+
   (recent.length?'<section class="v2-recent-section" aria-label="締切後10分の固定予想">'+

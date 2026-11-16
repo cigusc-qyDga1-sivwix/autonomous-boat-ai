@@ -70,3 +70,53 @@ def test_live_capture_writer_only_writes_weather_research(tmp_path):
     assert (tmp_path/"weather-research"/"latest.json").exists()
     assert (tmp_path/"weather-research"/f"{DAY}.json").exists()
     assert not (tmp_path/"live").exists()
+
+def test_frozen_preview_wind_is_fallback_not_fake_live_observation(tmp_path):
+    from datetime import date
+    from scripts.collect_site_weather_research import frozen_preview_fallback
+    d=date.fromisoformat(DAY)
+    live={
+        "mode":"auto-live","event_date":DAY,
+        "forecast_races":[{
+            "venue":"徳山","race":1,"phase":"exhibition","ticket_status":"formal",
+            "cutoff_jst":"10:00","frozen_at_utc":"2026-11-16T00:50:00+00:00",
+            "sha256":"a"*64,
+            "weather_used":{"site_observed":True,"wind_source":"boatrace_preview",
+                            "wind_speed":5,"wind_direction_number":4,"wave_height":3}
+        }],
+    }
+    initial=deepcopy(live)
+    records=frozen_preview_fallback(live,d)
+    one=records[f"{DAY}|徳山|1"]
+    assert one["source"]=="boatrace_preview_frozen_snapshot"
+    assert one["wind_speed_mps"]==5
+    assert one["wind_direction_raw"]=="4"
+    assert one["observed_at_jst"] is None
+    assert one["source_acquired_before_cutoff"] is False
+    assert one["source_value_frozen_before_cutoff"] is True
+    assert one["original_observation_clock_verified"] is False
+    assert live==initial
+    livefile=tmp_path/"latest.json"
+    livefile.write_text(__import__("json").dumps(live,ensure_ascii=False),encoding="utf-8")
+    def not_found(day):
+        return "",URL,"source_404"
+    result=run(out_dir=tmp_path/"evidence",now=NOW,downloader=not_found,frozen_path=livefile)
+    assert result["provider_status"]=="source_404"
+    assert result["saved_races"]==1
+    assert result["direct_sui_provenance_count"]==0
+    assert result["frozen_preview_only_count"]==1
+
+
+def test_timed_source_upgrades_non_timed_fallback_preserving_provenance():
+    from datetime import date
+    day=date.fromisoformat(DAY)
+    base,_=parse(csv_fixture(row()),day,NOW,source_url=URL)
+    x=next(iter(base.values()))
+    previous={**x,"source":"boatrace_preview_frozen_snapshot","evidence_sha256":"a"*64}
+    d=merge_document({next(iter(base)):previous},{},day,NOW,source_url=URL)
+    merged=merge_document(base,d,day,NOW,source_url=URL)
+    key=f"{DAY}|徳山|1"
+    assert merged["records"][key]["source"]=="boatracecsv_previews_sui"
+    assert merged["records"][key]["supersedes_research_sha256"]=="a"*64
+    assert not merged["conflicts_this_check"]
+

@@ -11,6 +11,8 @@ on:
       - 'app/data/statistical/third-place-pilot-latest.json'
       - 'scripts/conditional_second_primary.py'
       - 'scripts/weather_live_bridge.py'
+      - 'scripts/collect_site_weather_research.py'
+      - 'tests/test_collect_site_weather_research.py'
       - 'scripts/venue_weather.py'
       - 'weather_lab/monitor.py'
       - 'weather_lab/regional_jma.py'
@@ -348,6 +350,11 @@ jobs:
             if git diff --cached --quiet; then break; fi
             git commit -m 'research: revalidate conditional-second shadow after rebase'
           done
+      - name: Capture independent on-site wind/wave observation evidence (never used by formal model)
+        continue-on-error: true
+        run: |
+          python -m scripts.collect_site_weather_research
+          python -m json.tool app/data/weather-research/latest.json > /dev/null
       - name: Run slower retrospective research after shadow publication
         continue-on-error: true
         run: |
@@ -399,7 +406,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git add app/data/experiments/ app/data/exhibition/ app/data/statistical/prospective-audit.json
+          git add app/data/experiments/ app/data/exhibition/ app/data/statistical/prospective-audit.json app/data/weather-research/
           if ! git diff --cached --quiet; then
             git commit -m 'research: publish separate post-forecast trial evidence'
             for attempt in 1 2 3; do
@@ -416,6 +423,7 @@ jobs:
               git fetch origin main
               git reset --hard origin/main
               python scripts/ingest_boatracecsv_exhibition.py
+              python -m scripts.collect_site_weather_research || echo '::warning::On-site weather research unavailable'
               python scripts/research_outside_roles.py
               python -m scripts.research_coupling_patterns
               python -m scripts.research_wake_hypotheses

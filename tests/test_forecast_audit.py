@@ -251,3 +251,16 @@ def test_venue_breakpoint_tracks_first_confirmed_snapshot_by_actual_freeze():
     assert first["snapshot_sha256"] == "earlier"
     assert results["by_venue"]["三国"]["formal_frozen_counts"]["after_v02_verified"] == 2
     assert results["by_venue"]["三国"]["official_verified_formal"]["after_v02_verified"]["verified_races"] == 0
+
+def test_audit_emits_independent_venue_weather_research_without_modifying_input():
+    dataset=make_example()
+    source=deepcopy(dataset)
+    doc=analyze(dataset)
+    weather=doc["venue_weather_learning"]
+    assert weather["schema"]=="boatlabs.venue-weather-observational.v1"
+    assert weather["research_only"] is True
+    assert weather["formal_forecasts_modified"] is False
+    assert weather["venue_count"]==23
+    # Legacy baseline samples do not enter the formally exhibition-frozen cohort.
+    assert weather["official_verified_formal"]["n"]==0
+    assert dataset==source

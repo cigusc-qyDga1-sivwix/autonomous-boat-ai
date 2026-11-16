@@ -99,6 +99,16 @@ assert.match(js,/dailyLearning\(\)\+/);
 assert.match(css,/\.v2-learning\{/);
 assert.match(js,/head_focus_learning/);
 assert.match(js,/研究・未採用/);
+assert.match(js,/function venueWeatherLearning\(\)/);
+assert.match(js,/venueWeatherLearning\(\)\+/);
+assert.match(js,/id="weather-venue-filter"/);
+assert.match(js,/state.weatherVenue=e.target.value;render\(\)/);
+assert.match(js,/venue_weather_learning/);
+assert.match(js,/site_wave_time_verified/);
+assert.match(css,/\.v2-weather-study\{/);
+assert.match(css,/\.v2-weather-select select\{min-height:44px/);
+assert.match(html,/20261116-venue-weather-v1/);
+
 assert.match(js,/phase==='shadow'\?'shadow':'pending'/);
 const homeSource=js.slice(js.indexOf('function home(){'),js.indexOf('function filterRaces(){'));
 assert.ok(homeSource.indexOf('v2-section-heading')<homeSource.indexOf('v2-metrics'),'homepage displays near-term races before metrics');

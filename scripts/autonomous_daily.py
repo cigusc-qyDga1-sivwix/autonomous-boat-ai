@@ -296,6 +296,107 @@ def numeric_exhibition_matches_snapshot(candidate: dict, snapshot: dict) -> bool
     return True
 
 
+def exhibition_similarity_audit(records: dict, latest_races: list[dict]) -> dict:
+    """Compare ACTUAL frozen same-model pre/post-exhibition tickets, no results.
+
+    Do not confuse a newer model revision with exhibition sensitivity. Only
+    eligible formal latest snapshots and prior immutable baseline snapshots
+    are considered. An unchanged ticket is a legitimate observation, not a
+    failure assertion; feature-availability is reported separately.
+    """
+    current = {(r.get("venue"), r.get("race")): r for r in latest_races}
+    counts = {
+        "formal_exhibition_races": 0, "matched_six_boat_exhibition": 0,
+        "with_baseline_snapshot": 0, "same_model_baseline_pairs": 0,
+        "different_model_baseline_pairs": 0,
+        "same_model_identical_tickets_and_stakes": 0,
+        "same_model_different_tickets_or_stakes": 0,
+        "same_model_identical_first_ticket": 0,
+        "same_model_identical_first_head": 0,
+        "same_model_learned_pairs": 0,
+        "same_model_learned_identical_tickets": 0,
+        "six_boat_turn_metric_available": 0,
+        "six_boat_lap_metric_available": 0,
+        "six_boat_straight_metric_available": 0,
+    }
+    examples = []
+    def signature(rows):
+        if not isinstance(rows, list) or not rows:
+            return None
+        if any(not isinstance(x, dict) or not isinstance(x.get("combination"), str)
+               or type(x.get("virtual_yen")) is not int for x in rows):
+            return None
+        return sorted((x["combination"], x["virtual_yen"]) for x in rows)
+
+    for record in records.values():
+        r = current.get((record.get("venue"), record.get("race")))
+        if not r or r.get("phase") != "exhibition" or r.get("ticket_status") != "formal":
+            continue
+        counts["formal_exhibition_races"] += 1
+        check = r.get("exhibition_input_check") or {}
+        if check.get("verified_before_freeze") is True and check.get("six_boats_matched") == 6:
+            counts["matched_six_boat_exhibition"] += 1
+        available = check.get("original_metrics_matched") or []
+        for metric, counter in (("turn_time", "six_boat_turn_metric_available"),
+                                ("lap_time", "six_boat_lap_metric_available"),
+                                ("straight_time", "six_boat_straight_metric_available")):
+            if metric in available:
+                counts[counter] += 1
+        baseline = [v for v in (record.get("versions") or [])
+                    if v.get("phase") == "baseline"]
+        if not baseline:
+            continue
+        old = baseline[-1]
+        counts["with_baseline_snapshot"] += 1
+        if old.get("model_version") != r.get("model_version"):
+            counts["different_model_baseline_pairs"] += 1
+            continue
+        if r.get("model_version") == LEARNED_MAIN_MODEL:
+            old_sha = (old.get("learned_formal") or {}).get("model_sha256")
+            new_sha = (r.get("learned_formal") or {}).get("model_sha256")
+            if not old_sha or not new_sha or old_sha != new_sha:
+                counts["different_model_baseline_pairs"] += 1
+                continue
+        old_signature, new_signature = signature(old.get("bets")), signature(r.get("bets"))
+        if old_signature is None or new_signature is None:
+            continue
+        counts["same_model_baseline_pairs"] += 1
+        identical = old_signature == new_signature
+        counts["same_model_identical_tickets_and_stakes" if identical else
+               "same_model_different_tickets_or_stakes"] += 1
+        old_top = old["bets"][0]["combination"]
+        new_top = r["bets"][0]["combination"]
+        counts["same_model_identical_first_ticket"] += int(old_top == new_top)
+        counts["same_model_identical_first_head"] += int(old_top[0] == new_top[0])
+        if r.get("model_version") == LEARNED_MAIN_MODEL:
+            counts["same_model_learned_pairs"] += 1
+            counts["same_model_learned_identical_tickets"] += int(identical)
+        if len(examples) < 8:
+            examples.append({"venue": r["venue"], "race": r["race"],
+                             "baseline_top": old_top, "exhibition_top": new_top,
+                             "tickets_and_stakes_changed": not identical,
+                             "head_changed": old_top[0] != new_top[0],
+                             "model_version": r["model_version"]})
+    n = counts["same_model_baseline_pairs"]
+    return {
+        "schema": "boatlabs.exhibition_similarity_audit.v1",
+        **counts,
+        "same_model_unchanged_ticket_share": (
+            round(counts["same_model_identical_tickets_and_stakes"] / n, 5) if n else None
+        ),
+        "same_model_same_first_head_share": (
+            round(counts["same_model_identical_first_head"] / n, 5) if n else None
+        ),
+        "learned_primary_uses_original_turn_lap_straight_features": False,
+        "learned_primary_feature_contract": "conditional-choice-v1 excludes original_exhibition",
+        "sampled_frozen_pairs": examples,
+        "note": ("Identical tickets may be valid. Pre/post differences combine all "
+                 "changed before-race inputs, not just exhibition. "
+                 "The learned primary currently uses exhibition_time and exhibition_st, "
+                 "not original turn/lap/straight metrics. No postrace data used."),
+    }
+
+
 def numeric_exhibition_coverage(records: dict, day: str) -> dict:
     """Read-only per-venue outcome audit, never a new prediction or eligibility override."""
     grouped = {}
@@ -2164,9 +2265,11 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
             official_results[f"{local_day}|{record['venue']}|{record['race']}"] = dict(p)
     latest_races.sort(key=lambda r: (r["cutoff_jst"], r["venue"], r["race"]))
     coverage = numeric_exhibition_coverage(records, local_day)
+    similarity = exhibition_similarity_audit(records, latest_races)
     out = {
         "event_date": local_day,
         "numeric_exhibition_coverage": coverage,
+        "exhibition_similarity_audit": similarity,
         "mode": "auto-live",
         "updated_at_utc": ledger["last_updated_at_utc"],
         "forecast_updated_at_utc": ledger["last_updated_at_utc"],
@@ -2773,6 +2876,7 @@ def main():
         "completed_at_utc": (now if args.input_json else datetime.now(UTC)).astimezone(UTC).isoformat(),
         "listed_races": summary["listed_races"], "forecast_races": summary["forecast_races"],
         "final_exhibition_verified_races": webapp["final_exhibition_verified_races"],
+        "exhibition_similarity_audit": webapp["exhibition_similarity_audit"],
     })
     print(json.dumps(summary, ensure_ascii=False))
 

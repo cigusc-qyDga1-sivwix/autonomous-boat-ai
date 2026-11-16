@@ -46,6 +46,7 @@ if __package__:
     from .conditional_one_mark_v26 import rescore as rescore_conditional_v26
     from .learned_formal import load_model as load_learned_model, apply as apply_learned_primary, VERSION as LEARNED_MAIN_MODEL
     from .learned_conditional_shadow import build as build_learned_conditional_shadow
+    from .learned_exhibition_ablation import build as build_learned_exhibition_ablation
 else:
     from racer_context import collect as collect_racer_context, validated as validate_racer_context
     from official_pay import fetch_official_pay
@@ -72,6 +73,7 @@ else:
     from conditional_one_mark_v26 import rescore as rescore_conditional_v26
     from learned_formal import load_model as load_learned_model, apply as apply_learned_primary, VERSION as LEARNED_MAIN_MODEL
     from learned_conditional_shadow import build as build_learned_conditional_shadow
+    from learned_exhibition_ablation import build as build_learned_exhibition_ablation
 
 JST = ZoneInfo("Asia/Tokyo")
 UTC = timezone.utc
@@ -314,6 +316,9 @@ def exhibition_similarity_audit(records: dict, latest_races: list[dict]) -> dict
         "same_model_identical_first_ticket": 0,
         "same_model_identical_first_head": 0,
         "same_model_learned_pairs": 0,
+        "same_time_learned_ablation_frozen": 0,
+        "same_time_learned_ablation_ticket_changes": 0,
+        "same_time_learned_ablation_first_head_changes": 0,
         "same_model_learned_identical_tickets": 0,
         "six_boat_turn_metric_available": 0,
         "six_boat_lap_metric_available": 0,
@@ -333,6 +338,17 @@ def exhibition_similarity_audit(records: dict, latest_races: list[dict]) -> dict
         if not r or r.get("phase") != "exhibition" or r.get("ticket_status") != "formal":
             continue
         counts["formal_exhibition_races"] += 1
+        ablation = r.get("learned_exhibition_ablation") or {}
+        if (ablation.get("model_role") == "research_shadow"
+                and ablation.get("same_model_same_time") is True
+                and ablation.get("formal_tickets_changed") is False
+                and ablation.get("model_sha256") == (
+                    (r.get("learned_formal") or {}).get("model_sha256"))):
+            counts["same_time_learned_ablation_frozen"] += 1
+            counts["same_time_learned_ablation_ticket_changes"] += int(
+                ablation.get("actual_ticket_or_stake_changed") is True)
+            counts["same_time_learned_ablation_first_head_changes"] += int(
+                ablation.get("first_head_changed") is True)
         check = r.get("exhibition_input_check") or {}
         if check.get("verified_before_freeze") is True and check.get("six_boats_matched") == 6:
             counts["matched_six_boat_exhibition"] += 1
@@ -2062,6 +2078,12 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                                 new, ACTIVE_LEARNED_MODEL)
                         except (ValueError, KeyError, TypeError, OverflowError):
                             pass
+                    if new.get("model_version") == LEARNED_MAIN_MODEL and ACTIVE_LEARNED_MODEL is not None:
+                        try:
+                            new["learned_exhibition_ablation"] = build_learned_exhibition_ablation(
+                                new, ACTIVE_LEARNED_MODEL)
+                        except (ValueError, KeyError, TypeError, OverflowError):
+                            pass  # Research-only; preserve the checked main snapshot.
                     new["sha256"] = stable_hash({k: v for k, v in new.items() if k != "sha256"})
                     before = record["versions"][-1] if record["versions"] else None
                     if before:
@@ -2164,6 +2186,14 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                                 upgrade, ACTIVE_LEARNED_MODEL)
                         except (ValueError, KeyError, TypeError, OverflowError):
                             pass
+                    if (upgrade.get("model_version") == LEARNED_MAIN_MODEL
+                            and phase_to_promote == "exhibition"
+                            and ACTIVE_LEARNED_MODEL is not None):
+                        try:
+                            upgrade["learned_exhibition_ablation"] = build_learned_exhibition_ablation(
+                                upgrade, ACTIVE_LEARNED_MODEL)
+                        except (ValueError, KeyError, TypeError, OverflowError):
+                            pass
                     # Unique immutable record, not a rewrite of earlier SHA.
                     upgrade["model_upgrade"] = {
                         "previous_sha256": latest_before["sha256"],
@@ -2240,7 +2270,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "attack_defence_shadow", "grade_context", "grade_competition_shadow", "strong_field_diagnostic",
                       "coverage_reselection_shadow", "hidden_path_shadow",
                       "exhibition_input_check", "relative_scores_uncalibrated", "learned_formal", "third_place_pilot",
-                      "inside_survival_research", "learned_conditional_shadow"):
+                      "inside_survival_research", "learned_conditional_shadow",
+                      "learned_exhibition_ablation"):
             if extra in current:
                 r[extra] = current[extra]
         r["version_count"] = len(versions)

@@ -15,6 +15,9 @@ RAW_ROOT = "https://raw.githubusercontent.com/BoatraceCSV/boatracecsv.github.io/
 SOURCES = {"stt":"previews/stt","tkz":"previews/tkz","sui":"previews/sui",
            "original":"previews/original_exhibition","result":"results/realtime",
            "payout":"results/payouts"}
+# Per-process, per-source status cache. Keep fetch(name, day) signature
+# compatible with older importers/tests; each worker writes one distinct key.
+FETCH_HEALTH = {}
 VENUES = ["桐生","戸田","江戸川","平和島","多摩川","浜名湖","蒲郡","常滑","津","三国",
           "びわこ","住之江","尼崎","鳴門","丸亀","児島","宮島","徳山","下関","若松",
           "芦屋","福岡","唐津","大村"]
@@ -22,7 +25,7 @@ VENUES = ["桐生","戸田","江戸川","平和島","多摩川","浜名湖","蒲
 def url(name, day, root=ROOT):
     return f"{root}{SOURCES[name]}/{day:%Y/%m/%d}.csv"
 
-def fetch(name, day):
+def fetch(name, day, *, with_diagnostics=False):
     """Prefer the upstream GitHub file, then try its possibly lagging Pages CDN.
 
     Each attempt is a real HTTP fetch at run time. A CSV timestamp alone never
@@ -38,12 +41,22 @@ def fetch(name, day):
                 rows = list(csv.DictReader(io.StringIO(response.read().decode("utf-8-sig"))))
             if rows:
                 print(f"[research] {name}: {len(rows)} rows from {label}")
+                status = {"source": label, "rows": len(rows),
+                          "attempts": failures, "status": "AVAILABLE"}
+                FETCH_HEALTH[name] = status
+                if with_diagnostics:
+                    return rows, status
                 return rows
             failures.append(f"{label}:empty")
         except (HTTPError, URLError, TimeoutError, UnicodeError) as exc:
             detail = f"HTTP {exc.code}" if isinstance(exc, HTTPError) else type(exc).__name__
             failures.append(f"{label}:{detail}")
     print(f"[research] {name}: unavailable ({', '.join(failures)})")
+    status = {"source": None, "rows": 0,
+              "attempts": failures, "status": "SOURCE_UNAVAILABLE"}
+    FETCH_HEALTH[name] = status
+    if with_diagnostics:
+        return [], status
     return []
 
 def numeric(value):
@@ -259,9 +272,20 @@ def main():
     prior=json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
     # Independent public CSVs: bound concurrency and keep each request timeout.
     names=[name for name in SOURCES if not args.previews_only or name not in ("result","payout")]
+    FETCH_HEALTH.clear()
     with ThreadPoolExecutor(max_workers=len(names)) as pool:
         sources={name:[] for name in SOURCES}
+        # Keep the existing 2-argument fetch() call: mocks and external
+        # importers rely on it. The real fetch records source diagnostics.
         sources.update(zip(names, pool.map(lambda name: fetch(name,day), names)))
+        health={name: FETCH_HEALTH.get(name, {
+            "source": None, "rows": len(sources.get(name) or []),
+            "attempts": [], "status": "NOT_DIAGNOSED",
+        }) for name in names}
+        for name in SOURCES:
+            if name not in health:
+                health[name]={"source": None, "rows": 0, "attempts": [],
+                              "status": "NOT_FETCHED_PREVIEWS_ONLY"}
     has_essential=all(sources[k] for k in ("stt","tkz"))
     # Weather (sui) is optional: a missing weather feed must not suppress
     # otherwise complete six-boat exhibition readings.
@@ -286,6 +310,7 @@ def main():
         "complete_sources":has_essential,
         "weather_source_available":bool(sources["sui"]),
         "fetch_counts":{k:len(rows) for k,rows in sources.items()},
+        "fetch_health":health,
         "rejected_rows":current.get("rejected_rows",{}),
         "research_races":len(records),
         "research_venues":len({r.get("venue_code") for r in records}),

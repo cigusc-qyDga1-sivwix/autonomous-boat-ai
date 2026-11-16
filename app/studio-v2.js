@@ -106,19 +106,17 @@ function pickRows(r,limit=3){
 }
 function phaseChip(r){
  const phase=racePhase(r,state.data,ticketPolicy);
- return '<span class="v2-chip '+(phase==='formal'?'formal':'pending')+'">'+escapeHTML(labelFor(r))+'</span>';
+ return '<span class="v2-chip '+(phase==='formal'?'formal':phase==='shadow'?'shadow':'pending')+'">'+escapeHTML(labelFor(r))+'</span>';
 }
 function raceCard(r){
  const phase=racePhase(r,state.data,ticketPolicy),time=timeState(r),closed=time.startsWith('closed');
  const stake=sumBets(r),id=state.data.forecast_races.indexOf(r);
  const timeText=time==='archive'?'過去の固定記録':time==='urgent'?'締切間近':closed?'締切済み（保存記録）':'締切予定';
  const label=(r.classification==='BUY'?'BUY分類':r.classification==='SKIP'?'SKIP分類':'WATCH分類');
- const scenario=typeof r.scenario==='string'&&r.scenario.trim()?'<div class="v2-subtle">展開仮説：'+escapeHTML(r.scenario.slice(0,90))+'</div>':'';
- return '<article class="v2-race is-'+(phase==='formal'?'formal':'pending')+(closed?' is-closed':'')+'">'+
+ return '<article class="v2-race is-'+(phase==='formal'?'formal':'pending')+(closed?' is-closed':'')+(time==='urgent'?' is-urgent':'')+'">'+
    '<div class="v2-race-head"><div><h3 class="v2-race-name">'+escapeHTML(r.venue)+' '+r.race+'R</h3>'+
-   '<p class="v2-race-meta">'+timeText+' <b>'+escapeHTML(r.cutoff_jst)+'</b> JST · '+label+'</p></div>'+phaseChip(r)+'</div>'+
+   '<div class="v2-race-deadline"><span>締切</span><strong>'+escapeHTML(r.cutoff_jst)+'</strong><span class="v2-time-status">'+timeText+'</span></div>'+'<p class="v2-race-meta">'+label+' · JST</p></div>'+phaseChip(r)+'</div>'+
    '<div class="v2-picks">'+pickRows(r)+'</div>'+
-   scenario+
    '<div class="v2-race-foot"><small>上位'+Math.min(r.bets.length,3)+'点 / 全'+r.bets.length+'点・仮想'+money(stake)+'</small>'+
    '<button type="button" class="v2-detail-btn" data-open-race="'+id+'" aria-label="'+escapeHTML(r.venue+' '+r.race+'Rの全買い目を表示')+'">全買い目</button></div></article>';
 }
@@ -156,17 +154,17 @@ function home(){
   '<span class="v2-updated">データ更新 '+escapeHTML(jstStamp(data.updated_at_utc))+'</span></div>'+
   '<h2>'+escapeHTML(displayDate())+' のレース状況</h2><p>展示反映済み・暫定・公式結果を分離。仮想配分であり自動購入はありません。</p></section>'+
   freshAlert()+
-  '<div class="v2-metrics">'+
-  metric('固定予想',rs.length+'R','読み取り専用')+
-  metric('展示反映・正式',formals.length+'R','6艇の展示照合＋締切前固定','primary')+
-  metric('次の締切',current?due:'—',current?upcoming.length+'R 受付前の予想':'過去の日付')+
-  metric('公式照合',official?official.verified_races+'R':'—','正式予想のうち公式照合済み')+'</div>'+
   '<div class="v2-section-heading"><div><h2>'+ (upcoming.length?'直近の予想':'直近レースの状況')+'</h2><p>正式と暫定を混ぜず、表示順だけを整理</p></div>'+
   '<button type="button" class="v2-text-action" data-tab="forecasts">予想一覧を見る →</button></div>'+
   (recent.length?'<div class="v2-alert is-neutral">締切後10分の保存済み予想：'+recent.length+'R。新規投票不可・買い目は変更しません。</div>':'')+
   '<div class="v2-grid">'+(priority.length?priority.map(raceCard).join(''):
     '<div class="v2-empty"><strong>現在、これから締切を迎えるレースはありません。</strong>保存済みの予想は「予想」タブで全レースを確認できます。'+
     '<div class="v2-cta-row"><button class="v2-detail-btn" data-tab="forecasts" data-show-all="true">全レースの記録</button></div></div>')+'</div>'+
+  '<div class="v2-metrics">'+
+  metric('固定予想',rs.length+'R','読み取り専用')+
+  metric('展示反映・正式',formals.length+'R','6艇の展示照合＋締切前固定','primary')+
+  metric('次の締切',current?due:'—',current?upcoming.length+'R 受付前の予想':'過去の日付')+
+  metric('公式照合',official?official.verified_races+'R':'—','正式予想のうち公式照合済み')+'</div>'+
   '<div class="v2-evidence">正式予想＝保存された発走前の展示入力を6艇照合し、締切前に固定した記録。<b>BUY分類・採算判定とは別</b>です。'+
   '発走後の結果は新しい予想の計算には使いません。詳細は必ず最新の展示・締切を確認してください。</div>';
 }

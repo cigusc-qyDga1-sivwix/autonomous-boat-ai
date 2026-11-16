@@ -1,0 +1,346 @@
+/*
+ * BOAT LAB — High-Contrast Recovery / 2026-11-16.
+ *
+ * Readability takes priority over decorative themes. This stylesheet is loaded
+ * LAST and uses explicit matched foreground/background pairs. It is safe if an
+ * old PWA caches an earlier base stylesheet. No forecast or result data change.
+ *
+ * iPhone status-bar / topbar remain navy, but the WORKSPACE is LIGHT.
+ * Status colors (verified exhibition, provisional, hit, miss, urgent) are
+ * preserved and never used as proof that a missing source became available.
+ */
+:root {
+  color-scheme: light;
+  --bl-safe-canvas: #f0f5f9;
+  --bl-safe-paper: #ffffff;
+  --bl-safe-ink: #142e42;
+  --bl-safe-muted: #435e71;
+  --bl-safe-line: #c8d9e2;
+  --bl-safe-mint: #087966;
+  --bl-safe-amber: #855410;
+}
+body {
+  background: #f0f5f9 !important;
+  color: #142e42 !important;
+}
+.shell,.workspace {
+  background: #f0f5f9 !important;
+}
+.main {
+  color: #142e42 !important;
+  background: #f0f5f9;
+}
+.main .page-heading h1,
+.main .venue-board-head h2,
+.main .section-title,
+.main .section-head > .section-title {
+  color: #142e42 !important;
+}
+.main .page-heading p,
+.main .venue-board-head p,
+.main .venue-sort-label,
+.main .venue-legend,
+.main .venue-disclaimer,
+.main .venue-race-legend,
+.main .race-card-colour-guide,
+.main .bl-focus-note {
+  color: #435e71 !important;
+}
+.main .page-eyebrow {color:#087966 !important}
+.main :is(.card,.feature-card,.boat-ability-card,.detail-total,.tablewrap) {
+  color: #142e42;
+}
+.main .loading,.main .loading p {color:#294b60 !important}
+
+/* Global chrome: never let a content-card rule change status-bar contrast. */
+.topbar,.topbar .mobile-brand,.topbar .breadcrumb,.topbar .breadcrumb strong {
+  color: #f2fbff !important;
+}
+.topbar {
+  background: #081b33 !important;
+  border-bottom: 1px solid #345367;
+}
+.topbar .live-mark {color:#b3eadf !important}
+.topbar .icon-button,.topbar .quick-links-menu summary {
+  background: #193c54 !important;
+  border-color: #467388 !important;
+  color: #f0ffff !important;
+}
+.topbar .avatar {color:#f5ffff;background:#24516c}
+.quick-links-panel {
+  background: #ffffff !important;
+  color: #15364a !important;
+}
+.quick-links-panel a {color:#096d70 !important}
+.bottom-nav {
+  background: rgba(255,255,255,.98) !important;
+  border-top: 1px solid #bbd1dd !important;
+  color: #1a4055 !important;
+}
+.bottom-nav button {
+  background: transparent !important;
+  color: #31556a !important;
+}
+.bottom-nav button.active {
+  background: #ddf8ef !important;
+  color: #075f55 !important;
+  box-shadow: inset 0 0 0 1px #8ed8c7;
+}
+.bottom-nav button.active span {color:#075f55 !important}
+
+/* The home hero and every venue card become a light, legible surface. */
+.main .venue-hero,
+.main .venue-detail-hero {
+  background: linear-gradient(145deg,#ffffff,#eaf5fa) !important;
+  border: 1px solid #bcd5e1 !important;
+  color: #142e42 !important;
+  box-shadow: 0 9px 24px rgba(15,55,77,.08);
+}
+.main .venue-hero h1,
+.main .venue-detail-hero h1,
+.main .venue-hero h1 span {
+  color: #0d3549 !important;
+}
+.main .venue-hero-overline {color:#087966 !important}
+.main .venue-hero>p,.main .venue-hero p,
+.main .venue-detail-hero p {color:#385e73 !important}
+.main .venue-hero-stats>span {
+  background: #f3f9fb !important;
+  border: 1px solid #c5dee6 !important;
+  color: #36566b !important;
+}
+.main .venue-hero-stats strong {color:#163c52 !important}
+.main .venue-detail-symbol {background:#dbeff1;color:#11616a}
+.main .venue-card,
+.main .venue-card.venue-theme-morning,
+.main .venue-card.venue-theme-day,
+.main .venue-card.venue-theme-night {
+  background: #ffffff !important;
+  border: 1px solid #c7d9e4 !important;
+  color: #17394d !important;
+  box-shadow: 0 6px 17px rgba(10,43,62,.07);
+}
+.main .venue-card .venue-name,
+.main .venue-card.venue-theme-night .venue-name {
+  color: #153b50 !important;
+}
+.main .venue-card .venue-meta,
+.main .venue-card .venue-cutoff-caption,
+.main .venue-card .venue-progress,
+.main .venue-card .venue-card-weather,
+.main .venue-theme-night .venue-meta,
+.main .venue-theme-night .venue-cutoff-caption,
+.main .venue-theme-night .venue-progress,
+.main .venue-theme-night .venue-card-weather {
+  color: #47667a !important;
+}
+.main .venue-card .venue-next,
+.main .venue-theme-night .venue-next {
+  background: #edf6f9 !important;
+  border: 1px solid #c4dee4 !important;
+  color: #123e55 !important;
+}
+.main .venue-next span,.main .venue-next strong {
+  color: #123e55 !important;
+}
+.main .venue-inactive {
+  background: #e8eef2 !important;
+  opacity: .88;
+}
+.main .venue-inactive .venue-name,
+.main .venue-inactive .venue-next strong,
+.main .venue-inactive .venue-next span {color:#586c7b !important}
+.main .venue-filter:not(.active) {
+  background: #ffffff !important;
+  color: #28495e !important;
+  border-color: #bacfdc !important;
+}
+.main .venue-filter.active {
+  background: #087966 !important;
+  border-color: #087966 !important;
+  color: #ffffff !important;
+}
+.main .venue-back {color:#075c74 !important}
+.main .venue-race {background:#ffffff;color:#18374e}
+.main .venue-race .venue-race-top b,
+.main .venue-race .venue-race-main {color:#193d55}
+.main .venue-race .venue-race-cutoff strong {color:#115b6a}
+
+/* The near-cutoff ticket board must not inherit white text on white cards. */
+.main .bl-focus-board {
+  background: #ffffff !important;
+  border: 1px solid #aecfda !important;
+  color: #142e42 !important;
+  box-shadow: 0 10px 25px rgba(10,45,65,.09);
+}
+.main .bl-focus-heading h2 {color:#123b50 !important}
+.main .bl-focus-heading p,
+.main .bl-focus-updated,
+.main .bl-focus-guard,
+.main .bl-focus-overflow {color:#47677a !important}
+.main .bl-focus-updated strong {color:#143d54 !important}
+.main .bl-focus-eyebrow {color:#087966 !important}
+.main .bl-focus-metrics>span {
+  background: #f2f8fb !important;
+  border: 1px solid #c8dfe8 !important;
+  color: #31576d !important;
+}
+.main .bl-focus-metrics strong {color:#173b52 !important}
+.main .bl-focus-switch button {
+  background: #edf4f8 !important;
+  border: 1px solid #bbd5de !important;
+  color: #244e61 !important;
+}
+.main .bl-focus-switch button.active {
+  background: #087966 !important;
+  border-color: #087966 !important;
+  color: #ffffff !important;
+}
+.main .bl-focus-card,
+.main .bl-focus-card.is-pending {
+  background: #ffffff !important;
+  color: #183a4f !important;
+  border-color: #b9d4dd !important;
+}
+.main .bl-focus-card.is-pending {
+  border-left: 4px solid #dda449 !important;
+  background: #fffaf0 !important;
+}
+.main .bl-focus-card-head>div>strong,
+.main .bl-focus-card-head>div>strong span {color:#163b51 !important}
+.main .bl-focus-card-head small,
+.main .bl-focus-card-bottom>span,
+.main .bl-focus-note,
+.main .bl-focus-scenario {color:#426276 !important}
+.main .bl-focus-ticket {background:#f0f6f9;color:#173b50}
+.main .bl-focus-ticket:first-child {
+  background:#e8faf4;
+  box-shadow:inset 4px 0 0 #078772;
+}
+.main .bl-focus-amount {color:#0e5367 !important}
+.main .bl-focus-card-bottom button {
+  background: #0a6676 !important;
+  color: #ffffff !important;
+}
+.main .bl-focus-status {background:#def6e9;color:#075c46;border-color:#94d1b4}
+.main .bl-focus-status.is-pending {background:#fff1d4;color:#80500f;border-color:#e6c184}
+.main .bl-focus-urgent {
+  background:#fff5de !important;
+  border:2px solid #d69a40 !important;
+  color:#3e3c31 !important;
+}
+.main .bl-focus-urgent h3,
+.main .bl-focus-urgent h3 span {color:#60400c !important}
+.main .bl-focus-urgent>p {color:#674b21 !important}
+.main .bl-focus-empty {
+  background:#f0f6fa !important;
+  border-color:#bad2e1 !important;
+  color:#284d62 !important;
+}
+.main .bl-focus-delay {color:#76470e;background:#fff1d5}
+/* Racing lane colors: preserve white numerals on dark colored 2/3/4/6. */
+.main .bl-focus-lane.lane-2,
+.main .bl-focus-lane.lane-3,
+.main .bl-focus-lane.lane-4,
+.main .bl-focus-lane.lane-6 {color:#ffffff !important}
+.main .bl-focus-lane.lane-1,
+.main .bl-focus-lane.lane-5 {color:#142e42 !important}
+
+/* Operational status blocks and chronological race list. */
+.main .bl-race-desk,
+.main .race-timeline {
+  background: #ffffff !important;
+  border: 1px solid #c0d8e3 !important;
+  color: #142e42 !important;
+  box-shadow: 0 8px 20px rgba(9,43,66,.08);
+}
+.main .bl-desk-topline h2,
+.main .timeline-heading h2,
+.main .race-timeline h3 {color:#173b52 !important}
+.main .bl-desk-topline h2 small,
+.main .bl-desk-eyebrow,
+.main .timeline-heading p,
+.main .timeline-note,
+.main .timeline-empty,
+.main .bl-desk-safety {color:#486a7c !important}
+.main .bl-desk-stat,
+.main .bl-desk-stat-hero {
+  background: #f2f9fa !important;
+  border-color: #c2dfe0 !important;
+  color: #143e4e !important;
+}
+.main .bl-desk-stat>span,
+.main .bl-desk-stat>strong,
+.main .bl-desk-stat-hero>span,
+.main .bl-desk-stat-hero strong small {color:#174c53 !important}
+.main .bl-desk-stat em {color:#4b6e7c !important}
+.main .bl-desk-progress {background:#c7e5dc}
+.main .bl-desk-progress span {background:#07856d}
+.main .bl-desk-next-race {
+  background: #f4f9fb !important;
+  border-color:#c0d8e4 !important;
+  color:#193d50 !important;
+}
+.main .bl-desk-time {color:#075873 !important}
+.main .bl-desk-next-label,
+.main .bl-desk-next-empty {color:#466a7c !important}
+.main .bl-desk-disclosure,
+.main .bl-timeline-disclosure {
+  background:#f5fafb !important;
+  border-color:#c1d9e3 !important;
+}
+.main .bl-desk-disclosure>summary,
+.main .bl-timeline-disclosure>summary {color:#1d536b !important}
+.main .timeline-clock strong {color:#165d78 !important}
+.main .timeline-race-main strong,
+.main .timeline-race-main strong span {color:#183d52 !important}
+.main .timeline-race-main small,.main .timeline-clock small {color:#4c6b7f !important}
+.main .timeline-race {
+  background:#ffffff !important;
+  color:#16374b !important;
+}
+.main .timeline-race.timeline-urgent {
+  background:#fff9eb !important;
+  border-color:#dba647 !important;
+}
+.main .timeline-race.timeline-urgent .timeline-clock strong {color:#865014 !important}
+.main .timeline-race[data-exhibition-status="formal"] {
+  background:#eafbf3 !important;
+  border-color:#23a68d !important;
+}
+.main .timeline-race[data-exhibition-status="formal"] .timeline-clock strong,
+.main .timeline-race[data-exhibition-status="formal"] .timeline-race-main strong {color:#07634f !important}
+.main .detail-header {
+  background:#f3fafd !important;
+  border-color:#c4dfe7 !important;
+  color:#173a51 !important;
+}
+.main .detail-header .detail-title {color:#143b53 !important}
+.main .detail-header .detail-sub {color:#456578 !important}
+.main .bets-table th {background:#edf4f8;color:#315a6b}
+.main .bets-table td {color:#1b3d54}
+.main .quick-results-v2,.main .quick-results-v2 .quick-results-race {
+  color:#18394e;
+}
+/* Readable default controls even with iOS's system-wide dark preference. */
+.main :is(input,select,textarea) {
+  background-color:#ffffff;
+  color:#18384e;
+  border-color:#b9d1dc;
+}
+.main :is(button,summary,a):focus-visible {
+  outline:3px solid #087966;
+  outline-offset:3px;
+}
+@media(max-width:810px) {
+  html {background-color:#081b33}
+  .topbar {
+    background:#081b33 !important;
+    color:#f2fbff !important;
+  }
+  .shell,.workspace {background:#f0f5f9 !important}
+  .bottom-nav {padding-bottom:calc(7px + env(safe-area-inset-bottom,0px))}
+}
+@media(prefers-reduced-motion:reduce) {
+  .venue-card,.bl-focus-switch button,.venue-filter {transition:none !important}
+}

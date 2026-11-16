@@ -1,0 +1,337 @@
+/*
+ * BOAT LAB — MIDNIGHT RACING / visual refinement, 2026-11-16.
+ * Presentation-only: race data, tickets, classification, SHA, settlement,
+ * source freshness and official/experimental boundaries stay unchanged.
+ * Last in cascade; white data surfaces remain readable on the dark canvas.
+ */
+:root {
+  --mr-abyss:#071320;
+  --mr-midnight:#0a1d30;
+  --mr-panel:#102a3e;
+  --mr-line:rgba(140,190,207,.22);
+  --mr-text:#effbff;
+  --mr-soft:#a7c2d0;
+  --mr-mint:#61ead2;
+  --mr-gold:#f0bc66;
+  --mr-elevation:0 18px 42px rgba(0,9,22,.25);
+}
+html {
+  background-color:#081b33;
+}
+body {
+  background:
+    radial-gradient(ellipse 75% 33% at 83% 1%,rgba(20,106,131,.19),transparent 75%),
+    radial-gradient(ellipse 85% 32% at 5% 27%,rgba(32,74,114,.16),transparent 76%),
+    linear-gradient(180deg,#071421 0%,#0b2032 53%,#071422 100%);
+  color:#eaf7fb;
+}
+.shell,.workspace {
+  background:transparent;
+}
+::selection {background:#145c66;color:#fff}
+.sidebar {
+  background:linear-gradient(185deg,#061523 0%,#0b2538 58%,#071625 100%);
+  border-right:1px solid var(--mr-line);
+  box-shadow:12px 0 42px rgba(0,0,0,.13);
+}
+.brand-symbol {
+  background:linear-gradient(135deg,#0a5968 0%,#093040 100%);
+  border:1px solid rgba(114,241,223,.35);
+  box-shadow:0 0 0 4px rgba(57,179,170,.065),0 9px 26px rgba(0,10,25,.27);
+}
+.brand strong span,.mobile-brand span:last-child {color:var(--mr-mint)}
+.nav-item {
+  border-radius:13px;
+  transition:background .18s ease,border-color .18s ease,color .18s ease;
+}
+.nav-item.active {
+  background:linear-gradient(108deg,rgba(40,110,127,.41),rgba(29,87,111,.16));
+  border:1px solid rgba(98,231,207,.28);
+  box-shadow:inset 3px 0 0 var(--mr-mint),0 8px 24px rgba(0,0,0,.16);
+}
+.nav-item:hover:not(.active) {background:#123348}
+.topbar {
+  background:linear-gradient(96deg,rgba(7,22,36,.98),rgba(10,38,53,.97));
+  color:var(--mr-text);
+  border-bottom:1px solid var(--mr-line);
+  box-shadow:0 7px 22px rgba(0,6,15,.19);
+}
+.breadcrumb,.breadcrumb strong {color:#d8eef5}
+.breadcrumb > span:first-child {color:#83abbc}
+.crumb-arrow {color:#5b90a4}
+.topbar .live-mark {color:#a4efdf}
+.topbar .live-mark .dot {background:var(--mr-mint);box-shadow:0 0 0 4px rgba(95,234,210,.13)}
+.topbar .quick-links-menu summary,
+.topbar .icon-button {
+  background:rgba(24,66,82,.85);
+  color:#e7fcff;
+  border:1px solid rgba(121,198,206,.27);
+  box-shadow:inset 0 1px rgba(255,255,255,.035);
+}
+.topbar .quick-links-menu summary:hover,
+.topbar .icon-button:hover {background:#1c5162;border-color:rgba(116,230,209,.58)}
+.topbar .avatar {
+  color:#b9fff0;
+  background:linear-gradient(135deg,#123c54,#0b6a68);
+  border:1px solid rgba(111,235,209,.25);
+}
+.main {
+  position:relative;
+}
+.footer {color:#91b1c0}
+.page-heading h1,.venue-board-head h2,.section-head:not(.card .section-head) > .section-title {
+  color:#f4fdff;
+  letter-spacing:-.032em;
+}
+.page-heading p,.venue-board-head p {color:#b4cbd6}
+.page-eyebrow {color:#6ce8d1}
+.main .page-heading .select,.main .page-heading .input {
+  border-color:#b6cfd8;
+  box-shadow:0 4px 15px rgba(0,0,0,.11);
+}
+.card {
+  border-color:#d2e1e8;
+  box-shadow:0 12px 34px rgba(1,14,28,.14);
+}
+.card:focus-within {border-color:#91d5d3}
+
+/* Home: premium command header, with information order unchanged. */
+.venue-hero {
+  background:
+    radial-gradient(ellipse 65% 110% at 100% 0%,rgba(21,182,180,.28),transparent 69%),
+    radial-gradient(ellipse 52% 120% at 0% 130%,rgba(33,111,173,.18),transparent 76%),
+    linear-gradient(118deg,#081b30 5%,#0c3146 59%,#0d5360 100%);
+  border:1px solid rgba(128,246,222,.31);
+  box-shadow:inset 0 1px rgba(255,255,255,.085),var(--mr-elevation);
+}
+.venue-hero:after {color:#c1fff5;opacity:.075}
+.venue-hero-overline {color:#95f4e3}
+.venue-hero h1 {color:#f7feff;letter-spacing:-.035em}
+.venue-hero>p {color:#c1e0e9}
+.venue-hero-stats>span {
+  background:rgba(5,26,39,.32);
+  border:1px solid rgba(179,242,232,.19);
+  box-shadow:inset 0 1px rgba(255,255,255,.045);
+}
+.venue-hero-stats strong {color:#f5fdff}
+.venue-sort-label {color:#a9c3d0}
+.venue-sort-label select {box-shadow:0 3px 15px rgba(0,5,14,.12)}
+.venue-filter {
+  color:#d2e6ed;
+  background:rgba(23,52,71,.85);
+  border:1px solid rgba(132,182,197,.33);
+  transition:background .16s,border-color .16s;
+}
+.venue-filter:hover {background:#214a5c;border-color:#69bbbc}
+.venue-filter.active {
+  background:linear-gradient(110deg,#116f73,#0c5867);
+  border-color:#60d6c3;
+  color:#fff;
+  box-shadow:0 4px 20px rgba(37,166,162,.15);
+}
+.venue-card {
+  background:linear-gradient(150deg,#112d46,#0c2136 94%);
+  border:1px solid rgba(116,174,195,.31);
+  color:#f0fbff;
+  box-shadow:inset 0 1px rgba(255,255,255,.055),0 13px 27px rgba(0,10,24,.17);
+  transition:transform .18s,border-color .18s,box-shadow .18s;
+}
+.venue-card:after {
+  background:linear-gradient(90deg,#2b9ec7,#5de8ce);
+  opacity:.85;
+}
+.venue-theme-morning {background:linear-gradient(151deg,#163c52 0%,#092536 100%)}
+.venue-theme-day {background:linear-gradient(151deg,#153749 0%,#092334 100%)}
+.venue-theme-night {background:linear-gradient(153deg,#182e55 0%,#0a1d39 100%)}
+.venue-name,.venue-theme-night .venue-name {color:#f5fdff}
+.venue-meta,.venue-cutoff-caption,.venue-progress,
+.venue-theme-night .venue-meta,.venue-theme-night .venue-cutoff-caption,
+.venue-theme-night .venue-progress {color:#adcfde}
+.venue-card-weather,.venue-theme-night .venue-card-weather {color:#9ce4df}
+.venue-next,.venue-theme-night .venue-next {
+  background:rgba(3,18,32,.42);
+  border:1px solid rgba(159,220,224,.19);
+  color:#e9f9fd;
+  border-radius:11px;
+}
+.venue-next span,.venue-next strong {color:#f7feff}
+.venue-card:hover {
+  border-color:rgba(106,236,212,.73);
+  box-shadow:inset 0 1px rgba(255,255,255,.08),0 18px 34px rgba(0,10,26,.25);
+}
+.venue-card .venue-favorite {border-radius:11px}
+.venue-inactive {
+  background:#1a2b37!important;
+  border-color:#31434d!important;
+  color:#91a7b6!important;
+  opacity:.76;
+}
+.venue-inactive .venue-name,.venue-inactive .venue-next span,
+.venue-inactive .venue-next strong {color:#a7b8c2}
+.venue-inactive .venue-meta,.venue-inactive .venue-progress {color:#8499a9}
+.venue-legend,.venue-disclaimer,.venue-race-legend {color:#b4cfdb}
+.venue-back {color:#82e5d8}
+.venue-detail-hero {
+  background:linear-gradient(118deg,#0b203a,#0d5265);
+  border:1px solid rgba(122,222,217,.23);
+  box-shadow:var(--mr-elevation);
+}
+.venue-race {box-shadow:0 10px 25px rgba(0,10,25,.13)}
+.venue-race:focus-within {border-color:#55bcac}
+.venue-race-action {background:linear-gradient(120deg,#087e80,#095569)}
+.race-card-colour-guide {color:#b9d4dd}
+
+/* Prediction: make the next frozen ticket the unmistakable focal point. */
+.bl-focus-board {
+  background:
+    radial-gradient(ellipse at 100% 0%,rgba(42,163,166,.28),transparent 55%),
+    linear-gradient(130deg,#082237,#0b3a50 67%,#0a4550);
+  border:1px solid rgba(112,229,220,.36);
+  box-shadow:inset 0 1px rgba(255,255,255,.05),var(--mr-elevation);
+}
+.bl-focus-heading h2 {letter-spacing:-.045em}
+.bl-focus-metrics>span {
+  border-color:rgba(173,237,232,.19);
+  background:rgba(2,20,32,.32);
+}
+.bl-focus-switch button.active {
+  color:#074e49;
+  background:linear-gradient(120deg,#d7fff1,#bff7e9);
+  box-shadow:0 5px 13px rgba(0,16,19,.18);
+}
+.bl-focus-card {
+  border:1px solid #d4e8ea;
+  box-shadow:0 11px 26px rgba(0,13,28,.25);
+}
+.bl-focus-card:not(.is-pending) {border-top:3px solid #38cbb3}
+.bl-focus-card.is-pending {border-top:3px solid #e5b769}
+.bl-focus-ticket:first-child {
+  background:#e9f9f5;
+  box-shadow:inset 3px 0 0 #2eb99b;
+}
+.bl-focus-ticket {border:1px solid #e6eff2}
+.bl-focus-amount {font-variant-numeric:tabular-nums}
+.bl-focus-card-bottom button {
+  background:linear-gradient(112deg,#087f86,#0a5f77);
+  min-height:43px;
+}
+.bl-focus-countdown {font-variant-numeric:tabular-nums}
+
+/* Monitoring panels are dark chrome; figures remain high-contrast. */
+.bl-race-desk {
+  background:linear-gradient(138deg,#0b2739,#0b3441);
+  border:1px solid rgba(119,215,206,.32);
+  color:#eaf9fa;
+  box-shadow:var(--mr-elevation);
+}
+.bl-desk-topline h2 {color:#f2feff}
+.bl-desk-eyebrow {color:#91e8df}
+.bl-desk-topline h2 small {color:#afcbd6}
+.bl-desk-stat {
+  background:rgba(3,19,32,.43);
+  border-color:rgba(155,215,218,.19);
+  color:#eefbff;
+}
+.bl-desk-stat>span,.bl-desk-stat strong small {color:#b8d5de}
+.bl-desk-stat em {color:#90afbd}
+.bl-desk-stat-hero {
+  background:linear-gradient(135deg,#096569,#08495c);
+  border-color:rgba(136,242,208,.47);
+}
+.bl-desk-next-label,.bl-desk-safety,.bl-desk-next-empty {color:#accbd5}
+.bl-desk-next-race {
+  background:rgba(2,23,37,.54);
+  border-color:rgba(143,214,215,.28);
+  color:#ecfaff;
+}
+.bl-desk-next-race:hover {
+  background:rgba(18,73,83,.74);
+  border-color:#6cdbca;
+}
+.bl-desk-time {color:#91f0dd}
+.bl-desk-race-state.is-formal {background:#1d6557;color:#e4fff3}
+.bl-desk-race-state.is-pending {background:#684b20;color:#fff0c7}
+.bl-desk-disclosure,.bl-timeline-disclosure {
+  background:rgba(11,39,57,.8);
+  border-color:rgba(133,205,210,.25);
+}
+.bl-desk-disclosure>summary,.bl-timeline-disclosure>summary {color:#c9e9ee}
+.bl-desk-disclosure[open]>summary,.bl-timeline-disclosure[open]>summary {
+  border-bottom-color:rgba(152,216,215,.19);
+}
+.race-timeline {
+  background:linear-gradient(120deg,#0d2b41,#0e3043);
+  border:1px solid rgba(127,207,205,.3);
+  color:#f4feff;
+}
+.timeline-heading h2,.race-timeline h3 {color:#e9ffff}
+.timeline-heading p,.timeline-note,.timeline-empty {color:#bad3de}
+.timeline-race {
+  border-color:#d6e6ec;
+  box-shadow:0 6px 18px rgba(0,10,25,.16);
+}
+.timeline-next {border-color:#d5a755}
+.timeline-urgent {border-color:#e2aa53}
+.timeline-filters button[aria-pressed="true"] {
+  background:#116b77;
+  border-color:#4ed5c6;
+}
+.timeline-filters button:not([aria-pressed="true"]) {
+  background:#f6fcfd;
+  border-color:#bcd8e2;
+  color:#194d63;
+}
+/* Detail remains a bright, legible workstation against the dark shell. */
+.detail-header {
+  background:linear-gradient(111deg,#0e314a,#13495b);
+  border:1px solid rgba(113,227,210,.3);
+  box-shadow:0 10px 25px rgba(0,12,26,.2);
+}
+.detail-header .detail-title {color:#fff}
+.detail-header .detail-sub {color:#cbe6ef}
+
+/* Responsive dock. The native white iOS glyphs still sit above navy. */
+@media (max-width:810px) {
+  .shell,.workspace {background:transparent}
+  .topbar {
+    background:linear-gradient(120deg,#081b33,#0c2c3c);
+    color:#f2feff;
+    border-bottom-color:rgba(127,213,211,.26);
+  }
+  .bottom-nav {
+    background:rgba(7,23,37,.96);
+    border-top:1px solid rgba(112,202,202,.29);
+    box-shadow:0 -12px 34px rgba(0,8,19,.36);
+    -webkit-backdrop-filter:blur(18px);
+    backdrop-filter:blur(18px);
+  }
+  .bottom-nav button {color:#afcad8}
+  .bottom-nav button.active {
+    background:linear-gradient(145deg,rgba(21,105,103,.54),rgba(10,67,85,.45));
+    color:#c8fff0;
+    box-shadow:inset 0 0 0 1px rgba(101,225,210,.39);
+  }
+  .bottom-nav button.active span {color:#7bf1d6}
+  .footer {padding-bottom:calc(18px + env(safe-area-inset-bottom,0px))}
+}
+@media (max-width:600px) {
+  .main {padding-top:15px}
+  .venue-hero {padding:20px 16px}
+  .venue-hero-stats>span {min-width:0}
+  .venue-hero-stats strong {font-size:clamp(19px,5vw,24px)}
+  .venue-card {border-radius:16px}
+  .venue-card-grid {gap:10px}
+  .venue-open {padding:15px 12px 14px}
+  .venue-next {padding:9px 8px}
+  .bl-focus-board {padding:16px 13px}
+  .bl-focus-card {border-radius:15px}
+  .bl-focus-ticket:first-child {padding-block:7px}
+  .bl-race-desk {border-radius:17px}
+  .page-heading h1 {font-size:clamp(23px,6.4vw,28px)}
+}
+@media (hover:none) {
+  .venue-card:hover {transform:none}
+}
+@media (prefers-reduced-motion:reduce) {
+  .nav-item,.venue-filter,.venue-card,.bl-focus-card-bottom button {transition:none!important}
+}

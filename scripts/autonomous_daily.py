@@ -351,6 +351,12 @@ def exhibition_similarity_audit(records: dict, latest_races: list[dict]) -> dict
         if old.get("model_version") != r.get("model_version"):
             counts["different_model_baseline_pairs"] += 1
             continue
+        if r.get("model_version") == LEARNED_MAIN_MODEL:
+            old_sha = (old.get("learned_formal") or {}).get("model_sha256")
+            new_sha = (r.get("learned_formal") or {}).get("model_sha256")
+            if not old_sha or not new_sha or old_sha != new_sha:
+                counts["different_model_baseline_pairs"] += 1
+                continue
         old_signature, new_signature = signature(old.get("bets")), signature(r.get("bets"))
         if old_signature is None or new_signature is None:
             continue

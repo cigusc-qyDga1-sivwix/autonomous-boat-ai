@@ -45,6 +45,7 @@ class ProspectiveTrialTest(unittest.TestCase):
         first = freeze(original, NOW)
         self.assertEqual(first["entries"][0]["decision"], "BUY")
         self.assertEqual(first["entries"][0]["source_sha256"], SHA)
+        self.assertEqual(len(first["entries"][0]["decision_sha256"]), 64)
         self.assertEqual(original, unchanged)
         second = freeze(original, NOW + timedelta(minutes=1), first)
         self.assertEqual(first, second)

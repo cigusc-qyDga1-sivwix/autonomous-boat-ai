@@ -80,7 +80,7 @@ if(typeof module==='object'&&module.exports)module.exports=engine;
 if(typeof document==='undefined')return;
 
 const $=id=>document.getElementById(id);
-const state={tab:'home',forecastFilter:'formal',scope:'upcoming',venue:'全場',search:'',shown:20,resultShown:20,data:null,audit:null,source:'Pages',loading:false,requestId:0};
+const state={tab:'home',forecastFilter:'formal',scope:'upcoming',venue:'全場',search:'',shown:20,resultShown:20,weatherVenue:'',data:null,audit:null,source:'Pages',loading:false,requestId:0};
 const ticketPolicy=root.BoatTicketPolicy;
 let toastTimeout=null;
 function toast(message){
@@ -287,9 +287,52 @@ function dailyLearning(){
    cells+comparison+thirdPilot+
    '<p class="v2-subtle">出典：発走前固定SHA＋公式払戻。1日分の相関は勝因の証明ではなく、正式ロジックの自動変更にも使いません。</p></section>';
 }
+
+function venueWeatherLearning(){
+ const audit=validAudit()?.venue_weather_learning,sites=audit?.by_venue;
+ if(!sites||audit.research_only!==true)return '<section class="v2-weather-study"><h2>場別 × 気象研究</h2><p>公式照合済みの場別・気象研究は未公開です。欠損は推測で補いません。</p></section>';
+ const keys=Object.keys(sites),active=keys.filter(v=>sites[v]?.official_verified_formal?.n>0).sort((a,b)=>sites[b].official_verified_formal.n-sites[a].official_verified_formal.n);
+ const venue=keys.includes(state.weatherVenue)?state.weatherVenue:(active[0]||keys[0]),data=sites[venue]||{},m=data.official_verified_formal||{};
+ const n=x=>Number.isInteger(x)?x:'—';
+ const ratio=(x,total)=>total>0?(100*x/total).toFixed(1)+'%':'—';
+ const windLabels={site_preview_unverified_timestamp:'場内展示値／時刻未検証',nearby_grid_forecast:'周辺格子予報',source_unverified:'出典不明'};
+ const waveLabels={site_wave_time_verified:'場内波高／時刻照合済',preview_wave_timestamp_unverified:'展示波高／時刻未検証',source_unverified:'出典不明'};
+ const wb={under_4:'4m/s未満',4_to_under_6:'4～6m/s',6_to_under_8:'6～8m/s',8_plus:'8m/s以上'};
+ const vb={under_4:'4cm未満',4_to_under_8:'4～8cm',8_plus:'8cm以上'};
+ const build=(sets,sources,bands)=>{
+  let rows=[];
+  for(const [source,group] of Object.entries(sets||{})){
+   for(const [band,v] of Object.entries(group||{})){
+    if(!v||v.n===0)continue;
+    rows.push('<div class="v2-weather-row"><span>'+escapeHTML((sources[source]||source)+'・'+(bands[band]||band))+'</span>'+
+    '<strong>'+n(v.n)+'R</strong><small>外艇勝利 '+n(v.outside_wins)+'R／頭抜け '+n(v.head_miss)+'R／2着抜け '+n(v.second_miss)+'R</small></div>');
+   }
+  }
+  return rows.join('')||'<p class="v2-subtle">数値なし・未確認</p>';
+ };
+ const overview=active.map(v=>{
+  const c=sites[v].official_verified_formal;
+  return '<div class="v2-weather-place"><strong>'+escapeHTML(v)+'</strong><span>'+n(c.n)+'R</span><small>外艇勝利 '+n(c.outside_wins)+'R／頭抜け '+n(c.head_miss)+'R</small></div>';
+ }).join('');
+ const options=keys.map(v=>'<option value="'+escapeHTML(v)+'"'+(v===venue?' selected':'')+'>'+escapeHTML(v)+'</option>').join('');
+ return '<section class="v2-weather-study"><div class="v2-learning-heading"><h2>🌊 レース場別 × 気象研究</h2><span class="v2-chip shadow">研究用・未採用</span></div>'+
+ '<p>江戸川を除く23場の発走前の風速・波高を公式着順と照合。場内観測・周辺予報は別集計で、勝因とは断定しません。</p>'+
+ '<div class="v2-weather-places">'+overview+'</div>'+
+ '<label class="v2-weather-select" for="weather-venue-filter">レース場を選ぶ <select id="weather-venue-filter">'+options+'</select></label>'+
+ '<div class="v2-weather-venue-title"><h3>'+escapeHTML(venue)+'</h3><span>'+n(m.n)+'R 公式照合</span></div>'+
+ '<div class="v2-weather-facts"><div><small>外艇勝利</small><strong>'+n(m.outside_wins)+'R</strong></div>'+
+ '<div><small>1着抜け</small><strong>'+n(m.head_miss)+'R</strong></div>'+
+ '<div><small>2着抜け</small><strong>'+n(m.second_miss)+'R</strong></div>'+
+ '<div><small>的中率（参考）</small><strong>'+ratio(m.hits,m.n)+'</strong></div></div>'+
+ '<div class="v2-weather-columns"><section><h4>風速 × 着順</h4>'+build(data.wind_by_band,windLabels,wb)+'</section>'+
+ '<section><h4>波高 × 着順</h4>'+build(data.wave_by_band,waveLabels,vb)+'</section></div>'+
+ '<p class="v2-weather-coverage">検証済みの風向 '+n(data.coverage?.relative_wind_verified)+'R／現地潮位 '+n(data.coverage?.tide_verified)+'R／場内波高 '+n(data.coverage?.wave_site_time_verified)+'R。未確認の風向・潮位は補正に使いません。</p>'+
+ '<p class="v2-subtle">保存SHAと公式結果が一致した展示反映・正式のみ。未来の観測値は除外。少標本から正式ロジックは変更しません。</p></section>';
+}
 function research(){
  return title('LEARNING & EVIDENCE','研究・検証','研究用シャドーと正式予想を分離して参照する。')+
   dailyLearning()+
+  venueWeatherLearning()+
   '<div class="v2-info-list">'+
   '<article class="v2-info-tile"><h3>🧠 学習AIの成長</h3><p>正式モデルの推移、前向き比較、同一条件での検証を確認。学習しただけでは精度向上と判定しません。</p><a href="./learning-performance.html">成長記録を見る →</a></article>'+
   '<article class="v2-info-tile"><h3>🌊 WEATHER LAB</h3><p>場内波高・周辺風・予報を区別し、取得時刻と予想への反映を監査。</p><a href="./weather/">気象研究を見る →</a></article>'+
@@ -452,6 +495,7 @@ document.addEventListener('change',e=>{
   state.venue=e.target.value;state.shown=20;render();
  }
 });
+document.addEventListener('change',e=>{if(e.target?.id==='weather-venue-filter'){state.weatherVenue=e.target.value;render();}});
 document.addEventListener('input',e=>{
  if(e.target?.id==='race-search'){
   const value=e.target.value;

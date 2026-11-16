@@ -141,3 +141,32 @@ def test_production_attachment_after_live_six_boat_checks():
     assert '"same_time_learned_ablation_frozen"' in code
     assert 'new["exhibition_input_check"] = {' in code
     assert 'upgrade["exhibition_input_check"] = {' in code
+
+
+def test_official_comparison_uses_only_same_time_frozen_sha():
+    from scripts.forecast_audit import _learned_exhibition_effect_report
+    saved=main_snapshot()
+    saved["venue"]="徳山"
+    saved["race"]=2
+    saved["cutoff_jst"]="12:00"
+    saved["ticket_status"]="formal"
+    saved["learned_exhibition_ablation"]=build(saved, model())
+    day="2026-11-13"
+    key=f"{day}|徳山|2"
+    pay={"verified":True, "source":"boatrace_official_pay", "finish":"4-2-5",
+         "payout_per_100":8900, "virtual_stake":50000}
+    report=_learned_exhibition_effect_report([saved], {key:pay}, set(), day)
+    assert report["matched_races"]==1
+    assert report["official_matched_ticket_change_races"]==1
+    assert report["historical_formal_forecasts_modified"] is False
+    assert report["with_exhibition_formal"]["verified_races"]==1
+    assert report["without_exhibition_research"]["verified_races"]==1
+
+    tampered=deepcopy(saved)
+    tampered["learned_exhibition_ablation"]["no_exhibition_bets"][0]["virtual_yen"]+=1000
+    invalid=_learned_exhibition_effect_report([tampered],{key:pay},set(),day)
+    assert invalid["matched_races"]==0
+    assert invalid["exclusions"]["unproven_or_modified_ablation"]==1
+    conflict=_learned_exhibition_effect_report([saved],{key:pay},{key},day)
+    assert conflict["matched_races"]==0
+    assert conflict["exclusions"]["official_conflict_or_refund"]==1

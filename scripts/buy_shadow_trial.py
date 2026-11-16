@@ -104,6 +104,13 @@ def _eligible(race, day, now):
     return True
 
 
+def _verify_decision_sha(row):
+    stored = row.get("decision_sha256")
+    payload = {key: value for key, value in row.items() if key != "decision_sha256"}
+    canonical = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return isinstance(stored, str) and stored == hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def freeze(payload, now, previous=None):
     """Only append new, before-cutoff decisions for the real calendar day."""
     now = now.astimezone(UTC)
@@ -114,6 +121,8 @@ def freeze(payload, now, previous=None):
     if prior and (prior.get("schema") != SCHEMA or prior.get("event_date") != day):
         raise ValueError("Existing trial ledger has the wrong schema or date")
     records = list(prior.get("entries") or [])
+    if any(not _verify_decision_sha(row) for row in records):
+        raise ValueError("Previously frozen decision SHA does not match")
     seen = {r["race_id"] for r in records}
     for race in payload.get("forecast_races") or []:
         if not isinstance(race, dict) or not _eligible(race, day, now):
@@ -182,6 +191,8 @@ def evaluate(trial, payload):
                  "second_miss": 0, "third_miss": 0, "unresolved": 0} for k in ("BUY", "WATCH", "SKIP")}
     verified = []
     for row in trial.get("entries") or []:
+        if not _verify_decision_sha(row):
+            raise ValueError("Frozen decision SHA mismatch")
         category = row.get("decision")
         if category not in tally:
             raise ValueError("Unknown frozen decision")

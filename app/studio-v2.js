@@ -384,6 +384,11 @@ $('race-dialog').addEventListener('click',event=>{
  if(event.target===$('race-dialog'))$('race-dialog').close();
 });
 void load();
+// Re-fetch real source snapshots at a moderate interval, matching the
+// existing PWA's foreground refresh policy. No write, no local fallback.
+setInterval(()=>{if(!document.hidden&&!state.loading)void load()},300000);
 setInterval(()=>{if(!document.hidden&&state.data&&['home','forecasts'].includes(state.tab))render()},60000);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&state.data){render();}});
+document.addEventListener('visibilitychange',()=>{
+ if(!document.hidden&&!state.loading)void load();
+});
 })(typeof window==='undefined'?globalThis:window);

@@ -11,6 +11,8 @@ on:
       - 'app/data/statistical/third-place-pilot-latest.json'
       - 'scripts/conditional_second_primary.py'
       - 'scripts/weather_live_bridge.py'
+      - 'scripts/collect_site_weather_research.py'
+      - 'tests/test_collect_site_weather_research.py'
       - 'scripts/venue_weather.py'
       - 'weather_lab/monitor.py'
       - 'weather_lab/regional_jma.py'
@@ -223,6 +225,13 @@ jobs:
               git commit -m 'forecast: rebuild from latest immutable ledger before cutoff'
             done
           fi
+      # Capture the upstream ~5-min-before-cutoff site weather snapshot as soon
+      # as the primary formal forecast is saved. Failure never blocks forecasts.
+      - name: Capture independent on-site wind/wave observation evidence (never used by formal model)
+        continue-on-error: true
+        run: |
+          python -m scripts.collect_site_weather_research
+          python -m json.tool app/data/weather-research/latest.json > /dev/null
       # A race's exhibition may become available during the first publish.
       # Recheck ONLY previews and run another live pre-cutoff forecast if new
       # six-boat evidence arrives while there is still a 180-second lead.
@@ -400,6 +409,7 @@ jobs:
         run: |
           set -euo pipefail
           git add app/data/experiments/ app/data/exhibition/ app/data/statistical/prospective-audit.json
+          if [ -d app/data/weather-research ]; then git add app/data/weather-research/; fi
           if ! git diff --cached --quiet; then
             git commit -m 'research: publish separate post-forecast trial evidence'
             for attempt in 1 2 3; do
@@ -416,6 +426,7 @@ jobs:
               git fetch origin main
               git reset --hard origin/main
               python scripts/ingest_boatracecsv_exhibition.py
+              python -m scripts.collect_site_weather_research || echo '::warning::On-site weather research unavailable'
               python scripts/research_outside_roles.py
               python -m scripts.research_coupling_patterns
               python -m scripts.research_wake_hypotheses
@@ -429,6 +440,7 @@ jobs:
               # The full-history statistical audit is maintained by the
               # separate boat-lab-statistical workflow.
               git add app/data/experiments/ app/data/exhibition/ app/data/statistical/prospective-audit.json
+              if [ -d app/data/weather-research ]; then git add app/data/weather-research/; fi
               if git diff --cached --quiet; then
                 echo 'No new shadow trial evidence'
                 break

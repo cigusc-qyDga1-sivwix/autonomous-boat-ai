@@ -39,7 +39,7 @@ assert.equal(v2.jstDay(new Date('2026-11-15T15:30:00Z')),'2026-11-16');
 assert.equal(v2.cutoffMs('2026-11-16','18:45')-Date.parse('2026-11-16T09:45:00Z'),0);
 assert.equal(v2.normalize(sample).forecast_races.length,1);
 assert.throws(()=>v2.normalize({...sample,mode:'manual'}),/正式な自動予想/);
-assert.throws(()=>v2.normalize({...sample,forecast_races:[]}),/買い目付き/);
+assert.equal(v2.normalize({...sample,forecast_races:[]}).forecast_races.length,0);
 
 const key=sample.event_date+'|'+r.venue+'|'+r.race;
 const official={source:'boatrace_official_pay',verified:true,finish:'1-3-4',

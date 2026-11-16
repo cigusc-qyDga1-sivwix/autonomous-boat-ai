@@ -34,7 +34,6 @@ def test_covers_all_23_venues_and_keeps_provenance_separate():
     assert x["schema"] == SCHEMA
     assert x["venue_count"] == len(VENUES) == 23
     assert x["excluded_venue"] == "江戸川"
-    assert x["by_venue"]["江戸川"] if False else True
     v = x["by_venue"]["児島"]
     assert v["official_verified_formal"]["n"] == 2
     assert v["official_verified_formal"]["outside_wins"] == 1
@@ -79,6 +78,5 @@ def test_verified_tide_direction_explicit_only_and_no_hindsight():
     assert first["by_venue"]["徳山"]["coverage"]["tide_verified"] == 1
     assert first["by_venue"]["徳山"]["verified_local_tide"]["high"]["n"] == 1
     assert second["by_venue"]["徳山"]["verified_relative_wind"]["tailwind"]["n"] == 1
-    assert first["by_venue"]["徳山"]["wind_by_band"] == second["by_venue"]["徳山"]["wind_by_band"] if False else True
     assert first["by_venue"]["徳山"]["wind_by_band"]["site_preview_unverified_timestamp"]["4_to_under_6"]["n"] == 1
     assert second["by_venue"]["徳山"]["wind_by_band"]["site_preview_unverified_timestamp"]["4_to_under_6"]["n"] == 1

@@ -108,7 +108,7 @@ assert.match(js,/重量調整/);
 assert.match(html,/20261116-preview-coverage-v3/);
 assert.match(js,/fetch\('\.\/data\/weather-research\/latest\.json'/);
 assert.match(js,/onsiteWeatherCaptureStatus\(\)\+/);
-assert.match(html,/20261116-weather-capture-v2/);
+assert.match(html,/studio-v2\.js\?v=20261116-preview-coverage-v3/);
 assert.match(js,/venueWeatherLearning\(\)\+/);
 assert.match(js,/id="weather-venue-filter"/);
 assert.match(js,/state.weatherVenue=e.target.value;render\(\)/);

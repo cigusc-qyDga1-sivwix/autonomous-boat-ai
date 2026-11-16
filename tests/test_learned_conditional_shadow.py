@@ -101,3 +101,34 @@ def test_only_after_live_source_match_and_exposed_read_only():
     assert '"inside_survival_research", "learned_conditional_shadow"' in code
     assert 'formal_tickets_changed": False' in Path(
         "scripts/learned_conditional_shadow.py").read_text(encoding="utf-8")
+
+
+def test_only_frozen_and_untampered_pairs_enter_official_audit():
+    from scripts.forecast_audit import _learned_conditional_shadow_report
+    saved = snapshot()
+    saved["venue"] = "徳山"
+    saved["race"] = 1
+    saved["cutoff_jst"] = "12:00"
+    saved["ticket_status"] = "formal"
+    saved["learned_conditional_shadow"] = build(saved, model())
+    day = "2026-11-13"
+    key = f"{day}|徳山|1"
+    payout = {"verified": True, "source": "boatrace_official_pay",
+              "finish": "1-4-2", "payout_per_100": 12340, "virtual_stake": 50000}
+    report = _learned_conditional_shadow_report([saved], {key: payout}, set(), day)
+    assert report["matched_races"] == 1
+    assert report["changed_ticket_pairs"] == 1
+    assert report["formal_performance_changed"] is False
+    assert report["formal"]["verified_races"] == 1
+    assert report["research_shadow"]["verified_races"] == 1
+    assert report["head_misses_recovered"] == 0
+
+    forged = deepcopy(saved)
+    forged["learned_conditional_shadow"]["shadow_bets"][0]["virtual_yen"] += 1000
+    invalid = _learned_conditional_shadow_report([forged], {key: payout}, set(), day)
+    assert invalid["matched_races"] == 0
+    assert invalid["exclusions"]["unproven_or_modified_shadow"] == 1
+
+    conflicting = _learned_conditional_shadow_report([saved], {key: payout}, {key}, day)
+    assert conflicting["matched_races"] == 0
+    assert conflicting["exclusions"]["official_conflict_refund_or_cancel"] == 1

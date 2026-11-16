@@ -22,7 +22,7 @@ VENUES = ["桐生","戸田","江戸川","平和島","多摩川","浜名湖","蒲
 def url(name, day, root=ROOT):
     return f"{root}{SOURCES[name]}/{day:%Y/%m/%d}.csv"
 
-def fetch(name, day):
+def fetch(name, day, *, with_diagnostics=False):
     """Prefer the upstream GitHub file, then try its possibly lagging Pages CDN.
 
     Each attempt is a real HTTP fetch at run time. A CSV timestamp alone never
@@ -38,12 +38,18 @@ def fetch(name, day):
                 rows = list(csv.DictReader(io.StringIO(response.read().decode("utf-8-sig"))))
             if rows:
                 print(f"[research] {name}: {len(rows)} rows from {label}")
+                if with_diagnostics:
+                    return rows, {"source": label, "rows": len(rows),
+                                  "attempts": failures, "status": "AVAILABLE"}
                 return rows
             failures.append(f"{label}:empty")
         except (HTTPError, URLError, TimeoutError, UnicodeError) as exc:
             detail = f"HTTP {exc.code}" if isinstance(exc, HTTPError) else type(exc).__name__
             failures.append(f"{label}:{detail}")
     print(f"[research] {name}: unavailable ({', '.join(failures)})")
+    if with_diagnostics:
+        return [], {"source": None, "rows": 0,
+                    "attempts": failures, "status": "SOURCE_UNAVAILABLE"}
     return []
 
 def numeric(value):
@@ -261,7 +267,13 @@ def main():
     names=[name for name in SOURCES if not args.previews_only or name not in ("result","payout")]
     with ThreadPoolExecutor(max_workers=len(names)) as pool:
         sources={name:[] for name in SOURCES}
-        sources.update(zip(names, pool.map(lambda name: fetch(name,day), names)))
+        fetched=list(pool.map(lambda name: fetch(name,day,with_diagnostics=True), names))
+        sources.update({name: outcome[0] for name, outcome in zip(names, fetched)})
+        health={name: outcome[1] for name, outcome in zip(names, fetched)}
+        for name in SOURCES:
+            if name not in health:
+                health[name]={"source": None, "rows": 0, "attempts": [],
+                              "status": "NOT_FETCHED_PREVIEWS_ONLY"}
     has_essential=all(sources[k] for k in ("stt","tkz"))
     # Weather (sui) is optional: a missing weather feed must not suppress
     # otherwise complete six-boat exhibition readings.
@@ -286,6 +298,7 @@ def main():
         "complete_sources":has_essential,
         "weather_source_available":bool(sources["sui"]),
         "fetch_counts":{k:len(rows) for k,rows in sources.items()},
+        "fetch_health":health,
         "rejected_rows":current.get("rejected_rows",{}),
         "research_races":len(records),
         "research_venues":len({r.get("venue_code") for r in records}),

@@ -131,6 +131,7 @@ class VenueOriginalFormalV1Tests(unittest.TestCase):
         source["frozen_at_utc"] = "2026-11-18T02:54:00+00:00"
         source["cutoff_iso_jst"] = "2026-11-18T12:00:00+09:00"
         source["learned_formal"]["model_sha256"] = today_model["model_sha256"]
+        source["classification"] = "WATCH"
         original_capture = saved_capture()
         original_capture["date"] = "2026-11-18"
         original_capture["source_url"] = original_capture["source_url"].replace("20261117", "20261118")

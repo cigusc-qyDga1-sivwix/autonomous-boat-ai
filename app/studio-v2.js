@@ -163,7 +163,12 @@ function title(kicker,heading,subtitle='',action=''){
 function validAudit(){return state.audit?.event_date===state.data?.event_date&&state.audit?.source==='verified BOATRACE official payouts + immutable pre-cutoff predictions'?state.audit:null}
 function resultMetrics(){
  const o=validAudit()?.by_ticket_status?.formal;
- return o&&Number.isInteger(o.verified_races)?o:null;
+ if(!o||!Number.isSafeInteger(o.verified_races)||o.verified_races<0||
+  !Number.isSafeInteger(o.virtual_stake_yen)||o.virtual_stake_yen<0||
+  !Number.isSafeInteger(o.virtual_payout_yen)||o.virtual_payout_yen<0||
+  !Number.isSafeInteger(o.virtual_profit_yen)||
+  o.virtual_payout_yen-o.virtual_stake_yen!==o.virtual_profit_yen)return null;
+ return o;
 }
 function freshAlert(){
  const date=state.data?.event_date,dt=new Date(state.data?.updated_at_utc);
@@ -255,12 +260,17 @@ function forecasts(){
 function results(){
  const a=validAudit(),o=resultMetrics();
  const auditSource=a?'監査ファイルの公式照合済みデータ':'同じ対象日の公式監査が取得できていません';
- const settled=allRaces().map(r=>({r,out:officialOutcome(r,state.data)})).filter(x=>x.out);
+ // Match the formal-only financial summary. Research and pending tickets are excluded.
+ const settled=allRaces().filter(r=>frozenStatus(r,state.data,ticketPolicy))
+  .map(r=>({r,out:officialOutcome(r,state.data)})).filter(x=>x.out);
  settled.sort((a,b)=>raceOrder(b.r,a.r));
  const verified=settled.slice(0,state.resultShown);
  const formatProfit=o?((o.virtual_profit_yen>0?'+':'')+money(o.virtual_profit_yen)):'—';
+ const coverageMismatch=o&&settled.length!==o.verified_races;
+ const coverageWarning=coverageMismatch?'<div class="v2-alert">監査集計 '+o.verified_races+'R／個別正式照合 '+settled.length+'R。集計対象に差があります。最新データを確認してください。</div>':'';
  return title('OFFICIAL SETTLEMENT','結果・成績','公式照合済みの固定予想だけで検証。研究と実投票を混同しません。')+
   (!a?'<div class="v2-alert">公式照合監査を読み込めていません。未確認値は表示しません。</div>':'')+
+  (a&&!o?'<div class="v2-alert">監査の収支計算に不整合があります。集計値を保留しています。</div>':'')+coverageWarning+
   '<div class="v2-metrics">'+metric('正式・公式照合',o?o.verified_races+'R':'—',auditSource)+
   metric('3連単的中',o?o.hits+'R':'—',o?percent(o.hit_rate):'未集計','primary')+
   metric('仮想払戻総額',o&&Number.isSafeInteger(o.virtual_payout_yen)&&o.virtual_payout_yen>=0?money(o.virtual_payout_yen):'—','正式・公式照合済み')+
@@ -285,7 +295,7 @@ function results(){
   }).join(''):'<div class="v2-empty"><strong>個別レースの公式照合記録がありません。</strong>公開状況と監査の取得時刻を確認してください。</div>')+'</div>'+
   (settled.length>state.resultShown?'<div class="v2-cta-row"><button class="v2-secondary-btn" type="button" data-load-more="results">さらに'+Math.min(20,settled.length-state.resultShown)+'Rを表示</button></div>':'')+
   '<div class="v2-evidence">対象日 '+escapeHTML(state.data.event_date)+' · '+escapeHTML(jstStamp(a?.official_evidence_at_utc))+
-  '。上部の成績は監査済み<b>正式予想のみ</b>、個別一覧は公式結果が揃った全区分の保存記録を示します。'+
+  '。上部の成績は監査済み<b>正式予想のみ</b>、個別一覧も正式予想のみを示します。'+
   '公式3連単配当は100円あたり。各レースの仮想払戻と収支は保存済み買い目の配分で算出。金額が検証不能なら算定保留とし、実投票の収支とは区別します。'+
   '除外条件や返還の扱いが異なるため、一覧表示件数と正式成績の母数は一致するとは限りません。</div>';
 }
@@ -508,7 +518,7 @@ async function load(){
     (data.event_date===held.event_date&&Number.isFinite(heldTime)&&
      (!Number.isFinite(dataTime)||dataTime<heldTime)));
   if(!rollback){state.data=data;state.source='Pages';}
-  if(audit?.event_date===state.data?.event_date)state.audit=audit;
+  state.audit=audit?.event_date===state.data?.event_date?audit:null;
   if(!isToday()||state.data.forecast_races.every(r=>!visibleAroundCutoff(r,state.data.event_date,nowMs())))state.scope='all';
   render();
  }catch(error){

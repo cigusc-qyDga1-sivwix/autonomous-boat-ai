@@ -1,0 +1,1 @@
+Forward-only implementation staging marker. Source and exact tests in feature branch.

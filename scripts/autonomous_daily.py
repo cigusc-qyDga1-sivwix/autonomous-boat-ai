@@ -48,6 +48,7 @@ if __package__:
     from .learned_conditional_shadow import build as build_learned_conditional_shadow
     from .learned_exhibition_ablation import build as build_learned_exhibition_ablation
     from .original_venue_formal_v1 import apply as apply_original_venue_v1, attach_to_live_race, collect_candidates as collect_original_candidates
+    from .four_leg_live_freeze import merge_forward_evidence as merge_four_leg_evidence
 else:
     from racer_context import collect as collect_racer_context, validated as validate_racer_context
     from official_pay import fetch_official_pay
@@ -76,6 +77,7 @@ else:
     from learned_conditional_shadow import build as build_learned_conditional_shadow
     from learned_exhibition_ablation import build as build_learned_exhibition_ablation
     from original_venue_formal_v1 import apply as apply_original_venue_v1, attach_to_live_race, collect_candidates as collect_original_candidates
+    from four_leg_live_freeze import merge_forward_evidence as merge_four_leg_evidence
 
 JST = ZoneInfo("Asia/Tokyo")
 UTC = timezone.utc
@@ -2903,6 +2905,34 @@ def main():
         webapp["weather_fetch_status"] = "UNAVAILABLE"
     else:
         webapp["weather_fetch_status"] = "OK" if nearby_forecasts else "NO_DATA"
+    # Preserve independent four-leg evidence only AFTER the new pre-cutoff
+    # predictions have been computed, but BEFORE any post-race results are read.
+    # Never alter the immutable forecast, its model, or official accounting.
+    if not args.input_json:
+        evidence_dir = Path("app/data/exhibition/four-leg")
+        evidence_path = evidence_dir / f"{day}.json"
+        evidence_status = {"status": "RESEARCH_ONLY_NOT_FORMAL", "event_date": day}
+        try:
+            prior_evidence = (
+                json.loads(evidence_path.read_text(encoding="utf-8"))
+                if evidence_path.exists() else None
+            )
+            evidence_doc, evidence_status = merge_four_leg_evidence(
+                prior_evidence, ledger, original_captures,
+                event_date=day, generated_at_utc=datetime.now(UTC).isoformat(),
+            )
+            write_json(evidence_path, evidence_doc)
+            write_json(evidence_dir / "status-latest.json", evidence_status)
+        except (ValueError, TypeError, KeyError, OSError, OverflowError) as exc:
+            evidence_status = {
+                "status": "ERROR_RESEARCH_FAIL_CLOSED", "event_date": day,
+                "error_type": type(exc).__name__,
+                "formal_forecasts_untouched": True,
+                "results_and_payouts_not_used": True,
+            }
+            write_json(evidence_dir / "status-latest.json", evidence_status)
+        summary["four_leg_exhibition_research"] = evidence_status
+        webapp["four_leg_exhibition_research"] = evidence_status
     # Read official payouts only AFTER the pre-cutoff forecast has been frozen.
     # Failure of the official website must not make up results or erase forecasts.
     try:

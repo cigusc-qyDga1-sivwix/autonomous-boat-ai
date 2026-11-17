@@ -2310,7 +2310,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "coverage_reselection_shadow", "hidden_path_shadow",
                       "exhibition_input_check", "relative_scores_uncalibrated", "learned_formal", "third_place_pilot",
                       "inside_survival_research", "learned_conditional_shadow",
-                      "learned_exhibition_ablation"):
+                      "learned_exhibition_ablation", "original_exhibition_formal_v1",
+                      "original_exhibition_formal_v1_rejection"):
             if extra in current:
                 r[extra] = current[extra]
         r["version_count"] = len(versions)
@@ -2371,6 +2372,14 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         "exhibition_race_count": sum(r.get("phase")=="exhibition" for r in latest_races),
         "learned_formal_races": sum(r.get("model_version")==LEARNED_MAIN_MODEL for r in latest_races),
         "learned_formal_status": ("active" if ACTIVE_LEARNED_MODEL is not None else "awaiting_fresh_model"),
+        "original_exhibition_v1_formal_races": sum(
+            bool((r.get("original_exhibition_formal_v1") or {}).get("formal_component"))
+            and r.get("ticket_status") == "formal" for r in latest_races),
+        "original_exhibition_v1_candidate_races": sum(
+            bool(r.get("original_exhibition_formal_v1")) for r in latest_races),
+        "original_exhibition_v1_policy_shas": sorted({
+            (r.get("original_exhibition_formal_v1") or {}).get("coefficient_policy_sha256")
+            for r in latest_races if r.get("original_exhibition_formal_v1")}),
         "learned_formal_model_sha256": (ACTIVE_LEARNED_MODEL or {}).get("model_sha256"),
         "learned_formal_trained_through": (ACTIVE_LEARNED_MODEL or {}).get("trained_through"),
         "exhibition_changed_bet_count": sum(bool((r.get("exhibition_change") or {}).get("bets_changed")) for r in latest_races),
@@ -2961,6 +2970,9 @@ def main():
         "listed_races": summary["listed_races"], "forecast_races": summary["forecast_races"],
         "final_exhibition_verified_races": webapp["final_exhibition_verified_races"],
         "exhibition_similarity_audit": webapp["exhibition_similarity_audit"],
+        "original_exhibition_v1_source": original_status,
+        "original_exhibition_v1_formal_races": webapp["original_exhibition_v1_formal_races"],
+        "original_exhibition_v1_policy_shas": webapp["original_exhibition_v1_policy_shas"],
     })
     print(json.dumps(summary, ensure_ascii=False))
 

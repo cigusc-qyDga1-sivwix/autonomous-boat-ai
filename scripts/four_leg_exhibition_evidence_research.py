@@ -106,7 +106,10 @@ def assess(snapshot: dict, capture: dict) -> dict:
             "出足": {
                 "status": "INDIRECT_EVIDENCE_ONLY" if turn or straight else "NO_SEGMENT_EVIDENCE",
                 "turn_interval_seconds": turn,
-                "post_turn_straight_interval_seconds": straight,
+                # Depending on the venue, the original straight section is
+                # not necessarily a verified turn-exit acceleration interval.
+                "original_straight_interval_context_only": straight,
+                "post_turn_acceleration_measured": False,
                 "direct_acceleration_data": False,
                 "requires": ["turn_exit_video_speed_over_time", "consistent_measurement_boundaries"],
                 "numeric_score": None,

@@ -58,6 +58,11 @@ class VenueOriginalResearchTests(unittest.TestCase):
         self.assertIn(HALF, x["features"])
         self.assertNotIn(LAP, x["features"])
 
+    def test_mikuni_boatcast_full_lap_stays_full(self):
+        x = build(capture("10", (LAP, TURN, STRAIGHT)))
+        self.assertIn(LAP, x["features"])
+        self.assertNotIn(HALF, x["features"])
+
     def test_unoffered_metric_flagged_without_implicit_bad_score(self):
         x = build(capture("23", (LAP, TURN)))
         self.assertEqual(x["metric_status"][STRAIGHT], "NOT_OFFERED")

@@ -68,6 +68,27 @@ def load_model(now: datetime, path: Path = MODEL_PATH) -> dict | None:
         return None
 
 
+def ranking_summary(ranked: list[dict], racers: list[dict], note: str) -> dict:
+    classified = [(r["combination"].split("-"), r["score"]) for r in ranked]
+    shares = []
+    roles = {}
+    for racer in sorted(racers, key=lambda r: r["lane"]):
+        lane = racer["lane"]
+        first, second, third = (
+            sum(score for combo, score in classified if combo[stage] == str(lane))
+            for stage in range(3)
+        )
+        shares.append({"lane": lane, "course": racer["course"], "relative_share": first})
+        roles[str(lane)] = {"first": first, "second": second, "third": third, "note": note}
+    heads = sorted((x["relative_share"] for x in shares), reverse=True)
+    return {
+        "head_course_shares": shares,
+        "role_coverage": roles,
+        "head_weight_concentration": round(heads[0], 4),
+        "head_weight_gap": round(heads[0] - heads[1], 4),
+    }
+
+
 def apply(snapshot: dict, model: dict) -> dict:
     """Make the learned model the main 3連単 ticket selection, same budget.
 
@@ -107,21 +128,6 @@ def apply(snapshot: dict, model: dict) -> dict:
     result = deepcopy(snapshot)
     before = result["model_version"]
     control = deepcopy(prior_bets)
-    shares = []
-    role = {}
-    for lane in range(1, 7):
-        indexed = [r for r in ranked if str(lane) in r["combination"].split("-")]
-        first = sum(r["score"] for r in ranked
-                    if r["combination"].split("-")[0] == str(lane))
-        second = sum(r["score"] for r in ranked
-                     if r["combination"].split("-")[1] == str(lane))
-        third = sum(r["score"] for r in ranked
-                    if r["combination"].split("-")[2] == str(lane))
-        shares.append({"lane": lane, "course": racers[lane-1]["course"],
-                       "relative_share": first})
-        role[str(lane)] = {"first": first, "second": second, "third": third,
-                           "note": "学習済み相対順位・確率校正前"}
-    sorted_heads = sorted((x["relative_share"] for x in shares), reverse=True)
     result.update({
         "model_version": VERSION,
         "model_role": "main",
@@ -129,10 +135,7 @@ def apply(snapshot: dict, model: dict) -> dict:
         "point_count": count,
         "point_reason": ("統計学習モデルで1着→2着→3着を条件付き再評価。"
                          + str(count) + "点は旧正式モデルの点数と一致／仮想5万円・未校正"),
-        "head_course_shares": shares,
-        "role_coverage": role,
-        "head_weight_concentration": round(sorted_heads[0], 4),
-        "head_weight_gap": round(sorted_heads[0]-sorted_heads[1], 4),
+        **ranking_summary(ranked, racers, "学習済み相対順位・確率校正前"),
         "scenario": ("学習済みモデルの上位候補 "
                      + bets[0]["combination"]
                      + "（1着→2着→3着の条件付き評価、未校正）"),

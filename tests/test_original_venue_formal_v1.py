@@ -5,14 +5,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from boat_ai.statistical import digest
+from boat_ai.statistical import digest, distributions
 from scripts.boatcast_oriten_smoke import probe
 from scripts.learned_formal import VERSION as MODEL_VERSION
+from scripts.original_exhibition_venue_research import VENUE_SPECS
 from scripts.original_venue_formal_v1 import (
-    POLICY_SHA256, apply, attach_to_live_race, collect_candidates,
+    POLICY_SHA256, PROFILE_DATA, adjust_rankings, apply, attach_to_live_race, collect_candidates,
 )
 
-MODEL = json.loads(Path("app/data/statistical/latest-model.json").read_text())
+MODEL_SHA = "45535951091f1baad38fe810b3bd5b106bdf0fd80c525ff6bbc7a948e6fd88c8"
+MODEL = json.loads((Path("app/data/statistical/models") / f"{MODEL_SHA}.json").read_text())
 CUTOFF = "2026-11-17T12:00:00+09:00"
 FROZEN = "2026-11-17T02:54:00+00:00"
 
@@ -112,7 +114,7 @@ class VenueOriginalFormalV1Tests(unittest.TestCase):
         out = apply(formal_snapshot(), MODEL, saved_capture())
         policy = out["original_exhibition_formal_v1"]
         self.assertTrue(policy["formal_component"])
-        self.assertFalse(policy["trained_coefficient"])
+        self.assertTrue(policy["trained_coefficient"])
         self.assertEqual(policy["coefficient_policy_sha256"], POLICY_SHA256)
         self.assertEqual(policy["base_learned_model_sha256"], MODEL["model_sha256"])
         self.assertEqual(len(out["bets"]), 8)
@@ -120,6 +122,45 @@ class VenueOriginalFormalV1Tests(unittest.TestCase):
         self.assertEqual(len(policy["same_time_base_bets"]), 8)
         self.assertTrue(policy["no_results_or_payouts_used"])
         self.assertTrue(policy["pre_cutoff_only"])
+
+    def test_all_23_venue_profiles_use_only_their_own_measurement_contract(self):
+        profiles = PROFILE_DATA["venues"]
+        self.assertEqual(set(profiles), set(VENUE_SPECS) - {"03"})
+        self.assertEqual(sum(p["training_races"] for p in profiles.values()), PROFILE_DATA["training_races"])
+        for code, profile in profiles.items():
+            with self.subTest(venue=code):
+                self.assertEqual(tuple(profile["metrics"]), VENUE_SPECS[code]["expected_metrics"])
+                self.assertEqual(len(profile["weights"]), 3)
+                for weights, cap in zip(profile["weights"], PROFILE_DATA["stage_logit_caps"]):
+                    self.assertEqual(len(weights), len(profile["metrics"]))
+                    self.assertTrue(all(0 <= weight <= cap for weight in weights))
+                    self.assertLessEqual(sum(weights), cap + 0.0001)
+
+    def test_same_measurements_rank_differently_by_venue(self):
+        karatsu = apply(formal_snapshot(), MODEL, saved_capture())
+        omura = apply(formal_snapshot("大村"), MODEL, saved_capture("24"))
+        for out in (karatsu, omura):
+            self.assertAlmostEqual(sum(x["relative_share"] for x in out["head_course_shares"]), 1)
+            self.assertEqual(len(out["bets"]), 8)
+            self.assertEqual(sum(b["virtual_yen"] for b in out["bets"]), 50000)
+        self.assertEqual(karatsu["original_exhibition_formal_v1"]["profile_stage_weights"]["first"],
+                         {"turn_time": 0.08})
+        self.assertIn("lap_time", omura["original_exhibition_formal_v1"]["profile_stage_weights"]["first"])
+        self.assertNotEqual(karatsu["head_course_shares"], omura["head_course_shares"])
+
+    def test_third_place_changes_do_not_move_the_first_second_pair(self):
+        base = distributions(formal_snapshot(), MODEL)
+        values = {"turn_time": {str(lane): {"advantage_over_race_median_seconds": lane / 100}
+                                for lane in range(1, 7)}}
+        adjusted = adjust_rankings(base, values, {"first": {}, "second": {}, "third": {"turn_time": 0.05}})
+        choices = {r["combination"][:3] for r in base}
+        for pair in choices:
+            self.assertAlmostEqual(
+                sum(r["score"] for r in base if r["combination"].startswith(pair)),
+                sum(r["score"] for r in adjusted if r["combination"].startswith(pair)),
+            )
+        self.assertNotEqual({r["combination"]: r["score"] for r in base},
+                            {r["combination"]: r["score"] for r in adjusted})
 
     def test_twoway_tokuyama_no_imaginary_straight(self):
         out = apply(formal_snapshot("徳山"), MODEL,

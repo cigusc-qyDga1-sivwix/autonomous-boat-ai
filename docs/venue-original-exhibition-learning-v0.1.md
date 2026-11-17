@@ -1,7 +1,7 @@
 # BOAT LAB venue-specific original exhibition model design (research v0.1)
 
-Reviewed: **2026-11-17 JST**. Production forecasting, fixed ticket snapshots,
-learned model SHA, revenue ledger and main are deliberately unchanged.
+Reviewed **2026-11-17 JST**. The original research design is recorded here
+alongside the formal v1 venue profiles deployed on November 17.
 
 ## Factual measurement contract
 
@@ -29,7 +29,7 @@ Source terms/access frequency need assessment before broad live automation.
 |07 蒲郡|lap / turn / straight|Normally lap 2; lap 1 when only one lap is run. Store selection.|
 |08 常滑|lap / turn / straight|Lap missingness is possible; never set zero/worst score.|
 |09 津|lap / turn / straight, documented 2026|Verify actual present-day release before enabling live use.|
-|10 三国|half-lap / turn / straight|Do NOT equate half lap with full lap.|
+|10 三国|BOATCAST full lap / turn / straight|Keep the venue site's separately timed half lap distinct. BOATCAST 2026-11-12 and 11-14 2R provide full laps.|
 |11 びわこ|lap / turn / straight|Official turn section is 1M; model 1M survival interaction.|
 |12 住之江|lap / turn only|Do not substitute regular exhibition as original straight.|
 |13 尼崎|lap / turn only|Same: do not infer missing original straight.|
@@ -111,3 +111,24 @@ python -m unittest discover -s tests -p test_original_exhibition_venue_research.
 - Evaluate venue-specific relative metrics as a **shadow**. Do not claim
   performance gain before official forward comparison.
 - Only after proven improvement consider a separate formal-promotion PR.
+
+## Formal v1 venue profiles, 2026-11-17
+
+The [venue coefficients](../config/original-venue-v1-profiles.json) use 594
+archived races from Nov 3–13 in all 23 supported venues. Match the original
+capture SHA and timestamp, six racer names, actual entry, regular exhibition
+ST and time, and the official finish. Require the capture before the archived
+freeze and at least two minutes before cutoff. Exclude withdrawals and refunds.
+
+For each finishing stage, fit a nonnegative, bounded adjustment to the base
+conditional-choice logits using the within-race median gaps. Fit the national
+prior first (L2 0.60), then use it as the center of the venue penalty with 40
+prior races. Each stage has its own normalization so a third-place adjustment
+keeps the first–second pair's total score. The profile has a separate SHA and
+the forecast stores the same-time learned-model control.
+
+Historical replay on 187 held-out races from Nov 14–15 with the same inputs,
+ticket count and ¥50,000 virtual stake per race gave 86 hits for both the
+national v1 adjustment and this venue version. Third-place misses were 30
+and 29, first-place misses 47 and 48. Official settlement of future frozen
+race pairs is needed to establish prospective performance.

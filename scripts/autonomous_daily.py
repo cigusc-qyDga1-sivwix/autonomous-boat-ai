@@ -418,7 +418,7 @@ def exhibition_similarity_audit(records: dict, latest_races: list[dict]) -> dict
             round(counts["same_model_identical_first_head"] / n, 5) if n else None
         ),
         "learned_primary_uses_original_turn_lap_straight_features": False,
-        "learned_primary_feature_contract": "conditional-choice-v1 excludes original_exhibition; optional separately identified untrained formal v1 overlay",
+        "learned_primary_feature_contract": "conditional-choice-v1 and independently versioned original-exhibition venue profile",
         "formal_venue_original_v1_overlay_races": counts["original_v1_formal_overlay_races"],
         "sampled_frozen_pairs": examples,
         "note": ("Identical tickets may be valid. Pre/post differences combine all "

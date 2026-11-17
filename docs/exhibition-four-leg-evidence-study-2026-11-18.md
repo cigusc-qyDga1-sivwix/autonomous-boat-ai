@@ -60,3 +60,12 @@ Status: **RESEARCH ONLY。正式モデルと買い目は変更しない。**
 5. 独立した前方検証でプラス寄与が再現された項目のみ、正式化を検討する。
 
 **結論：展示から4種類の根拠を整理できるが、数字だけで4軸を独立した機力として精密推定したとは言えない。**
+
+## 2026-11-18: 発走前固定の自動証拠蓄積
+
+- `scripts/four_leg_live_freeze.py`: 全国自動予想で取得したBOATCASTの6艇独自展示を、同じ開催日・場・R・予想固定SHA・測定SHAで結び付け、4軸研究の証拠を上書きせず保存する。新たなネットワークアクセスや結果参照は行わない
+- `scripts/autonomous_daily.py`: 予想計算直後・公式結果取得前に実行する。出力は `app/data/exhibition/four-leg/YYYY-MM-DD.json` と `app/data/exhibition/four-leg/status-latest.json`。GitHub Actionsの既存 `git add app/data/exhibition/` で同日中に公開保存する
+- `tests/test_four_leg_live_freeze.py`: 予想の保全、6艇一致、予想SHAごとの不変保存、結果からの逆算防止、BOATCAST測定SHA・時刻不一致の拒否を検証
+- **正式予想とは別管理**。研究側が失敗しても正式買い目を上書きせず、研究側は `ERROR_RESEARCH_FAIL_CLOSED` と報告する
+- データ未公開でオリ展取得0件の場合は正式予想から独自4軸評価を生成しない。朝6時のベースライン起動は展示公開済みを意味しない
+- **まだ行き足/出足の独立した物理的計測も、予測精度向上も証明されていない**。次は実レースの前方保存件数と公式着順を分離して照合する

@@ -322,6 +322,8 @@ def exhibition_similarity_audit(records: dict, latest_races: list[dict]) -> dict
         "same_time_learned_ablation_ticket_changes": 0,
         "same_time_learned_ablation_first_head_changes": 0,
         "same_model_learned_identical_tickets": 0,
+        "original_v1_different_policy_baseline_pairs": 0,
+        "original_v1_formal_overlay_races": 0,
         "six_boat_turn_metric_available": 0,
         "six_boat_lap_metric_available": 0,
         "six_boat_straight_metric_available": 0,
@@ -340,6 +342,8 @@ def exhibition_similarity_audit(records: dict, latest_races: list[dict]) -> dict
         if not r or r.get("phase") != "exhibition" or r.get("ticket_status") != "formal":
             continue
         counts["formal_exhibition_races"] += 1
+        counts["original_v1_formal_overlay_races"] += int(
+            bool((r.get("original_exhibition_formal_v1") or {}).get("formal_component")))
         ablation = r.get("learned_exhibition_ablation") or {}
         if (ablation.get("model_role") == "research_shadow"
                 and ablation.get("same_model_same_time") is True
@@ -368,6 +372,14 @@ def exhibition_similarity_audit(records: dict, latest_races: list[dict]) -> dict
         counts["with_baseline_snapshot"] += 1
         if old.get("model_version") != r.get("model_version"):
             counts["different_model_baseline_pairs"] += 1
+            continue
+        # A v1 original timing overlay has a distinct scoring policy even
+        # when its statistical model SHA is identical to the baseline. Never
+        # claim this as a same-inference-policy exhibition ablation.
+        if ((r.get("original_exhibition_formal_v1") or {}).get("formal_component") and
+                not (old.get("original_exhibition_formal_v1") or {}).get("formal_component")):
+            counts["different_model_baseline_pairs"] += 1
+            counts["original_v1_different_policy_baseline_pairs"] += 1
             continue
         if r.get("model_version") == LEARNED_MAIN_MODEL:
             old_sha = (old.get("learned_formal") or {}).get("model_sha256")
@@ -406,7 +418,8 @@ def exhibition_similarity_audit(records: dict, latest_races: list[dict]) -> dict
             round(counts["same_model_identical_first_head"] / n, 5) if n else None
         ),
         "learned_primary_uses_original_turn_lap_straight_features": False,
-        "learned_primary_feature_contract": "conditional-choice-v1 excludes original_exhibition",
+        "learned_primary_feature_contract": "conditional-choice-v1 excludes original_exhibition; optional separately identified untrained formal v1 overlay",
+        "formal_venue_original_v1_overlay_races": counts["original_v1_formal_overlay_races"],
         "sampled_frozen_pairs": examples,
         "note": ("Identical tickets may be valid. Pre/post differences combine all "
                  "changed before-race inputs, not just exhibition. "
@@ -2109,7 +2122,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                         "source": selected_source,
                         "no_result_or_payout_used": True,
                     }
-                    if new.get("model_version") == LEARNED_MAIN_MODEL and ACTIVE_LEARNED_MODEL is not None:
+                    if (new.get("model_version") == LEARNED_MAIN_MODEL and ACTIVE_LEARNED_MODEL is not None
+                            and not new.get("original_exhibition_formal_v1")):
                         # Freeze research-only pair alternatives after verified
                         # six-boat input/output matching, never from results.
                         try:
@@ -2117,7 +2131,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                                 new, ACTIVE_LEARNED_MODEL)
                         except (ValueError, KeyError, TypeError, OverflowError):
                             pass
-                    if new.get("model_version") == LEARNED_MAIN_MODEL and ACTIVE_LEARNED_MODEL is not None:
+                    if (new.get("model_version") == LEARNED_MAIN_MODEL and ACTIVE_LEARNED_MODEL is not None
+                            and not new.get("original_exhibition_formal_v1")):
                         try:
                             new["learned_exhibition_ablation"] = build_learned_exhibition_ablation(
                                 new, ACTIVE_LEARNED_MODEL)
@@ -2219,7 +2234,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                         }
                     if (upgrade.get("model_version") == LEARNED_MAIN_MODEL
                             and phase_to_promote == "exhibition"
-                            and ACTIVE_LEARNED_MODEL is not None):
+                            and ACTIVE_LEARNED_MODEL is not None
+                            and not upgrade.get("original_exhibition_formal_v1")):
                         try:
                             upgrade["learned_conditional_shadow"] = build_learned_conditional_shadow(
                                 upgrade, ACTIVE_LEARNED_MODEL)
@@ -2227,7 +2243,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                             pass
                     if (upgrade.get("model_version") == LEARNED_MAIN_MODEL
                             and phase_to_promote == "exhibition"
-                            and ACTIVE_LEARNED_MODEL is not None):
+                            and ACTIVE_LEARNED_MODEL is not None
+                            and not upgrade.get("original_exhibition_formal_v1")):
                         try:
                             upgrade["learned_exhibition_ablation"] = build_learned_exhibition_ablation(
                                 upgrade, ACTIVE_LEARNED_MODEL)

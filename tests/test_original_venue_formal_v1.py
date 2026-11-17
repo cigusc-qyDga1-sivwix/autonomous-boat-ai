@@ -69,9 +69,11 @@ def formal_snapshot(venue="唐津", count=8):
         "exhibition_origin": {"source":"BoatraceOpenAPI",
                               "captured_before_cutoff": True},
         "weather_used": {},
-        "bets": [{"combination": f"1-2-{x+3}", "virtual_yen": 6000}
-                 for x in range(count-1)] +
-                [{"combination":"2-1-3", "virtual_yen": 50000-6000*(count-1)}],
+        "bets": [{"combination": combo, "virtual_yen": (6000 if idx < count-1
+                 else 50000-6000*(count-1))}
+                 for idx, combo in enumerate([
+                     "1-2-3", "1-2-4", "1-2-5", "1-2-6",
+                     "1-3-2", "1-3-4", "1-3-5", "2-1-3"][:count])],
         "point_reason": "学習済みメイン", "scenario": "学習済みメイン",
     }
 

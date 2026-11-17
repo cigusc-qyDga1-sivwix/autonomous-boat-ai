@@ -121,6 +121,8 @@ def apply(snapshot: dict, model: dict) -> dict:
     # formal tickets. This provisional corner/guard rule uses no outcomes.
     corner_audit = None
     if (snapshot.get("phase") == "exhibition"
+            and cutoff.date() >= date(2026, 11, 18)
+            and frozen.astimezone(cutoff.tzinfo).date() >= date(2026, 11, 18)
             and (snapshot.get("exhibition_origin") or {}).get("captured_before_cutoff") is True):
         ranked, corner_audit = corner_rescore(ranked, racers)
     prior_bets = snapshot["bets"]

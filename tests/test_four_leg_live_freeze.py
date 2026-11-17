@@ -91,6 +91,12 @@ class FourLegLiveFreezeTests(unittest.TestCase):
         self.assertEqual(status["new_evidence_versions"], 1)
         self.assertEqual(status["total_evidence_versions"], 1)
         self.assertEqual(status["evidence_races"], 1)
+        self.assertEqual(status["venues_with_evidence"], 1)
+        self.assertEqual(status["six_boat_original_metric_coverage_versions"]["turn_time"], 1)
+        self.assertEqual(status["six_boat_original_metric_coverage_versions"]["straight_time"], 1)
+        self.assertEqual(status["six_boat_original_metric_coverage_versions"]["half_lap_time"], 0)
+        self.assertEqual(status["ikiasi_acceleration_independently_measured"], 0)
+        self.assertEqual(status["deashi_acceleration_independently_measured"], 0)
         self.assertFalse(status["no_results_or_payouts_used"] is False)
         row = saved["race_versions"]["23-2"][SNAP_SHA]
         self.assertEqual(row["forecast_bets_sha256"], digest(before["race_records"]["23-2"]["versions"][-1]["bets"]))

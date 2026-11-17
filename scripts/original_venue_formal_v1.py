@@ -1,20 +1,20 @@
 """Forward-only BOAT LAB original-exhibition v1 scoring overlay.
 
-Research-informed but NOT a trained coefficient set. A limited, explicitly
-uncalibrated formal rule applies only to new six-boat, pre-cutoff snapshots,
-preserving the learned-model control and separate policy SHA. Results/payouts
-are neither imported nor used to construct predictions.
+Bounded venue coefficients fit offline against past official finish orders.
+Only current, pre-cutoff six-boat inputs reach inference. The learned-model
+control and independent scoring-policy SHA are preserved.
 
 BOATCAST source is one live HTTP request per target. Bounded to avoid
 uncontrolled site crawling. Usage terms must be reviewed before wider scale.
 """
 from __future__ import annotations
 
+from collections import defaultdict
 from copy import deepcopy
-from datetime import date, datetime, timedelta, timezone
-import hashlib
+from datetime import date, datetime, timedelta
 import json
 import math
+from pathlib import Path
 import re
 import time
 import unicodedata
@@ -22,21 +22,21 @@ import unicodedata
 from boat_ai.statistical import allocate, digest, distributions, prepare
 from scripts.boatcast_oriten_smoke import probe
 from scripts.entry_exhibition_gate import validated_preview
-from scripts.learned_formal import ALLOWED_FIELDS, VERSION as LEARNED_VERSION, verify_model
+from scripts.learned_formal import (
+    ALLOWED_FIELDS, VERSION as LEARNED_VERSION, ranking_summary, verify_model,
+)
 from scripts.original_exhibition_venue_research import venue_features, VENUE_SPECS
 
+PROFILE_PATH = Path(__file__).resolve().parents[1] / "config/original-venue-v1-profiles.json"
+PROFILE_DATA = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
+STAGES = ("first", "second", "third")
 POLICY = {
-    "version": "original-exhibition-venue-v1-forward-heuristic",
-    "stage1_straight": 0.04,
-    "stage1_turn": 0.03,
-    "stage2_turn": 0.09,
-    "stage3_turn": 0.06,
-    "stage3_lap_or_half": 0.025,
+    "version": "original-exhibition-venue-v1-venue-fit",
+    "profiles": PROFILE_DATA,
     "metric_scale_seconds": {
         "lap_time": 0.30, "half_lap_time": 0.20,
         "turn_time": 0.20, "straight_time": 0.09,
     },
-    "max_absolute_log_multiplier": 0.20,
 }
 POLICY_SHA256 = digest(POLICY)
 MAX_REQUESTS_PER_RUN = 6
@@ -49,20 +49,48 @@ def _name(v):
 
 
 def _score(z, metric, lane):
-    row = z.get(metric, {}).get(str(lane)) or {}
-    x = row.get("advantage_over_race_median_seconds")
-    if type(x) not in (float, int) or not math.isfinite(x):
-        return 0.0
+    x = z[metric][str(lane)]["advantage_over_race_median_seconds"]
     cap = POLICY["metric_scale_seconds"][metric]
     return max(-1.0, min(1.0, x / cap))
+
+
+def adjust_rankings(ranked: list[dict], features: dict, stage_weights: dict) -> list[dict]:
+    """Apply each delta to its own conditional distribution."""
+    first, second, third = (
+        {lane: math.exp(sum(weight * _score(features, metric, lane)
+                            for metric, weight in stage_weights[stage].items()))
+         for lane in range(1, 7)}
+        for stage in STAGES
+    )
+    rows = [(r["combination"], tuple(map(int, r["combination"].split("-"))), r["score"])
+            for r in ranked]
+    first_mass = defaultdict(float)
+    pair_mass = defaultdict(float)
+    third_normalizer = defaultdict(float)
+    for _, (h, s, t), score in rows:
+        first_mass[h] += score
+        pair_mass[h, s] += score
+        third_normalizer[h, s] += score * third[t]
+    second_normalizer = defaultdict(float)
+    for (h, s), score in pair_mass.items():
+        second_normalizer[h] += score * second[s]
+    first_normalizer = sum(score * first[h] for h, score in first_mass.items())
+
+    adjusted = []
+    for combo, (h, s, t), score in rows:
+        first_factor = first[h] / first_normalizer
+        second_factor = second[s] * first_mass[h] / second_normalizer[h]
+        third_factor = third[t] * pair_mass[h, s] / third_normalizer[h, s]
+        adjusted.append({"combination": combo, "score": score * first_factor * second_factor * third_factor})
+    return sorted(adjusted, key=lambda r: (-r["score"], r["combination"]))
 
 
 def apply(snapshot: dict, learned_model: dict, capture: dict) -> dict:
     """Rescore the exact pre-cutoff learned distribution with provenance.
 
     Keep the same point count and 50,000-yen virtual allocation.
-    The trained-model SHA is unchanged; the extra untrained scoring policy
-    has its OWN SHA, so auditors cannot mistake it for retraining.
+    The stage weights belong to the independent venue policy. The existing
+    base model still supplies the underlying conditional distribution.
     """
     frozen = datetime.fromisoformat(snapshot["frozen_at_utc"])
     cutoff = datetime.fromisoformat(snapshot["cutoff_iso_jst"])
@@ -70,7 +98,9 @@ def apply(snapshot: dict, learned_model: dict, capture: dict) -> dict:
             snapshot.get("model_version") != LEARNED_VERSION or
             frozen.tzinfo is None or cutoff.tzinfo is None or
             frozen >= cutoff - timedelta(minutes=2) or
-            not verify_model(learned_model, frozen)):
+            cutoff.date() <= date.fromisoformat(PROFILE_DATA["trained_through_jst"]) or
+            not verify_model(learned_model, frozen) or
+            (snapshot.get("learned_formal") or {}).get("model_sha256") != learned_model["model_sha256"]):
         raise ValueError("not eligible learned exhibition")
     if not isinstance(capture, dict) or len(capture.get("boats") or []) != 6:
         raise ValueError("incomplete original six boats")
@@ -92,6 +122,14 @@ def apply(snapshot: dict, learned_model: dict, capture: dict) -> dict:
     z = values["features"]
     if "turn_time" not in z or len(z["turn_time"]) != 6:
         raise ValueError("no six-boat original turn time")
+    profile = PROFILE_DATA["venues"][code]
+    stage_weights = {
+        stage: {metric: weight for metric, weight in zip(profile["metrics"], weights)
+                if metric in z and weight > 0}
+        for stage, weights in zip(STAGES, profile["weights"])
+    }
+    if not any(stage_weights.values()):
+        raise ValueError("no measured original metric used by the venue profile")
     safe_input = {
         "phase": "exhibition",
         "racers": [{k: r.get(k) for k in ALLOWED_FIELDS} for r in six],
@@ -105,47 +143,31 @@ def apply(snapshot: dict, learned_model: dict, capture: dict) -> dict:
     count = len(snapshot.get("bets") or [])
     if not 4 <= count <= 20 or sum(b["virtual_yen"] for b in snapshot["bets"]) != 50000:
         raise ValueError("invalid learned main stake")
-    adjusted = []
-    for r in ranked:
-        first, second, third = (int(i) for i in r["combination"].split("-"))
-        third_lap = "lap_time" if "lap_time" in z else (
-            "half_lap_time" if "half_lap_time" in z else None)
-        delta = (
-            POLICY["stage1_straight"] * _score(z, "straight_time", first)
-            + POLICY["stage1_turn"] * _score(z, "turn_time", first)
-            + POLICY["stage2_turn"] * _score(z, "turn_time", second)
-            + POLICY["stage3_turn"] * _score(z, "turn_time", third)
-            + (POLICY["stage3_lap_or_half"] * _score(z, third_lap, third)
-               if third_lap else 0.0)
-        )
-        delta = max(-POLICY["max_absolute_log_multiplier"],
-                    min(POLICY["max_absolute_log_multiplier"], delta))
-        adjusted.append({"combination": r["combination"],
-                         "score": r["score"] * math.exp(delta)})
-    adjusted.sort(key=lambda r: (-r["score"], r["combination"]))
+    adjusted = adjust_rankings(ranked, z, stage_weights)
     new_bets = allocate(adjusted, count, point_free=False, max_points=20)
     if len(new_bets) != count or sum(b["virtual_yen"] for b in new_bets) != 50000:
         raise ValueError("original v1 allocation corrupted")
     out = deepcopy(snapshot)
     original_bets = deepcopy(out["bets"])
     out["bets"] = new_bets
-    # Identical learned weights are NOT an identical scoring policy.
-    # Attribute composite inference separately for prospective audit.
+    out.update(ranking_summary(adjusted, six, "オリ展場別v1補正後の相対評価・確率校正前"))
     composite_sha = digest({"base_learned_model_sha256": learned_model["model_sha256"],
                             "original_v1_policy_sha256": POLICY_SHA256})
-    out["learned_formal"]["inference_variant"] = "learned_plus_original_v1_untrained_overlay"
+    out["learned_formal"]["inference_variant"] = "learned_plus_original_v1_venue_fit"
     out["learned_formal"]["composite_inference_sha256"] = composite_sha
-    out["learned_formal"]["original_v1_coefficients_trained"] = False
-    # Extra timing evidence has no trained coefficient yet: label honestly.
-    out["point_reason"] += "／オリ展場別v1: まわり足・直線・一周/半周の限定再順位付け（未学習の係数・未校正）"
-    out["scenario"] = ("オリ展場別v1上位 " + new_bets[0]["combination"]
-                       + "（元学習モデル＋限定的な実測補正、性能未検証）")
+    out["learned_formal"]["original_v1_coefficients_trained"] = True
+    out["point_reason"] += "／オリ展場別v1で出走6艇の実測を着順ごとに補正（未校正）"
+    out["scenario"] = (f"{snapshot['venue']} オリ展場別v1反映・上位 {new_bets[0]['combination']}"
+                       "（1着・2着・3着を個別補正）")
     out["original_exhibition_formal_v1"] = {
         "version": POLICY["version"],
-        "formal_component": True, "trained_coefficient": False,
+        "formal_component": True, "trained_coefficient": True,
         "coefficient_policy_sha256": POLICY_SHA256,
         "composite_inference_sha256": composite_sha,
         "base_learned_model_sha256": learned_model["model_sha256"],
+        "profile_training_races": profile["training_races"],
+        "profile_trained_through_jst": PROFILE_DATA["trained_through_jst"],
+        "profile_stage_weights": stage_weights,
         "capture_sha256": values["capture_sha256"],
         "source_body_sha256": capture.get("source_body_sha256"),
         "measurement_sha256": values["raw_measurement_sha256"],

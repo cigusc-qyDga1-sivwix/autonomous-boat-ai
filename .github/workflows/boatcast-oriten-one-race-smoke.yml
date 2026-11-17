@@ -3,6 +3,8 @@ on:
   push:
     branches:
       - research/original-exhibition-official-source-20261117
+    paths:
+      - .github/workflows/boatcast-oriten-one-race-smoke.yml
 permissions:
   contents: read
 jobs:
@@ -16,10 +18,10 @@ jobs:
           python-version: '3.12'
       - name: Test documented parser and fail-closed cases
         run: python -m unittest discover -s tests -p test_boatcast_oriten_smoke.py -v
-      - name: Make exactly one BOATCAST source request (Tokuyama 2R, research)
+      - name: Make exactly one BOATCAST source request (Karatsu 2R, research)
         run: |
           python scripts/boatcast_oriten_smoke.py \
-            --date 2026-11-17 --venue 18 --race 2 \
+            --date 2026-11-17 --venue 23 --race 2 \
             --out /tmp/boatcast-oriten-probe.json
       - name: Verify six boats and produce safe evidence summary
         run: |

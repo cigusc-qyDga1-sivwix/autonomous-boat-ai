@@ -7,6 +7,12 @@ on:
     paths:
       - 'scripts/autonomous_daily.py'
       - 'scripts/learned_formal.py'
+      - 'scripts/boatcast_oriten_smoke.py'
+      - 'scripts/original_exhibition_venue_research.py'
+      - 'scripts/original_venue_formal_v1.py'
+      - 'tests/test_original_exhibition_venue_research.py'
+      - 'tests/test_boatcast_oriten_smoke.py'
+      - 'tests/test_original_venue_formal_v1.py'
       - 'scripts/third_place_pilot.py'
       - 'app/data/statistical/third-place-pilot-latest.json'
       - 'scripts/conditional_second_primary.py'
@@ -143,6 +149,10 @@ jobs:
           python -m unittest discover -s tests -p test_racer_context.py
           node --check app/tactical-1m.js
           python -m compileall -q scripts/autonomous_daily.py
+          python -m compileall -q scripts/original_venue_formal_v1.py scripts/original_exhibition_venue_research.py scripts/boatcast_oriten_smoke.py
+          python -m unittest discover -s tests -p test_boatcast_oriten_smoke.py -v
+          python -m unittest discover -s tests -p test_original_exhibition_venue_research.py -v
+          python -m unittest discover -s tests -p test_original_venue_formal_v1.py -v
           python -m compileall -q scripts/conditional_second_primary.py
           python -m compileall -q scripts/strong_field_diagnostic.py
           python -m compileall -q scripts/weather_live_bridge.py

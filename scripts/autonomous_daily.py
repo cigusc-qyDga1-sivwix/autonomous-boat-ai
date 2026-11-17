@@ -47,6 +47,7 @@ if __package__:
     from .learned_formal import load_model as load_learned_model, apply as apply_learned_primary, VERSION as LEARNED_MAIN_MODEL
     from .learned_conditional_shadow import build as build_learned_conditional_shadow
     from .learned_exhibition_ablation import build as build_learned_exhibition_ablation
+    from .original_venue_formal_v1 import apply as apply_original_venue_v1, attach_to_live_race, collect_candidates as collect_original_candidates
 else:
     from racer_context import collect as collect_racer_context, validated as validate_racer_context
     from official_pay import fetch_official_pay
@@ -74,6 +75,7 @@ else:
     from learned_formal import load_model as load_learned_model, apply as apply_learned_primary, VERSION as LEARNED_MAIN_MODEL
     from learned_conditional_shadow import build as build_learned_conditional_shadow
     from learned_exhibition_ablation import build as build_learned_exhibition_ablation
+    from original_venue_formal_v1 import apply as apply_original_venue_v1, attach_to_live_race, collect_candidates as collect_original_candidates
 
 JST = ZoneInfo("Asia/Tokyo")
 UTC = timezone.utc
@@ -288,7 +290,7 @@ def numeric_exhibition_matches_snapshot(candidate: dict, snapshot: dict) -> bool
                 return False
         for metric, boat_values in (candidate.get("_exhibition_original") or {}).items():
             if (not isinstance(boat_values, dict) or len(boat_values) != 6
-                    or metric not in ("lap_time", "turn_time", "straight_time")):
+                    or metric not in ("lap_time", "half_lap_time", "turn_time", "straight_time")):
                 return False
             expected = number(boat_values.get(str(lane)))
             observed = number((saved.get("original_exhibition") or {}).get(metric))
@@ -320,6 +322,8 @@ def exhibition_similarity_audit(records: dict, latest_races: list[dict]) -> dict
         "same_time_learned_ablation_ticket_changes": 0,
         "same_time_learned_ablation_first_head_changes": 0,
         "same_model_learned_identical_tickets": 0,
+        "original_v1_different_policy_baseline_pairs": 0,
+        "original_v1_formal_overlay_races": 0,
         "six_boat_turn_metric_available": 0,
         "six_boat_lap_metric_available": 0,
         "six_boat_straight_metric_available": 0,
@@ -338,6 +342,8 @@ def exhibition_similarity_audit(records: dict, latest_races: list[dict]) -> dict
         if not r or r.get("phase") != "exhibition" or r.get("ticket_status") != "formal":
             continue
         counts["formal_exhibition_races"] += 1
+        counts["original_v1_formal_overlay_races"] += int(
+            bool((r.get("original_exhibition_formal_v1") or {}).get("formal_component")))
         ablation = r.get("learned_exhibition_ablation") or {}
         if (ablation.get("model_role") == "research_shadow"
                 and ablation.get("same_model_same_time") is True
@@ -366,6 +372,14 @@ def exhibition_similarity_audit(records: dict, latest_races: list[dict]) -> dict
         counts["with_baseline_snapshot"] += 1
         if old.get("model_version") != r.get("model_version"):
             counts["different_model_baseline_pairs"] += 1
+            continue
+        # A v1 original timing overlay has a distinct scoring policy even
+        # when its statistical model SHA is identical to the baseline. Never
+        # claim this as a same-inference-policy exhibition ablation.
+        if ((r.get("original_exhibition_formal_v1") or {}).get("formal_component") and
+                not (old.get("original_exhibition_formal_v1") or {}).get("formal_component")):
+            counts["different_model_baseline_pairs"] += 1
+            counts["original_v1_different_policy_baseline_pairs"] += 1
             continue
         if r.get("model_version") == LEARNED_MAIN_MODEL:
             old_sha = (old.get("learned_formal") or {}).get("model_sha256")
@@ -404,7 +418,8 @@ def exhibition_similarity_audit(records: dict, latest_races: list[dict]) -> dict
             round(counts["same_model_identical_first_head"] / n, 5) if n else None
         ),
         "learned_primary_uses_original_turn_lap_straight_features": False,
-        "learned_primary_feature_contract": "conditional-choice-v1 excludes original_exhibition",
+        "learned_primary_feature_contract": "conditional-choice-v1 excludes original_exhibition; optional separately identified untrained formal v1 overlay",
+        "formal_venue_original_v1_overlay_races": counts["original_v1_formal_overlay_races"],
         "sampled_frozen_pairs": examples,
         "note": ("Identical tickets may be valid. Pre/post differences combine all "
                  "changed before-race inputs, not just exhibition. "
@@ -1857,6 +1872,20 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
     }
     if ACTIVE_LEARNED_MODEL is not None and venue != "江戸川":
         body = apply_learned_primary(body, ACTIVE_LEARNED_MODEL)
+        # Apply the bounded venue-original v1 policy only to fresh verified
+        # six-boat original data. No old forecast or trained model SHA rewrites.
+        if phase == "exhibition" and race.get("_boatcast_original_capture"):
+            try:
+                body = apply_original_venue_v1(
+                    body, ACTIVE_LEARNED_MODEL, race["_boatcast_original_capture"])
+            except (ValueError, KeyError, TypeError, OverflowError) as exc:
+                # Never call the fallback a successful original-v1 forecast.
+                # Keep existing learned tickets when the source is unsuitable.
+                body["original_exhibition_formal_v1_rejection"] = {
+                    "status": "REJECTED_FALLBACK_LEARNED",
+                    "reason": str(exc)[:180],
+                    "base_model_only": True,
+                }
     return {**body, "sha256": stable_hash(body)}
 
 
@@ -1893,7 +1922,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
           weather_by_venue: dict | None = None, exhibition_rows: dict | None = None,
           enforce_wall_clock: bool = False, racer_context_rows: dict | None = None,
           tactics_rows: dict | None = None,
-          site_wave_snapshot: dict | None = None) -> tuple[dict, dict, dict]:
+          site_wave_snapshot: dict | None = None,
+          original_captures: dict | None = None) -> tuple[dict, dict, dict]:
     if now.tzinfo is None:
         raise ValueError("Timezone-aware now is mandatory")
     local_day = now.astimezone(JST).date().isoformat()
@@ -1909,6 +1939,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
     new_model_upgrades = 0
     new_weather_revisions = 0
     exhibition_rows = exhibition_rows or {}
+    original_captures = original_captures or {}
     withdrawal_notices = {}
     race_source = (payload.get("programs") or {}).get("stadiums") or {}
     for venue_code, stadium in race_source.items():
@@ -2028,6 +2059,22 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 code = f"{local_day.replace('-', '')}{int(venue_code):02d}{n:02d}"
                 candidate, selected_csv_origin, selected_source = select_exhibition_source(
                     race, exhibition_rows.get(code), runtime_now, venue_code, n)
+                # A current-run direct BOATCAST record is accepted only when
+                # source URL, event/date, all six names and measurements match
+                # the same live OpenAPI six-boat preview before cutoff.
+                original_v1_attached = False
+                original_raw = original_captures.get(key)
+                if original_raw and selected_source == "openapi":
+                    try:
+                        candidate = attach_to_live_race(
+                            candidate, original_raw, venue_code=f"{int(venue_code):02d}",
+                            race_number=n,
+                            captured_by_forecast_at_utc=(
+                                datetime.now(UTC) if enforce_wall_clock else runtime_now
+                            ).isoformat())
+                        original_v1_attached = True
+                    except (ValueError, KeyError, TypeError, OverflowError):
+                        pass  # Fail closed; preserve canonical normal exhibition.
                 candidate = {**candidate, "_head_coverage_trial": coverage_active}
                 preview_ready = selected_source != "unavailable"
                 existing_exhibition = [v for v in record["versions"] if v["phase"] == "exhibition"]
@@ -2042,12 +2089,17 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 live_measurements_changed = bool(
                     selected_source == "openapi" and existing_exhibition
                     and not numeric_exhibition_matches_snapshot(candidate, existing_exhibition[-1]))
+                original_v1_gain = bool(
+                    original_v1_attached and existing_exhibition
+                    and not any((v.get("original_exhibition_formal_v1") or {}).get("formal_component")
+                                for v in existing_exhibition))
                 revision = bool(
-                    existing_exhibition and len(existing_exhibition) < 3
-                    and ((selected_csv_origin
-                          and (changed_measurement or not previous_csv_time
-                               or previous_csv_time < selected_csv_origin["observed_at_jst"]))
-                         or live_measurements_changed)
+                    (existing_exhibition and len(existing_exhibition) < 3
+                     and ((selected_csv_origin
+                           and (changed_measurement or not previous_csv_time
+                                or previous_csv_time < selected_csv_origin["observed_at_jst"]))
+                          or live_measurements_changed))
+                    or (original_v1_gain and len(existing_exhibition) < 5)
                 )
                 if preview_ready and ("exhibition" not in phases or revision):
                     origin_url = selected_csv_origin and "https://boatracecsv.github.io/docs/data/previews.html" or source_url
@@ -2070,7 +2122,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                         "source": selected_source,
                         "no_result_or_payout_used": True,
                     }
-                    if new.get("model_version") == LEARNED_MAIN_MODEL and ACTIVE_LEARNED_MODEL is not None:
+                    if (new.get("model_version") == LEARNED_MAIN_MODEL and ACTIVE_LEARNED_MODEL is not None
+                            and not new.get("original_exhibition_formal_v1")):
                         # Freeze research-only pair alternatives after verified
                         # six-boat input/output matching, never from results.
                         try:
@@ -2078,7 +2131,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                                 new, ACTIVE_LEARNED_MODEL)
                         except (ValueError, KeyError, TypeError, OverflowError):
                             pass
-                    if new.get("model_version") == LEARNED_MAIN_MODEL and ACTIVE_LEARNED_MODEL is not None:
+                    if (new.get("model_version") == LEARNED_MAIN_MODEL and ACTIVE_LEARNED_MODEL is not None
+                            and not new.get("original_exhibition_formal_v1")):
                         try:
                             new["learned_exhibition_ablation"] = build_learned_exhibition_ablation(
                                 new, ACTIVE_LEARNED_MODEL)
@@ -2180,7 +2234,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                         }
                     if (upgrade.get("model_version") == LEARNED_MAIN_MODEL
                             and phase_to_promote == "exhibition"
-                            and ACTIVE_LEARNED_MODEL is not None):
+                            and ACTIVE_LEARNED_MODEL is not None
+                            and not upgrade.get("original_exhibition_formal_v1")):
                         try:
                             upgrade["learned_conditional_shadow"] = build_learned_conditional_shadow(
                                 upgrade, ACTIVE_LEARNED_MODEL)
@@ -2188,7 +2243,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                             pass
                     if (upgrade.get("model_version") == LEARNED_MAIN_MODEL
                             and phase_to_promote == "exhibition"
-                            and ACTIVE_LEARNED_MODEL is not None):
+                            and ACTIVE_LEARNED_MODEL is not None
+                            and not upgrade.get("original_exhibition_formal_v1")):
                         try:
                             upgrade["learned_exhibition_ablation"] = build_learned_exhibition_ablation(
                                 upgrade, ACTIVE_LEARNED_MODEL)
@@ -2271,7 +2327,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "coverage_reselection_shadow", "hidden_path_shadow",
                       "exhibition_input_check", "relative_scores_uncalibrated", "learned_formal", "third_place_pilot",
                       "inside_survival_research", "learned_conditional_shadow",
-                      "learned_exhibition_ablation"):
+                      "learned_exhibition_ablation", "original_exhibition_formal_v1",
+                      "original_exhibition_formal_v1_rejection"):
             if extra in current:
                 r[extra] = current[extra]
         r["version_count"] = len(versions)
@@ -2332,6 +2389,14 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         "exhibition_race_count": sum(r.get("phase")=="exhibition" for r in latest_races),
         "learned_formal_races": sum(r.get("model_version")==LEARNED_MAIN_MODEL for r in latest_races),
         "learned_formal_status": ("active" if ACTIVE_LEARNED_MODEL is not None else "awaiting_fresh_model"),
+        "original_exhibition_v1_formal_races": sum(
+            bool((r.get("original_exhibition_formal_v1") or {}).get("formal_component"))
+            and r.get("ticket_status") == "formal" for r in latest_races),
+        "original_exhibition_v1_candidate_races": sum(
+            bool(r.get("original_exhibition_formal_v1")) for r in latest_races),
+        "original_exhibition_v1_policy_shas": sorted({
+            (r.get("original_exhibition_formal_v1") or {}).get("coefficient_policy_sha256")
+            for r in latest_races if r.get("original_exhibition_formal_v1")}),
         "learned_formal_model_sha256": (ACTIVE_LEARNED_MODEL or {}).get("model_sha256"),
         "learned_formal_trained_through": (ACTIVE_LEARNED_MODEL or {}).get("trained_through"),
         "exhibition_changed_bet_count": sum(bool((r.get("exhibition_change") or {}).get("bets_changed")) for r in latest_races),
@@ -2810,10 +2875,24 @@ def main():
         tactics_rows = raw_tactics['races']
     global ACTIVE_LEARNED_MODEL
     ACTIVE_LEARNED_MODEL = (load_learned_model(now) if not args.input_json else None)
+    original_captures = {}
+    original_status = {"status": "SKIPPED_NO_FRESH_LEARNED_MODEL" if ACTIVE_LEARNED_MODEL is None
+                       else "SKIPPED_FIXTURE", "attempted": 0, "captured_six_boat": 0}
+    if not args.input_json and ACTIVE_LEARNED_MODEL is not None:
+        try:
+            original_captures, original_status = collect_original_candidates(
+                source, previous, datetime.now(UTC))
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            original_status = {"status": "SOURCE_UNAVAILABLE_FAIL_CLOSED",
+                               "error_type": type(exc).__name__, "attempted": 0,
+                               "captured_six_boat": 0}
     ledger, webapp, summary = build(previous, source, now, source_url, nearby_forecasts,
                                      exhibition_rows=research, enforce_wall_clock=not bool(args.input_json),
                                      racer_context_rows=contexts, tactics_rows=tactics_rows,
-                                     site_wave_snapshot=weather_site_wave)
+                                     site_wave_snapshot=weather_site_wave,
+                                     original_captures=original_captures)
+    summary["original_exhibition_v1_source"] = original_status
+    webapp["original_exhibition_v1_source"] = original_status
     weather_bridge_status["formal_wave_applied_races"] = webapp["weather_lab_site_wave_applied_race_count"]
     weather_bridge_status["formal_jma_wind_races"] = webapp["jma_regional_wind_race_count"]
     weather_bridge_status["new_weather_revisions"] = summary["new_weather_revisions"]
@@ -2908,6 +2987,9 @@ def main():
         "listed_races": summary["listed_races"], "forecast_races": summary["forecast_races"],
         "final_exhibition_verified_races": webapp["final_exhibition_verified_races"],
         "exhibition_similarity_audit": webapp["exhibition_similarity_audit"],
+        "original_exhibition_v1_source": original_status,
+        "original_exhibition_v1_formal_races": webapp["original_exhibition_v1_formal_races"],
+        "original_exhibition_v1_policy_shas": webapp["original_exhibition_v1_policy_shas"],
     })
     print(json.dumps(summary, ensure_ascii=False))
 

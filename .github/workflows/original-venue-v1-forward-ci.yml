@@ -1,0 +1,36 @@
+name: BOAT LAB original venue v1 forward safety tests
+on:
+  push:
+    branches:
+      - feature/original-exhibition-v1-forward-formal-20261117
+  pull_request:
+    paths:
+      - scripts/original_venue_formal_v1.py
+      - scripts/original_exhibition_venue_research.py
+      - scripts/boatcast_oriten_smoke.py
+      - tests/test_original_venue_formal_v1.py
+      - tests/test_original_exhibition_venue_research.py
+      - tests/test_boatcast_oriten_smoke.py
+      - .github/workflows/original-venue-v1-forward-ci.yml
+permissions:
+  contents: read
+jobs:
+  original-v1-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate production imports
+        run: |
+          python -m compileall -q scripts/autonomous_daily.py scripts/boatcast_oriten_smoke.py scripts/original_exhibition_venue_research.py scripts/original_venue_formal_v1.py
+      - name: Boot direct production CLI imports (not just compile)
+        run: python scripts/autonomous_daily.py --help
+      - name: Verify six-boat parsing
+        run: python -m unittest discover -s tests -p test_boatcast_oriten_smoke.py -v
+      - name: Verify venue-specific metrics and cutoff evidence
+        run: python -m unittest discover -s tests -p test_original_exhibition_venue_research.py -v
+      - name: Verify same-time formal control and prospectivity
+        run: python -m unittest discover -s tests -p test_original_venue_formal_v1.py -v

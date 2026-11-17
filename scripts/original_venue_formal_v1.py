@@ -26,6 +26,7 @@ from scripts.learned_formal import (
     ALLOWED_FIELDS, VERSION as LEARNED_VERSION, ranking_summary, verify_model,
 )
 from scripts.original_exhibition_venue_research import venue_features, VENUE_SPECS
+from scripts.corner_attack_formal_v1 import rescore as corner_rescore, POLICY_SHA256 as CORNER_POLICY_SHA256
 
 PROFILE_PATH = Path(__file__).resolve().parents[1] / "config/original-venue-v1-profiles.json"
 PROFILE_DATA = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
@@ -144,6 +145,10 @@ def apply(snapshot: dict, learned_model: dict, capture: dict) -> dict:
     if not 4 <= count <= 20 or sum(b["virtual_yen"] for b in snapshot["bets"]) != 50000:
         raise ValueError("invalid learned main stake")
     adjusted = adjust_rankings(ranked, z, stage_weights)
+    # Apply the same conservative 3-vs-4 and 4->5 signal as learned primary.
+    # Recompute once from base+venue scores: never double-boost a learned
+    # snapshot that was already corner-adjusted before original-v1 enrichment.
+    adjusted, corner_audit = corner_rescore(adjusted, six)
     new_bets = allocate(adjusted, count, point_free=False, max_points=20)
     if len(new_bets) != count or sum(b["virtual_yen"] for b in new_bets) != 50000:
         raise ValueError("original v1 allocation corrupted")
@@ -151,18 +156,28 @@ def apply(snapshot: dict, learned_model: dict, capture: dict) -> dict:
     original_bets = deepcopy(out["bets"])
     out["bets"] = new_bets
     out.update(ranking_summary(adjusted, six, "オリ展場別v1補正後の相対評価・確率校正前"))
-    composite_sha = digest({"base_learned_model_sha256": learned_model["model_sha256"],
-                            "original_v1_policy_sha256": POLICY_SHA256})
-    out["learned_formal"]["inference_variant"] = "learned_plus_original_v1_venue_fit"
+    composite_input = {"base_learned_model_sha256": learned_model["model_sha256"],
+                       "original_v1_policy_sha256": POLICY_SHA256}
+    if corner_audit.get("applied"):
+        composite_input["corner_guard_policy_sha256"] = CORNER_POLICY_SHA256
+        out["corner_attack_formal_v1"] = corner_audit
+        out["learned_formal"]["corner_guard_policy_sha256"] = CORNER_POLICY_SHA256
+    composite_sha = digest(composite_input)
+    out["learned_formal"]["inference_variant"] = (
+        "learned_plus_original_v1_venue_fit_plus_corner_guard_v1"
+        if corner_audit.get("applied") else "learned_plus_original_v1_venue_fit")
     out["learned_formal"]["composite_inference_sha256"] = composite_sha
     out["learned_formal"]["original_v1_coefficients_trained"] = True
     out["point_reason"] += "／オリ展場別v1で出走6艇の実測を着順ごとに補正（未校正）"
+    if corner_audit.get("applied") and not (snapshot.get("corner_attack_formal_v1") or {}).get("applied"):
+        out["point_reason"] += "／3・4コース攻防・5コース追走を小幅補正（未校正）"
     out["scenario"] = (f"{snapshot['venue']} オリ展場別v1反映・上位 {new_bets[0]['combination']}"
                        "（1着・2着・3着を個別補正）")
     out["original_exhibition_formal_v1"] = {
         "version": POLICY["version"],
         "formal_component": True, "trained_coefficient": True,
         "coefficient_policy_sha256": POLICY_SHA256,
+        "corner_guard_policy_sha256": CORNER_POLICY_SHA256 if corner_audit.get("applied") else None,
         "composite_inference_sha256": composite_sha,
         "base_learned_model_sha256": learned_model["model_sha256"],
         "profile_training_races": profile["training_races"],

@@ -79,12 +79,18 @@ def merge_forward_evidence(previous: dict | None, ledger: dict,
             has_bound_capture = bool(
                 bound.get("capture_sha256") == digest(capture)
                 and bound.get("measurement_sha256") == capture.get("measurement_sha256"))
+            origin = version.get("exhibition_origin") or {}
             has_input_capture = bool(
                 input_check.get("original_metrics_matched")
+                and origin.get("original_exhibition_source") == "BOATCAST_direct"
+                and origin.get("original_exhibition_measurement_sha256") ==
+                    capture.get("measurement_sha256")
+                and origin.get("original_exhibition_captured_at_utc") ==
+                    capture.get("captured_at_utc")
                 and version.get("model_version")
                 and _iso_time(capture["captured_at_utc"]) <=
                     _iso_time(version["frozen_at_utc"])
-                and version.get("original_exhibition_formal_v1") is None)
+                and not bound)
             if not (has_bound_capture or has_input_capture):
                 continue
             frozen_sha = version.get("sha256")

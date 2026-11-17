@@ -129,6 +129,13 @@ def apply(snapshot: dict, learned_model: dict, capture: dict) -> dict:
     out = deepcopy(snapshot)
     original_bets = deepcopy(out["bets"])
     out["bets"] = new_bets
+    # Identical learned weights are NOT an identical scoring policy.
+    # Attribute composite inference separately for prospective audit.
+    composite_sha = digest({"base_learned_model_sha256": learned_model["model_sha256"],
+                            "original_v1_policy_sha256": POLICY_SHA256})
+    out["learned_formal"]["inference_variant"] = "learned_plus_original_v1_untrained_overlay"
+    out["learned_formal"]["composite_inference_sha256"] = composite_sha
+    out["learned_formal"]["original_v1_coefficients_trained"] = False
     # Extra timing evidence has no trained coefficient yet: label honestly.
     out["point_reason"] += "／オリ展場別v1: まわり足・直線・一周/半周の限定再順位付け（未学習の係数・未校正）"
     out["scenario"] = ("オリ展場別v1上位 " + new_bets[0]["combination"]
@@ -137,6 +144,7 @@ def apply(snapshot: dict, learned_model: dict, capture: dict) -> dict:
         "version": POLICY["version"],
         "formal_component": True, "trained_coefficient": False,
         "coefficient_policy_sha256": POLICY_SHA256,
+        "composite_inference_sha256": composite_sha,
         "base_learned_model_sha256": learned_model["model_sha256"],
         "capture_sha256": values["capture_sha256"],
         "source_body_sha256": capture.get("source_body_sha256"),

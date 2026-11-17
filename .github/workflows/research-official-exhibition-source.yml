@@ -1,0 +1,55 @@
+name: Research official exhibition source smoke test
+on:
+  workflow_dispatch:
+    inputs:
+      event_date:
+        description: "JST event date YYYY-MM-DD (source availability not guaranteed)"
+        required: true
+        type: string
+      race:
+        description: "Gamagori race number 1..12"
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  original-source-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline fail-closed parser tests
+        run: python -m unittest tests.test_official_original_exhibition_research
+      - name: One-race live fetch (research only)
+        env:
+          EVENT_DATE: ${{ inputs.event_date }}
+          RACE: ${{ inputs.race }}
+        run: |
+          python scripts/official_original_exhibition_research.py \
+            --date "$EVENT_DATE" --race "$RACE" \
+            --output-dir /tmp/original-exhibition-research
+      - name: Inspect source capture without certifying production
+        run: |
+          python - <<'PY'
+          import glob, json
+          files=glob.glob('/tmp/original-exhibition-research/**/*.json',recursive=True)
+          assert len(files)==1, 'missing capture artifact'
+          data=json.load(open(files[0]))
+          print('status:',data['status'],'boats:',len(data['boats']),
+                'source:',data['source_url'],'research_only:',data['research_only'])
+          assert data['research_only'] is True
+          assert data['eligible_for_formal_prediction'] is False
+          if data['status'] != 'SIX_BOAT_SOURCE_CAPTURED_NOT_CROSSCHECKED':
+              print('UNAVAILABLE:',data['reason'])
+          PY
+      - name: Upload immutable research evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: original-exhibition-research-${{ github.run_id }}
+          path: /tmp/original-exhibition-research
+          retention-days: 14
+          if-no-files-found: warn

@@ -1,0 +1,54 @@
+name: BOATCAST direct original exhibition one-race smoke
+on:
+  push:
+    branches:
+      - research/original-exhibition-official-source-20261117
+    paths:
+      - .github/workflows/boatcast-oriten-one-race-smoke.yml
+permissions:
+  contents: read
+jobs:
+  boatcast-one-race:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test documented parser and fail-closed cases
+        run: python -m unittest discover -s tests -p test_boatcast_oriten_smoke.py -v
+      - name: Make exactly one BOATCAST source request (Karatsu 2R, research)
+        run: |
+          python scripts/boatcast_oriten_smoke.py \
+            --date 2026-11-17 --venue 23 --race 2 \
+            --out /tmp/boatcast-oriten-probe.json
+      - name: Verify six boats and produce safe evidence summary
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          raw=json.loads(Path('/tmp/boatcast-oriten-probe.json').read_text())
+          summary={k:raw.get(k) for k in (
+              'schema','date','venue_code','race_number','source_url',
+              'requested_at_utc','captured_at_utc','http_status','status',
+              'source_body_sha256','measurement_sha256','metrics',
+              'reason','research_only','pre_cutoff_verified',
+              'formal_forecast_eligible')}
+          summary['six_boat_count']=len(raw.get('boats') or [])
+          summary_path=Path('/tmp/boatcast-oriten-summary.json')
+          summary_path.write_text(json.dumps(summary,ensure_ascii=False,indent=2)+'\n')
+          print(json.dumps(summary,ensure_ascii=False))
+          assert raw['research_only'] and not raw['formal_forecast_eligible']
+          assert raw['status']=='SIX_BOAT_PARSED_RESEARCH_ONLY', 'Live source probe did not pass'
+          assert len(raw['boats'])==6, 'Not six boats'
+          assert len(raw['metrics']) in (2,3), 'Incorrect number of venue measurements'
+          PY
+      - name: Upload limited evidence (never raw third-party data)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boatcast-oriten-one-race-check
+          path: /tmp/boatcast-oriten-summary.json
+          retention-days: 7
+          if-no-files-found: warn

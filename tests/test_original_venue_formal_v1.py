@@ -63,6 +63,8 @@ def formal_snapshot(venue="唐津", count=8):
     } for i in range(1, 7)]
     return {
         "model_version": MODEL_VERSION, "phase": "exhibition",
+        "learned_formal": {"model_sha256": MODEL["model_sha256"],
+                           "model_role": "formal_primary"},
         "venue": venue, "race": 2,
         "frozen_at_utc": FROZEN, "cutoff_iso_jst": CUTOFF,
         "racers": racers,

@@ -17,6 +17,7 @@ from boat_ai.statistical import (
 )
 from scripts.third_place_pilot import load_pilot, frozen_shadow
 from scripts.inside_survival_research import evaluate as evaluate_inside_survival
+from scripts.corner_attack_formal_v1 import rescore as corner_rescore, POLICY_SHA256 as CORNER_POLICY_SHA256
 
 VERSION = "four-factor-learned-v1-conditional-choice-trained"
 START_DATE = date(2026, 11, 13)
@@ -116,6 +117,12 @@ def apply(snapshot: dict, model: dict) -> dict:
     ranked = distributions(safe_input, model)
     if len(ranked) != 120:
         raise ValueError("learned primary needs canonical 120 rankings")
+    # Only freshly verified pre-cutoff six-boat exhibition input may affect
+    # formal tickets. This provisional corner/guard rule uses no outcomes.
+    corner_audit = None
+    if (snapshot.get("phase") == "exhibition"
+            and (snapshot.get("exhibition_origin") or {}).get("captured_before_cutoff") is True):
+        ranked, corner_audit = corner_rescore(ranked, racers)
     prior_bets = snapshot["bets"]
     count = len(prior_bets)
     if not 4 <= count <= 20 or sum(b["virtual_yen"] for b in prior_bets) != 50000:
@@ -164,6 +171,15 @@ def apply(snapshot: dict, model: dict) -> dict:
             "no_historical_prediction_overwrite": True,
         }
     })
+    if corner_audit and corner_audit.get("applied"):
+        result["corner_attack_formal_v1"] = corner_audit
+        result["learned_formal"]["inference_variant"] = "learned_plus_corner_guard_forward_v1"
+        result["learned_formal"]["corner_guard_policy_sha256"] = CORNER_POLICY_SHA256
+        result["learned_formal"]["composite_inference_sha256"] = digest({
+            "base_learned_model_sha256": model["model_sha256"],
+            "corner_guard_policy_sha256": CORNER_POLICY_SHA256,
+        })
+        result["point_reason"] += "／3・4コース攻防を発走前展示で小幅補正（未校正）"
     # Old-model diagnostics must not be represented as learned-model evidence.
     for key in ("interaction_primary", "three_leg_primary",
                 "formal_insight_v24", "formal_head_risk_v25",

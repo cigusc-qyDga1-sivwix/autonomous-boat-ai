@@ -64,15 +64,16 @@ class FourLegExhibitionEvidenceTests(unittest.TestCase):
             self.assertIsNone(b["出足"]["numeric_score"])
             self.assertEqual(b["まわり足"]["status"], "MEASURED_TURN_INTERVAL_PROXY")
             self.assertEqual(b["伸び足"]["status"], "MEASURED_TIMING_PROXY")
-            self.assertIsNotNone(b["出足"]["post_turn_straight_interval_seconds"])
+            self.assertIsNotNone(b["出足"]["original_straight_interval_context_only"])
             self.assertIsNotNone(b["まわり足"]["whole_lap_relative"])
+            self.assertFalse(b["出足"]["post_turn_acceleration_measured"])
         self.assertTrue(out["no_results_odds_or_payouts_used"])
 
     def test_suminoe_has_no_imaginary_independent_straight(self):
         out = assess(snapshot("住之江"), original("12", ("lap_time", "turn_time")))
         for b in out["boats"]:
             self.assertIsNone(b["伸び足"]["original_straight_relative"])
-            self.assertIsNone(b["出足"]["post_turn_straight_interval_seconds"])
+            self.assertIsNone(b["出足"]["original_straight_interval_context_only"])
             self.assertIsNotNone(b["伸び足"]["normal_exhibition_relative"])
         self.assertEqual(out["original_metric_status"]["turn_time"], "SIX_BOAT_COMPLETE")
 

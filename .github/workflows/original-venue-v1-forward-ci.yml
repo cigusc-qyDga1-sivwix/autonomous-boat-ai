@@ -26,6 +26,8 @@ jobs:
       - name: Validate production imports
         run: |
           python -m compileall -q scripts/autonomous_daily.py scripts/boatcast_oriten_smoke.py scripts/original_exhibition_venue_research.py scripts/original_venue_formal_v1.py
+      - name: Boot direct production CLI imports (not just compile)
+        run: python scripts/autonomous_daily.py --help
       - name: Verify six-boat parsing
         run: python -m unittest discover -s tests -p test_boatcast_oriten_smoke.py -v
       - name: Verify venue-specific metrics and cutoff evidence

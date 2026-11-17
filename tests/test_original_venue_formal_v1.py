@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from boat_ai.statistical import digest, distributions
 from scripts.boatcast_oriten_smoke import probe
-from scripts.learned_formal import VERSION as MODEL_VERSION
+from scripts.learned_formal import VERSION as MODEL_VERSION, apply as apply_learned_primary
 from scripts.original_exhibition_venue_research import VENUE_SPECS
 from scripts.original_venue_formal_v1 import (
     POLICY_SHA256, PROFILE_DATA, adjust_rankings, apply, attach_to_live_race, collect_candidates,
@@ -122,6 +122,25 @@ class VenueOriginalFormalV1Tests(unittest.TestCase):
         self.assertEqual(len(policy["same_time_base_bets"]), 8)
         self.assertTrue(policy["no_results_or_payouts_used"])
         self.assertTrue(policy["pre_cutoff_only"])
+
+    def test_corner_guard_from_today_preserves_budget_without_double_boost(self):
+        source = formal_snapshot()
+        r = source["racers"]
+        r[2]["exhibition_st"], r[3]["exhibition_st"], r[4]["exhibition_st"] = .18, .12, .13
+        r[2]["exhibition_time"], r[3]["exhibition_time"], r[4]["exhibition_time"] = 6.76, 6.73, 6.74
+        r[2]["average_start_timing"], r[3]["average_start_timing"], r[4]["average_start_timing"] = .17, .15, .16
+        learned = apply_learned_primary(source, MODEL)
+        self.assertTrue(learned["corner_attack_formal_v1"]["applied"])
+        self.assertEqual(sum(x["virtual_yen"] for x in learned["bets"]), 50000)
+        direct_original = apply(source, MODEL, saved_capture())
+        enriched_original = apply(learned, MODEL, saved_capture())
+        self.assertEqual(direct_original["bets"], enriched_original["bets"])
+        self.assertEqual(enriched_original["original_exhibition_formal_v1"]["same_time_base_bets"],
+                         learned["bets"])
+        self.assertTrue(enriched_original["corner_attack_formal_v1"]["applied"])
+        self.assertEqual(sum(x["virtual_yen"] for x in enriched_original["bets"]), 50000)
+        self.assertIn("corner_guard_policy_sha256",
+                      enriched_original["original_exhibition_formal_v1"])
 
     def test_all_23_venue_profiles_use_only_their_own_measurement_contract(self):
         profiles = PROFILE_DATA["venues"]

@@ -148,7 +148,10 @@ def apply(snapshot: dict, learned_model: dict, capture: dict) -> dict:
     # Apply the same conservative 3-vs-4 and 4->5 signal as learned primary.
     # Recompute once from base+venue scores: never double-boost a learned
     # snapshot that was already corner-adjusted before original-v1 enrichment.
-    adjusted, corner_audit = corner_rescore(adjusted, six)
+    corner_audit = {"applied": False}
+    if (cutoff.date() >= date(2026, 11, 18)
+            and frozen.astimezone(cutoff.tzinfo).date() >= date(2026, 11, 18)):
+        adjusted, corner_audit = corner_rescore(adjusted, six)
     new_bets = allocate(adjusted, count, point_free=False, max_points=20)
     if len(new_bets) != count or sum(b["virtual_yen"] for b in new_bets) != 50000:
         raise ValueError("original v1 allocation corrupted")

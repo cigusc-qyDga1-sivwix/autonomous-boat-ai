@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from boat_ai.statistical import digest, distributions
 from scripts.boatcast_oriten_smoke import probe
-from scripts.learned_formal import VERSION as MODEL_VERSION
+from scripts.learned_formal import VERSION as MODEL_VERSION, apply as apply_learned_primary
 from scripts.original_exhibition_venue_research import VENUE_SPECS
 from scripts.original_venue_formal_v1 import (
     POLICY_SHA256, PROFILE_DATA, adjust_rankings, apply, attach_to_live_race, collect_candidates,
@@ -122,6 +122,36 @@ class VenueOriginalFormalV1Tests(unittest.TestCase):
         self.assertEqual(len(policy["same_time_base_bets"]), 8)
         self.assertTrue(policy["no_results_or_payouts_used"])
         self.assertTrue(policy["pre_cutoff_only"])
+
+    def test_corner_guard_from_today_preserves_budget_without_double_boost(self):
+        source = formal_snapshot()
+        # Immutable Nov-16-trained model stays valid for Nov-18 forward inference.
+        today_model_sha = "0fdc5cacba60dd9af6e1d1cb562b7a868644e99922662298ac3cd62c7572dc96"
+        today_model = json.loads((Path("app/data/statistical/models") / f"{today_model_sha}.json").read_text())
+        source["frozen_at_utc"] = "2026-11-18T02:54:00+00:00"
+        source["cutoff_iso_jst"] = "2026-11-18T12:00:00+09:00"
+        source["learned_formal"]["model_sha256"] = today_model["model_sha256"]
+        source["classification"] = "WATCH"
+        original_capture = saved_capture()
+        original_capture["date"] = "2026-11-18"
+        original_capture["source_url"] = original_capture["source_url"].replace("20261117", "20261118")
+        original_capture["captured_at_utc"] = "2026-11-18T02:53:00+00:00"
+        r = source["racers"]
+        r[2]["exhibition_st"], r[3]["exhibition_st"], r[4]["exhibition_st"] = .18, .12, .13
+        r[2]["exhibition_time"], r[3]["exhibition_time"], r[4]["exhibition_time"] = 6.76, 6.73, 6.74
+        r[2]["average_start_timing"], r[3]["average_start_timing"], r[4]["average_start_timing"] = .17, .15, .16
+        learned = apply_learned_primary(source, today_model)
+        self.assertTrue(learned["corner_attack_formal_v1"]["applied"])
+        self.assertEqual(sum(x["virtual_yen"] for x in learned["bets"]), 50000)
+        direct_original = apply(source, today_model, original_capture)
+        enriched_original = apply(learned, today_model, original_capture)
+        self.assertEqual(direct_original["bets"], enriched_original["bets"])
+        self.assertEqual(enriched_original["original_exhibition_formal_v1"]["same_time_base_bets"],
+                         learned["bets"])
+        self.assertTrue(enriched_original["corner_attack_formal_v1"]["applied"])
+        self.assertEqual(sum(x["virtual_yen"] for x in enriched_original["bets"]), 50000)
+        self.assertIn("corner_guard_policy_sha256",
+                      enriched_original["original_exhibition_formal_v1"])
 
     def test_all_23_venue_profiles_use_only_their_own_measurement_contract(self):
         profiles = PROFILE_DATA["venues"]

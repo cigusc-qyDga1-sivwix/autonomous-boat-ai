@@ -226,3 +226,49 @@ def collect_candidates(payload: dict, previous: dict | None, now: datetime,
         "formal_eligibility_requires_same_race_6_names_and_freeze": True,
         "historical_results_used": False,
     }
+
+
+def attach_to_live_race(race: dict, capture: dict, *, venue_code: str,
+                        race_number: int, captured_by_forecast_at_utc: str) -> dict:
+    """Validate source identity/names before ANY original value reaches legacy engine.
+
+    A full legal six-boat normal exhibition remains the hard dependency.
+    This is only a prospective source enrichment, never historical replay.
+    """
+    from scripts.original_exhibition_venue_research import VENUE_SPECS
+    if venue_code not in VENUE_SPECS or venue_code == "03":
+        raise ValueError("venue outside original v1 scope")
+    if validated_preview(race.get("preview")) is None:
+        raise ValueError("no complete six-boat normal exhibition")
+    try:
+        cutoff = datetime.strptime(race["closed_at"], "%Y-%m-%d %H:%M:%S").replace(
+            tzinfo=__import__("zoneinfo").ZoneInfo("Asia/Tokyo"))
+    except (KeyError, TypeError, ValueError):
+        raise ValueError("no valid cutoff")
+    if capture.get("venue_code") != venue_code or capture.get("race_number") != race_number:
+        raise ValueError("original source race mismatch")
+    transformed = venue_features(
+        capture, frozen_at_utc=captured_by_forecast_at_utc,
+        cutoff_at_jst=cutoff.isoformat())
+    if "turn_time" not in transformed["features"]:
+        raise ValueError("six-boat original turn data missing")
+    source = race.get("racers") or {}
+    if not all(_name((source.get(str(lane)) or {}).get("name"))
+               == _name((capture.get("boats") or [])[lane-1].get("name"))
+               for lane in range(1, 7)):
+        raise ValueError("original/normal six racer names disagree")
+    out = deepcopy(race)
+    out["_boatcast_original_capture"] = capture
+    out["_exhibition_original"] = {
+        metric: {str(b["lane"]): b[metric] for b in capture["boats"]}
+        for metric in transformed["features"]
+    }
+    prior = out.get("_exhibition_origin") or {}
+    out["_exhibition_origin"] = {
+        **prior, "original_exhibition_source": "BOATCAST_direct",
+        "original_exhibition_measurement_sha256": capture["measurement_sha256"],
+        "original_exhibition_captured_at_utc": capture["captured_at_utc"],
+        "original_exhibition_six_boat_program_names_matched": True,
+        "metrics": sorted(out["_exhibition_original"]),
+    }
+    return out

@@ -7,6 +7,8 @@ on:
     paths:
       - 'scripts/autonomous_daily.py'
       - 'scripts/learned_formal.py'
+      - 'scripts/corner_attack_formal_v1.py'
+      - 'tests/test_corner_attack_formal_v1.py'
       - 'scripts/boatcast_oriten_smoke.py'
       - 'scripts/original_exhibition_venue_research.py'
       - 'scripts/original_venue_formal_v1.py'
@@ -150,7 +152,8 @@ jobs:
           python -m unittest discover -s tests -p test_racer_context.py
           node --check app/tactical-1m.js
           python -m compileall -q scripts/autonomous_daily.py
-          python -m compileall -q scripts/original_venue_formal_v1.py scripts/original_exhibition_venue_research.py scripts/boatcast_oriten_smoke.py
+          python -m compileall -q scripts/original_venue_formal_v1.py scripts/original_exhibition_venue_research.py scripts/boatcast_oriten_smoke.py scripts/corner_attack_formal_v1.py
+          python -m unittest discover -s tests -p test_corner_attack_formal_v1.py -v
           python -m unittest discover -s tests -p test_boatcast_oriten_smoke.py -v
           python -m unittest discover -s tests -p test_original_exhibition_venue_research.py -v
           python -m unittest discover -s tests -p test_original_venue_formal_v1.py -v

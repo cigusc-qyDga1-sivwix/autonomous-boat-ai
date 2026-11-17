@@ -136,6 +136,22 @@ def merge_forward_evidence(previous: dict | None, ledger: dict,
     }
     counts["total_evidence_versions"] = sum(len(v) for v in prior.values())
     counts["evidence_races"] = len([v for v in prior.values() if v])
+    metric_counts = {metric: 0 for metric in (
+        "lap_time", "half_lap_time", "turn_time", "straight_time")}
+    venues = set()
+    for per_race in prior.values():
+        if not isinstance(per_race, dict):
+            continue
+        for row in per_race.values():
+            ev = row.get("evidence") or {}
+            venues.add(ev.get("venue"))
+            for metric, status_value in (ev.get("original_metric_status") or {}).items():
+                if metric in metric_counts and status_value == "SIX_BOAT_COMPLETE":
+                    metric_counts[metric] += 1
+    counts["six_boat_original_metric_coverage_versions"] = metric_counts
+    counts["venues_with_evidence"] = len(venues - {None})
+    counts["ikiasi_acceleration_independently_measured"] = 0
+    counts["deashi_acceleration_independently_measured"] = 0
     counts["errors"] = errors
     status = {
         "schema": STATUS_SCHEMA, "event_date": event_date,

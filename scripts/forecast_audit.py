@@ -618,6 +618,110 @@ def _learned_formal_comparison(forecasts, official, alerts, day):
     }
 
 
+def _experimental_race_flow_report(forecasts, official, alerts, day):
+    """Pre-cutoff saved experiment vs same-time unmodified learned control.
+
+    Results are only joined AFTER official verification; never regenerate old
+    predictions or infer payouts for unresolved/cancelled races.
+    """
+    actual, control = [], []
+    cohorts = defaultdict(lambda: {"experiment": [], "control": []})
+    excluded = Counter()
+    trials = changed = head_switched = 0
+    def sha(x):
+        return hashlib.sha256(json.dumps(
+            x, sort_keys=True, ensure_ascii=False,
+            separators=(",", ":"), allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+
+    for r in forecasts:
+        proof = r.get("experimental_race_flow")
+        if not isinstance(proof, dict):
+            continue
+        trials += 1
+        if proof.get("formal_component") is not True:
+            excluded["no_independent_signal_or_unverified"] += 1
+            continue
+        key = f"{day}|{r.get('venue')}|{r.get('race')}"
+        if key in alerts:
+            excluded["official_conflict_or_refund"] += 1
+            continue
+        eligible, reason = _verify_race(r, official.get(key), day)
+        if not eligible:
+            excluded[reason] += 1
+            continue
+        main = r.get("bets")
+        prior = proof.get("same_time_control_bets")
+        try:
+            good = (
+                day >= "2026-11-20"
+                and r.get("ticket_status") == "formal"
+                and r.get("phase") == "exhibition"
+                and r.get("model_version") == "four-factor-learned-v1-conditional-choice-trained"
+                and proof.get("version") == "race-flow-head-experiment-v1-20261120-uncalibrated"
+                and proof.get("status") == "APPLIED_EXPERIMENTAL_UNCALIBRATED"
+                and proof.get("results_used") is False
+                and proof.get("odds_used") is False
+                and proof.get("calibrated") is False
+                and proof.get("no_historical_overwrite") is True
+                and proof.get("frozen_at_utc") == r.get("frozen_at_utc")
+                and proof.get("same_point_count") is True
+                and proof.get("same_virtual_stake_yen") == RESEARCH_BUDGET
+                and (r.get("exhibition_input_check") or {}).get("verified_before_freeze") is True
+                and (r.get("exhibition_input_check") or {}).get("six_boats_matched") == 6
+                and isinstance(main, list) and isinstance(prior, list)
+                and len(main) == len(prior)
+                and _valid_shadow_tickets(main) and _valid_shadow_tickets(prior)
+                and isinstance(proof.get("policy_sha256"), str)
+                and len(proof["policy_sha256"]) == 64
+                and proof.get("control_bets_sha256") == sha(prior)
+                and proof.get("experimental_bets_sha256") == sha(main)
+                and proof.get("formal_bets_changed") is (
+                    _ticket_signature(main) != _ticket_signature(prior))
+                and proof.get("first_ticket_head_changed") is (
+                    main[0]["combination"][0] != prior[0]["combination"][0])
+            )
+        except (KeyError, TypeError, ValueError, OverflowError):
+            good = False
+        if not good:
+            excluded["unverifiable_experiment_control"] += 1
+            continue
+        a = _shadow_trial_result(r, main, official[key])
+        b = _shadow_trial_result(r, prior, official[key])
+        actual.append(a)
+        control.append(b)
+        cohorts[r["venue"]]["experiment"].append(a)
+        cohorts[r["venue"]]["control"].append(b)
+        changed += _ticket_signature(main) != _ticket_signature(prior)
+        head_switched += main[0]["combination"][0] != prior[0]["combination"][0]
+
+    def comparison(exp, ctrl):
+        return {
+            "matched_races": len(exp),
+            "experimental_formal": _metrics(exp),
+            "same_time_learned_control": _metrics(ctrl),
+            "head_misses_recovered": sum(b["stage"] == "head_miss" and a["stage"] != "head_miss"
+                                         for a, b in zip(exp, ctrl)),
+            "new_head_misses": sum(b["stage"] != "head_miss" and a["stage"] == "head_miss"
+                                   for a, b in zip(exp, ctrl)),
+            "virtual_payout_delta_yen": sum(x["virtual_payout_yen"] for x in exp) -
+                                        sum(x["virtual_payout_yen"] for x in ctrl),
+        }
+    return {
+        "protocol": "experiment-v1-vs-frozen-same-time-no-experiment-control",
+        "forward_frozen_experiment_records": trials,
+        "verified_formal_ticket_change_races": changed,
+        "verified_formal_first_head_change_races": head_switched,
+        **comparison(actual, control),
+        "by_venue": {venue: comparison(x["experiment"], x["control"])
+                     for venue, x in sorted(cohorts.items())},
+        "exclusions": dict(sorted(excluded.items())),
+        "untrained_and_uncalibrated": True,
+        "not_an_actual_purchase": True,
+        "no_historical_reconstruction": True,
+    }
+
+
 def _third_place_pilot_report(forecasts, official, alerts, day):
     """Read-only matched comparison for an actually frozen third-place pilot.
 
@@ -1465,6 +1569,9 @@ def analyze(dataset: dict):
     if day >= "2026-11-10":
         report["head_risk_breakpoint"] = _head_risk_breakpoint_report(raw, verified, day)
     report["learned_formal_comparison"] = _learned_formal_comparison(
+        raw, official, alerts, day
+    )
+    report["experimental_race_flow_comparison"] = _experimental_race_flow_report(
         raw, official, alerts, day
     )
     report["learned_exhibition_effect_comparison"] = _learned_exhibition_effect_report(

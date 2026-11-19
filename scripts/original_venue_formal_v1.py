@@ -27,6 +27,7 @@ from scripts.learned_formal import (
 )
 from scripts.original_exhibition_venue_research import venue_features, VENUE_SPECS
 from scripts.corner_attack_formal_v1 import rescore as corner_rescore, POLICY_SHA256 as CORNER_POLICY_SHA256
+from scripts.race_flow_experimental_primary import rescore as rescore_experimental, POLICY_SHA256 as EXPERIMENT_POLICY_SHA
 
 PROFILE_PATH = Path(__file__).resolve().parents[1] / "config/original-venue-v1-profiles.json"
 PROFILE_DATA = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
@@ -152,6 +153,18 @@ def apply(snapshot: dict, learned_model: dict, capture: dict) -> dict:
     if (cutoff.date() >= date(2026, 11, 18)
             and frozen.astimezone(cutoff.tzinfo).date() >= date(2026, 11, 18)):
         adjusted, corner_audit = corner_rescore(adjusted, six)
+    # Final learned+venue+corner stack gets ONE experimental rerank.
+    # Rebuild from the same pre-cutoff inputs so previous experiment is not
+    # stacked twice when this verified original exhibition capture arrives.
+    experimental_audit = None
+    experimental_control = None
+    if (cutoff.date() >= date(2026, 11, 20)
+            and frozen.astimezone(cutoff.tzinfo).date() >= date(2026, 11, 20)):
+        experimental_control = allocate(adjusted, count, point_free=False, max_points=20)
+        adjusted, experimental_audit = rescore_experimental(
+            adjusted, six, frozen_at_utc=snapshot["frozen_at_utc"],
+            cutoff_iso_jst=snapshot["cutoff_iso_jst"],
+            exhibition_verified=True)
     new_bets = allocate(adjusted, count, point_free=False, max_points=20)
     if len(new_bets) != count or sum(b["virtual_yen"] for b in new_bets) != 50000:
         raise ValueError("original v1 allocation corrupted")
@@ -165,10 +178,30 @@ def apply(snapshot: dict, learned_model: dict, capture: dict) -> dict:
         composite_input["corner_guard_policy_sha256"] = CORNER_POLICY_SHA256
         out["corner_attack_formal_v1"] = corner_audit
         out["learned_formal"]["corner_guard_policy_sha256"] = CORNER_POLICY_SHA256
+    if (experimental_audit is not None
+            and experimental_audit["status"] == "APPLIED_EXPERIMENTAL_UNCALIBRATED"):
+        composite_input["race_flow_experiment_policy_sha256"] = EXPERIMENT_POLICY_SHA
     composite_sha = digest(composite_input)
     out["learned_formal"]["inference_variant"] = (
         "learned_plus_original_v1_venue_fit_plus_corner_guard_v1"
         if corner_audit.get("applied") else "learned_plus_original_v1_venue_fit")
+    if experimental_audit is not None:
+        changed = sorted((b["combination"], b["virtual_yen"]) for b in new_bets) != sorted(
+            (b["combination"], b["virtual_yen"]) for b in experimental_control)
+        applied = experimental_audit["status"] == "APPLIED_EXPERIMENTAL_UNCALIBRATED"
+        out["experimental_race_flow"] = {
+            **experimental_audit, "formal_component": applied,
+            "formal_bets_changed": changed,
+            "first_ticket_head_changed": new_bets[0]["combination"][0] != experimental_control[0]["combination"][0],
+            "same_time_control_bets": experimental_control,
+            "control_bets_sha256": digest(experimental_control),
+            "experimental_bets_sha256": digest(new_bets),
+            "same_point_count": len(new_bets) == len(experimental_control),
+            "same_virtual_stake_yen": 50000,
+            "not_an_actual_purchase": True, "no_historical_overwrite": True,
+        }
+        if applied:
+            out["learned_formal"]["inference_variant"] += "+race-flow-head-experiment-v1"
     out["learned_formal"]["composite_inference_sha256"] = composite_sha
     out["learned_formal"]["original_v1_coefficients_trained"] = True
     out["point_reason"] += "／オリ展場別v1で出走6艇の実測を着順ごとに補正（未校正）"
@@ -176,6 +209,10 @@ def apply(snapshot: dict, learned_model: dict, capture: dict) -> dict:
         out["point_reason"] += "／3・4コース攻防・5コース追走を小幅補正（未校正）"
     out["scenario"] = (f"{snapshot['venue']} オリ展場別v1反映・上位 {new_bets[0]['combination']}"
                        "（1着・2着・3着を個別補正）")
+    if (experimental_audit is not None
+            and experimental_audit["status"] == "APPLIED_EXPERIMENTAL_UNCALIBRATED"):
+        out["scenario"] = "【展開実験v1・未校正】" + out["scenario"]
+        out["point_reason"] += "／オリ展補正後に外頭・内残りを展開実験で再配分（対照保存）"
     out["original_exhibition_formal_v1"] = {
         "version": POLICY["version"],
         "formal_component": True, "trained_coefficient": True,

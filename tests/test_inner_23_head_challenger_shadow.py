@@ -101,3 +101,22 @@ def test_strong_inside_is_not_forcibly_replaced():
     out = evaluate(s, adjusted, old)
     assert out["status"] == "QUALIFIED_FORWARD_SHADOW"
     assert out["trial_top_head"] == 1
+
+
+def test_builder_recomputes_only_after_proof_and_parent_sha():
+    from boat_ai.statistical import SCHEMA, FEATURES, digest
+    from scripts.inner_23_head_challenger_shadow import build
+    s, _, main = fixture()
+    s["racers"][1].update(average_start_timing=.10, exhibition_st=.08,
+                          exhibition_time=6.70, motor_top_2_percent=45.0)
+    model = {"schema": SCHEMA, "features": FEATURES,
+             "weights": [[0.0]*len(FEATURES) for _ in range(3)]}
+    model["model_sha256"] = digest(model)
+    s["bets"] = main
+    s["learned_formal"] = {"model_sha256": model["model_sha256"]}
+    out = build(s, model)
+    assert out["status"] == "QUALIFIED_FORWARD_SHADOW"
+    assert out["parent_model_sha256"] == model["model_sha256"]
+    assert out["source_formal_bets_sha256"] == digest(main)
+    assert out["trial_top_head"] == 2
+    assert build(s, dict(model, model_sha256="0"*64))["status"] == "MODEL_SHA_MISMATCH"

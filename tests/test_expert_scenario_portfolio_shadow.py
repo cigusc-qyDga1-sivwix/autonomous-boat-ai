@@ -98,6 +98,7 @@ def test_postrace_and_late_inputs_rejected():
     with pytest.raises(ValueError, match="postcutoff"):
         build(snap, ranked)
     snap, ranked = source()
+    snap["frozen_at_utc"] = "2026-11-19T01:45:00+00:00"
     snap["cutoff_iso_jst"] = "2026-11-19T12:00:00+09:00"
     assert build(snap, ranked) is None
 

@@ -1,0 +1,36 @@
+name: BOAT LAB Nov20 race-flow experiment contract
+on:
+  pull_request:
+    paths:
+      - 'scripts/race_flow_experimental_primary.py'
+      - 'scripts/learned_formal.py'
+      - 'scripts/original_venue_formal_v1.py'
+      - 'scripts/autonomous_daily.py'
+      - 'tests/test_race_flow_experimental_primary.py'
+      - '.github/workflows/boat-lab-race-flow-experiment-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/race_flow_experimental_primary.py'
+      - 'scripts/learned_formal.py'
+      - 'scripts/original_venue_formal_v1.py'
+      - 'scripts/autonomous_daily.py'
+      - 'tests/test_race_flow_experimental_primary.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  forward-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install -q -e '.[test,research]'
+      - run: python -m compileall -q scripts/race_flow_experimental_primary.py scripts/learned_formal.py scripts/original_venue_formal_v1.py scripts/autonomous_daily.py tests/test_race_flow_experimental_primary.py
+      - run: python -m pytest -q tests/test_race_flow_experimental_primary.py tests/test_learned_formal.py tests/test_original_venue_formal_v1.py tests/test_corner_attack_formal_v1.py tests/test_autonomous_daily.py

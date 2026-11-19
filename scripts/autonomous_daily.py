@@ -47,6 +47,7 @@ if __package__:
     from .learned_formal import load_model as load_learned_model, apply as apply_learned_primary, VERSION as LEARNED_MAIN_MODEL
     from .learned_conditional_shadow import build as build_learned_conditional_shadow
     from .learned_exhibition_ablation import build as build_learned_exhibition_ablation
+    from .inner_23_head_challenger_shadow import build as build_head_23_shadow
     from .original_venue_formal_v1 import apply as apply_original_venue_v1, attach_to_live_race, collect_candidates as collect_original_candidates
     from .four_leg_live_freeze import merge_forward_evidence as merge_four_leg_evidence
 else:
@@ -76,6 +77,7 @@ else:
     from learned_formal import load_model as load_learned_model, apply as apply_learned_primary, VERSION as LEARNED_MAIN_MODEL
     from learned_conditional_shadow import build as build_learned_conditional_shadow
     from learned_exhibition_ablation import build as build_learned_exhibition_ablation
+    from inner_23_head_challenger_shadow import build as build_head_23_shadow
     from original_venue_formal_v1 import apply as apply_original_venue_v1, attach_to_live_race, collect_candidates as collect_original_candidates
     from four_leg_live_freeze import merge_forward_evidence as merge_four_leg_evidence
 
@@ -2124,6 +2126,16 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                         "source": selected_source,
                         "no_result_or_payout_used": True,
                     }
+                    # Only after six-boat verified pre-cutoff evidence exists.
+                    # Research-only: never alter main 3連単 or payout ledger.
+                    if (new.get("model_version") == LEARNED_MAIN_MODEL
+                            and ACTIVE_LEARNED_MODEL is not None
+                            and not new.get("original_exhibition_formal_v1")):
+                        try:
+                            new["inner_23_head_challenger_shadow"] = build_head_23_shadow(
+                                new, ACTIVE_LEARNED_MODEL)
+                        except (ValueError, KeyError, TypeError, OverflowError):
+                            pass
                     if (new.get("model_version") == LEARNED_MAIN_MODEL and ACTIVE_LEARNED_MODEL is not None
                             and not new.get("original_exhibition_formal_v1")):
                         # Freeze research-only pair alternatives after verified
@@ -2239,6 +2251,15 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                             and ACTIVE_LEARNED_MODEL is not None
                             and not upgrade.get("original_exhibition_formal_v1")):
                         try:
+                            upgrade["inner_23_head_challenger_shadow"] = build_head_23_shadow(
+                                upgrade, ACTIVE_LEARNED_MODEL)
+                        except (ValueError, KeyError, TypeError, OverflowError):
+                            pass
+                    if (upgrade.get("model_version") == LEARNED_MAIN_MODEL
+                            and phase_to_promote == "exhibition"
+                            and ACTIVE_LEARNED_MODEL is not None
+                            and not upgrade.get("original_exhibition_formal_v1")):
+                        try:
                             upgrade["learned_conditional_shadow"] = build_learned_conditional_shadow(
                                 upgrade, ACTIVE_LEARNED_MODEL)
                         except (ValueError, KeyError, TypeError, OverflowError):
@@ -2328,7 +2349,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "attack_defence_shadow", "grade_context", "grade_competition_shadow", "strong_field_diagnostic",
                       "coverage_reselection_shadow", "hidden_path_shadow",
                       "exhibition_input_check", "relative_scores_uncalibrated", "learned_formal", "third_place_pilot",
-                      "inside_survival_research", "learned_conditional_shadow",
+                      "inside_survival_research", "learned_conditional_shadow", "inner_23_head_challenger_shadow",
                       "learned_exhibition_ablation", "original_exhibition_formal_v1",
                       "original_exhibition_formal_v1_rejection"):
             if extra in current:

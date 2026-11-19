@@ -542,6 +542,118 @@ def _learned_conditional_shadow_report(forecasts, official, alerts, day):
     }
 
 
+def _inner_23_head_challenger_report(forecasts, official, alerts, day):
+    """Only verified forward-frozen same-race, same-points 2/3-head experiments."""
+    formal, trials = [], []
+    groups = defaultdict(lambda: {"formal": [], "trial": []})
+    models = defaultdict(lambda: {"formal": [], "trial": []})
+    exclusions = Counter()
+    frozen = qualified = changed = top_head_changed = 0
+    winner_23 = {str(n): {"races": 0, "formal_head_covered": 0,
+                           "trial_head_covered": 0} for n in (2, 3)}
+
+    def sha(value):
+        return hashlib.sha256(json.dumps(
+            value, sort_keys=True, ensure_ascii=False,
+            separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+
+    for row in forecasts:
+        trial = row.get("inner_23_head_challenger_shadow")
+        if not isinstance(trial, dict):
+            continue
+        frozen += 1
+        if trial.get("status") != "QUALIFIED_FORWARD_SHADOW":
+            exclusions["no_qualified_verified_candidate"] += 1
+            continue
+        qualified += 1
+        key = f"{day}|{row.get('venue')}|{row.get('race')}"
+        if key in alerts:
+            exclusions["official_conflict_or_refund"] += 1
+            continue
+        ok, reason = _verify_race(row, official.get(key), day)
+        if not ok:
+            exclusions[reason] += 1
+            continue
+        main, candidate = row.get("bets"), trial.get("trial_bets")
+        proof = row.get("learned_formal") or {}
+        exhibition = row.get("exhibition_input_check") or {}
+        integrity = (
+            row.get("ticket_status") == "formal"
+            and row.get("model_version") == "four-factor-learned-v1-conditional-choice-trained"
+            and exhibition.get("verified_before_freeze") is True
+            and exhibition.get("six_boats_matched") == 6
+            and trial.get("version") == "inner-23-head-challenger-shadow-v0.1"
+            and trial.get("model_role") == "research_shadow"
+            and trial.get("not_formal") is True
+            and trial.get("formal_tickets_changed") is False
+            and trial.get("result_data_used") is False
+            and trial.get("odds_used") is False
+            and trial.get("same_point_count") is True
+            and trial.get("same_time_same_input") is True
+            and trial.get("virtual_stake_yen_each") == RESEARCH_BUDGET
+            and trial.get("frozen_at_utc") == row.get("frozen_at_utc")
+            and trial.get("parent_model_sha256") == proof.get("model_sha256")
+            and isinstance(main, list) and isinstance(candidate, list)
+            and len(main) == len(candidate) and _valid_shadow_tickets(candidate)
+            and trial.get("source_formal_bets_sha256") == sha(main)
+            and trial.get("trial_bets_sha256") == sha(candidate)
+        )
+        if not integrity:
+            exclusions["unverified_or_changed_shadow"] += 1
+            continue
+        payment = official[key]
+        m = _shadow_trial_result(row, main, payment)
+        t = _shadow_trial_result(row, candidate, payment)
+        formal.append(m)
+        trials.append(t)
+        groups[row["venue"]]["formal"].append(m)
+        groups[row["venue"]]["trial"].append(t)
+        models[proof["model_sha256"]]["formal"].append(m)
+        models[proof["model_sha256"]]["trial"].append(t)
+        changed += _ticket_signature(main) != _ticket_signature(candidate)
+        top_head_changed += main[0]["combination"][0] != candidate[0]["combination"][0]
+        winner = payment["finish"].split("-")[0]
+        if winner in winner_23:
+            winner_23[winner]["races"] += 1
+            winner_23[winner]["formal_head_covered"] += any(
+                b["combination"].split("-")[0] == winner for b in main)
+            winner_23[winner]["trial_head_covered"] += any(
+                b["combination"].split("-")[0] == winner for b in candidate)
+
+    def compare(f, t):
+        return {
+            "matched_races": len(f),
+            "learned_formal": _metrics(f),
+            "research_trial": _metrics(t),
+            "payout_delta_trial_minus_formal_yen": sum(
+                x["virtual_payout_yen"] for x in t) - sum(
+                x["virtual_payout_yen"] for x in f),
+            "first_head_misses_recovered": sum(
+                x["stage"] == "head_miss" and y["stage"] != "head_miss"
+                for x, y in zip(f, t)),
+            "new_first_head_misses": sum(
+                x["stage"] != "head_miss" and y["stage"] == "head_miss"
+                for x, y in zip(f, t)),
+        }
+
+    return {
+        "protocol": "forward-frozen-inner-23-head-v01-vs-learned-formal",
+        "frozen_records": frozen,
+        "qualified_trials": qualified,
+        "changed_ticket_or_allocation_races": changed,
+        "top_head_changed_races": top_head_changed,
+        **compare(formal, trials),
+        "by_winner_2_3": winner_23,
+        "by_venue": {k: compare(v["formal"], v["trial"])
+                     for k, v in sorted(groups.items())},
+        "by_model_sha": {k: compare(v["formal"], v["trial"])
+                         for k, v in sorted(models.items())},
+        "exclusions": dict(exclusions),
+        "research_only_no_formal_change": True,
+        "warning": "100+ newly frozen official matched races required; never backfill or auto-promote.",
+    }
+
+
 def _learned_formal_comparison(forecasts, official, alerts, day):
     """Compare ONLY pre-cutoff official learned main vs same-input old control.
 
@@ -1471,6 +1583,9 @@ def analyze(dataset: dict):
         raw, official, alerts, day
     )
     report["learned_conditional_shadow_comparison"] = _learned_conditional_shadow_report(
+        raw, official, alerts, day
+    )
+    report["inner_23_head_challenger_comparison"] = _inner_23_head_challenger_report(
         raw, official, alerts, day
     )
     report["third_place_pilot_comparison"] = _third_place_pilot_report(

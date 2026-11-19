@@ -111,7 +111,7 @@ def test_suppressed_if_counter_head_has_tiny_mass():
     assert build(snap, ranked)["status"] == "COUNTER_HEAD_UNSUPPORTED"
 
 
-def test_learned_primary_preserves_formal_when_research_study_created():
+def test_learned_primary_promotes_only_fresh_exhibition_and_keeps_control():
     snap, _ = source()
     snap.update({
         "model_version": "four-factor-v2.6-evidence-conditional-pairs-untrained",
@@ -121,14 +121,29 @@ def test_learned_primary_preserves_formal_when_research_study_created():
     })
     before = deepcopy(snap)
     out = learned_apply(snap, model())
-    trial = out["expert_scenario_portfolio_shadow"]
-    assert trial["not_formal"]
-    assert trial["control_bets"] == out["bets"]
-    assert trial["bets_modified"] is False
+    proof = out["expert_scenario_portfolio_formal"]
+    assert proof["formal_component"] is True
+    assert proof["not_formal"] is False
+    assert proof["bets_modified"] is True
+    assert proof["control_bets"] != out["bets"]
+    assert proof["alternative_bets"] == out["bets"]
+    assert proof["control_bets_sha256"] == digest(proof["control_bets"])
+    assert proof["alternative_bets_sha256"] == digest(out["bets"])
     assert out["model_role"] == "main"
     assert out["classification"] == "WATCH"
+    assert {b["combination"][0] for b in out["bets"]} == {"1", "2"}
     assert sum(x["virtual_yen"] for x in out["bets"]) == 50000
+    assert sum(x["virtual_yen"] for x in proof["control_bets"]) == 50000
+    assert len(out["bets"]) == len(proof["control_bets"]) == 8
+    assert "専門家型" in out["scenario"]
     assert snap == before
+    unverified = deepcopy(snap)
+    unverified["exhibition_origin"]["captured_before_cutoff"] = False
+    no = learned_apply(unverified, model())
+    assert "expert_scenario_portfolio_formal" not in no
+    baseline = deepcopy(snap)
+    baseline["phase"] = "baseline"
+    assert "expert_scenario_portfolio_formal" not in learned_apply(baseline, model())
 
 
 def test_study_audit_official_only_and_sha_bound():
@@ -157,3 +172,37 @@ def test_study_audit_official_only_and_sha_bound():
     assert report["existing_formal"]["virtual_stake_yen"] == 50000
     official[key]["snapshot_sha256"] = "wrong"
     assert _expert_scenario_portfolio_report([snap], official, {}, "2026-11-20")["matched_races"] == 0
+
+
+def test_expert_formal_audit_requires_official_sha_and_equal_frozen_control():
+    from scripts.forecast_audit import _expert_scenario_formal_report
+    snap, _ = source()
+    snap.update({
+        "model_version": "four-factor-v2.6-evidence-conditional-pairs-untrained",
+        "classification": "WATCH", "model_role": "main",
+        "weather_used": {"wind_speed": 1, "wave_height": 2},
+        "point_count": 8,
+    })
+    out = learned_apply(snap, model())
+    out["ticket_status"] = "formal"
+    out["exhibition_input_check"] = {
+        "verified_before_freeze": True, "six_boats_matched": 6}
+    out["sha256"] = digest({k: v for k, v in out.items() if k != "sha256"})
+    key = "2026-11-20|徳山|1"
+    win = out["expert_scenario_portfolio_formal"]["alternative_bets"][-1]["combination"]
+    official = {key: {
+        "verified": True, "source": "boatrace_official_pay",
+        "virtual_stake": 50000, "snapshot_sha256": out["sha256"],
+        "finish": win, "payout_per_100": 2500,
+    }}
+    comparison = _expert_scenario_formal_report([out], official, {}, "2026-11-20")
+    assert comparison["matched_races"] == 1
+    assert comparison["matched_ticket_change_races"] == 1
+    assert comparison["matched_head_set_change_races"] == 1
+    assert comparison["expert_style_experimental_formal"]["hits"] == 1
+    assert comparison["same_time_learned_control"]["hits"] == 0
+    assert comparison["head_misses_recovered"] == 1
+    assert comparison["expert_style_experimental_formal"]["virtual_stake_yen"] == 50000
+    assert comparison["same_time_learned_control"]["virtual_stake_yen"] == 50000
+    official[key]["snapshot_sha256"] = "tampered"
+    assert _expert_scenario_formal_report([out], official, {}, "2026-11-20")["matched_races"] == 0

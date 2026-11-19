@@ -4,7 +4,7 @@ import pytest
 
 from scripts.race_flow_cues import inspect
 
-CAPTURE = "2026-11-19T02:00:00+00:00"
+CAPTURE = "2026-11-19T01:50:00+00:00"
 CUTOFF = "2026-11-19T11:00:00+09:00"
 
 

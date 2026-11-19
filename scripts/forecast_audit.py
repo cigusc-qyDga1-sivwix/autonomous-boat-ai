@@ -722,6 +722,108 @@ def _experimental_race_flow_report(forecasts, official, alerts, day):
     }
 
 
+def _expert_scenario_portfolio_report(forecasts, official, alerts, day):
+    """Freeze-first portfolio study: compare source-proven alternative vs main.
+
+    This never imports third-party picks, copies historical predictions, or
+    modifies official forecast performance. Same-time snapshots + result joins.
+    """
+    frozen = changed = 0
+    formal, shadow = [], []
+    per_venue = defaultdict(lambda: {"formal": [], "shadow": []})
+    exclusions = Counter()
+    def sha(value):
+        return hashlib.sha256(json.dumps(
+            value, sort_keys=True, ensure_ascii=False,
+            separators=(",", ":"), allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+    for row in forecasts:
+        trial = row.get("expert_scenario_portfolio_shadow")
+        if not isinstance(trial, dict):
+            continue
+        frozen += 1
+        if trial.get("status") != "PRE_CUTOFF_COUNTER_PATH_FROZEN":
+            exclusions["unsupported_or_incomplete_counterpath"] += 1
+            continue
+        key = f"{day}|{row.get('venue')}|{row.get('race')}"
+        if key in alerts:
+            exclusions["official_conflict_or_refund"] += 1
+            continue
+        good_result, reason = _verify_race(row, official.get(key), day)
+        if not good_result:
+            exclusions[reason] += 1
+            continue
+        actual, original, candidate = row.get("bets"), trial.get("control_bets"), trial.get("alternative_bets")
+        try:
+            proof_ok = (
+                day >= "2026-11-20"
+                and row.get("model_version") == "four-factor-learned-v1-conditional-choice-trained"
+                and row.get("ticket_status") == "formal"
+                and row.get("phase") == "exhibition"
+                and trial.get("version") == "expert-scenario-portfolio-shadow-v0.1"
+                and trial.get("model_role") == "research_shadow"
+                and trial.get("not_formal") is True
+                and trial.get("bets_modified") is False
+                and trial.get("no_odds_used") is True
+                and trial.get("no_results_used") is True
+                and trial.get("calibrated") is False
+                and trial.get("comparison_only_no_history_rewrite") is True
+                and trial.get("frozen_at_utc") == row.get("frozen_at_utc")
+                and trial.get("same_point_count") is True
+                and trial.get("virtual_budget_yen_each") == RESEARCH_BUDGET
+                and (row.get("exhibition_input_check") or {}).get("verified_before_freeze") is True
+                and (row.get("exhibition_input_check") or {}).get("six_boats_matched") == 6
+                and isinstance(actual, list) and isinstance(original, list)
+                and isinstance(candidate, list)
+                and len(actual) == len(original) == len(candidate)
+                and _valid_shadow_tickets(actual) and _valid_shadow_tickets(original)
+                and _valid_shadow_tickets(candidate)
+                and _ticket_signature(actual) == _ticket_signature(original)
+                and trial.get("control_bets_sha256") == sha(original)
+                and trial.get("alternative_bets_sha256") == sha(candidate)
+                and trial.get("ticket_or_allocation_changed") is (
+                    _ticket_signature(actual) != _ticket_signature(candidate))
+            )
+        except (TypeError, KeyError, ValueError, OverflowError):
+            proof_ok = False
+        if not proof_ok:
+            exclusions["unverified_or_changed_control"] += 1
+            continue
+        p = official[key]
+        m = _shadow_trial_result(row, original, p)
+        a = _shadow_trial_result(row, candidate, p)
+        formal.append(m)
+        shadow.append(a)
+        per_venue[row["venue"]]["formal"].append(m)
+        per_venue[row["venue"]]["shadow"].append(a)
+        changed += _ticket_signature(original) != _ticket_signature(candidate)
+    def compare(a, b):
+        return {
+            "matched_races": len(a),
+            "existing_formal": _metrics(a),
+            "expert_style_research": _metrics(b),
+            "head_misses_recovered": sum(x["stage"] == "head_miss" and y["stage"] != "head_miss"
+                                         for x, y in zip(a, b)),
+            "new_head_misses": sum(x["stage"] != "head_miss" and y["stage"] == "head_miss"
+                                   for x, y in zip(a, b)),
+            "virtual_payout_delta_research_minus_formal_yen":
+                sum(x["virtual_payout_yen"] for x in b) -
+                sum(x["virtual_payout_yen"] for x in a),
+        }
+    return {
+        "protocol": "expert-inspired-scenario-portfolio-precutoff-shadow-v01",
+        "frozen_research_records": frozen,
+        "changed_ticket_or_stake_pairs": changed,
+        **compare(formal, shadow),
+        "by_venue": {v: compare(rows["formal"], rows["shadow"])
+                     for v, rows in sorted(per_venue.items())},
+        "exclusions": dict(sorted(exclusions.items())),
+        "not_formal": True,
+        "no_proven_accuracy_or_roi_gain": True,
+        "no_hindsight_reconstruction": True,
+    }
+
+
 def _third_place_pilot_report(forecasts, official, alerts, day):
     """Read-only matched comparison for an actually frozen third-place pilot.
 
@@ -1569,6 +1671,9 @@ def analyze(dataset: dict):
     if day >= "2026-11-10":
         report["head_risk_breakpoint"] = _head_risk_breakpoint_report(raw, verified, day)
     report["learned_formal_comparison"] = _learned_formal_comparison(
+        raw, official, alerts, day
+    )
+    report["expert_scenario_portfolio_comparison"] = _expert_scenario_portfolio_report(
         raw, official, alerts, day
     )
     report["experimental_race_flow_comparison"] = _experimental_race_flow_report(

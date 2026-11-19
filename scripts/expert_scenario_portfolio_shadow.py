@@ -11,6 +11,7 @@ This function never modifies formal bets, regardless of its suggestions.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, date
+from copy import deepcopy
 from math import isfinite
 
 from boat_ai.statistical import digest
@@ -172,3 +173,77 @@ def build(snapshot, ranked):
         "source_ranked_sha256": digest(ranked),
         "comparison_only_no_history_rewrite": True,
     }
+
+
+def promote_verified_experiment(snapshot, trial):
+    """Promote a valid pre-cutoff two-path STRUCTURE into a new formal experiment.
+
+    Original learned/venue rankings and the original formal tickets survive as
+    same-time controls. Only new verified exhibition-stage snapshots are
+    eligible. No odds, payouts, outcomes, actual purchases, or historical edits.
+    """
+    if (trial is None or trial.get("status") != "PRE_CUTOFF_COUNTER_PATH_FROZEN"):
+        return snapshot
+    if (trial.get("not_formal") is not True or
+            trial.get("no_odds_used") is not True or
+            trial.get("no_results_used") is not True or
+            trial.get("same_point_count") is not True or
+            trial.get("virtual_budget_yen_each") != 50000):
+        raise ValueError("not_a_proven_prefreeze_trial")
+    frozen = _time(snapshot["frozen_at_utc"])
+    cutoff = _time(snapshot["cutoff_iso_jst"])
+    if (cutoff.date() < date(2026, 11, 20)
+            or frozen >= cutoff - timedelta(minutes=2)
+            or snapshot.get("phase") != "exhibition"
+            or (snapshot.get("exhibition_origin") or {}).get("captured_before_cutoff") is not True):
+        raise ValueError("promotion_requires_verified_precutoff_exhibition")
+    original, alt = snapshot.get("bets"), trial.get("alternative_bets")
+    _validate_tickets(original)
+    _validate_tickets(alt)
+    if (len(original) != len(alt)
+            or digest(original) != trial.get("control_bets_sha256")
+            or digest(alt) != trial.get("alternative_bets_sha256")
+            or _ticket_signature(original) != _ticket_signature(trial["control_bets"])):
+        raise ValueError("original_formal_control_digest_mismatch")
+    out = deepcopy(snapshot)
+    out["bets"] = deepcopy(alt)
+    evidence = {**trial,
+                "version": "expert-scenario-portfolio-formal-experiment-v0.1",
+                "base_research_version": VERSION,
+                "model_role": "experimental_formal",
+                "formal_component": True,
+                "not_formal": False,
+                "bets_modified": _ticket_signature(original) != _ticket_signature(alt),
+                "same_input_same_time": True,
+                "same_point_count": True,
+                "same_virtual_stake_yen": 50000,
+                "not_real_purchase": True,
+                "no_historical_forecast_overwrite": True,
+                "calibrated": False,
+                "professional_tickets_copied": False,
+                "proven_performance_gain": False,
+                "promotion_basis": "user_authorized_prospective_experiment",
+                "source_snapshot_frozen_at_utc": snapshot["frozen_at_utc"]}
+    out["expert_scenario_portfolio_formal"] = evidence
+    out.pop("expert_scenario_portfolio_shadow", None)
+    if "learned_formal" in out:
+        base_meta = out["learned_formal"]
+        base_sha = base_meta.get("composite_inference_sha256") or base_meta.get("model_sha256")
+        base_meta["inference_variant"] = (
+            base_meta.get("inference_variant", "learned")
+            + "+expert_two_path_formal_experiment_v01")
+        base_meta["composite_inference_sha256"] = digest({
+            "before_expert_inference_sha256": base_sha,
+            "portfolio_version": evidence["version"],
+            "main_head": trial["main_head_lane"],
+            "counter_head": trial["counter_head_lane"],
+            "source_ranked_sha256": trial["source_ranked_sha256"],
+        })
+    out["scenario"] = ("【専門家型・展開実験v0.1】"
+                       + f"本線{trial['main_head_lane']}頭／逆転{trial['counter_head_lane']}頭"
+                       + f"・第一候補{out['bets'][0]['combination']}"
+                       + "（配分仮説、的中率・回収率の改善未証明）")
+    out["point_reason"] = (out.get("point_reason") or "") + (
+        "／本線約65%・逆転約35%の展開別配分、同点数・仮想5万円。"
+        "旧買い目と配分は保存し、結果を見ずに採用")
+    return out

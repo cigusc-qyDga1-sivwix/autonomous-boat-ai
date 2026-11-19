@@ -19,7 +19,7 @@ from scripts.third_place_pilot import load_pilot, frozen_shadow
 from scripts.inside_survival_research import evaluate as evaluate_inside_survival
 from scripts.corner_attack_formal_v1 import rescore as corner_rescore, POLICY_SHA256 as CORNER_POLICY_SHA256
 from scripts.race_flow_experimental_primary import rescore as rescore_experimental, POLICY_SHA256 as EXPERIMENT_POLICY_SHA
-from scripts.expert_scenario_portfolio_shadow import build as build_expert_portfolio
+from scripts.expert_scenario_portfolio_shadow import build as build_expert_portfolio, promote_verified_experiment
 
 VERSION = "four-factor-learned-v1-conditional-choice-trained"
 START_DATE = date(2026, 11, 13)
@@ -258,13 +258,17 @@ def apply(snapshot: dict, model: dict) -> dict:
                 "result_data_used": False,
                 "calibrated": False,
             }
-    # A separate expert-style scenario-portfolio trial. This never changes
-    # actual formal bets and uses the exact same ranked, frozen source.
+    # A same-time two-path allocation experiment. No historical data, odds,
+    # results or real purchases enter the portfolio. The frozen learned-main
+    # control stays in source metadata even when new formal tickets differ.
     if snapshot.get("phase") == "exhibition":
         try:
             expert = build_expert_portfolio(result, ranked)
             if expert is not None:
-                result["expert_scenario_portfolio_shadow"] = expert
+                if expert.get("status") == "PRE_CUTOFF_COUNTER_PATH_FROZEN":
+                    result = promote_verified_experiment(result, expert)
+                else:
+                    result["expert_scenario_portfolio_shadow"] = expert
         except (ValueError, KeyError, TypeError, OverflowError):
             result["expert_scenario_portfolio_shadow"] = {
                 "model_role": "research_shadow", "status": "ERROR_FAIL_CLOSED",

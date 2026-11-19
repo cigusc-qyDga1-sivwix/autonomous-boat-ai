@@ -650,7 +650,11 @@ def _experimental_race_flow_report(forecasts, official, alerts, day):
         if not eligible:
             excluded[reason] += 1
             continue
-        main = r.get("bets")
+        portfolio = r.get("expert_scenario_portfolio_formal")
+        # Evaluate the underlying race-flow trial against ITS frozen no-experiment
+        # control, not the later expert-portfolio overlay in the final forecast.
+        main = (portfolio.get("control_bets") if isinstance(portfolio, dict)
+                else r.get("bets"))
         prior = proof.get("same_time_control_bets")
         try:
             good = (
@@ -672,6 +676,9 @@ def _experimental_race_flow_report(forecasts, official, alerts, day):
                 and isinstance(main, list) and isinstance(prior, list)
                 and len(main) == len(prior)
                 and _valid_shadow_tickets(main) and _valid_shadow_tickets(prior)
+                and (not isinstance(portfolio, dict)
+                     or (portfolio.get("control_bets_sha256") == sha(main)
+                         and portfolio.get("alternative_bets_sha256") == sha(r.get("bets"))))
                 and isinstance(proof.get("policy_sha256"), str)
                 and len(proof["policy_sha256"]) == 64
                 and proof.get("control_bets_sha256") == sha(prior)
@@ -719,6 +726,113 @@ def _experimental_race_flow_report(forecasts, official, alerts, day):
         "untrained_and_uncalibrated": True,
         "not_an_actual_purchase": True,
         "no_historical_reconstruction": True,
+    }
+
+
+def _expert_scenario_formal_report(forecasts, official, alerts, day):
+    """Official-verified comparison: experimental FORMAL tickets vs frozen control.
+
+    Both ticket sets are actually committed in the same pre-cutoff SHA snapshot,
+    same race and same hypothetical ¥50,000 allocation. Historical events are
+    never re-forecast or used for score construction.
+    """
+    before, after = [], []
+    by_venue = defaultdict(lambda: {"control": [], "formal": []})
+    exclusions = Counter()
+    frozen_count = changed = head_added = 0
+    def sha(v):
+        return hashlib.sha256(json.dumps(
+            v, sort_keys=True, ensure_ascii=False,
+            separators=(",", ":"), allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+
+    for row in forecasts:
+        proof = row.get("expert_scenario_portfolio_formal")
+        if not isinstance(proof, dict):
+            continue
+        frozen_count += 1
+        key = f"{day}|{row.get('venue')}|{row.get('race')}"
+        if key in alerts:
+            exclusions["refund_conflict_or_cancellation"] += 1
+            continue
+        ok, reason = _verify_race(row, official.get(key), day)
+        if not ok:
+            exclusions[reason] += 1
+            continue
+        main, ctrl = row.get("bets"), proof.get("control_bets")
+        try:
+            verified = (
+                day >= "2026-11-20"
+                and row.get("ticket_status") == "formal"
+                and row.get("phase") == "exhibition"
+                and row.get("model_version") == "four-factor-learned-v1-conditional-choice-trained"
+                and proof.get("version") == "expert-scenario-portfolio-formal-experiment-v0.1"
+                and proof.get("formal_component") is True
+                and proof.get("not_formal") is False
+                and proof.get("model_role") == "experimental_formal"
+                and proof.get("promotion_basis") == "user_authorized_prospective_experiment"
+                and proof.get("source_snapshot_frozen_at_utc") == row.get("frozen_at_utc")
+                and proof.get("frozen_at_utc") == row.get("frozen_at_utc")
+                and proof.get("same_input_same_time") is True
+                and proof.get("same_point_count") is True
+                and proof.get("same_virtual_stake_yen") == RESEARCH_BUDGET
+                and proof.get("no_odds_used") is True
+                and proof.get("no_results_used") is True
+                and proof.get("calibrated") is False
+                and proof.get("not_real_purchase") is True
+                and proof.get("no_historical_forecast_overwrite") is True
+                and (row.get("exhibition_input_check") or {}).get("verified_before_freeze") is True
+                and (row.get("exhibition_input_check") or {}).get("six_boats_matched") == 6
+                and isinstance(main, list) and isinstance(ctrl, list)
+                and len(main) == len(ctrl)
+                and _valid_shadow_tickets(main) and _valid_shadow_tickets(ctrl)
+                and proof.get("control_bets_sha256") == sha(ctrl)
+                and proof.get("alternative_bets_sha256") == sha(main)
+                and proof.get("bets_modified") is (_ticket_signature(main) != _ticket_signature(ctrl))
+            )
+        except (TypeError, KeyError, ValueError, OverflowError):
+            verified = False
+        if not verified:
+            exclusions["invalid_or_missing_frozen_pair_evidence"] += 1
+            continue
+        p = official[key]
+        control_result = _shadow_trial_result(row, ctrl, p)
+        formal_result = _shadow_trial_result(row, main, p)
+        before.append(control_result)
+        after.append(formal_result)
+        by_venue[row["venue"]]["control"].append(control_result)
+        by_venue[row["venue"]]["formal"].append(formal_result)
+        changed += _ticket_signature(main) != _ticket_signature(ctrl)
+        head_added += {b["combination"][0] for b in main} != {b["combination"][0] for b in ctrl}
+
+    def stats(ctrl, formal):
+        return {
+            "matched_races": len(formal),
+            "same_time_learned_control": _metrics(ctrl),
+            "expert_style_experimental_formal": _metrics(formal),
+            "head_misses_recovered": sum(
+                x["stage"] == "head_miss" and y["stage"] != "head_miss"
+                for x, y in zip(ctrl, formal)),
+            "new_head_misses": sum(
+                x["stage"] != "head_miss" and y["stage"] == "head_miss"
+                for x, y in zip(ctrl, formal)),
+            "virtual_payout_delta_experiment_minus_control_yen":
+                sum(x["virtual_payout_yen"] for x in formal)
+                - sum(x["virtual_payout_yen"] for x in ctrl),
+        }
+    return {
+        "protocol": "prospective-verified-expert-portfolio-formal-v01",
+        "frozen_formal_experiment_records": frozen_count,
+        "matched_ticket_change_races": changed,
+        "matched_head_set_change_races": head_added,
+        **stats(before, after),
+        "by_venue": {venue: stats(rows["control"], rows["formal"])
+                     for venue, rows in sorted(by_venue.items())},
+        "exclusions": dict(sorted(exclusions.items())),
+        "not_an_actual_purchase": True,
+        "not_calibrated": True,
+        "historical_forecasts_not_recomputed": True,
+        "improvement_unproven": True,
     }
 
 
@@ -1674,6 +1788,9 @@ def analyze(dataset: dict):
         raw, official, alerts, day
     )
     report["expert_scenario_portfolio_comparison"] = _expert_scenario_portfolio_report(
+        raw, official, alerts, day
+    )
+    report["expert_scenario_formal_comparison"] = _expert_scenario_formal_report(
         raw, official, alerts, day
     )
     report["experimental_race_flow_comparison"] = _experimental_race_flow_report(

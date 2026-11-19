@@ -2330,7 +2330,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "exhibition_input_check", "relative_scores_uncalibrated", "learned_formal", "third_place_pilot",
                       "inside_survival_research", "learned_conditional_shadow",
                       "experimental_race_flow",
-                      "learned_exhibition_ablation", "original_exhibition_formal_v1",
+                      "learned_exhibition_ablation", "expert_scenario_portfolio_shadow",
+                      "expert_scenario_portfolio_formal", "original_exhibition_formal_v1",
                       "original_exhibition_formal_v1_rejection"):
             if extra in current:
                 r[extra] = current[extra]
@@ -2417,6 +2418,24 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
             for r in latest_races if r.get("original_exhibition_formal_v1")}),
         "learned_formal_model_sha256": (ACTIVE_LEARNED_MODEL or {}).get("model_sha256"),
         "learned_formal_trained_through": (ACTIVE_LEARNED_MODEL or {}).get("trained_through"),
+        "expert_scenario_portfolio_study": {
+            "version": "expert-scenario-portfolio-shadow-v0.1",
+            "frozen_counterpath_races": sum(
+                (r.get("expert_scenario_portfolio_shadow") or {}).get("status")
+                == "PRE_CUTOFF_COUNTER_PATH_FROZEN" for r in latest_races),
+            "research_ticket_change_races": sum(
+                (r.get("expert_scenario_portfolio_shadow") or {}).get("ticket_or_allocation_changed") is True
+                for r in latest_races),
+            "formal_tickets_modified": sum(
+                (r.get("expert_scenario_portfolio_formal") or {}).get("formal_component") is True
+                and (r.get("expert_scenario_portfolio_formal") or {}).get("bets_modified") is True
+                and r.get("ticket_status") == "formal" for r in latest_races),
+            "formal_experiment_races": sum(
+                (r.get("expert_scenario_portfolio_formal") or {}).get("formal_component") is True
+                and r.get("ticket_status") == "formal" for r in latest_races),
+            "virtual_budget_yen_each": 50000,
+            "no_profitability_claim": True,
+        },
         "exhibition_changed_bet_count": sum(bool((r.get("exhibition_change") or {}).get("bets_changed")) for r in latest_races),
         "exhibition_input_mismatch_rejected_this_run": rejected_exhibition_input_mismatch,
         "exhibition_input_verified_race_count": sum(

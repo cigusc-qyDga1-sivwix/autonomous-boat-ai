@@ -28,6 +28,7 @@ from scripts.learned_formal import (
 from scripts.original_exhibition_venue_research import venue_features, VENUE_SPECS
 from scripts.corner_attack_formal_v1 import rescore as corner_rescore, POLICY_SHA256 as CORNER_POLICY_SHA256
 from scripts.race_flow_experimental_primary import rescore as rescore_experimental, POLICY_SHA256 as EXPERIMENT_POLICY_SHA
+from scripts.expert_scenario_portfolio_shadow import build as build_expert_portfolio, promote_verified_experiment
 
 PROFILE_PATH = Path(__file__).resolve().parents[1] / "config/original-venue-v1-profiles.json"
 PROFILE_DATA = json.loads(PROFILE_PATH.read_text(encoding="utf-8"))
@@ -243,6 +244,23 @@ def apply(snapshot: dict, learned_model: dict, capture: dict) -> dict:
         "pre_cutoff_only": True, "prospective_accuracy_improvement_unproven": True,
         "not_a_retrained_statistical_model": True,
     }
+    # Rebuild the expert allocation from FINAL venue-adjusted, corner-adjusted,
+    # race-flow scores exactly ONCE: do not compound a prior learned portfolio.
+    out.pop("expert_scenario_portfolio_formal", None)
+    out.pop("expert_scenario_portfolio_shadow", None)
+    try:
+        expert = build_expert_portfolio(out, adjusted)
+        if expert is not None:
+            if expert.get("status") == "PRE_CUTOFF_COUNTER_PATH_FROZEN":
+                out = promote_verified_experiment(out, expert)
+            else:
+                out["expert_scenario_portfolio_shadow"] = expert
+    except (ValueError, KeyError, TypeError, OverflowError):
+        out["expert_scenario_portfolio_shadow"] = {
+            "model_role": "research_shadow", "status": "ERROR_FAIL_CLOSED",
+            "not_formal": True, "bets_modified": False,
+            "no_results_used": True, "no_odds_used": True,
+        }
     return out
 
 

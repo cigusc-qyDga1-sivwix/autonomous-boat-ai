@@ -18,6 +18,7 @@ from boat_ai.statistical import (
 from scripts.third_place_pilot import load_pilot, frozen_shadow
 from scripts.inside_survival_research import evaluate as evaluate_inside_survival
 from scripts.corner_attack_formal_v1 import rescore as corner_rescore, POLICY_SHA256 as CORNER_POLICY_SHA256
+from scripts.race_flow_experimental_primary import rescore as rescore_experimental, POLICY_SHA256 as EXPERIMENT_POLICY_SHA
 
 VERSION = "four-factor-learned-v1-conditional-choice-trained"
 START_DATE = date(2026, 11, 13)
@@ -129,6 +130,19 @@ def apply(snapshot: dict, model: dict) -> dict:
     count = len(prior_bets)
     if not 4 <= count <= 20 or sum(b["virtual_yen"] for b in prior_bets) != 50000:
         raise ValueError("invalid previous main allocation")
+    # Explicit 20 Nov forward experiment: verified exhibition only, not a
+    # retroactive recalculation or a trained improvement claim. Freeze the
+    # unchanged learned+corner control before experimental head reranking.
+    experimental_audit = None
+    experimental_control = None
+    if (snapshot.get("phase") == "exhibition"
+            and cutoff.date() >= date(2026, 11, 20)
+            and frozen.astimezone(cutoff.tzinfo).date() >= date(2026, 11, 20)):
+        experimental_control = allocate(ranked, count, point_free=False, max_points=20)
+        ranked, experimental_audit = rescore_experimental(
+            ranked, racers, frozen_at_utc=snapshot["frozen_at_utc"],
+            cutoff_iso_jst=snapshot["cutoff_iso_jst"],
+            exhibition_verified=(snapshot.get("exhibition_origin") or {}).get("captured_before_cutoff") is True)
     bets = allocate(ranked, count, point_free=False, max_points=20)
     if (len(bets) != count or sum(b["virtual_yen"] for b in bets) != 50000
             or any(b["virtual_yen"] < 1000 or b["virtual_yen"] % 1000
@@ -182,6 +196,35 @@ def apply(snapshot: dict, model: dict) -> dict:
             "corner_guard_policy_sha256": CORNER_POLICY_SHA256,
         })
         result["point_reason"] += "／3・4コース攻防を発走前展示で小幅補正（未校正）"
+    if experimental_audit is not None:
+        changed = sorted((b["combination"], b["virtual_yen"]) for b in bets) != sorted(
+            (b["combination"], b["virtual_yen"]) for b in experimental_control)
+        applied = experimental_audit["status"] == "APPLIED_EXPERIMENTAL_UNCALIBRATED"
+        result["experimental_race_flow"] = {
+            **experimental_audit,
+            "formal_component": applied,
+            "formal_bets_changed": changed,
+            "first_ticket_head_changed": bets[0]["combination"][0] != experimental_control[0]["combination"][0],
+            "same_time_control_bets": experimental_control,
+            "control_bets_sha256": digest(experimental_control),
+            "experimental_bets_sha256": digest(bets),
+            "same_point_count": len(bets) == len(experimental_control),
+            "same_virtual_stake_yen": 50000,
+            "not_an_actual_purchase": True,
+            "no_historical_overwrite": True,
+        }
+        if applied:
+            result["learned_formal"]["inference_variant"] = (
+                result["learned_formal"].get("inference_variant", "learned")
+                + "+race-flow-head-experiment-v1")
+            result["learned_formal"]["composite_inference_sha256"] = digest({
+                "base_learned_model_sha256": model["model_sha256"],
+                "corner_guard_policy_sha256": (
+                    CORNER_POLICY_SHA256 if corner_audit and corner_audit.get("applied") else None),
+                "race_flow_experiment_policy_sha256": EXPERIMENT_POLICY_SHA,
+            })
+            result["scenario"] = "【展開実験v1・未校正】攻防予兆で頭を再評価・上位 " + bets[0]["combination"]
+            result["point_reason"] += "／展開実験v1で外頭・内残りを再配分（旧買い目保存）"
     # Old-model diagnostics must not be represented as learned-model evidence.
     for key in ("interaction_primary", "three_leg_primary",
                 "formal_insight_v24", "formal_head_risk_v25",

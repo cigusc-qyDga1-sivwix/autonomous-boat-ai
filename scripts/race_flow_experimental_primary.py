@@ -77,7 +77,7 @@ def _inputs(racers):
 
 def rescore(ranked, racers, *, frozen_at_utc, cutoff_iso_jst, exhibition_verified):
     frozen, cutoff = _ts(frozen_at_utc), _ts(cutoff_iso_jst)
-    if frozen > cutoff - timedelta(minutes=2):
+    if frozen >= cutoff - timedelta(minutes=2):
         raise ValueError("late_snapshot_cannot_change_formal")
     if not isinstance(ranked, list) or len(ranked) != 120:
         raise ValueError("canonical_120_required")

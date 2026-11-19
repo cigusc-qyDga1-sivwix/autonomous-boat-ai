@@ -11,7 +11,8 @@ import math
 from datetime import datetime, timedelta
 from itertools import permutations
 
-from boat_ai.statistical import allocate, digest
+from boat_ai.statistical import allocate, digest, distributions
+from scripts.corner_attack_formal_v1 import rescore as corner_rescore
 
 VERSION = "inner-23-head-challenger-shadow-v0.1"
 POLICY = {
@@ -160,3 +161,36 @@ def evaluate(snapshot: dict, ranked: list[dict], formal_bets: list[dict]) -> dic
         "before_head_mass": {str(n): round(_mass(ranked, n), 6) for n in (1,2,3)},
         "trial_head_mass": {str(n): round(_mass(adjusted, n), 6) for n in (1,2,3)},
     }
+
+
+def build(snapshot: dict, model: dict) -> dict:
+    """Re-evaluate only AFTER six-boat input proof has been frozen by the builder.
+
+    Do not run inside learned_formal.apply: exhibition_input_check is attached
+    downstream, after the six-boat input/output checksum comparison.
+    """
+    proof = snapshot.get("learned_formal") or {}
+    if proof.get("model_sha256") != model.get("model_sha256"):
+        return {"version": VERSION, "model_role": "research_shadow",
+                "not_formal": True, "formal_tickets_changed": False,
+                "status": "MODEL_SHA_MISMATCH", "result_data_used": False}
+    allowed = ("lane", "course", "national_win_rate",
+               "motor_top_2_percent", "average_start_timing",
+               "average_start_timing_imputed", "exhibition_time", "exhibition_st")
+    safe = {
+        "phase": snapshot.get("phase"),
+        "racers": [{k: row.get(k) for k in allowed} for row in snapshot["racers"]],
+        "weather_used": {k: (snapshot.get("weather_used") or {}).get(k)
+                         for k in ("wind_speed", "wave_height")},
+    }
+    ranked = distributions(safe, model)
+    if (snapshot.get("corner_attack_formal_v1") or {}).get("applied") is True:
+        ranked, audit = corner_rescore(ranked, snapshot["racers"])
+        if audit.get("applied") is not True:
+            return {"version": VERSION, "model_role": "research_shadow",
+                    "not_formal": True, "formal_tickets_changed": False,
+                    "status": "CORNER_PROVENANCE_MISMATCH", "result_data_used": False}
+    report = evaluate(snapshot, ranked, snapshot["bets"])
+    report["parent_model_sha256"] = model["model_sha256"]
+    report["source_formal_bets_sha256"] = digest(snapshot["bets"])
+    return report

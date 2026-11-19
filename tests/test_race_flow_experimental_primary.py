@@ -144,3 +144,32 @@ def test_baseline_and_pre_activation_never_experiment():
     snap["frozen_at_utc"] = "2026-11-19T01:45:00+00:00"
     snap["cutoff_iso_jst"] = "2026-11-19T12:00:00+09:00"
     assert "experimental_race_flow" not in learned_apply(snap, future_model())
+
+
+def test_official_audit_compares_both_pre_frozen_versions():
+    from scripts.forecast_audit import _experimental_race_flow_report
+    snap = learned_apply(future_snapshot(), future_model())
+    snap["cutoff_jst"] = "12:00"
+    snap["ticket_status"] = "formal"
+    snap["exhibition_input_check"] = {
+        "verified_before_freeze": True, "six_boats_matched": 6}
+    snap["sha256"] = digest({k: v for k, v in snap.items() if k != "sha256"})
+    key = "2026-11-20|徳山|1"
+    official = {key: {
+        "verified": True, "source": "boatrace_official_pay",
+        "virtual_stake": 50000, "snapshot_sha256": snap["sha256"],
+        "finish": snap["bets"][0]["combination"], "payout_per_100": 1500,
+    }}
+    report = _experimental_race_flow_report([snap], official, {}, "2026-11-20")
+    assert report["matched_races"] == 1
+    assert report["verified_formal_ticket_change_races"] == 1
+    assert report["verified_formal_first_head_change_races"] == 1
+    assert report["experimental_formal"]["hits"] == 1
+    assert report["same_time_learned_control"]["hits"] == 0
+    assert report["head_misses_recovered"] == 1
+    assert report["experimental_formal"]["virtual_stake_yen"] == 50000
+    assert report["same_time_learned_control"]["virtual_stake_yen"] == 50000
+    official[key]["verified"] = False
+    report = _experimental_race_flow_report([snap], official, {}, "2026-11-20")
+    assert report["matched_races"] == 0
+    assert report["exclusions"]["unverified"] == 1

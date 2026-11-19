@@ -2328,7 +2328,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "attack_defence_shadow", "grade_context", "grade_competition_shadow", "strong_field_diagnostic",
                       "coverage_reselection_shadow", "hidden_path_shadow",
                       "exhibition_input_check", "relative_scores_uncalibrated", "learned_formal", "third_place_pilot",
-                      "inside_survival_research", "learned_conditional_shadow",
+                      "inside_survival_research", "experimental_race_flow", "learned_conditional_shadow",
                       "learned_exhibition_ablation", "original_exhibition_formal_v1",
                       "original_exhibition_formal_v1_rejection"):
             if extra in current:
@@ -2391,6 +2391,21 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
         "exhibition_race_count": sum(r.get("phase")=="exhibition" for r in latest_races),
         "learned_formal_races": sum(r.get("model_version")==LEARNED_MAIN_MODEL for r in latest_races),
         "learned_formal_status": ("active" if ACTIVE_LEARNED_MODEL is not None else "awaiting_fresh_model"),
+        "race_flow_experiment_v1": {
+            "activation_date_jst": "2026-11-20",
+            "active_formal_races": sum(
+                (r.get("experimental_race_flow") or {}).get("formal_component") is True
+                and r.get("ticket_status") == "formal" for r in latest_races),
+            "ticket_or_stake_changed_races": sum(
+                (r.get("experimental_race_flow") or {}).get("formal_bets_changed") is True
+                and r.get("ticket_status") == "formal" for r in latest_races),
+            "first_ticket_head_changed_races": sum(
+                (r.get("experimental_race_flow") or {}).get("first_ticket_head_changed") is True
+                and r.get("ticket_status") == "formal" for r in latest_races),
+            "gate": "verified pre-cutoff exhibition, >=2 independent attack signals",
+            "untrained": True, "no_proven_accuracy_gain": True,
+            "same_virtual_budget_yen": 50000,
+        },
         "original_exhibition_v1_formal_races": sum(
             bool((r.get("original_exhibition_formal_v1") or {}).get("formal_component"))
             and r.get("ticket_status") == "formal" for r in latest_races),

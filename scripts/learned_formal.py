@@ -17,7 +17,6 @@ from boat_ai.statistical import (
 )
 from scripts.third_place_pilot import load_pilot, frozen_shadow
 from scripts.inside_survival_research import evaluate as evaluate_inside_survival
-from scripts.inner_23_head_challenger_shadow import evaluate as evaluate_inner_23_head
 from scripts.corner_attack_formal_v1 import rescore as corner_rescore, POLICY_SHA256 as CORNER_POLICY_SHA256
 
 VERSION = "four-factor-learned-v1-conditional-choice-trained"
@@ -214,19 +213,5 @@ def apply(snapshot: dict, model: dict) -> dict:
                 "formal_tickets_changed": False,
                 "result_data_used": False,
                 "calibrated": False,
-            }
-    # Independent 2/3-boat winning-path trial on new pre-cutoff exhibition inputs.
-    # Its trial ticket list is sealed with the new frozen snapshot SHA, never
-    # substituted for formal tickets or promoted from a post-race result.
-    if snapshot.get("phase") == "exhibition":
-        try:
-            result["inner_23_head_challenger_shadow"] = evaluate_inner_23_head(
-                snapshot, ranked, bets)
-        except (ValueError, TypeError, KeyError, OverflowError):
-            result["inner_23_head_challenger_shadow"] = {
-                "version": "inner-23-head-challenger-shadow-v0.1",
-                "model_role": "research_shadow", "not_formal": True,
-                "status": "ERROR_FAIL_CLOSED", "formal_tickets_changed": False,
-                "result_data_used": False,
             }
     return result

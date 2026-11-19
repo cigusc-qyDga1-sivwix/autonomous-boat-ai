@@ -2330,7 +2330,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "exhibition_input_check", "relative_scores_uncalibrated", "learned_formal", "third_place_pilot",
                       "inside_survival_research", "learned_conditional_shadow",
                       "experimental_race_flow",
-                      "learned_exhibition_ablation", "expert_scenario_portfolio_shadow", "original_exhibition_formal_v1",
+                      "learned_exhibition_ablation", "expert_scenario_portfolio_shadow",
+                      "expert_scenario_portfolio_formal", "original_exhibition_formal_v1",
                       "original_exhibition_formal_v1_rejection"):
             if extra in current:
                 r[extra] = current[extra]
@@ -2425,7 +2426,13 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
             "research_ticket_change_races": sum(
                 (r.get("expert_scenario_portfolio_shadow") or {}).get("ticket_or_allocation_changed") is True
                 for r in latest_races),
-            "formal_tickets_modified": False,
+            "formal_tickets_modified": sum(
+                (r.get("expert_scenario_portfolio_formal") or {}).get("formal_component") is True
+                and (r.get("expert_scenario_portfolio_formal") or {}).get("bets_modified") is True
+                and r.get("ticket_status") == "formal" for r in latest_races),
+            "formal_experiment_races": sum(
+                (r.get("expert_scenario_portfolio_formal") or {}).get("formal_component") is True
+                and r.get("ticket_status") == "formal" for r in latest_races),
             "virtual_budget_yen_each": 50000,
             "no_profitability_claim": True,
         },

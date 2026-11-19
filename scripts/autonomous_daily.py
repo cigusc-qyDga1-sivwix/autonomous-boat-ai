@@ -2349,7 +2349,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "attack_defence_shadow", "grade_context", "grade_competition_shadow", "strong_field_diagnostic",
                       "coverage_reselection_shadow", "hidden_path_shadow",
                       "exhibition_input_check", "relative_scores_uncalibrated", "learned_formal", "third_place_pilot",
-                      "inside_survival_research", "inner_23_head_challenger_shadow", "learned_conditional_shadow",
+                      "inside_survival_research", "learned_conditional_shadow", "inner_23_head_challenger_shadow",
                       "learned_exhibition_ablation", "original_exhibition_formal_v1",
                       "original_exhibition_formal_v1_rejection"):
             if extra in current:

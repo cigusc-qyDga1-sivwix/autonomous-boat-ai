@@ -29,6 +29,7 @@ if __package__:
         OFFICIAL_WAVE_SOURCE, OFFICIAL_WAVE_EVIDENCE, WAVE_TARGET_MARGIN,
     )
     from .venue_weather_special_shadow import rescore as rescore_site_weather_shadow
+    from .relative_wind_shadow import rescore as rescore_relative_wind_shadow, VERSION as RELATIVE_WIND_SHADOW_VERSION
     from .attack_defense_shadow import rescore as rescore_attack_defence_shadow
     from .hidden_path_shadow import analyze as analyze_hidden_path
     from .grade_competition_shadow import grade_from_program, rescore as rescore_grade_competition
@@ -58,6 +59,7 @@ else:
         OFFICIAL_WAVE_SOURCE, OFFICIAL_WAVE_EVIDENCE, WAVE_TARGET_MARGIN,
     )
     from venue_weather_special_shadow import rescore as rescore_site_weather_shadow
+    from relative_wind_shadow import rescore as rescore_relative_wind_shadow, VERSION as RELATIVE_WIND_SHADOW_VERSION
     from attack_defense_shadow import rescore as rescore_attack_defence_shadow
     from hidden_path_shadow import analyze as analyze_hidden_path
     from grade_competition_shadow import grade_from_program, rescore as rescore_grade_competition
@@ -1571,6 +1573,59 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
                 "result_data_used": False,
                 "calibrated": False,
             }
+    # Wind codes in the pre-cutoff Open API preview are ALREADY relative to
+    # the start-to-first-mark axis across venues (see documented API codes).
+    # Wind-direction hypotheses are isolated in a new, untrained SHADOW; no
+    # change to formal tickets, model weights, stakes, older SHA or settlement.
+    relative_wind_shadow = None
+    if linked_active and interaction_active and phase == "exhibition":
+        relative_wind_shadow = {
+            "version": RELATIVE_WIND_SHADOW_VERSION, "status": "SKIPPED",
+            "reason": "six_boat_gate_or_pre_cutoff_onsite_wind_unavailable",
+            "not_formal": True, "no_additional_stake": True,
+            "result_data_used": False,
+        }
+        if point_gate.get("final_eligible"):
+            try:
+                wind_trial = rescore_relative_wind_shadow(
+                    promoted["ranked_outcomes"], racers, selected_weather)
+                if wind_trial is not None:
+                    wind_alt_bets, wind_alt_meta = interaction_primary(
+                        promoted, racers, frozen_at, cutoff,
+                        tactics=race.get("_course_tactics"), scored_weights=None,
+                        adaptive_points=adaptive_active,
+                        justified_points=justified_active,
+                        exhibition_verified=True,
+                        site_weather_verified=True,
+                        entry_aware=entry_active,
+                        linked_ranked=wind_trial["outcomes"])
+                    if sum(int(x["virtual_yen"]) for x in wind_alt_bets) != VIRTUAL_BUDGET_YEN:
+                        raise ValueError("Wind shadow virtual stake != formal budget")
+                    relative_wind_shadow = {
+                        **{k: v for k, v in wind_trial.items() if k != "outcomes"},
+                        "forecast_alternative_bets": wind_alt_bets,
+                        "alternative_head_course_shares": wind_alt_meta.get("new_head_course_shares"),
+                        "formal_point_count": len(bets),
+                        "alternative_point_count": len(wind_alt_bets),
+                        "point_count_matched": len(bets) == len(wind_alt_bets),
+                        "actual_ticket_or_allocation_change": sorted(
+                            (x["combination"], x["virtual_yen"]) for x in bets
+                        ) != sorted(
+                            (x["combination"], x["virtual_yen"]) for x in wind_alt_bets
+                        ),
+                        "frozen_at_utc": frozen_at,
+                        "baseline_ranked_sha256": stable_hash({"ranked": promoted["ranked_outcomes"]}),
+                        "formal_bets_unchanged": True,
+                        "not_part_of_formal_performance": True,
+                    }
+            except (ValueError, TypeError, KeyError, OverflowError) as exc:
+                # Never allow an uncalibrated experiment to stop formal service.
+                relative_wind_shadow = {
+                    "version": RELATIVE_WIND_SHADOW_VERSION,
+                    "status": "UNAVAILABLE", "reason": str(exc)[:180],
+                    "not_formal": True, "no_additional_stake": True,
+                    "result_data_used": False,
+                }
     # Forward-only same-time alternative: attack pressure, inside defence and
     # the counter/follower after a contest. Main formal bets remain unchanged.
     attack_defence_shadow = None
@@ -1798,6 +1853,7 @@ def prediction(race: dict, venue: str, race_number: int, phase: str,
             "venue_surface_v1": promoted.get("venue_surface_v1"),
             "venue_surface_ab": promoted.get("venue_surface_ab")} if four_factor else {}),
         **({"weather_special_shadow": weather_special_shadow} if weather_special_shadow else {}),
+        **({"relative_wind_shadow": relative_wind_shadow} if relative_wind_shadow else {}),
         **({"attack_defence_shadow": attack_defence_shadow} if attack_defence_shadow else {}),
         "model_role": "main",
         "legacy_control": legacy_control,
@@ -2325,7 +2381,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "postrace_conditional_control", "venue_tactics_v2", "venue_tactics_ab", "point_free_control", "point_free_provenance",
                       "role_skill_shadow", "venue_motor_exhibition_shadow", "interaction_primary",
                       "three_leg_primary", "formal_insight_v24", "formal_head_risk_v25", "formal_conditional_v26",
-                      "attack_defence_shadow", "grade_context", "grade_competition_shadow", "strong_field_diagnostic",
+                      "attack_defence_shadow", "relative_wind_shadow", "grade_context", "grade_competition_shadow", "strong_field_diagnostic",
                       "coverage_reselection_shadow", "hidden_path_shadow",
                       "exhibition_input_check", "relative_scores_uncalibrated", "learned_formal", "third_place_pilot",
                       "inside_survival_research", "learned_conditional_shadow",

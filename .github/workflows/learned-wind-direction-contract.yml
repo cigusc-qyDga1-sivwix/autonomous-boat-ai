@@ -1,0 +1,44 @@
+name: BOAT LAB learned wind direction formal pre-cutoff contract
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/learned_wind_direction_v1.py'
+      - 'scripts/learned_formal.py'
+      - 'scripts/autonomous_daily.py'
+      - 'tests/test_learned_wind_direction_v1.py'
+      - '.github/workflows/learned-wind-direction-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  learned-direction:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /pyproject.toml
+            /scripts/
+            /boat_ai/
+            /tests/
+            /weather_lab/
+            /config/
+            /app/*.js
+            /app/data/statistical/
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify new code syntax
+        run: python -m compileall -q scripts/learned_wind_direction_v1.py scripts/learned_formal.py scripts/autonomous_daily.py
+      - name: Test historical-model weather integration and immutable formal ledger
+        run: |
+          python -m pip install -e '.[test]'
+          python -m pytest -q tests/test_learned_wind_direction_v1.py tests/test_learned_formal.py

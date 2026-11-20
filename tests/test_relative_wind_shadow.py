@@ -86,6 +86,40 @@ class RelativeWindShadowTests(unittest.TestCase):
                         by_combo(ref["outcomes"], "2-1-3") /
                         by_combo(ref["outcomes"], "1-4-3"))
 
+    def test_pipeline_frozen_wind_shadow_without_formal_ticket_mutation(self):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        from scripts.autonomous_daily import prediction, stable_hash
+
+        day = "2026-11-22"
+        sample = {
+            "closed_at": day + " 11:00:00",
+            "racers": {str(i): {
+                "name": "選手" + str(i),
+                "national_win_rate": 5.2, "motor_top_2_percent": 32,
+                "average_start_timing": .16
+            } for i in range(1, 7)},
+            "preview": {
+                "wind_speed": 6, "wind_direction_number": 5, "wave_height": 3,
+                "racers": {str(i): {
+                    "course_number": i, "start_timing": .12 + i * .01,
+                    "exhibition_time": 6.8 - i * .01
+                } for i in range(1, 7)},
+            },
+        }
+        now = datetime(2026, 11, 22, 9, 0, tzinfo=ZoneInfo("Asia/Tokyo"))
+        snap = prediction(sample, "徳山", 1, "exhibition", now, "test-source")
+        audit = snap["relative_wind_shadow"]
+        self.assertEqual(audit["status"], "RESEARCH_SHADOW", audit)
+        self.assertEqual(audit["signal"]["relative_wind"], "tailwind")
+        self.assertTrue(audit["not_part_of_formal_performance"])
+        self.assertTrue(audit["formal_bets_unchanged"])
+        self.assertEqual(sum(b["virtual_yen"] for b in snap["bets"]), 50_000)
+        self.assertEqual(sum(b["virtual_yen"] for b in audit["forecast_alternative_bets"]), 50_000)
+        self.assertEqual(snap["sha256"], stable_hash({
+            k: v for k, v in snap.items() if k != "sha256"
+        }))
+
     def test_invalid_actual_entry_or_outcomes_rejected(self):
         bad = racers()
         bad[1]["course"] = 1

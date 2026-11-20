@@ -151,6 +151,13 @@ def apply(snapshot: dict, model: dict) -> dict:
                    for b in bets)):
         raise ValueError("invalid learned main allocation")
     result = deepcopy(snapshot)
+    # Strict inference boundary: historical outcomes/market fields must not
+    # change ANY downstream expert-portfolio branch, nor leak into a forecast.
+    # Keep these in the separate official-result ledger only.
+    for postrace_key in ("result", "finish", "actual_finish", "actual_start",
+                         "official_pay", "payout", "odds", "kimarite",
+                         "actual_tactic", "observed_maneuver"):
+        result.pop(postrace_key, None)
     before = result["model_version"]
     control = deepcopy(prior_bets)
     result.update({

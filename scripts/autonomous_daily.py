@@ -2330,7 +2330,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                       "exhibition_input_check", "relative_scores_uncalibrated", "learned_formal", "third_place_pilot",
                       "inside_survival_research", "learned_conditional_shadow",
                       "experimental_race_flow",
-                      "learned_exhibition_ablation", "expert_scenario_portfolio_shadow",
+                      "learned_exhibition_ablation", "learned_wind_direction_v1", "expert_scenario_portfolio_shadow",
                       "expert_scenario_portfolio_formal", "original_exhibition_formal_v1",
                       "original_exhibition_formal_v1_rejection"):
             if extra in current:

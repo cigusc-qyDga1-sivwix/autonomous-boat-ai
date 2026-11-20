@@ -19,6 +19,7 @@ from scripts.third_place_pilot import load_pilot, frozen_shadow
 from scripts.inside_survival_research import evaluate as evaluate_inside_survival
 from scripts.corner_attack_formal_v1 import rescore as corner_rescore, POLICY_SHA256 as CORNER_POLICY_SHA256
 from scripts.race_flow_experimental_primary import rescore as rescore_experimental, POLICY_SHA256 as EXPERIMENT_POLICY_SHA
+from scripts.learned_wind_direction_v1 import rescore as rescore_learned_wind, POLICY_SHA256 as WIND_POLICY_SHA
 from scripts.expert_scenario_portfolio_shadow import build as build_expert_portfolio, promote_verified_experiment
 
 VERSION = "four-factor-learned-v1-conditional-choice-trained"
@@ -235,6 +236,59 @@ def apply(snapshot: dict, model: dict) -> dict:
                 "weather_special_shadow", "role_skill_shadow",
                 "venue_motor_exhibition_shadow"):
         result.pop(key, None)
+    # The historical SHA-verified learned model already uses wind speed/wave.
+    # Apply a separately disclosed, bounded direction hypothesis ONLY to NEW
+    # verified pre-cutoff OpenAPI exhibition rows. Do not backfill old results
+    # or change existing frozen forecasts. The preceding learned/race-flow
+    # forecast is the immutable same-time A/B control for this new policy.
+    wind_control_result = deepcopy(result)
+    wind_control_ranked = [dict(row) for row in ranked]
+    wind_audit = None
+    if snapshot.get("phase") == "exhibition":
+        try:
+            adjusted_ranked, wind_audit = rescore_learned_wind(ranked, result)
+            if wind_audit["status"] == "APPLIED_FORWARD_UNCALIBRATED":
+                wind_bets = allocate(adjusted_ranked, count, point_free=False, max_points=20)
+                if (len(wind_bets) != count
+                        or sum(b["virtual_yen"] for b in wind_bets) != 50000
+                        or any(b["virtual_yen"] < 1000 or b["virtual_yen"] % 1000
+                               for b in wind_bets)):
+                    raise ValueError("wind_forward_budget_invariant")
+                ranked = adjusted_ranked
+                result["bets"] = wind_bets
+                result.update(ranking_summary(
+                    ranked, racers, "保存済み学習係数＋風向別前向き補正・未校正"))
+                result["point_reason"] += (
+                    "／学習済み風速・波高効果を維持し、場内の追い風・向かい風別に"
+                    "3連単順位・配分を再計算（未校正）")
+                result["scenario"] = (
+                    "【学習済み＋風向補正v0.1】第一候補 "
+                    + wind_bets[0]["combination"] + "（未校正）")
+                meta = result["learned_formal"]
+                before_wind_sha = meta.get("composite_inference_sha256") or model["model_sha256"]
+                meta["inference_variant"] = (
+                    meta.get("inference_variant", "learned")
+                    + "+learned-wind-direction-forward-v01")
+                meta["wind_direction_policy_sha256"] = WIND_POLICY_SHA
+                meta["wind_direction_base_training_n"] = model["training_n"]
+                meta["wind_direction_effect_trained"] = False
+                meta["composite_inference_sha256"] = digest({
+                    "prior_inference_sha256": before_wind_sha,
+                    "wind_direction_policy_sha256": WIND_POLICY_SHA,
+                    "trained_model_sha256": model["model_sha256"],
+                })
+        except (KeyError, TypeError, ValueError, OverflowError, ZeroDivisionError) as exc:
+            # Never allow a new wind hypothesis to corrupt a formal forecast.
+            result = wind_control_result
+            ranked = wind_control_ranked
+            wind_audit = {
+                "version": "learned-relative-wind-formal-v0.1-forward-uncalibrated",
+                "status": "ERROR_FAIL_CLOSED",
+                "error_type": type(exc).__name__,
+                "formal_component": False,
+                "result_data_used": False,
+                "calibrated": False,
+            }
     # A separately trained, pre-cutoff third-place experiment. Never changes
     # learned-formal tickets, classification, or the existing 50,000-yen stake.
     pilot = load_pilot(model, frozen)
@@ -275,4 +329,50 @@ def apply(snapshot: dict, model: dict) -> dict:
                 "not_formal": True, "bets_modified": False,
                 "no_results_used": True, "no_odds_used": True,
             }
+    # Compare FINAL tickets against a same-time *no wind-direction*
+    # counterfactual, including the preexisting expert portfolio policy.
+    # This comparison is not historical outcome-based or a second actual stake.
+    if wind_audit is not None:
+        if wind_audit.get("status") == "APPLIED_FORWARD_UNCALIBRATED":
+            comparison_status = "MATCHED_SAME_TIME"
+            try:
+                control_trial = build_expert_portfolio(
+                    wind_control_result, wind_control_ranked)
+                control_result = (
+                    promote_verified_experiment(wind_control_result, control_trial)
+                    if control_trial is not None
+                    and control_trial.get("status") == "PRE_CUTOFF_COUNTER_PATH_FROZEN"
+                    else wind_control_result)
+                control_final_bets = deepcopy(control_result["bets"])
+            except (ValueError, KeyError, TypeError, OverflowError) as exc:
+                # A failed control comparison must never be labelled matched.
+                comparison_status = "CONTROL_UNAVAILABLE_" + type(exc).__name__
+                control_final_bets = None
+            current_bets = result["bets"]
+            wind_audit = {
+                **wind_audit,
+                "learned_model_sha256": model["model_sha256"],
+                "learned_training_n": model["training_n"],
+                "trained_through": model["trained_through"],
+                "frozen_at_utc": snapshot["frozen_at_utc"],
+                "same_time_before_expert_control_bets": wind_control_result["bets"],
+                "same_time_final_control_bets": control_final_bets,
+                "same_time_comparison_status": comparison_status,
+                "actual_ticket_or_allocation_changed": (
+                    sorted((b["combination"], b["virtual_yen"]) for b in current_bets)
+                    != sorted((b["combination"], b["virtual_yen"]) for b in control_final_bets)
+                    if control_final_bets is not None else None),
+                "before_first_head": (
+                    control_final_bets[0]["combination"].split("-")[0]
+                    if control_final_bets else None),
+                "after_first_head": current_bets[0]["combination"].split("-")[0],
+                "same_point_count": (
+                    len(control_final_bets) == len(current_bets)
+                    if control_final_bets else None),
+                "virtual_budget_yen": sum(b["virtual_yen"] for b in current_bets),
+                "not_real_purchase": True,
+                "no_historical_rewrite": True,
+                "no_proven_performance_gain": True,
+            }
+        result["learned_wind_direction_v1"] = wind_audit
     return result

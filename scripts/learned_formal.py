@@ -309,7 +309,7 @@ def apply(snapshot: dict, model: dict) -> dict:
     if snapshot.get("phase") == "exhibition":
         try:
             result["inside_survival_research"] = evaluate_inside_survival(
-                snapshot, ranked, result["bets"])
+                result, ranked, result["bets"])
         except (ValueError, TypeError, KeyError, OverflowError):
             result["inside_survival_research"] = {
                 "version": "inside-survival-forward-shadow-v0.1",

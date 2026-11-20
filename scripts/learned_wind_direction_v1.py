@@ -7,7 +7,7 @@ No result, payout, odds, retrospective weather or post-cutoff replay is used.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from itertools import permutations
 from math import exp, isfinite
 from boat_ai.statistical import digest
@@ -81,6 +81,8 @@ def _gate(snapshot):
     if snapshot.get("phase")!="exhibition":
         return None,"NO_EXHIBITION"
     frozen,cutoff=_clock(snapshot["frozen_at_utc"]),_clock(snapshot["cutoff_iso_jst"])
+    if cutoff.date() < date(2026,11,21) or frozen.astimezone(cutoff.tzinfo).date() < date(2026,11,21):
+        return None,"BEFORE_FORWARD_ACTIVATION"
     if frozen >= cutoff-timedelta(minutes=POLICY["min_cutoff_lead_minutes"]):
         return None,"TOO_LATE_FOR_WIND"
     origin=snapshot.get("exhibition_origin") or {}

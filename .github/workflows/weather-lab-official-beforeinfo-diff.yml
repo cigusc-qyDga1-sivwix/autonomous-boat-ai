@@ -1,6 +1,11 @@
 name: WEATHER LAB official wind-wave vs BOAT LAB Open API diff
 
 on:
+  pull_request:
+    paths:
+      - 'weather_lab/official_beforeinfo_audit.py'
+      - 'weather_lab/tests/test_official_beforeinfo_audit.py'
+      - '.github/workflows/weather-lab-official-beforeinfo-diff.yml'
   workflow_dispatch:
   schedule:
     # JST 06:00-23:59 best effort; independent of BOAT LAB release.
@@ -15,6 +20,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test-offline-on-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /weather_lab/official_beforeinfo_audit.py
+            /weather_lab/tests/test_official_beforeinfo_audit.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m unittest discover -s weather_lab/tests -p 'test_official_beforeinfo_audit.py' -v
   compare-before-cutoff:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest

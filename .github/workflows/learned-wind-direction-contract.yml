@@ -22,8 +22,14 @@ jobs:
         with:
           sparse-checkout-cone-mode: false
           sparse-checkout: |
-            /*
-            !/app/data/live/20??-??-??.json
+            /pyproject.toml
+            /scripts/
+            /boat_ai/
+            /tests/
+            /weather_lab/
+            /config/
+            /app/*.js
+            /app/data/statistical/
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'

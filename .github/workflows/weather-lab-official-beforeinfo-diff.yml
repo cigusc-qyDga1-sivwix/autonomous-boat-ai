@@ -1,0 +1,114 @@
+name: WEATHER LAB official wind-wave vs BOAT LAB Open API diff
+
+on:
+  pull_request:
+    paths:
+      - 'weather_lab/official_beforeinfo_audit.py'
+      - 'weather_lab/tests/test_official_beforeinfo_audit.py'
+      - '.github/workflows/weather-lab-official-beforeinfo-diff.yml'
+  workflow_dispatch:
+  schedule:
+    # JST 06:00-23:59 best effort; independent of BOAT LAB release.
+    - cron: '4-59/5 21-23 * * *'
+    - cron: '4-59/5 0-14 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weather-lab-official-diff-audit
+  cancel-in-progress: false
+
+jobs:
+  test-offline-on-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /weather_lab/official_beforeinfo_audit.py
+            /weather_lab/tests/test_official_beforeinfo_audit.py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m unittest discover -s weather_lab/tests -p 'test_official_beforeinfo_audit.py' -v
+  compare-before-cutoff:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /weather_lab/
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test offline weather parser and safe comparison
+        run: python -m unittest discover -s weather_lab/tests -p 'test_official_beforeinfo_audit.py' -v
+      - name: Capture same-run pre-cutoff comparison (not prediction)
+        id: capture
+        shell: bash
+        run: |
+          set -euo pipefail
+          DAY="$(TZ=Asia/Tokyo date +%F)"
+          echo "day=$DAY" >> "$GITHUB_OUTPUT"
+          cp weather_lab/official_beforeinfo_audit.py "$RUNNER_TEMP/official-beforeinfo-audit.py"
+          python weather_lab/official_beforeinfo_audit.py --out "$RUNNER_TEMP/weather-official-current.json"
+          python - <<'PY'
+          import json, os
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          with open(os.environ["RUNNER_TEMP"]+"/weather-official-current.json", encoding="utf-8") as fp:
+              doc=json.load(fp)
+          assert doc["event_date"] == datetime.now(ZoneInfo("Asia/Tokyo")).date().isoformat()
+          assert doc["no_formal_bet_or_model_changes"] is True
+          assert doc["record_count"] == len(doc["records"])
+          print("Weather difference counts:", doc["status_counts"])
+          PY
+      - name: Publish ONLY the independent WEATHER LAB data branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          DAY="${{ steps.capture.outputs.day }}"
+          if [ "$(TZ=Asia/Tokyo date +%F)" != "$DAY" ]; then
+            echo "::warning::JST day rolled over: do not backfill weather"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for attempt in 1 2 3; do
+            git fetch origin +refs/heads/weather-lab-data:refs/remotes/origin/weather-lab-data
+            git checkout -q -B weather-lab-data origin/weather-lab-data
+            mkdir -p weather_lab/data/official_audit
+            PREVIOUS="weather_lab/data/official_audit/$DAY.json"
+            python "$RUNNER_TEMP/official-beforeinfo-audit.py" \
+              --merge-from "$RUNNER_TEMP/weather-official-current.json" \
+              --previous "$PREVIOUS" \
+              --archive-out "$RUNNER_TEMP/weather-official-merged.json"
+            cp "$RUNNER_TEMP/weather-official-current.json" weather_lab/data/official_audit/latest.json
+            cp "$RUNNER_TEMP/weather-official-merged.json" "$PREVIOUS"
+            git add weather_lab/data/official_audit/
+            if git diff --cached --quiet; then
+              echo "Already published"
+              exit 0
+            fi
+            git commit -m "weather: pre-cutoff official wind and wave diff $DAY"
+            if git push origin HEAD:refs/heads/weather-lab-data; then
+              echo "Published to WEATHER LAB; formal BOAT LAB untouched"
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::Weather audit branch update failed"
+              exit 1
+            fi
+            git fetch origin +refs/heads/weather-lab-data:refs/remotes/origin/weather-lab-data
+            git reset --hard origin/weather-lab-data
+          done

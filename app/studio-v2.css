@@ -101,6 +101,19 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible{ou
 .v2-chip.closed{background:#e9eff3;color:#445c6b}
 .v2-chip.hit{background:#d8f8e5;color:#06603c}
 .v2-chip.miss{background:#ffe9ed;color:#932d3d}
+/* Two independent forecast diagnostics: read-only relative scores, never win probability. */
+.v2-confidence{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:13px 0 11px}
+.v2-confidence-cell{min-width:0;padding:10px 11px;border:1px solid #d9e7ec;background:#f6fafc;border-radius:11px}
+.v2-confidence-caption{display:flex;align-items:baseline;justify-content:space-between;gap:5px;flex-wrap:wrap}
+.v2-confidence-caption span{font-size:11px;font-weight:850;color:#3c5c6d}
+.v2-confidence-caption strong{font-variant-numeric:tabular-nums;font-size:20px;color:#143e56;font-weight:950}
+.v2-confidence-meter{width:100%;height:6px;background:#e1eaef;border-radius:6px;overflow:hidden;margin:7px 0 6px}
+.v2-confidence-meter span{display:block;height:100%;background:#26977a;border-radius:6px}
+.v2-confidence-cell:nth-child(2) .v2-confidence-meter span{background:#3d83bd}
+.v2-confidence-cell small{display:block;color:#496779;font-size:10px;line-height:1.5;overflow-wrap:anywhere}
+.v2-confidence-explainer{grid-column:1/-1;font-size:10px;line-height:1.7;color:#506a7b;margin:0}
+.v2-confidence.is-detail{margin:15px 0 12px}
+@media(max-width:430px){.v2-confidence{gap:6px}.v2-confidence-cell{padding:8px}.v2-confidence-caption strong{font-size:17px}.v2-confidence-caption span{font-size:10px}}
 .v2-race .v2-picks{margin:13px 0 12px;display:grid;gap:6px}
 .v2-pick{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;border:1px solid #e2eaf0;background:#f8fafc;border-radius:9px}
 .v2-pick:first-child{background:#edf8f4;border-color:#c3e8d6}

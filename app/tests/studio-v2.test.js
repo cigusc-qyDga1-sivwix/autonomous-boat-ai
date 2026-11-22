@@ -85,6 +85,23 @@ assert.equal(v2.virtualSettlement(r,{...source,settlement_alerts:{[key]:{status:
 assert.equal(v2.virtualSettlement(r,{...source,official_results:{[key]:{...official,verified:false}}}),null);
 assert.equal(v2.virtualSettlement({...r,bets:[{combination:'1-3-4',virtual_yen:9007199254740900}]},source),null);
 
+
+const dailyAudit={
+ event_date:'2026-11-22',
+ source:'verified BOATRACE official payouts + immutable pre-cutoff predictions',
+ by_ticket_status:{
+  formal:{verified_races:2,hits:1,virtual_stake_yen:100000,virtual_payout_yen:125000,virtual_profit_yen:25000,return_rate:9},
+  provisional:{verified_races:1,hits:0,virtual_stake_yen:50000,virtual_payout_yen:0,virtual_profit_yen:-50000}
+ }
+};
+assert.equal(v2.dailyMetrics(dailyAudit,'2026-11-22').return_rate,1.25,'ROI is recalculated from audited yen');
+assert.equal(v2.dailyMetrics(dailyAudit,'2026-11-22').virtual_profit_yen,25000);
+assert.equal(v2.dailyMetrics(dailyAudit,'2026-11-22','provisional').virtual_profit_yen,-50000);
+assert.equal(v2.dailyMetrics(dailyAudit,'2026-11-21'),null,'other days must never appear as today');
+assert.equal(v2.dailyMetrics({...dailyAudit,source:'unverified'},'2026-11-22'),null);
+assert.equal(v2.dailyMetrics({...dailyAudit,by_ticket_status:{formal:{...dailyAudit.by_ticket_status.formal,virtual_profit_yen:0}}},'2026-11-22'),null,'inconsistent profit is withheld');
+assert.equal(v2.dailyMetrics({...dailyAudit,by_ticket_status:{formal:{...dailyAudit.by_ticket_status.formal,virtual_payout_yen:null}}},'2026-11-22'),null,'missing payout is not zero');
+
 assert.match(html,/<meta name="color-scheme" content="light">/);
 assert.match(html,/name="apple-mobile-web-app-status-bar-style" content="black-translucent"/);
 assert.match(html,/studio-v2\.css/);
@@ -99,7 +116,7 @@ assert.match(html,/data-tab="results"/);
 assert.match(html,/data-tab="research"/);
 assert.match(css,/\.v2-bottom-nav/);
 assert.match(css,/\.v2-settlement-main strong/);
-assert.match(js,/metric\('仮想払戻総額'/);
+assert.match(js,/metric\('本日の仮想払戻'/);
 assert.match(js,/公式3連単配当（100円あたり）/);
 assert.match(js,/virtualSettlement\(r,state\.data\)/);
 assert.match(css,/@media\(max-width:760px\)/);
@@ -120,18 +137,17 @@ assert.match(js,/function previewFeatureCoverage\(\)/);
 assert.match(js,/previewFeatureCoverage\(\)\+/);
 assert.match(js,/exhibition-preview-evidence\/latest\.json/);
 assert.match(js,/重量調整/);
-assert.match(html,/20261117-postcutoff10-v1/);
+assert.match(html,/studio-v2\.css\?v=20261122-today-v1/);
 assert.match(js,/fetch\('\.\/data\/weather-research\/latest\.json'/);
 assert.match(js,/onsiteWeatherCaptureStatus\(\)\+/);
-assert.match(html,/studio-v2\.js\?v=20261122-settlement-v1/);
-assert.match(html,/cumulative-settlement\.css/);
-assert.match(html,/cumulative-settlement\.js\?v=20261122-fast-v1/);
-assert.ok(html.indexOf('cumulative-settlement.js')<html.indexOf('studio-v2.js'),
-  'the read-only cumulative helper must load before the results page');
-assert.match(js,/function cumulativeResults\(\)/);
-assert.match(js,/function refreshCumulative\(force=false\)/);
-assert.match(js,/refreshCumulative\(true\)/);
-assert.match(js,/cumulativeResults\(\)\+/);
+assert.match(html,/studio-v2\.js\?v=20261122-today-v1/);
+assert.doesNotMatch(html,/cumulative-settlement\.js|cumulative-settlement\.css/);
+assert.doesNotMatch(js,/BoatCumulative|cumulativeResults|refreshCumulative/);
+assert.match(js,/function refreshTodayResults\(force=false\)/);
+assert.match(js,/data-action="refresh-todays-results"/);
+assert.match(js,/dailyMetrics\(a,jstDay\(\),'provisional'\)/);
+assert.match(js,/audit-latest\.json\?daily=/);
+assert.doesNotMatch(js,/data\/live\/settlement\//);
 assert.match(js,/venueWeatherLearning\(\)\+/);
 assert.match(js,/id="weather-venue-filter"/);
 assert.match(js,/state.weatherVenue=e.target.value;render\(\)/);
@@ -139,7 +155,7 @@ assert.match(js,/venue_weather_learning/);
 assert.match(js,/site_wave_time_verified/);
 assert.match(css,/\.v2-weather-study\{/);
 assert.match(css,/\.v2-weather-select select\{min-height:44px/);
-assert.match(html,/20261117-postcutoff10-v1/);
+assert.match(html,/studio-v2\.css\?v=20261122-today-v1/);
 
 assert.match(js,/phase==='shadow'\?'shadow':'pending'/);
 

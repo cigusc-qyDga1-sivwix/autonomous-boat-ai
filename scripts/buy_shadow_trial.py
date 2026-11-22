@@ -20,16 +20,24 @@ UTC = timezone.utc
 JST = ZoneInfo("Asia/Tokyo")
 START_DAY = "2026-11-17"
 SCHEMA = "boatlabs.buy-shadow-forward.v1"
-RULE = "relative-head-separation-v0.1"
-# These exploratory, uncalibrated cutoffs are frozen BEFORE the first trial day.
+RULE_V1 = "relative-head-separation-v0.1"
+RULE = "relative-head-separation-point-neutral-v0.2"
+POINT_NEUTRAL_FROM_DAY = "2026-11-23"
+# Uncalibrated head-separation cutoffs. Preserve v0.1 for all historical days.
 # No official results, payoffs, or odds are used to set an individual decision.
-THRESHOLDS = {
+THRESHOLDS_V1 = {
     "buy_head_concentration_gte": 0.62,
     "buy_head_gap_gte": 0.40,
     "buy_ticket_count_lte": 10,
     "skip_head_concentration_lt": 0.37,
     "skip_head_gap_lt": 0.12,
 }
+THRESHOLDS = {key: value for key, value in THRESHOLDS_V1.items()
+              if key != "buy_ticket_count_lte"}
+
+
+def _policy_for_day(day):
+    return (RULE, THRESHOLDS) if day >= POINT_NEUTRAL_FROM_DAY else (RULE_V1, THRESHOLDS_V1)
 SAFE_LEAD = timedelta(minutes=2)
 COMBO = re.compile(r"^[1-6]-[1-6]-[1-6]$")
 SHA = re.compile(r"^[a-f0-9]{64}$", re.I)
@@ -58,14 +66,21 @@ def _datetime(value):
         return None
 
 
-def classify(race):
-    """Study-only heuristic, not a calibrated win chance or EV."""
+def classify(race, *, rule=RULE):
+    """Study-only heuristic, not a calibrated win chance or EV.
+
+    The prospective v0.2 policy never downgrades BUY solely for ticket count.
+    Historical v0.1 decisions retain their original <=10-ticket restriction.
+    """
+    if rule not in (RULE_V1, RULE):
+        raise ValueError("Unknown BUY research policy")
     concentration, gap = race.get("head_weight_concentration"), race.get("head_weight_gap")
-    count = len(race.get("bets") or [])
     if not all(isinstance(x, (int, float)) and math.isfinite(x)
                for x in (concentration, gap)):
         return "WATCH", "missing_unscaled_head_metrics"
-    if concentration >= 0.62 and gap >= 0.40 and count <= 10:
+    if concentration >= 0.62 and gap >= 0.40:
+        if rule == RULE_V1 and len(race.get("bets") or []) > THRESHOLDS_V1["buy_ticket_count_lte"]:
+            return "WATCH", "intermediate_relative_head_separation"
         return "BUY", "strong_relative_head_separation"
     if concentration < 0.37 or gap < 0.12:
         return "SKIP", "weak_or_competing_head_paths"
@@ -117,9 +132,11 @@ def freeze(payload, now, previous=None):
     day = now.astimezone(JST).date().isoformat()
     if day < START_DAY or payload.get("event_date") != day or payload.get("mode") != "auto-live":
         raise ValueError("Only current JST trial-day auto-live forecasts are eligible")
+    rule, thresholds = _policy_for_day(day)
     prior = previous or {}
-    if prior and (prior.get("schema") != SCHEMA or prior.get("event_date") != day):
-        raise ValueError("Existing trial ledger has the wrong schema or date")
+    if prior and (prior.get("schema") != SCHEMA or prior.get("event_date") != day
+                  or prior.get("rule") != rule):
+        raise ValueError("Existing trial ledger has the wrong schema, date, or policy")
     records = list(prior.get("entries") or [])
     if any(not _verify_decision_sha(row) for row in records):
         raise ValueError("Previously frozen decision SHA does not match")
@@ -130,7 +147,7 @@ def freeze(payload, now, previous=None):
         key = f"{day}|{race['venue']}|{race['race']}"
         if key in seen:
             continue  # A decision never changes after its initial freeze.
-        decision, reason = classify(race)
+        decision, reason = classify(race, rule=rule)
         head = race.get("head_course_shares") or []
         eligible_heads = [row for row in head if isinstance(row, dict)
                           and isinstance(row.get("relative_share"), (int, float))
@@ -162,11 +179,11 @@ def freeze(payload, now, previous=None):
         seen.add(key)
     records.sort(key=lambda r: (r["cutoff_jst"], r["venue"], r["race"]))
     return {
-        "schema": SCHEMA, "rule": RULE, "event_date": day,
+        "schema": SCHEMA, "rule": rule, "event_date": day,
         "created_before_official_results": True,
         "no_odds_or_payout_inputs": True,
         "no_formal_ticket_or_classification_changes": True,
-        "thresholds": THRESHOLDS,
+        "thresholds": thresholds,
         "entries": records,
     }
 
@@ -186,6 +203,9 @@ def evaluate(trial, payload):
     """Post-race, official-only read of immutable shadow decisions; no reclassification."""
     if trial.get("schema") != SCHEMA or trial.get("event_date") != payload.get("event_date"):
         raise ValueError("Day/schema mismatch; no cross-date settlement allowed")
+    expected_rule, _ = _policy_for_day(trial["event_date"])
+    if trial.get("rule") != expected_rule:
+        raise ValueError("Frozen BUY policy does not match its effective date")
     official, alerts = payload.get("official_results") or {}, payload.get("settlement_alerts") or {}
     tally = {k: {"frozen": 0, "verified": 0, "hits": 0, "head_miss": 0,
                  "second_miss": 0, "third_miss": 0, "unresolved": 0} for k in ("BUY", "WATCH", "SKIP")}
@@ -221,7 +241,7 @@ def evaluate(trial, payload):
         })
     return {
         "schema": "boatlabs.buy-shadow-official-audit.v1",
-        "event_date": trial["event_date"], "rule": RULE, "research_only": True,
+        "event_date": trial["event_date"], "rule": trial["rule"], "research_only": True,
         "outcome_not_used_to_reclassify": True, "no_real_or_virtual_roi_claim": True,
         "cohorts": tally, "verified_rows": verified,
     }

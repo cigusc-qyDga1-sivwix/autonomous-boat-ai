@@ -100,7 +100,43 @@ const dailyMetrics=(audit,day,kind='formal')=>{
     (value.verified_races>0&&value.virtual_stake_yen===0))return null;
  return {...value,return_rate:value.virtual_stake_yen>0?value.virtual_payout_yen/value.virtual_stake_yen:null};
 };
-const engine={dailyMetrics,money,percent,validDay,validClock,jstDay,jstStamp,cutoffMs,sumBets,validRace,validCombo,frozenStatus,verifiedOfficial,officialOutcome,virtualSettlement,racePhase,normalize,raceOrder,recentCutoff,visibleAroundCutoff,POST_CUTOFF_GRACE_MS};
+/* Read-only confidence diagnostics; these are NOT observed win probabilities. */
+const share01=x=>typeof x==='number'&&Number.isFinite(x)&&x>=0&&x<=1;
+function confidenceView(r){
+ const blank={head:null,coverage:null};
+ if(!validRace(r)||r.model_role!=='main'||r.relative_scores_uncalibrated!==true)return blank;
+ const rows=r.head_course_shares;
+ if(!Array.isArray(rows)||rows.length!==6||new Set(rows.map(x=>x?.lane)).size!==6||
+    !rows.every(x=>Number.isInteger(x?.lane)&&x.lane>=1&&x.lane<=6&&share01(x.relative_share)))return blank;
+ if(Math.abs(rows.reduce((n,x)=>n+x.relative_share,0)-1)>.012)return blank;
+ const sorted=[...rows].sort((a,b)=>b.relative_share-a.relative_share);
+ const leader=sorted[0],gap=leader.relative_share-sorted[1].relative_share;
+ if(share01(r.head_weight_concentration)&&Math.abs(r.head_weight_concentration-leader.relative_share)>.01)return blank;
+ if(share01(r.head_weight_gap)&&Math.abs(r.head_weight_gap-gap)>.01)return blank;
+ const head={lane:leader.lane,share:leader.relative_share,gap};
+ const meta=r.interaction_primary,ranked=meta?.ranked_outcomes;
+ if(meta?.role_evaluation_source!=='same_final_ranked_120_as_primary_bets'||
+    !Array.isArray(ranked)||ranked.length!==120)return {head,coverage:null};
+ const weights=new Map();
+ for(const row of ranked){
+  if(!validCombo(row?.combination)||typeof row.relative_score!=='number'||
+     !Number.isFinite(row.relative_score)||row.relative_score<=0||weights.has(row.combination))
+    return {head,coverage:null};
+  weights.set(row.combination,row.relative_score);
+ }
+ if(weights.size!==120)return {head,coverage:null};
+ const selected=new Set();let covered=0,total=0;
+ for(const weight of weights.values())total+=weight;
+ for(const bet of r.bets){
+  if(!validCombo(bet?.combination)||selected.has(bet.combination)||!weights.has(bet.combination))
+    return {head,coverage:null};
+  selected.add(bet.combination);covered+=weights.get(bet.combination);
+ }
+ if(!Number.isFinite(total)||total<=0)return {head,coverage:null};
+ const fraction=covered/total;
+ return {head,coverage:share01(fraction)?{share:fraction,selected:selected.size,possible:120}:null};
+}
+const engine={dailyMetrics,money,percent,validDay,validClock,jstDay,jstStamp,cutoffMs,sumBets,validRace,validCombo,frozenStatus,verifiedOfficial,officialOutcome,virtualSettlement,racePhase,normalize,raceOrder,recentCutoff,visibleAroundCutoff,confidenceView,POST_CUTOFF_GRACE_MS};
 root.BoatLabV2=engine;
 if(typeof module==='object'&&module.exports)module.exports=engine;
 if(typeof document==='undefined')return;
@@ -194,6 +230,22 @@ function pickRows(r,limit=3){
  return bets.map(b=>'<div class="v2-pick">'+formatPicks(b.combination)+
    '<strong class="v2-amount">'+money(b.virtual_yen)+'</strong></div>').join('');
 }
+function confidencePanel(r,detail=false){
+ const c=confidenceView(r),headText=c.head?percent(c.head.share):'—',
+       coverageText=c.coverage?percent(c.coverage.share):'—';
+ const headInfo=c.head?'評価1位 '+c.head.lane+'号艇・次点差 '+percent(c.head.gap):'頭評価の根拠が未確認';
+ const coverageInfo=c.coverage?c.coverage.selected+'点 / 全'+c.coverage.possible+'通りのモデル評価':'同一120通りの根拠が未確認';
+ const cell=(label,value,sub,fraction)=>'<div class="v2-confidence-cell"><div class="v2-confidence-caption">'+
+  '<span>'+label+'</span><strong>'+value+'</strong></div>'+
+  '<div class="v2-confidence-meter" aria-hidden="true"><span style="width:'+(share01(fraction)?(fraction*100).toFixed(1):'0')+'%"></span></div>'+
+  '<small>'+escapeHTML(sub)+'</small></div>';
+ return '<div class="v2-confidence'+(detail?' is-detail':'')+'" aria-label="予想の自信度を示すモデル内相対評価">'+
+  cell('頭の評価集中度',headText,headInfo,c.head?.share)+
+  cell('3連単の評価カバー',coverageText,coverageInfo,c.coverage?.share)+
+  '<p class="v2-confidence-explainer">未校正の相対評価であり、的中確率・回収率ではありません。'+
+  '点数を増やすとカバー率も上がりやすく、BUY判定とは独立です。'+
+  (r.phase==='baseline'?'展示前の暫定評価です。':'')+'</p></div>';
+}
 function phaseChip(r){
  const phase=racePhase(r,state.data,ticketPolicy);
  return '<span class="v2-chip '+(phase==='formal'?'formal':phase==='shadow'?'shadow':'pending')+'">'+escapeHTML(labelFor(r))+'</span>';
@@ -208,7 +260,7 @@ function raceCard(r){
  return '<article class="v2-race is-'+(phase==='formal'?'formal':'pending')+(decision?' is-research-'+decision.toLowerCase():'')+(closed?' is-closed':'')+(time==='closed-recent'?' is-closed-recent':'')+(time==='urgent'?' is-urgent':'')+'">'+
    '<div class="v2-race-head"><div><h3 class="v2-race-name">'+escapeHTML(r.venue)+' '+r.race+'R</h3>'+
    '<div class="v2-race-deadline"><span>締切</span><strong>'+escapeHTML(r.cutoff_jst)+'</strong><span class="v2-time-status">'+timeText+'</span></div>'+'<p class="v2-race-meta">展示後の研究判定・正式買い目とは独立</p></div><div class="v2-race-badges">'+phaseChip(r)+decisionChip(r)+'</div></div>'+
-   closedNote+'<div class="v2-picks">'+pickRows(r)+'</div>'+
+   closedNote+confidencePanel(r)+'<div class="v2-picks">'+pickRows(r)+'</div>'+
    '<div class="v2-race-foot"><small>上位'+Math.min(r.bets.length,3)+'点 / 全'+r.bets.length+'点・仮想'+money(stake)+'</small>'+
    '<button type="button" class="v2-detail-btn" data-open-race="'+id+'" aria-label="'+escapeHTML(r.venue+' '+r.race+'Rの全買い目を表示')+'">全買い目</button></div></article>';
 }
@@ -534,7 +586,7 @@ function openRace(index){
   '<h2>'+escapeHTML(r.venue)+' '+r.race+'R</h2><p>締切 '+escapeHTML(r.cutoff_jst)+' JST · '+escapeHTML(phase)+'</p></div>'+
   '<button type="button" class="v2-close" data-close-dialog aria-label="閉じる">×</button></header>'+
   '<div class="v2-dialog-body"><span class="v2-chip '+(isFormal?'formal':'pending')+'">'+escapeHTML(phase)+'</span> '+decisionChip(r)+
-  '<p class="v2-dialog-legal">BUY/WATCH/SKIPは展示反映後の研究判定。的中や利益を保証せず、正式買い目の区分・配分を変更しません。</p>'+
+  confidencePanel(r,true)+'<p class="v2-dialog-legal">BUY/WATCH/SKIPは展示反映後の研究判定。的中や利益を保証せず、正式買い目の区分・配分を変更しません。</p>'+
   '<h3 class="v2-dialog-section">3連単の全買い目</h3><div class="v2-detail-list">'+
   bets.map(b=>'<div class="v2-pick">'+formatPicks(b.combination)+'<strong class="v2-amount">'+money(b.virtual_yen)+'</strong></div>').join('')+'</div>'+
   '<div class="v2-dialog-summary"><span>合計 '+bets.length+'点（仮想）</span><strong>'+money(sumBets(r))+'</strong></div>'+

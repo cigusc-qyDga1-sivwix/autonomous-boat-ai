@@ -3,7 +3,7 @@ import copy
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from scripts.buy_shadow_trial import START_DAY, classify, evaluate, freeze
+from scripts.buy_shadow_trial import RULE, RULE_V1, START_DAY, classify, evaluate, freeze
 
 NOW = datetime.fromisoformat("2026-11-17T01:00:00+00:00")
 SHA = "a" * 64
@@ -38,6 +38,55 @@ class ProspectiveTrialTest(unittest.TestCase):
         self.assertEqual(classify(base)[0], "BUY")
         self.assertEqual(classify(example_race(head_weight_concentration=0.55))[0], "WATCH")
         self.assertEqual(classify(example_race(head_weight_gap=0.05))[0], "SKIP")
+
+    def test_ticket_count_never_downgrades_v02_buy(self):
+        combinations = [
+            {"combination": f"{first}-{second}-{third}"}
+            for first in range(1, 7)
+            for second in range(1, 7) if second != first
+            for third in range(1, 7) if third not in (first, second)
+        ]
+        for point_count in (2, 10, 12, 18, 24, 30):
+            with self.subTest(point_count=point_count):
+                race = example_race(bets=combinations[:point_count])
+                self.assertEqual(classify(race)[0], "BUY")
+                if point_count > 10:
+                    self.assertEqual(classify(race, rule=RULE_V1)[0], "WATCH")
+        self.assertEqual(
+            classify(example_race(bets=combinations[:30], head_weight_concentration=0.55))[0],
+            "WATCH",
+        )
+        self.assertEqual(
+            classify(example_race(bets=combinations[:30], head_weight_gap=0.05))[0],
+            "SKIP",
+        )
+
+    def test_nov23_policy_uses_new_rule_without_rewriting_old_ledger(self):
+        combinations = [
+            {"combination": f"{first}-{second}-{third}"}
+            for first in range(1, 7)
+            for second in range(1, 7) if second != first
+            for third in range(1, 7) if third not in (first, second)
+        ][:24]
+        old_source = payload(example_race(bets=combinations))
+        old_ledger = freeze(old_source, NOW)
+        self.assertEqual(old_ledger["rule"], RULE_V1)
+        self.assertEqual(old_ledger["entries"][0]["decision"], "WATCH")
+        self.assertEqual(evaluate(old_ledger, old_source)["rule"], RULE_V1)
+
+        new_day = "2026-11-23"
+        new_time = datetime.fromisoformat("2026-11-23T01:00:00+00:00")
+        new_source = payload(example_race(
+            bets=combinations, frozen_at_utc="2026-11-23T00:58:00+00:00"))
+        new_source["event_date"] = new_day
+        fresh = freeze(new_source, new_time)
+        self.assertEqual(fresh["rule"], RULE)
+        self.assertNotIn("buy_ticket_count_lte", fresh["thresholds"])
+        self.assertEqual(fresh["entries"][0]["decision"], "BUY")
+        self.assertEqual(fresh["entries"][0]["ticket_count"], 24)
+        self.assertEqual(freeze(new_source, new_time + timedelta(minutes=1), fresh), fresh)
+        self.assertEqual(evaluate(fresh, new_source)["rule"], RULE)
+        self.assertEqual(evaluate(old_ledger, old_source)["rule"], RULE_V1)
 
     def test_forward_freeze_preserves_formal_and_is_idempotent(self):
         original = payload(example_race())

@@ -18,10 +18,13 @@ from pathlib import Path
 GITHUB_ARCHIVE_BASE = (
     "https://github.com/cigusc-qyDga1-sivwix/autonomous-boat-ai/blob/main/app/"
 )
-# Only large date-specific historical JSON is kept off Pages.
-# All source files, live pointers, status, current predictions and HTML remain.
+# Historical dated JSON above this bound stays on GitHub main and is indexed,
+# but is not copied to Pages. This is deliberately below 1 MB: otherwise the
+# numerous medium-size research files push Pages over the guarded site limit.
+# Live pointers, status, current predictions, HTML, and compact daily settlement
+# files remain published. No immutable source history is deleted.
 DATED_JSON = re.compile(r"^data/.+/(?:[a-z][a-z0-9-]*-)?\d{4}-\d{2}-\d{2}\.json$")
-ARCHIVE_LIMIT_BYTES = 1_500_000
+ARCHIVE_LIMIT_BYTES = 600_000
 # Do not include the full immutable ledger in the PWA. Publish only the
 # fields the official settlement verifier needs, beginning Nov 4 JST.
 SETTLEMENT_START_DAY = "2026-11-04"

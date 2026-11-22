@@ -362,11 +362,14 @@ body{font-size:16px;line-height:1.55}
 /* Exhibition-frozen BUY/WATCH/SKIP overlays (research only; NOT formal bet labels). */
 .v2-race-badges{display:flex;flex-direction:column;align-items:flex-end;gap:7px;flex:0 0 auto;max-width:45%}
 .v2-buy-chip{display:inline-flex;align-items:center;justify-content:center;min-width:92px;min-height:31px;padding:5px 10px;border:1px solid #c9d7df;border-radius:9px;font-size:12px;font-weight:900;line-height:1.25;white-space:nowrap;letter-spacing:.01em}
-.v2-buy-chip.is-buy{background:#d9f6e5;border-color:#80caa5;color:#075d3d}
+/* 🌈 Research BUY: high-contrast pastel rainbow, with a readable ink label. */
+.v2-buy-chip.is-buy{background:linear-gradient(105deg,#ffb8cd 0%,#ffd19a 18%,#fff2a1 36%,#aef0c6 54%,#a9e2ff 75%,#ddc0ff 100%);border:2px solid #40546a;color:#172d3f;box-shadow:0 2px 7px rgba(64,84,106,.14);font-weight:950}
+.v2-buy-chip.is-buy::before{content:'🌈';margin-right:5px;font-size:14px}
 .v2-buy-chip.is-watch{background:#fff1d5;border-color:#e9ca88;color:#78500b}
 .v2-buy-chip.is-skip{background:#e9eff4;border-color:#bdccd6;color:#3e5669}
 .v2-buy-chip.is-unconfirmed{background:#f2f4f6;border-color:#d3dce3;color:#526776}
-.v2-race.is-research-buy{border-left:6px solid #16865b;background:#fafffc}
+.v2-race.is-research-buy{position:relative;overflow:hidden;border-left:0;background:#fffefd}
+.v2-race.is-research-buy::before{content:'';position:absolute;left:0;top:0;bottom:0;width:7px;background:linear-gradient(180deg,#f04b75 0%,#f8a634 19%,#f4d24e 35%,#37ba82 54%,#4c9fe6 73%,#9b6de1 100%);pointer-events:none}
 .v2-race.is-research-watch{border-left:5px solid #cd9227}
 .v2-race.is-research-skip{border-left:5px solid #8196a4}
 .v2-buy-legend{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:10px 0 15px;color:#465f71;font-size:12px;line-height:1.65}

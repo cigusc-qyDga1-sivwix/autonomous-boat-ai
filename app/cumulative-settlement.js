@@ -140,8 +140,14 @@ async function load(force=false,fetcher=root.fetch?.bind(root),now=new Date()){
  state={loading:true,ready:false,days:force?{}:{...state.days},errors:{},
    range,formalDays:force?{}:{...state.formalDays},lastFetchedAt:state.lastFetchedAt};
  inflight=(async()=>{
-  for(const day of range){
-   try{
+  // Load four dates at a time rather than serially fetching the whole history.
+  // Previously verified old dates stay cached; yesterday and today are refreshed
+  // for late official results/corrections. Manual 'recalculate' still forces all.
+  const recentDays=new Set(range.slice(-2));
+  for(let offset=0;offset<range.length;offset+=4){
+   await Promise.all(range.slice(offset,offset+4).map(async day=>{
+    if(!force&&state.days[day]&&!recentDays.has(day))return;
+    try{
     if(typeof fetcher!=='function')throw Error('取得機能が利用できません');
     const response=await fetcher('./data/live/settlement/'+day+'.json',{cache:'no-store'});
     if(!response?.ok)throw Error('HTTP '+(response?.status??'接続失敗'));
@@ -160,6 +166,7 @@ async function load(force=false,fetcher=root.fetch?.bind(root),now=new Date()){
    }catch(e){
     delete state.days[day];delete state.formalDays[day];state.errors[day]=e?.message||'データを取得できません';
    }
+   }));
   }
   state.loading=false;state.ready=true;state.lastFetchedAt=Date.now();
   return state;

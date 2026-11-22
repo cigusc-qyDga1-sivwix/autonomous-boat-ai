@@ -106,7 +106,7 @@ if(typeof module==='object'&&module.exports)module.exports=engine;
 if(typeof document==='undefined')return;
 
 const $=id=>document.getElementById(id);
-const state={tab:'home',forecastFilter:'formal',scope:'upcoming',venue:'全場',search:'',shown:20,resultShown:20,weatherVenue:'',data:null,audit:null,windEvidence:null,previewEvidence:null,source:'Pages',loading:false,requestId:0};
+const state={tab:'home',forecastFilter:'formal',scope:'upcoming',venue:'全場',search:'',shown:20,resultShown:20,weatherVenue:'',data:null,audit:null,buyShadow:null,windEvidence:null,previewEvidence:null,source:'Pages',loading:false,requestId:0};
 const ticketPolicy=root.BoatTicketPolicy;
 let toastTimeout=null;
 function toast(message){
@@ -126,6 +126,51 @@ function nowMs(){return Date.now()}
 function displayDate(){return (state.data?.event_date||'—').replaceAll('-','/')}
 function allRaces(){return sortRaces(state.data?.forecast_races||[])}
 function getFormal(){return allRaces().filter(r=>frozenStatus(r,state.data,ticketPolicy))}
+/* BUY ledger is a separate, research-only overlay on the frozen formal tickets. */
+function buyDecision(r){
+ const day=state.data?.event_date,trial=state.buyShadow;
+ if(!frozenStatus(r,state.data,ticketPolicy)||trial?.event_date!==day||!Array.isArray(trial.entries))return null;
+ const id=day+'|'+r.venue+'|'+r.race,row=trial.entries.find(e=>e?.race_id===id);
+ if(!row||!['BUY','WATCH','SKIP'].includes(row.decision)||
+    row.source_sha256!==r.sha256||row.source_model!==r.model_version||
+    row.source_frozen_at_utc!==r.frozen_at_utc||
+    row.original_classification!==r.classification||row.cutoff_jst!==r.cutoff_jst||
+    !Array.isArray(row.bet_combinations)||row.bet_combinations.length!==r.bets.length||
+    !row.bet_combinations.every((c,i)=>c===r.bets[i].combination))return null;
+ const cutoff=cutoffMs(day,r.cutoff_jst),decisionAt=Date.parse(row.decision_frozen_at_utc);
+ if(!Number.isFinite(decisionAt)||decisionAt>cutoff-120000)return null;
+ return row.decision;
+}
+function decisionChip(r){
+ const decision=buyDecision(r);
+ if(decision)return '<span class="v2-buy-chip is-'+decision.toLowerCase()+'" title="展示反映後の締切前固定・研究用判定。購入推奨ではありません">研究'+decision+'</span>';
+ return frozenStatus(r,state.data,ticketPolicy)?
+   '<span class="v2-buy-chip is-unconfirmed">BUY判定待ち</span>':
+   '<span class="v2-buy-chip is-unconfirmed">'+(r.phase==='exhibition'?'展示照合待ち':'展示待ち')+'</span>';
+}
+let buyRefreshBusy=false;
+async function refreshBuyShadow(day){
+ if(!validDay(day)||buyRefreshBusy)return;
+ buyRefreshBusy=true;
+ try{
+  const name='buy-shadow-'+day+'.json',base='./data/experiments/'+name;
+  let response=await fetch(base+'?t='+Date.now(),{cache:'no-store'}).catch(()=>null);
+  if(!response?.ok)response=await fetch('https://raw.githubusercontent.com/cigusc-qyDga1-sivwix/autonomous-boat-ai/main/app/data/experiments/'+name+'?t='+Date.now(),{cache:'no-store'}).catch(()=>null);
+  if(!response?.ok)return;
+  const trial=await response.json();
+  if(trial?.schema!=='boatlabs.buy-shadow-forward.v1'||
+     trial.event_date!==day||trial.created_before_official_results!==true||
+     trial.no_formal_ticket_or_classification_changes!==true||
+     trial.no_odds_or_payout_inputs!==true||
+     !Array.isArray(trial.entries)||trial.entries.length>300||
+     state.data?.event_date!==day)return;
+  if(!state.buyShadow||state.buyShadow.event_date!==day||
+     trial.entries.length>=state.buyShadow.entries.length){
+   state.buyShadow=trial;render();
+  }
+ }catch{/* Missing evidence remains unconfirmed, never reconstructed. */}
+ finally{buyRefreshBusy=false;}
+}
 function labelFor(r){
  const phase=racePhase(r,state.data,ticketPolicy);
  return phase==='formal'?'展示反映・正式':phase==='shadow'?'SKIP・研究':'展示未確認・暫定';
@@ -159,10 +204,10 @@ function raceCard(r){
  const timeText=time==='archive'?'過去の固定記録':time==='urgent'?'締切間近':time==='closed-recent'?'締切後10分間・保存中':closed?'締切済み（保存記録）':'締切予定';
  const recentRemaining=time==='closed-recent'?Math.max(0,Math.ceil((cutoffMs(state.data.event_date,r.cutoff_jst)+POST_CUTOFF_GRACE_MS-nowMs())/60000)):0;
  const closedNote=time==='closed-recent'?'<p class="v2-recent-note">締切済み・新規投票不可／固定した予想をあと'+recentRemaining+'分表示</p>':'';
- const label=(r.classification==='BUY'?'BUY分類':r.classification==='SKIP'?'SKIP分類':'WATCH分類');
- return '<article class="v2-race is-'+(phase==='formal'?'formal':'pending')+(closed?' is-closed':'')+(time==='closed-recent'?' is-closed-recent':'')+(time==='urgent'?' is-urgent':'')+'">'+
+ const decision=buyDecision(r);
+ return '<article class="v2-race is-'+(phase==='formal'?'formal':'pending')+(decision?' is-research-'+decision.toLowerCase():'')+(closed?' is-closed':'')+(time==='closed-recent'?' is-closed-recent':'')+(time==='urgent'?' is-urgent':'')+'">'+
    '<div class="v2-race-head"><div><h3 class="v2-race-name">'+escapeHTML(r.venue)+' '+r.race+'R</h3>'+
-   '<div class="v2-race-deadline"><span>締切</span><strong>'+escapeHTML(r.cutoff_jst)+'</strong><span class="v2-time-status">'+timeText+'</span></div>'+'<p class="v2-race-meta">'+label+' · JST</p></div>'+phaseChip(r)+'</div>'+
+   '<div class="v2-race-deadline"><span>締切</span><strong>'+escapeHTML(r.cutoff_jst)+'</strong><span class="v2-time-status">'+timeText+'</span></div>'+'<p class="v2-race-meta">展示後の研究判定・正式買い目とは独立</p></div><div class="v2-race-badges">'+phaseChip(r)+decisionChip(r)+'</div></div>'+
    closedNote+'<div class="v2-picks">'+pickRows(r)+'</div>'+
    '<div class="v2-race-foot"><small>上位'+Math.min(r.bets.length,3)+'点 / 全'+r.bets.length+'点・仮想'+money(stake)+'</small>'+
    '<button type="button" class="v2-detail-btn" data-open-race="'+id+'" aria-label="'+escapeHTML(r.venue+' '+r.race+'Rの全買い目を表示')+'">全買い目</button></div></article>';
@@ -214,6 +259,7 @@ function home(){
   '<div class="v2-metrics">'+
   metric('固定予想',rs.length+'R','読み取り専用')+
   metric('展示反映・正式',formals.length+'R','6艇の展示照合＋締切前固定','primary')+
+  metric('研究BUY',state.buyShadow?.event_date===data.event_date?formals.filter(r=>buyDecision(r)==='BUY').length+'R':'—','展示後判定・購入推奨ではありません')+
   metric('次の締切',current?due:'—',current?upcoming.length+'R 受付前の予想':'過去の日付')+
   metric('公式照合',official?official.verified_races+'R':'—','正式予想のうち公式照合済み')+'</div>'+
   '<div class="v2-evidence">正式予想＝保存された発走前の展示入力を6艇照合し、締切前に固定した記録。<b>BUY分類・採算判定とは別</b>です。'+
@@ -223,6 +269,7 @@ function filterRaces(){
  let rs=allRaces();
  if(state.forecastFilter==='formal')rs=rs.filter(r=>frozenStatus(r,state.data,ticketPolicy));
  if(state.forecastFilter==='research')rs=rs.filter(r=>!frozenStatus(r,state.data,ticketPolicy));
+ if(state.forecastFilter==='buy')rs=rs.filter(r=>buyDecision(r)==='BUY');
  if(state.venue!=='全場')rs=rs.filter(r=>r.venue===state.venue);
  if(state.search.trim()){
   const query=state.search.trim().toLowerCase();
@@ -250,6 +297,7 @@ function forecasts(){
   metric('最終更新',jstStamp(state.data.updated_at_utc).replace(' JST',''),'データ取得時刻')+'</div>'+
   '<div class="v2-filters" aria-label="予想表示を絞り込む"><div class="v2-segments" role="group" aria-label="正式・暫定の切替">'+
   '<button data-forecast-filter="formal" type="button"'+active(state.forecastFilter,'formal')+'>正式予想</button>'+
+  '<button data-forecast-filter="buy" type="button"'+active(state.forecastFilter,'buy')+'>研究BUYのみ</button>'+
   '<button data-forecast-filter="research" type="button"'+active(state.forecastFilter,'research')+'>暫定・研究</button>'+
   '<button data-forecast-filter="all" type="button"'+active(state.forecastFilter,'all')+'>すべて</button></div>'+
   '<div class="v2-segments" role="group" aria-label="開催の絞込">'+
@@ -258,6 +306,7 @@ function forecasts(){
   '<label class="v2-filter-label">開催場 <select id="venue-filter" aria-label="開催場で絞る">'+selectable+'</select></label>'+
   '<input id="race-search" class="v2-search" type="search" placeholder="場名・R・締切を検索" aria-label="レース検索" value="'+escapeHTML(state.search)+'"></div>'+
   '<div class="v2-count">'+filtered.length+'R 該当 / '+all.length+'R 保存。'+(state.scope==='upcoming'?'締切前と締切後10分の予想':'締切済みの記録を含む')+'</div>'+
+  '<p class="v2-buy-legend"><span class="v2-buy-chip is-buy">研究BUY</span><span class="v2-buy-chip is-watch">研究WATCH</span><span class="v2-buy-chip is-skip">研究SKIP</span>展示反映後の締切前固定・研究判定です。正式買い目や成績は変わりません。</p>'+
   (recentShown.length?'<section class="v2-recent-section" aria-label="締切後10分の固定予想">'+
     '<div class="v2-section-heading"><div><h2>締切後10分｜保存済み予想（'+recentShown.length+'R）</h2><p>新規投票不可・発走前の固定買い目をそのまま表示</p></div></div>'+
     '<div class="v2-grid">'+recentShown.map(raceCard).join('')+'</div></section>':'')+
@@ -484,12 +533,13 @@ function openRace(index){
  $('dialog-content').innerHTML='<header class="v2-dialog-head"><div><span class="v2-overline">FROZEN FORECAST / PREVIEW</span>'+
   '<h2>'+escapeHTML(r.venue)+' '+r.race+'R</h2><p>締切 '+escapeHTML(r.cutoff_jst)+' JST · '+escapeHTML(phase)+'</p></div>'+
   '<button type="button" class="v2-close" data-close-dialog aria-label="閉じる">×</button></header>'+
-  '<div class="v2-dialog-body"><span class="v2-chip '+(isFormal?'formal':'pending')+'">'+escapeHTML(phase)+'</span>'+
+  '<div class="v2-dialog-body"><span class="v2-chip '+(isFormal?'formal':'pending')+'">'+escapeHTML(phase)+'</span> '+decisionChip(r)+
+  '<p class="v2-dialog-legal">BUY/WATCH/SKIPは展示反映後の研究判定。的中や利益を保証せず、正式買い目の区分・配分を変更しません。</p>'+
   '<h3 class="v2-dialog-section">3連単の全買い目</h3><div class="v2-detail-list">'+
   bets.map(b=>'<div class="v2-pick">'+formatPicks(b.combination)+'<strong class="v2-amount">'+money(b.virtual_yen)+'</strong></div>').join('')+'</div>'+
   '<div class="v2-dialog-summary"><span>合計 '+bets.length+'点（仮想）</span><strong>'+money(sumBets(r))+'</strong></div>'+
   note+'<div class="v2-evidence">予想固定 '+escapeHTML(frozen)+'<br>SHA：<code>'+escapeHTML(r.sha256||'未確認')+'</code><br>'+
-  'モデル：'+escapeHTML(r.model_version||'未確認')+'<br>分類：'+escapeHTML(r.classification||'未確認')+'</div>'+
+  'モデル：'+escapeHTML(r.model_version||'未確認')+'<br>元データの分類：'+escapeHTML(r.classification||'未確認')+'</div>'+
   (official?'<p class="v2-dialog-legal">公式結果：<b>'+escapeHTML(official.finish)+'</b>（'+(official.hit?'この保存買い目で的中':'この保存買い目では不的中')+'）・公式配当 <b>'+money(official.payoutPer100)+'</b>／100円・仮想払戻 <b>'+(virtualSettlement(r,state.data)?money(virtualSettlement(r,state.data).payoutYen):'算定保留')+'</b></p>':
     '<p class="v2-dialog-legal">公式照合未完了／返還・欠場などの保留がある場合は、的中判定を表示しません。</p>')+
   '<div class="v2-dialog-actions"><button class="v2-detail-btn" type="button" data-copy-race="'+index+'">買い目をコピー</button>'+
@@ -528,6 +578,8 @@ async function pollCanonicalForecast(){
       Number.isFinite(oldTime)&&(!Number.isFinite(newTime)||newTime<=oldTime)))
       return {state:'older'};
   state.data=incoming;state.source='GitHub main';
+  if(state.buyShadow?.event_date!==incoming.event_date)state.buyShadow=null;
+  void refreshBuyShadow(incoming.event_date);
   if(!isToday()||incoming.forecast_races.every(r=>!visibleAroundCutoff(r,incoming.event_date,nowMs())))state.scope='all';
   render();
   return {state:'applied'};
@@ -563,6 +615,8 @@ async function load(){
     (data.event_date===held.event_date&&Number.isFinite(heldTime)&&
      (!Number.isFinite(dataTime)||dataTime<heldTime)));
   if(!rollback){state.data=data;state.source='Pages';}
+  if(state.buyShadow?.event_date!==state.data.event_date)state.buyShadow=null;
+  void refreshBuyShadow(state.data.event_date);
   if(audit?.event_date===state.data?.event_date){
    const prior=Date.parse(state.audit?.source_updated_at_utc||state.audit?.official_evidence_at_utc);
    const next=Date.parse(audit.source_updated_at_utc||audit.official_evidence_at_utc);
@@ -596,7 +650,7 @@ document.addEventListener('click',event=>{
  }
  const filter=target.closest('[data-forecast-filter]');
  if(filter){
-  if(!['formal','research','all'].includes(filter.dataset.forecastFilter))return;
+  if(!['formal','research','buy','all'].includes(filter.dataset.forecastFilter))return;
   state.forecastFilter=filter.dataset.forecastFilter;state.shown=20;render();return;
  }
  const scope=target.closest('[data-scope]');
@@ -639,6 +693,7 @@ void load();
 // existing PWA's foreground refresh policy. No write, no local fallback.
 setInterval(()=>{if(!document.hidden&&!state.loading)void load()},300000);
 setInterval(()=>{if(!document.hidden)void pollCanonicalForecast()},60000);
+setInterval(()=>{if(!document.hidden&&state.data)void refreshBuyShadow(state.data.event_date)},60000);
 setInterval(()=>{if(!document.hidden&&state.tab==='results')void refreshTodayResults()},60000);
 setInterval(()=>{if(!document.hidden&&state.data&&['home','forecasts'].includes(state.tab))render()},60000);
 document.addEventListener('visibilitychange',()=>{

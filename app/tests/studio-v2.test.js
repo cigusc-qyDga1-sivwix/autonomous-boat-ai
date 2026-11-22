@@ -31,6 +31,53 @@ assert.equal(v2.frozenStatus({...r,sha256:'wrong'},sample,policy),false);
 assert.equal(v2.frozenStatus(r,{...sample,mode:'manual'},policy),false);
 assert.equal(v2.frozenStatus(r,sample,null),false);
 assert.equal(v2.sumBets(r),50000);
+
+// Confidence is model-relative, not a calibrated hit probability or an ROI claim.
+// The 120 canonical outcome weights must be the SAME source as immutable tickets.
+const allCombos=[];
+for(let a=1;a<=6;a++)for(let b=1;b<=6;b++)if(a!==b)
+ for(let c=1;c<=6;c++)if(c!==a&&c!==b)allCombos.push(a+'-'+b+'-'+c);
+assert.equal(allCombos.length,120);
+const scoredOutcomes=allCombos.map(combination=>({
+ combination,relative_score:combination==='1-3-4'?8:combination==='1-4-3'?4:1
+}));
+const confidenceFixture={
+ ...r,model_role:'main',relative_scores_uncalibrated:true,
+ head_course_shares:[.69,.08,.07,.06,.05,.05].map((relative_share,i)=>({lane:i+1,relative_share})),
+ head_weight_concentration:.69,head_weight_gap:.61,
+ interaction_primary:{
+  role_evaluation_source:'same_final_ranked_120_as_primary_bets',
+  ranked_outcomes:scoredOutcomes
+ }
+};
+const originalConfidenceSource=JSON.stringify(confidenceFixture);
+const view=v2.confidenceView(confidenceFixture);
+assert.equal(view.head.lane,1);
+assert.equal(view.head.share,.69);
+assert.ok(Math.abs(view.head.gap-.61)<1e-10);
+assert.equal(view.coverage.selected,2);
+assert.equal(view.coverage.possible,120);
+assert.ok(Math.abs(view.coverage.share-12/130)<1e-10);
+assert.equal(JSON.stringify(confidenceFixture),originalConfidenceSource,'confidence cannot mutate forecasts or stakes');
+assert.deepEqual(v2.confidenceView({...confidenceFixture,bets:confidenceFixture.bets.map(b=>({...b,virtual_yen:1000}))}),view,
+ 'virtual allocation must not alter model confidence');
+assert.equal(v2.confidenceView({...confidenceFixture,interaction_primary:{...confidenceFixture.interaction_primary,ranked_outcomes:[]}}).coverage,null,
+ 'missing canonical 120 outcome scores must fail closed');
+assert.equal(v2.confidenceView({...confidenceFixture,interaction_primary:{...confidenceFixture.interaction_primary,
+ ranked_outcomes:[...scoredOutcomes.slice(0,-1),{...scoredOutcomes[119],relative_score:NaN}]}}).coverage,null,
+ 'invalid model scores must fail closed');
+assert.equal(v2.confidenceView({...confidenceFixture,model_role:'research_shadow'}).head,null,
+ 'research shadow cannot masquerade as main confidence');
+assert.equal(v2.confidenceView({...confidenceFixture,head_weight_concentration:.9}).head,null,
+ 'inconsistent head share cannot be shown');
+assert.equal(v2.confidenceView(r).head,null,'missing main evidence must be unknown');
+assert.match(js,/function confidencePanel\(r,detail=false\)/);
+assert.match(js,/closedNote\+confidencePanel\(r\)/);
+assert.match(js,/confidencePanel\(r,true\)/);
+assert.match(js,/BUY判定とは独立です/);
+assert.match(css,/\.v2-confidence-caption/);
+assert.match(css,/\.v2-confidence-explainer/);
+
 assert.equal(v2.money(50000),'50,000円');
 assert.equal(v2.validCombo('1-3-4'),true);
 assert.equal(v2.validCombo('1-1-3'),false);
@@ -137,10 +184,10 @@ assert.match(js,/function previewFeatureCoverage\(\)/);
 assert.match(js,/previewFeatureCoverage\(\)\+/);
 assert.match(js,/exhibition-preview-evidence\/latest\.json/);
 assert.match(js,/重量調整/);
-assert.match(html,/studio-v2\.css\?v=20261122-today-v1/);
+assert.match(html,/studio-v2\.css\?v=20261123-confidence-v1/);
 assert.match(js,/fetch\('\.\/data\/weather-research\/latest\.json'/);
 assert.match(js,/onsiteWeatherCaptureStatus\(\)\+/);
-assert.match(html,/studio-v2\.js\?v=20261122-today-v1/);
+assert.match(html,/studio-v2\.js\?v=20261123-confidence-v1/);
 assert.doesNotMatch(html,/cumulative-settlement\.js|cumulative-settlement\.css/);
 assert.doesNotMatch(js,/BoatCumulative|cumulativeResults|refreshCumulative/);
 assert.match(js,/function refreshTodayResults\(force=false\)/);
@@ -155,7 +202,7 @@ assert.match(js,/venue_weather_learning/);
 assert.match(js,/site_wave_time_verified/);
 assert.match(css,/\.v2-weather-study\{/);
 assert.match(css,/\.v2-weather-select select\{min-height:44px/);
-assert.match(html,/studio-v2\.css\?v=20261122-today-v1/);
+assert.match(html,/studio-v2\.css\?v=20261123-confidence-v1/);
 
 assert.match(js,/phase==='shadow'\?'shadow':'pending'/);
 

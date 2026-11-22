@@ -165,7 +165,7 @@ async function refreshBuyShadow(day){
      !Array.isArray(trial.entries)||trial.entries.length>300||
      state.data?.event_date!==day)return;
   if(!state.buyShadow||state.buyShadow.event_date!==day||
-     trial.entries.length>=state.buyShadow.entries.length){
+     trial.entries.length>state.buyShadow.entries.length){
    state.buyShadow=trial;render();
   }
  }catch{/* Missing evidence remains unconfirmed, never reconstructed. */}

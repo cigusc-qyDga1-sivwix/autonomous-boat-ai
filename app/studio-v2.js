@@ -252,6 +252,19 @@ function forecasts(){
   (futureShown.length>state.shown?'<div class="v2-cta-row"><button class="v2-secondary-btn" data-load-more="forecasts" type="button">さらに'+Math.min(20,futureShown.length-state.shown)+'Rを表示（残り'+(futureShown.length-state.shown)+'R）</button></div>':'')+
   '<p class="v2-subtle">表示は保存済み買い目の読み取り専用。画面の絞り込みや並べ替えでは予想を再計算しません。</p>';
 }
+function cumulativeResults(){
+ const totals=root.BoatCumulative;
+ if(!totals)return '<section class="v2-cumulative-state">累積収支データの読み込み機能がありません。</section>';
+ if(totals.status()!=='ready')return '<section class="v2-cumulative-state" role="status">累積収支を照合中です。今日の正式成績は上の監査値をご確認ください。</section>';
+ return '<div class="v2-cumulative">'+totals.render()+
+  '<p class="v2-subtle">累積は公開された日付別の締切前固定記録を使用。最新の当日監査と公開時刻が異なる場合があります。</p></div>';
+}
+function refreshCumulative(force=false){
+ const totals=root.BoatCumulative;
+ if(!totals||(!force&&!totals.needsRefresh()))return;
+ void totals.load(force).then(()=>{if(state.tab==='results')render();})
+  .catch(()=>{if(state.tab==='results')render();});
+}
 function results(){
  const a=validAudit(),o=resultMetrics();
  const auditSource=a?'監査ファイルの公式照合済みデータ':'同じ対象日の公式監査が取得できていません';
@@ -266,6 +279,7 @@ function results(){
   metric('仮想払戻総額',o&&Number.isSafeInteger(o.virtual_payout_yen)&&o.virtual_payout_yen>=0?money(o.virtual_payout_yen):'—','正式・公式照合済み')+
   metric('仮想回収率',o?percent(o.return_rate):'—','実投票の収支ではありません')+
   metric('仮想収支',formatProfit,'照合済みのみ')+'</div>'+
+  cumulativeResults()+
   '<div class="v2-section-heading"><div><h2>公式確認済みの着順</h2><p>返還・欠場・照合不一致は、この簡易一覧では的中/不的中に断定しません。</p></div></div>'+
   '<div class="v2-results-list">'+(verified.length?verified.map(({r,out})=>{
     const id=state.data.forecast_races.indexOf(r);
@@ -511,6 +525,7 @@ async function load(){
   if(audit?.event_date===state.data?.event_date)state.audit=audit;
   if(!isToday()||state.data.forecast_races.every(r=>!visibleAroundCutoff(r,state.data.event_date,nowMs())))state.scope='all';
   render();
+  if(state.tab==='results')refreshCumulative();
  }catch(error){
   if(!state.data){
    $('content').innerHTML='<div class="v2-empty" role="alert"><strong>固定予想の取得に失敗しました。</strong>'+
@@ -525,13 +540,14 @@ async function load(){
 document.addEventListener('click',event=>{
  const target=event.target;
  if(!(target instanceof Element))return;
+ if(target.closest('[data-action="reload-cumulative-results"]')){refreshCumulative(true);return;}
  const tab=target.closest('[data-tab]');
  if(tab){
   const next=tab.dataset.tab;
   if(!['home','forecasts','results','research'].includes(next))return;
   state.tab=next;
   if(tab.dataset.showAll==='true')state.scope='all';
-  state.shown=20;render();window.scrollTo({top:0,behavior:'instant'});$('content').focus();return;
+  state.shown=20;render();if(next==='results')refreshCumulative();window.scrollTo({top:0,behavior:'instant'});$('content').focus();return;
  }
  const filter=target.closest('[data-forecast-filter]');
  if(filter){
@@ -578,8 +594,10 @@ void load();
 // existing PWA's foreground refresh policy. No write, no local fallback.
 setInterval(()=>{if(!document.hidden&&!state.loading)void load()},300000);
 setInterval(()=>{if(!document.hidden)void pollCanonicalForecast()},60000);
+setInterval(()=>{if(!document.hidden&&state.tab==='results')refreshCumulative()},60000);
 setInterval(()=>{if(!document.hidden&&state.data&&['home','forecasts'].includes(state.tab))render()},60000);
 document.addEventListener('visibilitychange',()=>{
+ if(!document.hidden&&state.tab==='results')refreshCumulative();
  if(!document.hidden&&!state.loading)void load();
  if(!document.hidden)void pollCanonicalForecast();
 });

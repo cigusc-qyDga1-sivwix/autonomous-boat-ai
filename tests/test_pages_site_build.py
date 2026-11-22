@@ -96,6 +96,25 @@ class PagesArtifactTests(unittest.TestCase):
                 for x in manifest["archived"]))
             self.assertTrue(DATED_JSON.fullmatch("data/live/2026-11-07.json"))
 
+    def test_medium_historical_json_is_indexed_not_published(self):
+        # A build must not swell to >120 MB as dated research files accumulate.
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t)
+            app,*_=self.fixture(root)
+            medium=app/"data"/"experiments"/"research-2026-11-06.json"
+            medium.write_bytes(b"x" * (ARCHIVE_LIMIT_BYTES+100))
+            tiny=app/"data"/"experiments"/"research-2026-11-05.json"
+            tiny.write_text('{"small":true}')
+            dist=root/"pages"
+            summary=build_site(app,dist)
+            self.assertFalse((dist/"data/experiments/research-2026-11-06.json").exists())
+            self.assertTrue((dist/"data/experiments/research-2026-11-05.json").exists())
+            self.assertTrue(medium.exists(),"GitHub source history must remain untouched")
+            manifest=json.loads((dist/"data/archive-on-github.json").read_text())
+            paths={x["path"] for x in manifest["archived"]}
+            self.assertIn("data/experiments/research-2026-11-06.json",paths)
+            self.assertLess(summary["shipped_bytes"],ARCHIVE_LIMIT_BYTES)
+
     def test_missing_required_live_file_rejected(self):
         with tempfile.TemporaryDirectory() as t:
             root=Path(t)

@@ -89,6 +89,38 @@ class OutsideHeadForwardShadowTests(unittest.TestCase):
         snap["racers"][0]["actual_finish"] = 2
         self.assertEqual(build(snap, ranked)["status"], "INVALID_OR_POSTRACE_RACER")
 
+    def test_official_audit_uses_only_frozen_same_point_pairs(self):
+        from scripts.forecast_audit import _outside_head_forward_shadow_report
+        snap, ranked = fixture()
+        snap.update({"venue": "徳山", "race": 1, "cutoff_jst": "12:00",
+                     "ticket_status": "formal",
+                     "model_version": "four-factor-learned-v1-conditional-choice-trained"})
+        snap["outside_head_forward_shadow_v1"] = build(snap, ranked)
+        source = {"verified": True, "source": "boatrace_official_pay",
+                  "virtual_stake": 50000, "finish": "5-1-2",
+                  "payout_per_100": 2000}
+        official = {"2026-11-24|徳山|1": source}
+        result = _outside_head_forward_shadow_report(
+            [snap], official, {}, "2026-11-24")
+        self.assertEqual(result["official_verified_sha_matched_pairs"], 1)
+        self.assertEqual(result["formal"]["hits"], 0)
+        self.assertEqual(result["outside_head_shadow"]["hits"], 1)
+        self.assertEqual(result["head_misses_recovered"], 1)
+        self.assertEqual(result["outside_head_shadow"]["virtual_stake_yen"], 50000)
+        # No official evidence: must not fabricate winning payouts.
+        missing = _outside_head_forward_shadow_report(
+            [snap], {}, {}, "2026-11-24")
+        self.assertEqual(missing["official_verified_sha_matched_pairs"], 0)
+        self.assertEqual(missing["exclusions"]["unverified"], 1)
+        # If the frozen control was tampered with, pair is excluded.
+        modified = copy.deepcopy(snap)
+        modified["bets"][0]["virtual_yen"] += 1000
+        modified["bets"][1]["virtual_yen"] -= 1000
+        bad = _outside_head_forward_shadow_report(
+            [modified], official, {}, "2026-11-24")
+        self.assertEqual(bad["official_verified_sha_matched_pairs"], 0)
+        self.assertEqual(bad["exclusions"]["control_or_trial_sha_mismatch"], 1)
+
     def test_no_supported_signal_preserves_control(self):
         snap, ranked = fixture()
         snap["racers"][4]["exhibition_st"] = 0.21

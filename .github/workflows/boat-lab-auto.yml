@@ -7,6 +7,8 @@ on:
     paths:
       - 'scripts/autonomous_daily.py'
       - 'scripts/learned_formal.py'
+      - 'scripts/outside_head_forward_shadow_v1.py'
+      - 'tests/test_outside_head_forward_shadow_v1.py'
       - 'scripts/corner_attack_formal_v1.py'
       - 'scripts/four_leg_exhibition_evidence_research.py'
       - 'scripts/four_leg_live_freeze.py'
@@ -158,6 +160,8 @@ jobs:
           python -m compileall -q scripts/autonomous_daily.py
           python -m compileall -q scripts/original_venue_formal_v1.py scripts/original_exhibition_venue_research.py scripts/boatcast_oriten_smoke.py scripts/corner_attack_formal_v1.py
           python -m unittest discover -s tests -p test_corner_attack_formal_v1.py -v
+          python -m compileall -q scripts/outside_head_forward_shadow_v1.py scripts/learned_formal.py
+          python -m unittest discover -s tests -p test_outside_head_forward_shadow_v1.py -v
           python -m compileall -q scripts/four_leg_exhibition_evidence_research.py scripts/four_leg_live_freeze.py
           python -m unittest discover -s tests -p test_four_leg_exhibition_evidence_research.py -v
           python -m unittest discover -s tests -p test_four_leg_live_freeze.py -v

@@ -542,6 +542,123 @@ def _learned_conditional_shadow_report(forecasts, official, alerts, day):
     }
 
 
+def _outside_head_forward_shadow_report(forecasts, official, alerts, day):
+    """11/24+ read-only, official-verified, prospectively frozen 5/6-head A/B.
+
+    DO NOT retrospectively generate alternatives. This is never formal ROI.
+    Keep unchanged/no-signal records separate from paired ticket comparisons.
+    """
+    statuses = Counter()
+    exclusions = Counter()
+    paired_main, paired_shadow = [], []
+    changed_examples = []
+    by_venue = defaultdict(lambda: {"formal": [], "outside_shadow": []})
+    prospective_frozen = 0
+    supported_signals = 0
+    for race in forecasts:
+        trial = race.get("outside_head_forward_shadow_v1")
+        if not isinstance(trial, dict):
+            continue
+        status = trial.get("status", "UNKNOWN")
+        statuses[status] += 1
+        supported_signals += len(trial.get("supported_outer_1st_signals") or [])
+        if status != "PRE_CUTOFF_SHADOW_SWAP_FROZEN":
+            continue
+        prospective_frozen += 1
+        key = f"{day}|{race.get('venue')}|{race.get('race')}"
+        if key in alerts:
+            exclusions["official_conflict_or_refund"] += 1
+            continue
+        ok, reason = _verify_race(race, official.get(key), day)
+        if not ok:
+            exclusions[reason] += 1
+            continue
+        control, alternative = trial.get("control_bets"), trial.get("shadow_alternative_bets")
+        if (day < "2026-11-24"
+                or race.get("ticket_status") != "formal"
+                or race.get("phase") != "exhibition"
+                or trial.get("version") != "outside-head-5-6-precutoff-shadow-v0.1"
+                or trial.get("model_role") != "research_shadow"
+                or trial.get("not_formal") is not True
+                or trial.get("result_data_used") is not False
+                or trial.get("odds_used") is not False
+                or trial.get("formal_tickets_changed") is not False
+                or trial.get("frozen_at_utc") != race.get("frozen_at_utc")
+                or trial.get("cutoff_iso_jst") != race.get("cutoff_iso_jst")
+                or not _valid_shadow_tickets(control)
+                or not _valid_shadow_tickets(alternative)
+                or len(control) != len(alternative)
+                or len(control) != len(race["bets"])):
+            exclusions["not_independently_frozen_equal_point_pair"] += 1
+            continue
+        try:
+            def sha(payload):
+                return hashlib.sha256(json.dumps(
+                    payload, sort_keys=True, ensure_ascii=False,
+                    separators=(",", ":"), allow_nan=False).encode("utf-8")).hexdigest()
+            if (sha(control) != trial.get("control_bets_sha256")
+                    or sha(alternative) != trial.get("shadow_bets_sha256")
+                    or _ticket_signature(control) != _ticket_signature(race["bets"])
+                    or _ticket_signature(control) == _ticket_signature(alternative)):
+                exclusions["control_or_trial_sha_mismatch"] += 1
+                continue
+            freeze = datetime.fromisoformat(race["frozen_at_utc"])
+            cutoff = datetime.fromisoformat(race["cutoff_iso_jst"])
+            if (freeze.tzinfo is None or cutoff.tzinfo is None
+                    or freeze >= cutoff - timedelta(minutes=2)):
+                exclusions["not_frozen_two_minutes_before_cutoff"] += 1
+                continue
+        except (KeyError, ValueError, TypeError, OverflowError):
+            exclusions["invalid_provenance"] += 1
+            continue
+        payout = official[key]
+        formal = _shadow_trial_result(race, control, payout)
+        shadow = _shadow_trial_result(race, alternative, payout)
+        paired_main.append(formal)
+        paired_shadow.append(shadow)
+        by_venue[race["venue"]]["formal"].append(formal)
+        by_venue[race["venue"]]["outside_shadow"].append(shadow)
+        if formal["stage"] != shadow["stage"] or formal["virtual_payout_yen"] != shadow["virtual_payout_yen"]:
+            changed_examples.append({
+                "venue": race["venue"], "race": race["race"],
+                "official_finish": payout["finish"],
+                "formal_stage": formal["stage"], "shadow_stage": shadow["stage"],
+                "formal_payout_yen": formal["virtual_payout_yen"],
+                "shadow_payout_yen": shadow["virtual_payout_yen"],
+                "replacement": trial.get("replacement"),
+            })
+    return {
+        "protocol": "forward-frozen-5-6-outside-head-conditional-pair-shadow-v0.1",
+        "research_shadow_only": True, "actual_purchase": False,
+        "prospective_new_snapshots": sum(statuses.values()),
+        "supported_outer_head_signals": supported_signals,
+        "precutoff_equal_point_alternatives": prospective_frozen,
+        "official_verified_sha_matched_pairs": len(paired_main),
+        "status_counts": dict(sorted(statuses.items())),
+        "exclusions": dict(sorted(exclusions.items())),
+        "formal": _metrics(paired_main),
+        "outside_head_shadow": _metrics(paired_shadow),
+        "virtual_payout_delta_shadow_minus_formal_yen":
+            sum(x["virtual_payout_yen"] for x in paired_shadow) -
+            sum(x["virtual_payout_yen"] for x in paired_main),
+        "head_misses_recovered": sum(a["stage"] == "head_miss" and b["stage"] != "head_miss"
+                                     for a, b in zip(paired_main, paired_shadow)),
+        "new_head_misses": sum(a["stage"] != "head_miss" and b["stage"] == "head_miss"
+                               for a, b in zip(paired_main, paired_shadow)),
+        "second_misses_recovered": sum(a["stage"] == "second_miss" and
+                                        b["stage"] not in ("second_miss", "head_miss")
+                                        for a, b in zip(paired_main, paired_shadow)),
+        "changed_outcome_examples": changed_examples[:12],
+        "by_venue": {
+            venue: {"formal": _metrics(rows["formal"]),
+                    "outside_head_shadow": _metrics(rows["outside_shadow"])}
+            for venue, rows in sorted(by_venue.items())
+        },
+        "not_a_formal_performance_claim": True,
+        "warning": "Single-day postrace inspection is not proof of uplift. Only source-time, SHA-verified prospective pairs count.",
+    }
+
+
 def _learned_formal_comparison(forecasts, official, alerts, day):
     """Compare ONLY pre-cutoff official learned main vs same-input old control.
 
@@ -1784,6 +1901,9 @@ def analyze(dataset: dict):
     report["venue_weather_learning"] = inspect_venue_weather(raw, verified)
     if day >= "2026-11-10":
         report["head_risk_breakpoint"] = _head_risk_breakpoint_report(raw, verified, day)
+    report["outside_head_forward_shadow_comparison"] = _outside_head_forward_shadow_report(
+        raw, official, alerts, day
+    )
     report["learned_formal_comparison"] = _learned_formal_comparison(
         raw, official, alerts, day
     )

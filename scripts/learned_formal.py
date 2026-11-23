@@ -21,6 +21,7 @@ from scripts.corner_attack_formal_v1 import rescore as corner_rescore, POLICY_SH
 from scripts.race_flow_experimental_primary import rescore as rescore_experimental, POLICY_SHA256 as EXPERIMENT_POLICY_SHA
 from scripts.learned_wind_direction_v1 import rescore as rescore_learned_wind, POLICY_SHA256 as WIND_POLICY_SHA
 from scripts.expert_scenario_portfolio_shadow import build as build_expert_portfolio, promote_verified_experiment
+from scripts.outside_head_forward_shadow_v1 import build as build_outside_head_shadow
 
 VERSION = "four-factor-learned-v1-conditional-choice-trained"
 START_DATE = date(2026, 11, 13)
@@ -382,4 +383,20 @@ def apply(snapshot: dict, model: dict) -> dict:
                 "no_proven_performance_gain": True,
             }
         result["learned_wind_direction_v1"] = wind_audit
+    # Forward-only 5/6-course head research starts 24 Nov. This is an independent
+    # same-time alternative AFTER the full formal/expert/wind portfolio is fixed.
+    # It never modifies formal picks, model metadata, classification, or stake.
+    if (snapshot.get("phase") == "exhibition"
+            and frozen.astimezone(cutoff.tzinfo).date() >= date(2026, 11, 24)):
+        try:
+            result["outside_head_forward_shadow_v1"] = build_outside_head_shadow(
+                result, ranked)
+        except (ValueError, TypeError, KeyError, OverflowError, ZeroDivisionError):
+            # Research data failure must not block normal forecast publication.
+            result["outside_head_forward_shadow_v1"] = {
+                "version": "outside-head-5-6-precutoff-shadow-v0.1",
+                "model_role": "research_shadow", "not_formal": True,
+                "status": "ERROR_FAIL_CLOSED", "formal_tickets_changed": False,
+                "result_data_used": False, "calibrated": False,
+            }
     return result

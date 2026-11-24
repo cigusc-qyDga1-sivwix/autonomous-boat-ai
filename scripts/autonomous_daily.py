@@ -37,6 +37,7 @@ if __package__:
     from .exhibition_bridge import available_rows, inject, verified_original_for_openapi
     from .official_withdrawals import fetch_notices, match_lanes
     from .entry_exhibition_gate import validated_preview, summarize_gate
+    from .official_exhibition_fallback import collect as collect_official_exhibition, SOURCE as OFFICIAL_EXHIBITION_SOURCE
     from .venue_profiles import get_profile, adjust_weights as adjust_venue_weights
     from .interaction_scenarios import evaluate as evaluate_interactions, VERSION as INTERACTION_VERSION
     from .racer_course_tactics import profile as validate_tactics_profile, pairwise_note as tactic_pair
@@ -66,6 +67,7 @@ else:
     from exhibition_bridge import available_rows, inject, verified_original_for_openapi
     from official_withdrawals import fetch_notices, match_lanes
     from entry_exhibition_gate import validated_preview, summarize_gate
+    from official_exhibition_fallback import collect as collect_official_exhibition, SOURCE as OFFICIAL_EXHIBITION_SOURCE
     from venue_profiles import get_profile, adjust_weights as adjust_venue_weights
     from interaction_scenarios import evaluate as evaluate_interactions, VERSION as INTERACTION_VERSION
     from racer_course_tactics import profile as validate_tactics_profile, pairwise_note as tactic_pair
@@ -202,6 +204,21 @@ def select_exhibition_source(race: dict, research_row: dict | None, now: datetim
         if (now.tzinfo is None or cutoff is None
                 or now.astimezone(JST) >= cutoff - timedelta(seconds=SAFE_MARGIN_SECONDS)):
             return race, None, "unavailable"
+        direct = race.get("_official_preview_origin")
+        if direct:
+            try:
+                stamp = datetime.fromisoformat(direct["captured_at_utc"])
+                if (direct.get("source") != OFFICIAL_EXHIBITION_SOURCE
+                        or direct.get("six_program_names_matched") is not True
+                        or direct.get("captured_before_cutoff") is not True
+                        or stamp.tzinfo is None or stamp > now
+                        or stamp.astimezone(JST).date() != cutoff.date()
+                        or stamp >= cutoff - timedelta(seconds=180)):
+                    return race, None, "unavailable"
+            except (TypeError, KeyError, ValueError):
+                return race, None, "unavailable"
+            return {**race, "_exhibition_origin": {**direct,
+                    "forecast_run_utc": now.astimezone(UTC).isoformat()}}, None, "official_beforeinfo"
         captured = now.astimezone(UTC).isoformat()
         live = {**race, "_exhibition_origin": {
             "source": "BoatraceOpenAPI",
@@ -271,7 +288,7 @@ def numeric_exhibition_matches_snapshot(candidate: dict, snapshot: dict) -> bool
     if snapshot.get("phase") != "exhibition" or not preview_complete(candidate):
         return False
     origin = candidate.get("_exhibition_origin") or {}
-    if (origin.get("source") not in ("BoatraceOpenAPI", "BoatraceCSV")
+    if (origin.get("source") not in ("BoatraceOpenAPI", "BoatraceCSV", OFFICIAL_EXHIBITION_SOURCE)
             or origin.get("captured_before_cutoff") is not True):
         return False
     applied = snapshot.get("racers")
@@ -436,7 +453,7 @@ def numeric_exhibition_coverage(records: dict, day: str) -> dict:
     totals = {
         "listed_races": 0, "verified_exhibition": 0, "baseline_or_unverified": 0,
         "six_boat_input_checked": 0, "openapi_source": 0,
-        "csv_source": 0, "unknown_source": 0, "actual_ticket_changes": 0,
+        "csv_source": 0, "official_beforeinfo_source": 0, "unknown_source": 0, "actual_ticket_changes": 0,
     }
     for rec in records.values():
         venue = rec["venue"]
@@ -453,7 +470,8 @@ def numeric_exhibition_coverage(records: dict, day: str) -> dict:
             origin = (latest.get("exhibition_origin") or {}).get("source")
             source_key = (
                 "openapi_source" if origin == "BoatraceOpenAPI" else
-                "csv_source" if origin == "BoatraceCSV" else "unknown_source")
+                "csv_source" if origin == "BoatraceCSV" else
+                "official_beforeinfo_source" if origin == OFFICIAL_EXHIBITION_SOURCE else "unknown_source")
             row[source_key] += 1
             row["actual_ticket_changes"] += int(bool(
                 (latest.get("exhibition_change") or {}).get("bets_changed")))
@@ -2066,7 +2084,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 # the same live OpenAPI six-boat preview before cutoff.
                 original_v1_attached = False
                 original_raw = original_captures.get(key)
-                if original_raw and selected_source == "openapi":
+                if original_raw and selected_source in ("openapi", "official_beforeinfo"):
                     try:
                         candidate = attach_to_live_race(
                             candidate, original_raw, venue_code=f"{int(venue_code):02d}",
@@ -2089,7 +2107,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 # Compare the actual six-boat source input against the most
                 # recently frozen version, not just a CSV timestamp.
                 live_measurements_changed = bool(
-                    selected_source == "openapi" and existing_exhibition
+                    selected_source in ("openapi", "official_beforeinfo") and existing_exhibition
                     and not numeric_exhibition_matches_snapshot(candidate, existing_exhibition[-1]))
                 original_v1_gain = bool(
                     original_v1_attached and existing_exhibition
@@ -2104,7 +2122,9 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                     or (original_v1_gain and len(existing_exhibition) < 5)
                 )
                 if preview_ready and ("exhibition" not in phases or revision):
-                    origin_url = selected_csv_origin and "https://boatracecsv.github.io/docs/data/previews.html" or source_url
+                    origin_url = ((candidate.get("_exhibition_origin") or {}).get("source_url")
+                                  or (selected_csv_origin and "https://boatracecsv.github.io/docs/data/previews.html")
+                                  or source_url)
                     prediction_now = datetime.now(UTC) if enforce_wall_clock else now
                     site_wave = wave_for_race(site_wave_snapshot, venue_code, n, cutoff, prediction_now)
                     new = prediction(candidate, VENUES[venue_code], n,
@@ -2216,7 +2236,9 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                     latest_timestamp = datetime.now(UTC) if enforce_wall_clock else upgrade_now
                     upgrade = prediction(
                         candidate_now, VENUES[venue_code], n,
-                        phase_to_promote, latest_timestamp, source_url, nearby,
+                        phase_to_promote, latest_timestamp,
+                        ((candidate_now.get("_exhibition_origin") or {}).get("source_url") or source_url)
+                        if phase_to_promote == "exhibition" else source_url, nearby,
                         wave_for_race(site_wave_snapshot, venue_code, n, cutoff, latest_timestamp)
                     )
                     completed_at = datetime.now(UTC) if enforce_wall_clock else now
@@ -2857,6 +2879,13 @@ def main():
             return
     path = args.out_dir / f"{day}.json"
     previous = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+    # Independent official direct preview fallback before optional weather/research work.
+    direct_preview_status = {"status": "fixture_skipped"}
+    if not args.input_json:
+        try:
+            direct_preview_status = collect_official_exhibition(source, datetime.now(UTC), previous)
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            direct_preview_status = {"status": "unavailable", "error_type": type(exc).__name__}
     # Forecast weather is fetched only for venues actually hosting races today.
     # A failed provider request is reported; never synthesize wind readings.
     active = [
@@ -2928,6 +2957,8 @@ def main():
                                      racer_context_rows=contexts, tactics_rows=tactics_rows,
                                      site_wave_snapshot=weather_site_wave,
                                      original_captures=original_captures)
+    summary["official_exhibition_fallback"] = direct_preview_status
+    webapp["official_exhibition_fallback"] = direct_preview_status
     summary["original_exhibition_v1_source"] = original_status
     webapp["original_exhibition_v1_source"] = original_status
     weather_bridge_status["formal_wave_applied_races"] = webapp["weather_lab_site_wave_applied_race_count"]

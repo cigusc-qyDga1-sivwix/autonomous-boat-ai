@@ -114,8 +114,10 @@ class OutsideHeadForwardShadowTests(unittest.TestCase):
         self.assertEqual(missing["exclusions"]["unverified"], 1)
         # If the frozen control was tampered with, pair is excluded.
         modified = copy.deepcopy(snap)
-        modified["bets"][0]["virtual_yen"] += 1000
-        modified["bets"][1]["virtual_yen"] -= 1000
+        # Move stake from the large ticket to a small one: preserve a valid
+        # positive allocation so this test reaches the SHA/signature guard.
+        modified["bets"][0]["virtual_yen"] -= 1000
+        modified["bets"][1]["virtual_yen"] += 1000
         bad = _outside_head_forward_shadow_report(
             [modified], official, {}, "2026-11-24")
         self.assertEqual(bad["official_verified_sha_matched_pairs"], 0)

@@ -209,6 +209,8 @@ def select_exhibition_source(race: dict, research_row: dict | None, now: datetim
             "forecast_run_utc": captured,
             "captured_before_cutoff": True,
             "source_observation_time": "not_provided",
+            "source_url": race.get("_preview_refresh_source_url"),
+            "refresh_received_at_utc": race.get("_preview_refresh_received_at_utc"),
             "metrics": [],
         }}
         # The OpenAPI six-boat preview remains canonical. It does not include
@@ -2812,6 +2814,76 @@ def retrieve(day: str) -> tuple[dict, str]:
     return json.loads(raw), url
 
 
+def refresh_missing_previews(payload: dict, day: str, now: datetime) -> dict:
+    """One bounded last-mile retry for imminent races; never copy results.
+    
+    The primary Pages JSON may be cached. The upstream gh-pages raw file
+    provides a second delivery path, not an independent measurement source.
+    Keep corrected local cutoff/program data and only attach complete previews
+    for the identical six names, while the actual clock is still safe.
+    """
+    targets = {}
+    for code, stadium in ((payload.get("programs") or {}).get("stadiums") or {}).items():
+        if code not in VENUES or code == "3" or not isinstance(stadium, dict):
+            continue
+        for n, race in (stadium.get("races") or {}).items():
+            if not isinstance(race, dict) or not valid_entrants(race) or preview_complete(race):
+                continue
+            cutoff = cutoff_of(race)
+            if (cutoff and cutoff.date() == now.astimezone(JST).date()
+                    and timedelta(minutes=4) < cutoff - now <= timedelta(minutes=30)):
+                targets[(code, n)] = race
+    status = {"target_count": len(targets), "updated": [], "attempts": []}
+    if not targets:
+        return status
+    endpoints = (
+        f"https://raw.githubusercontent.com/boatraceopenapi/api/gh-pages/v1/{day[:4]}/{day}.json",
+        f"{SOURCE}/{day[:4]}/{day}.json",
+    )
+    for endpoint in endpoints:
+        if not targets:
+            break
+        try:
+            req = Request(endpoint, headers={"User-Agent": "BOAT-LAB-research/0.2 (read-only)",
+                                             "Cache-Control": "no-cache", "Pragma": "no-cache"})
+            with urlopen(req, timeout=6) as response:
+                raw = response.read(10_000_001)
+            if len(raw) > 10_000_000:
+                raise ValueError("oversize preview response")
+            fresh = json.loads(raw)
+            received = datetime.now(UTC)
+            stadiums = (fresh.get("programs") or {}).get("stadiums") or {}
+            updated = 0
+            for (code, n), race in list(targets.items()):
+                cutoff = cutoff_of(race)
+                if received >= cutoff - timedelta(minutes=3):
+                    del targets[(code, n)]
+                    continue
+                candidate = ((stadiums.get(code) or {}).get("races") or {}).get(n)
+                if not isinstance(candidate, dict) or not valid_entrants(candidate) or not preview_complete(candidate):
+                    continue
+                other_cutoff = cutoff_of(candidate)
+                if other_cutoff is None or other_cutoff.date() != cutoff.date():
+                    continue
+                if received >= other_cutoff - timedelta(minutes=3):
+                    continue
+                if any(re.sub(r"\\s+", "", str(race["racers"][str(i)]["name"])) !=
+                       re.sub(r"\\s+", "", str(candidate["racers"][str(i)]["name"]))
+                       for i in range(1, 7)):
+                    continue
+                race["preview"] = candidate["preview"]
+                race["_preview_refresh_source_url"] = endpoint
+                race["_preview_refresh_received_at_utc"] = received.isoformat()
+                status["updated"].append(f"{code}-{n}")
+                del targets[(code, n)]
+                updated += 1
+            status["attempts"].append({"source": endpoint, "status": "OK", "updated": updated})
+        except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
+            status["attempts"].append({"source": endpoint, "status": type(exc).__name__})
+    status["remaining"] = len(targets)
+    return status
+
+
 def write_json(path: Path, value: dict):
     """Persist exact JSON values; compact immutable day ledgers to avoid GitHub's 100 MB cap.
 
@@ -2936,6 +3008,9 @@ def main():
         tactics_rows = raw_tactics['races']
     global ACTIVE_LEARNED_MODEL
     ACTIVE_LEARNED_MODEL = (load_learned_model(now) if not args.input_json else None)
+    # Refresh immediately before the direct original-exhibition capture and build.
+    preview_refresh = (refresh_missing_previews(source, compact, datetime.now(UTC))
+                       if not args.input_json else {"status": "fixture_skipped"})
     original_captures = {}
     original_status = {"status": "SKIPPED_NO_FRESH_LEARNED_MODEL" if ACTIVE_LEARNED_MODEL is None
                        else "SKIPPED_FIXTURE", "attempted": 0, "captured_six_boat": 0}
@@ -2952,6 +3027,8 @@ def main():
                                      racer_context_rows=contexts, tactics_rows=tactics_rows,
                                      site_wave_snapshot=weather_site_wave,
                                      original_captures=original_captures)
+    summary["preview_refresh"] = preview_refresh
+    webapp["preview_refresh"] = preview_refresh
     summary["original_exhibition_v1_source"] = original_status
     webapp["original_exhibition_v1_source"] = original_status
     weather_bridge_status["formal_wave_applied_races"] = webapp["weather_lab_site_wave_applied_race_count"]
@@ -3079,6 +3156,7 @@ def main():
         "original_exhibition_v1_source": original_status,
         "original_exhibition_v1_formal_races": webapp["original_exhibition_v1_formal_races"],
         "original_exhibition_v1_policy_shas": webapp["original_exhibition_v1_policy_shas"],
+        "preview_refresh": preview_refresh,
     })
     print(json.dumps(summary, ensure_ascii=False))
 

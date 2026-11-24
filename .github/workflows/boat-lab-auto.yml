@@ -186,6 +186,7 @@ jobs:
           python -m unittest discover -s tests -p test_grade_competition_integration.py
           # The former Mikuni replay test no longer exists in this repository.
           python scripts/test_entry_exhibition_gate.py
+          python -m unittest discover -s tests -p test_official_exhibition_fallback.py
       - name: Collect exhibition measurements before forecasting
         continue-on-error: true
         run: |

@@ -1968,6 +1968,10 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
             })
             if record["venue_code"] != venue_code or record["race"] != n:
                 raise ValueError("Recorded race identity mismatch")
+            # Current schedule is metadata, not a modification of any frozen version.
+            record["current_cutoff_jst"] = cutoff.strftime("%H:%M")
+            if race.get("_official_cutoff_notice_url"):
+                record["current_cutoff_source_url"] = race["_official_cutoff_notice_url"]
             phases = {entry["phase"] for entry in record["versions"]}
             nearby = weather_at(weather_by_venue.get(venue_code), cutoff)
             # Actual production per-race clock: a large nationwide Node batch
@@ -2306,7 +2310,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
             reason = "締切前の予想を固定できなかった"
         if not versions:
             unavailable.append({"venue": record["venue"], "race": record["race"],
-                                "cutoff_jst": record["cutoff_jst"],
+                                "cutoff_jst": record.get("current_cutoff_jst", record["cutoff_jst"]),
                                 "reason": reason,
                                 **({"official_withdrawal": withdrawal} if withdrawal else {})})
             continue
@@ -2351,6 +2355,12 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
             r["entry_exhibition_gate"].update(final_eligible=False, buy_allowed=False, reason=reason)
             r["ticket_status"] = "provisional"
         r["formal_snapshot_sha256"] = current["sha256"] if r["ticket_status"] == "formal" else None
+        # Display schedule may change; formal eligibility above used the immutable snapshot.
+        if record.get("current_cutoff_jst") and record["current_cutoff_jst"] != current["cutoff_jst"]:
+            r["frozen_cutoff_jst"] = current["cutoff_jst"]
+            r["cutoff_jst"] = record["current_cutoff_jst"]
+            if record.get("current_cutoff_source_url"):
+                r["current_cutoff_source_url"] = record["current_cutoff_source_url"]
         latest_races.append(r)
         p = record.get("official_pay")
         if p and p.get("verified") and not record.get("official_conflict") and not record.get("official_review"):
@@ -2855,6 +2865,20 @@ def main():
                 "retry_by_next_scheduled_run": True,
             }, ensure_ascii=False))
             return
+    # Official Marugame notice, 2026-11-24 only. Replace stale original times
+    # before collection; leave other dates, venues and later source changes alone.
+    if day == "2026-11-24" and not args.input_json:
+        old_new = {4: ("16:50", "17:00"), 5: ("17:16", "17:26"),
+                   6: ("17:42", "17:52"), 7: ("18:10", "18:20"),
+                   8: ("18:40", "18:50"), 9: ("19:10", "19:20"),
+                   10: ("19:42", "19:52"), 11: ("20:12", "20:22"),
+                   12: ("20:42", "20:52")}
+        marugame = ((source.get("programs") or {}).get("stadiums") or {}).get("15", {})
+        for n, (old, new) in old_new.items():
+            row = (marugame.get("races") or {}).get(str(n), {})
+            if row.get("closed_at") == f"{day} {old}:00":
+                row["closed_at"] = f"{day} {new}:00"
+                row["_official_cutoff_notice_url"] = "https://www.boatrace.jp/owpc/pc/race/racelist?hd=20261124&jcd=15&rno=5"
     path = args.out_dir / f"{day}.json"
     previous = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
     # Forecast weather is fetched only for venues actually hosting races today.

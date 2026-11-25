@@ -25,6 +25,12 @@ class OfficialPreviewTest(unittest.TestCase):
         self.assertEqual(result["racers"]["4"]["start_timing"], -.02)
         self.assertEqual(result["racers"]["3"]["exhibition_time"], 6.73)
 
+    def test_nested_past_race_table_preserves_outer_row(self):
+        html = self.fixture().replace(
+            "</td></tr>", "</td><td><table><tr><td>R</td><td>2</td></tr></table></td></tr>")
+        result = parse_preview(html, self.racers)
+        self.assertEqual(validated_preview(result), (1, 2, 4, 3, 5, 6))
+
     def test_reject_missing_duplicate_or_mismatched(self):
         self.assertIsNone(parse_preview(self.fixture((1, 2, 3, 4, 5)), self.racers))
         self.assertIsNone(parse_preview(self.fixture((1, 2, 3, 4, 5, 5)), self.racers))

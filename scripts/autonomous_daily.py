@@ -2844,7 +2844,7 @@ def refresh_missing_previews(payload: dict, day: str, now: datetime, *, first_on
     if not targets:
         return status
     endpoints = (
-        f"https://raw.githubusercontent.com/boatraceopenapi/api/gh-pages/v1/{day[:4]}/{day}.json",
+        f"https://raw.githubusercontent.com/boatraceopenapi/api/gh-pages/docs/v1/{day[:4]}/{day}.json",
         f"{SOURCE}/{day[:4]}/{day}.json",
     )
     for endpoint in endpoints:

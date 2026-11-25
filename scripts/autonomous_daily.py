@@ -2984,6 +2984,13 @@ def main():
     # Prioritize the opening races before potentially slow weather/player I/O.
     early_first_preview = (refresh_missing_previews(source, compact, datetime.now(UTC), first_only=True)
                            if not args.input_json else {"status": "fixture_skipped"})
+    karatsu_official = {"status": "fixture_skipped", "formal_input": False}
+    if not args.input_json:
+        try:
+            from scripts.karatsu_official_preview import collect as collect_karatsu_preview
+            karatsu_official = collect_karatsu_preview(source, datetime.now(UTC))
+        except Exception as exc:
+            karatsu_official = {"status": "UNAVAILABLE", "reason": type(exc).__name__, "formal_input": False}
     nearby_forecasts = {}
     weather_site_wave = None
     weather_bridge_status = {"status": "fixture_skipped"}
@@ -3024,6 +3031,7 @@ def main():
     preview_refresh = (refresh_missing_previews(source, compact, datetime.now(UTC))
                        if not args.input_json else {"status": "fixture_skipped"})
     preview_refresh["early_first_race_pass"] = early_first_preview
+    preview_refresh["karatsu_official_shadow"] = karatsu_official
     original_captures = {}
     original_status = {"status": "SKIPPED_NO_FRESH_LEARNED_MODEL" if ACTIVE_LEARNED_MODEL is None
                        else "SKIPPED_FIXTURE", "attempted": 0, "captured_six_boat": 0}

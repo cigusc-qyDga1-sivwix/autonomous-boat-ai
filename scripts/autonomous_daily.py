@@ -3033,9 +3033,10 @@ def main():
     preview_refresh["early_first_race_pass"] = early_first_preview
     preview_refresh["karatsu_official_shadow"] = karatsu_official
     original_captures = {}
-    original_status = {"status": "SKIPPED_NO_FRESH_LEARNED_MODEL" if ACTIVE_LEARNED_MODEL is None
-                       else "SKIPPED_FIXTURE", "attempted": 0, "captured_six_boat": 0}
-    if not args.input_json and ACTIVE_LEARNED_MODEL is not None:
+    original_status = {"status": "SKIPPED_FIXTURE", "attempted": 0, "captured_six_boat": 0}
+    # Acquisition and evidence must not stop because model training is stale.
+    # Keep the existing formal-input gate independent of capture.
+    if not args.input_json:
         try:
             original_captures, original_status = collect_original_candidates(
                 source, previous, datetime.now(UTC))
@@ -3043,11 +3044,16 @@ def main():
             original_status = {"status": "SOURCE_UNAVAILABLE_FAIL_CLOSED",
                                "error_type": type(exc).__name__, "attempted": 0,
                                "captured_six_boat": 0}
+    original_status["formal_model_eligible"] = ACTIVE_LEARNED_MODEL is not None
+    original_status["capture_mode"] = ("formal_candidate" if ACTIVE_LEARNED_MODEL is not None
+                                       else "research_only")
+    original_status["captured_race_ids"] = sorted(original_captures)
+    formal_original_captures = original_captures if ACTIVE_LEARNED_MODEL is not None else {}
     ledger, webapp, summary = build(previous, source, now, source_url, nearby_forecasts,
                                      exhibition_rows=research, enforce_wall_clock=not bool(args.input_json),
                                      racer_context_rows=contexts, tactics_rows=tactics_rows,
                                      site_wave_snapshot=weather_site_wave,
-                                     original_captures=original_captures)
+                                     original_captures=formal_original_captures)
     summary["preview_refresh"] = preview_refresh
     webapp["preview_refresh"] = preview_refresh
     summary["original_exhibition_v1_source"] = original_status

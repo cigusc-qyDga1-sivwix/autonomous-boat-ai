@@ -23,6 +23,7 @@ from zoneinfo import ZoneInfo
 if __package__:
     from .racer_context import collect as collect_racer_context, validated as validate_racer_context
     from .official_pay import fetch_official_pay
+    from .official_exhibition_preview import fetch_preview as fetch_official_preview
     from .venue_weather import fetch_weather, weather_at, VENUE_POINTS
     from .weather_live_bridge import (
         collect_today as collect_live_weather, wave_for_race,
@@ -52,6 +53,7 @@ if __package__:
 else:
     from racer_context import collect as collect_racer_context, validated as validate_racer_context
     from official_pay import fetch_official_pay
+    from official_exhibition_preview import fetch_preview as fetch_official_preview
     from venue_weather import fetch_weather, weather_at, VENUE_POINTS
     from weather_live_bridge import (
         collect_today as collect_live_weather, wave_for_race,
@@ -203,8 +205,9 @@ def select_exhibition_source(race: dict, research_row: dict | None, now: datetim
                 or now.astimezone(JST) >= cutoff - timedelta(seconds=SAFE_MARGIN_SECONDS)):
             return race, None, "unavailable"
         captured = now.astimezone(UTC).isoformat()
+        official = race.get("_preview_refresh_source") == "BOATRACE_official"
         live = {**race, "_exhibition_origin": {
-            "source": "BoatraceOpenAPI",
+            "source": "BOATRACE_official" if official else "BoatraceOpenAPI",
             "captured_at_utc": captured,
             "forecast_run_utc": captured,
             "captured_before_cutoff": True,
@@ -213,6 +216,8 @@ def select_exhibition_source(race: dict, research_row: dict | None, now: datetim
             "refresh_received_at_utc": race.get("_preview_refresh_received_at_utc"),
             "metrics": [],
         }}
+        if official:
+            return live, None, "official"
         # The OpenAPI six-boat preview remains canonical. It does not include
         # the optional original-exhibition lap/turn/straight measurements.
         # Enrich ONLY when an independently captured CSV preview satisfies
@@ -273,7 +278,7 @@ def numeric_exhibition_matches_snapshot(candidate: dict, snapshot: dict) -> bool
     if snapshot.get("phase") != "exhibition" or not preview_complete(candidate):
         return False
     origin = candidate.get("_exhibition_origin") or {}
-    if (origin.get("source") not in ("BoatraceOpenAPI", "BoatraceCSV")
+    if (origin.get("source") not in ("BoatraceOpenAPI", "BoatraceCSV", "BOATRACE_official")
             or origin.get("captured_before_cutoff") is not True):
         return False
     applied = snapshot.get("racers")
@@ -437,7 +442,7 @@ def numeric_exhibition_coverage(records: dict, day: str) -> dict:
     grouped = {}
     totals = {
         "listed_races": 0, "verified_exhibition": 0, "baseline_or_unverified": 0,
-        "six_boat_input_checked": 0, "openapi_source": 0,
+        "six_boat_input_checked": 0, "openapi_source": 0, "official_source": 0,
         "csv_source": 0, "unknown_source": 0, "actual_ticket_changes": 0,
     }
     for rec in records.values():
@@ -455,7 +460,8 @@ def numeric_exhibition_coverage(records: dict, day: str) -> dict:
             origin = (latest.get("exhibition_origin") or {}).get("source")
             source_key = (
                 "openapi_source" if origin == "BoatraceOpenAPI" else
-                "csv_source" if origin == "BoatraceCSV" else "unknown_source")
+                "csv_source" if origin == "BoatraceCSV" else
+                "official_source" if origin == "BOATRACE_official" else "unknown_source")
             row[source_key] += 1
             row["actual_ticket_changes"] += int(bool(
                 (latest.get("exhibition_change") or {}).get("bets_changed")))
@@ -2072,7 +2078,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 # the same live OpenAPI six-boat preview before cutoff.
                 original_v1_attached = False
                 original_raw = original_captures.get(key)
-                if original_raw and selected_source == "openapi":
+                if original_raw and selected_source in ("openapi", "official"):
                     try:
                         candidate = attach_to_live_race(
                             candidate, original_raw, venue_code=f"{int(venue_code):02d}",
@@ -2095,7 +2101,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 # Compare the actual six-boat source input against the most
                 # recently frozen version, not just a CSV timestamp.
                 live_measurements_changed = bool(
-                    selected_source == "openapi" and existing_exhibition
+                    selected_source in ("openapi", "official") and existing_exhibition
                     and not numeric_exhibition_matches_snapshot(candidate, existing_exhibition[-1]))
                 original_v1_gain = bool(
                     original_v1_attached and existing_exhibition
@@ -2110,7 +2116,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                     or (original_v1_gain and len(existing_exhibition) < 5)
                 )
                 if preview_ready and ("exhibition" not in phases or revision):
-                    origin_url = selected_csv_origin and "https://boatracecsv.github.io/docs/data/previews.html" or source_url
+                    origin_url = (race.get("_preview_refresh_source_url") if selected_source == "official" else
+                                  selected_csv_origin and "https://boatracecsv.github.io/docs/data/previews.html" or source_url)
                     prediction_now = datetime.now(UTC) if enforce_wall_clock else now
                     site_wave = wave_for_race(site_wave_snapshot, venue_code, n, cutoff, prediction_now)
                     new = prediction(candidate, VENUES[venue_code], n,
@@ -2833,11 +2840,12 @@ def refresh_missing_previews(payload: dict, day: str, now: datetime) -> dict:
             if (cutoff and cutoff.date() == now.astimezone(JST).date()
                     and timedelta(minutes=4) < cutoff - now <= timedelta(minutes=30)):
                 targets[(code, n)] = race
-    status = {"target_count": len(targets), "updated": [], "attempts": []}
+    status = {"target_count": len(targets), "updated": [], "attempts": [],
+              "official_attempts": {}, "remaining_race_ids": []}
     if not targets:
         return status
     endpoints = (
-        f"https://raw.githubusercontent.com/boatraceopenapi/api/gh-pages/v1/{day[:4]}/{day}.json",
+        f"https://raw.githubusercontent.com/boatraceopenapi/api/gh-pages/docs/v1/{day[:4]}/{day}.json",
         f"{SOURCE}/{day[:4]}/{day}.json",
     )
     for endpoint in endpoints:
@@ -2879,7 +2887,33 @@ def refresh_missing_previews(payload: dict, day: str, now: datetime) -> dict:
                 updated += 1
             status["attempts"].append({"source": endpoint, "status": "OK", "updated": updated})
         except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
-            status["attempts"].append({"source": endpoint, "status": type(exc).__name__})
+            status["attempts"].append({"source": endpoint, "status": type(exc).__name__,
+                                       "http_code": getattr(exc, "code", None)})
+    # Independent official route: earliest cutoff first, strictly bounded per run.
+    for (code, n), race in sorted(targets.items(), key=lambda item: cutoff_of(item[1]))[:3]:
+        key = f"{code}-{n}"
+        cutoff = cutoff_of(race)
+        if datetime.now(UTC) >= cutoff - timedelta(minutes=4):
+            status["official_attempts"][key] = "TOO_CLOSE_TO_CUTOFF"
+            continue
+        try:
+            preview, url, received = fetch_official_preview(day, code, n, race["racers"])
+            if received is None or received >= cutoff - timedelta(minutes=3):
+                status["official_attempts"][key] = "IDENTITY_OR_CUTOFF_GATE"
+                continue
+            if validated_preview(preview) is None:
+                status["official_attempts"][key] = "INCOMPLETE_OR_NAME_MISMATCH"
+                continue
+            race["preview"] = preview
+            race["_preview_refresh_source"] = "BOATRACE_official"
+            race["_preview_refresh_source_url"] = url
+            race["_preview_refresh_received_at_utc"] = received.isoformat()
+            status["official_attempts"][key] = "VERIFIED_SIX_BOAT"
+            status["updated"].append(key)
+            del targets[(code, n)]
+        except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
+            status["official_attempts"][key] = f"{type(exc).__name__}:{getattr(exc, 'code', '')}"
+    status["remaining_race_ids"] = [f"{code}-{n}" for code, n in targets]
     status["remaining"] = len(targets)
     return status
 

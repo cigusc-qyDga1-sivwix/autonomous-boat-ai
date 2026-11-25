@@ -280,6 +280,8 @@ def collect_candidates(payload: dict, previous: dict | None, now: datetime,
     today = now.astimezone(__import__("zoneinfo").ZoneInfo("Asia/Tokyo")).date()
     records = (previous or {}).get("race_records") or {}
     targets = []
+    excluded = {"outside_time_window": 0, "normal_exhibition_incomplete": 0,
+                "already_frozen": 0}
     for raw_code, stadium in active.items():
         try:
             code = f"{int(raw_code):02d}"
@@ -298,12 +300,15 @@ def collect_candidates(payload: dict, previous: dict | None, now: datetime,
                 continue
             lead = cutoff - now
             if not timedelta(minutes=4) <= lead <= timedelta(minutes=20):
+                excluded["outside_time_window"] += 1
                 continue
             if validated_preview(race.get("preview")) is None:
+                excluded["normal_exhibition_incomplete"] += 1
                 continue
             versions = (records.get(f"{int(code)}-{number}") or {}).get("versions") or []
             if any((v.get("original_exhibition_formal_v1") or {}).get("formal_component")
                    for v in versions):
+                excluded["already_frozen"] += 1
                 continue
             targets.append((cutoff, code, number))
     targets.sort()
@@ -325,6 +330,7 @@ def collect_candidates(payload: dict, previous: dict | None, now: datetime,
         "captured_six_boat": len(captured),
         "failures": failures,
         "eligible_targets": len(targets),
+        "excluded_target_counts": excluded,
         "requests_capped_per_run": MAX_REQUESTS_PER_RUN,
         "formal_eligibility_requires_same_race_6_names_and_freeze": True,
         "historical_results_used": False,

@@ -1,8 +1,11 @@
 name: BOAT LAB one-off retrospective exhibition replay
 
-# Only a deliberate code merge that creates/changes THIS workflow runs it,
-# or a human-triggered dispatch. Never convert old forecasts to formal picks.
+# Preserve the workflow name for the existing nationwide workflow_run dependency.
+# Replay today's late-captured exhibition data after racing, research only.
+# Never convert retrospective forecasts into formal picks.
 on:
+  schedule:
+    - cron: '30 13 * * *' # 22:30 JST, best effort
   workflow_dispatch:
   push:
     branches: [main]

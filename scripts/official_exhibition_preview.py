@@ -19,6 +19,7 @@ class BeforeInfo(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.rows = []
+        self.row_stack = []
         self.row = None
         self.cell = None
         self.span = None
@@ -26,7 +27,9 @@ class BeforeInfo(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         if tag == "tr":
+            self.row_stack.append((self.row, self.cell))
             self.row = []
+            self.cell = None
         elif tag == "td" and self.row is not None:
             self.cell = []
         elif tag == "span":
@@ -48,8 +51,7 @@ class BeforeInfo(HTMLParser):
             self.cell = None
         elif tag == "tr" and self.row is not None:
             self.rows.append(self.row)
-            self.row = None
-            self.cell = None
+            self.row, self.cell = self.row_stack.pop() if self.row_stack else (None, None)
         elif tag == "span" and self.span is not None:
             kind, value = self.span
             self.start_values.append((kind, norm("".join(value))))

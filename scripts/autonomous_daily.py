@@ -2814,8 +2814,10 @@ def retrieve(day: str) -> tuple[dict, str]:
     return json.loads(raw), url
 
 
-def refresh_missing_previews(payload: dict, day: str, now: datetime) -> dict:
-    """One bounded last-mile retry for imminent races; never copy results.
+def refresh_missing_previews(payload: dict, day: str, now: datetime, *, first_only: bool = False) -> dict:
+    """Bounded preview retry for imminent races; never copy results.
+
+    First races receive an early pass before slower auxiliary collection.
     
     The primary Pages JSON may be cached. The upstream gh-pages raw file
     provides a second delivery path, not an independent measurement source.
@@ -2827,13 +2829,18 @@ def refresh_missing_previews(payload: dict, day: str, now: datetime) -> dict:
         if code not in VENUES or code == "3" or not isinstance(stadium, dict):
             continue
         for n, race in (stadium.get("races") or {}).items():
+            if first_only and str(n) != "1":
+                continue
             if not isinstance(race, dict) or not valid_entrants(race) or preview_complete(race):
                 continue
             cutoff = cutoff_of(race)
+            lead_limit = timedelta(minutes=45 if str(n) == "1" else 30)
             if (cutoff and cutoff.date() == now.astimezone(JST).date()
-                    and timedelta(minutes=4) < cutoff - now <= timedelta(minutes=30)):
+                    and timedelta(minutes=4) < cutoff - now <= lead_limit):
                 targets[(code, n)] = race
-    status = {"target_count": len(targets), "updated": [], "attempts": []}
+    status = {"target_count": len(targets), "target_ids": [f"{c}-{n}" for c, n in targets],
+              "updated": [], "attempts": [], "remaining": 0, "remaining_ids": [],
+              "expired_ids": [], "first_only": first_only}
     if not targets:
         return status
     endpoints = (
@@ -2857,6 +2864,7 @@ def refresh_missing_previews(payload: dict, day: str, now: datetime) -> dict:
             for (code, n), race in list(targets.items()):
                 cutoff = cutoff_of(race)
                 if received >= cutoff - timedelta(minutes=3):
+                    status["expired_ids"].append(f"{code}-{n}")
                     del targets[(code, n)]
                     continue
                 candidate = ((stadiums.get(code) or {}).get("races") or {}).get(n)
@@ -2881,6 +2889,7 @@ def refresh_missing_previews(payload: dict, day: str, now: datetime) -> dict:
         except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
             status["attempts"].append({"source": endpoint, "status": type(exc).__name__})
     status["remaining"] = len(targets)
+    status["remaining_ids"] = [f"{c}-{n}" for c, n in targets]
     return status
 
 
@@ -2972,6 +2981,9 @@ def main():
             cutoff = cutoff_of(race)
             if cutoff is not None:
                 official_targets.append((code, int(race_number), cutoff))
+    # Prioritize the opening races before potentially slow weather/player I/O.
+    early_first_preview = (refresh_missing_previews(source, compact, datetime.now(UTC), first_only=True)
+                           if not args.input_json else {"status": "fixture_skipped"})
     nearby_forecasts = {}
     weather_site_wave = None
     weather_bridge_status = {"status": "fixture_skipped"}
@@ -3011,6 +3023,7 @@ def main():
     # Refresh immediately before the direct original-exhibition capture and build.
     preview_refresh = (refresh_missing_previews(source, compact, datetime.now(UTC))
                        if not args.input_json else {"status": "fixture_skipped"})
+    preview_refresh["early_first_race_pass"] = early_first_preview
     original_captures = {}
     original_status = {"status": "SKIPPED_NO_FRESH_LEARNED_MODEL" if ACTIVE_LEARNED_MODEL is None
                        else "SKIPPED_FIXTURE", "attempted": 0, "captured_six_boat": 0}

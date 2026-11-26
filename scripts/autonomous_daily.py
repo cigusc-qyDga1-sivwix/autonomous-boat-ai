@@ -203,8 +203,10 @@ def select_exhibition_source(race: dict, research_row: dict | None, now: datetim
                 or now.astimezone(JST) >= cutoff - timedelta(seconds=SAFE_MARGIN_SECONDS)):
             return race, None, "unavailable"
         captured = now.astimezone(UTC).isoformat()
+        is_official = bool(race.get("_official_preview_response_sha256"))
         live = {**race, "_exhibition_origin": {
-            "source": "BoatraceOpenAPI",
+            "source": "BOATRACE_official_beforeinfo" if is_official else "BoatraceOpenAPI",
+            "response_sha256": race.get("_official_preview_response_sha256"),
             "captured_at_utc": captured,
             "forecast_run_utc": captured,
             "captured_before_cutoff": True,
@@ -221,6 +223,8 @@ def select_exhibition_source(race: dict, research_row: dict | None, now: datetim
         # canonical OpenAPI observations with stale/mismatched CSV values.
         # No CSV six-boat row: keep the canonical OpenAPI unchanged and
         # avoid unnecessary fallback calls (including unrelated source errors).
+        if is_official:
+            return live, None, "official_beforeinfo"
         if (not isinstance(research_row, dict)
                 or not isinstance(research_row.get("boats"), list)
                 or len(research_row["boats"]) != 6):
@@ -2095,7 +2099,7 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                 # Compare the actual six-boat source input against the most
                 # recently frozen version, not just a CSV timestamp.
                 live_measurements_changed = bool(
-                    selected_source == "openapi" and existing_exhibition
+                    selected_source in ("openapi", "official_beforeinfo") and existing_exhibition
                     and not numeric_exhibition_matches_snapshot(candidate, existing_exhibition[-1]))
                 original_v1_gain = bool(
                     original_v1_attached and existing_exhibition
@@ -2110,7 +2114,8 @@ def build(existing: dict | None, payload: dict, now: datetime, source_url: str,
                     or (original_v1_gain and len(existing_exhibition) < 5)
                 )
                 if preview_ready and ("exhibition" not in phases or revision):
-                    origin_url = selected_csv_origin and "https://boatracecsv.github.io/docs/data/previews.html" or source_url
+                    origin_url = (candidate.get("_preview_refresh_source_url") if selected_source == "official_beforeinfo"
+                                  else selected_csv_origin and "https://boatracecsv.github.io/docs/data/previews.html" or source_url)
                     prediction_now = datetime.now(UTC) if enforce_wall_clock else now
                     site_wave = wave_for_race(site_wave_snapshot, venue_code, n, cutoff, prediction_now)
                     new = prediction(candidate, VENUES[venue_code], n,
@@ -3032,6 +3037,14 @@ def main():
                        if not args.input_json else {"status": "fixture_skipped"})
     preview_refresh["early_first_race_pass"] = early_first_preview
     preview_refresh["karatsu_official_shadow"] = karatsu_official
+    official_fallback = {"status": "fixture_skipped"}
+    if not args.input_json:
+        try:
+            from scripts.official_preview_fallback import collect as collect_official_preview
+            official_fallback = collect_official_preview(source, datetime.now(UTC), cutoff_of, valid_entrants, preview_complete)
+        except Exception as exc:
+            official_fallback = {"status": "UNAVAILABLE", "reason": type(exc).__name__}
+    preview_refresh["national_official_fallback"] = official_fallback
     original_captures = {}
     original_status = {"status": "SKIPPED_FIXTURE", "attempted": 0, "captured_six_boat": 0}
     # Acquisition and evidence must not stop because model training is stale.

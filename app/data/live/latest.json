@@ -8,15 +8,15 @@
   ],
   "exhibition_changed_bet_count": 0,
   "exhibition_input_mismatch_rejected_this_run": 0,
-  "exhibition_input_verified_race_count": 100,
-  "exhibition_race_count": 100,
+  "exhibition_input_verified_race_count": 101,
+  "exhibition_race_count": 101,
   "exhibition_similarity_audit": {
-    "different_model_baseline_pairs": 100,
-    "formal_exhibition_races": 100,
+    "different_model_baseline_pairs": 101,
+    "formal_exhibition_races": 101,
     "formal_venue_original_v1_overlay_races": 0,
     "learned_primary_feature_contract": "conditional-choice-v1 and independently versioned original-exhibition venue profile",
     "learned_primary_uses_original_turn_lap_straight_features": false,
-    "matched_six_boat_exhibition": 100,
+    "matched_six_boat_exhibition": 101,
     "note": "Identical tickets may be valid. Pre/post differences combine all changed before-race inputs, not just exhibition. The learned primary currently uses exhibition_time and exhibition_st, not original turn/lap/straight metrics. No postrace data used.",
     "original_v1_different_policy_baseline_pairs": 0,
     "original_v1_formal_overlay_races": 0,
@@ -37,7 +37,7 @@
     "six_boat_lap_metric_available": 0,
     "six_boat_straight_metric_available": 0,
     "six_boat_turn_metric_available": 0,
-    "with_baseline_snapshot": 100
+    "with_baseline_snapshot": 101
   },
   "expert_scenario_portfolio_study": {
     "formal_experiment_races": 0,
@@ -48,7 +48,7 @@
     "version": "expert-scenario-portfolio-shadow-v0.1",
     "virtual_budget_yen_each": 50000
   },
-  "final_exhibition_verified_races": 100,
+  "final_exhibition_verified_races": 101,
   "forecast_races": [
     {
       "bets": [
@@ -615114,7 +615114,7 @@
           {
             "follower_course": 2,
             "follower_lane": 2,
-            "follower_readiness": 0.4344,
+            "follower_readiness": 0.4149,
             "head_course": 1,
             "head_lane": 1,
             "inside": [],
@@ -615140,28 +615140,28 @@
           {
             "follower_course": 4,
             "follower_lane": 4,
-            "follower_readiness": 0.7408,
+            "follower_readiness": 0.7314,
             "head_course": 3,
             "head_lane": 3,
             "inside": [
               {
                 "course": 1,
                 "lane": 1,
-                "risk": 0.2858
+                "risk": 0.3348
               },
               {
                 "course": 2,
                 "lane": 2,
-                "risk": 0.4239
+                "risk": 0.5092
               }
             ],
-            "pressure": 0.4692,
+            "pressure": 0.5432,
             "tactic": "外からのまくり"
           },
           {
             "follower_course": 5,
             "follower_lane": 5,
-            "follower_readiness": 0.5959,
+            "follower_readiness": 0.5995,
             "head_course": 4,
             "head_lane": 4,
             "inside": [
@@ -615187,7 +615187,7 @@
           {
             "follower_course": 6,
             "follower_lane": 6,
-            "follower_readiness": 0.6668,
+            "follower_readiness": 0.6705,
             "head_course": 5,
             "head_lane": 5,
             "inside": [
@@ -615255,29 +615255,45 @@
       },
       "coverage_reselection_shadow": {
         "calibrated": false,
+        "candidate_review": [
+          {
+            "candidate": "3-1-4",
+            "decision": "REJECT",
+            "reason": "relative_score_below_model_floor"
+          },
+          {
+            "candidate": "3-4-1",
+            "decision": "REJECT",
+            "reason": "relative_score_below_model_floor"
+          },
+          {
+            "candidate": "3-1-5",
+            "decision": "REJECT",
+            "reason": "relative_score_below_model_floor"
+          }
+        ],
         "formal_bets_sha256": "9a69fc8f8b92431386be4d71a145e2a23aaf1269395a7f82a068da2dd6b29ff8",
         "formal_bets_unchanged": true,
-        "frozen_at_utc": "2026-11-25T17:29:14.702505+00:00",
+        "frozen_at_utc": "2026-11-26T10:45:43.643956+00:00",
         "model_role": "research_shadow",
         "no_additional_stake": true,
         "not_formal": true,
         "notes": "Scenario top-3 is a model hypothesis, not independent observed evidence. Never promote without matched forward testing.",
         "odds_used": false,
         "prospective_comparison_only": true,
-        "reason": "six_boat_pre_cutoff_exhibition_unverified",
         "results_used": false,
         "same_point_count": true,
         "score_floor_vs_best": 0.45,
         "score_floor_vs_victim": 0.75,
         "selection_gate": "pre_cutoff_exhibition_and_scenario_top3_only",
-        "status": "NOT_ELIGIBLE",
+        "status": "NO_QUALIFIED_SWAP",
         "version": "coverage-reselection-shadow-v0.1-untrained",
         "virtual_budget_yen": 50000
       },
       "cutoff_jst": "19:57",
       "data_quality": {
         "average_start_timing_imputed_count": 0,
-        "exhibition_f_count": 0,
+        "exhibition_f_count": 2,
         "motor_zero_percent_count": 6,
         "notes": "平均STの0.00は中立補完、展示Fは速いSTとして加点しない",
         "original_exhibition_metrics": []
@@ -615287,40 +615303,296 @@
         "entry_changed": false,
         "entry_watch": false,
         "entry_watch_racers": [],
-        "exhibition_course_order": null,
-        "exhibition_source": null,
-        "exhibition_verified_before_cutoff": false,
-        "final_eligible": false,
+        "exhibition_course_order": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "exhibition_source": "BoatraceOpenAPI",
+        "exhibition_verified_before_cutoff": true,
+        "final_eligible": true,
         "limitation": "前付け候補の選手リストは網羅的ではない。展示未取得は全レース最終予想保留。",
-        "reason": "展示6艇の進入・ST・タイムの発走前固定が未確認",
-        "status": "hold"
+        "reason": "展示6艇の進入を発走前に検証済み",
+        "status": "verified"
       },
-      "evidence": "近隣予報（現地実測ではない）・展示前",
-      "exhibition_origin": null,
-      "formal_head_risk_v25": {
-        "formal_component": false,
-        "frozen_at_utc": "2026-11-25T17:29:14.702505+00:00",
+      "evidence": "展示・場内気象あり・展示あり",
+      "exhibition_input_check": {
+        "matched_fields": [
+          "course",
+          "exhibition_time",
+          "exhibition_st"
+        ],
+        "no_result_or_payout_used": true,
+        "original_metrics_matched": [],
+        "six_boats_matched": 6,
+        "source": "openapi",
+        "verified_before_freeze": true
+      },
+      "exhibition_origin": {
+        "captured_at_utc": "2026-11-26T10:45:43.520967+00:00",
+        "captured_before_cutoff": true,
+        "forecast_run_utc": "2026-11-26T10:45:43.520967+00:00",
+        "metrics": [],
+        "refresh_received_at_utc": null,
+        "source": "BoatraceOpenAPI",
+        "source_observation_time": "not_provided",
+        "source_url": null
+      },
+      "formal_conditional_v26": {
+        "actual_ticket_or_allocation_changed": false,
+        "adjusted_outcome_count": 0,
+        "calibrated": false,
+        "control_bets": [
+          {
+            "combination": "1-3-4",
+            "virtual_yen": 8000
+          },
+          {
+            "combination": "1-4-3",
+            "virtual_yen": 8000
+          },
+          {
+            "combination": "1-3-5",
+            "virtual_yen": 6000
+          },
+          {
+            "combination": "1-4-5",
+            "virtual_yen": 6000
+          },
+          {
+            "combination": "1-3-6",
+            "virtual_yen": 6000
+          },
+          {
+            "combination": "1-4-6",
+            "virtual_yen": 6000
+          },
+          {
+            "combination": "1-3-2",
+            "virtual_yen": 5000
+          },
+          {
+            "combination": "1-4-2",
+            "virtual_yen": 5000
+          }
+        ],
+        "control_generated_pre_cutoff": true,
+        "control_model": "four-factor-v2.5-evidence-head-switch-untrained",
+        "control_ranked_sha256": "d6319ee39646457270a232b42548256e9abdaed4e507540278499d216b31c760",
+        "evidence": [],
+        "frozen_at_utc": "2026-11-26T10:45:43.643956+00:00",
+        "generated_pre_cutoff": true,
+        "head_marginals_preserved": true,
+        "main_ranked_sha256": "d6319ee39646457270a232b42548256e9abdaed4e507540278499d216b31c760",
+        "max_candidate_multiplier": 1.25,
+        "model_role": "formal_primary",
         "no_additional_stake": true,
-        "reason": "six_boat_pre_cutoff_exhibition_unverified",
+        "no_backfilled_forecasts": true,
+        "odds_used": false,
         "result_data_used": false,
-        "status": "NOT_ELIGIBLE",
+        "same_point_count": true,
+        "same_virtual_budget_yen": 50000,
+        "status": "NO_COMPLETE_PRE_CUTOFF_SIX_BOAT_EVIDENCE",
+        "version": "conditional-one-mark-v2.6-forward-untrained"
+      },
+      "formal_head_risk_v25": {
+        "actual_ticket_or_allocation_changed": true,
+        "calibrated": false,
+        "control_bets": [
+          {
+            "combination": "1-3-4",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から4コース3着（攻め方未確定）",
+            "head_course": 1,
+            "relative_score": 0.047148,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 7000
+          },
+          {
+            "combination": "1-4-3",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から3コース3着（攻め方未確定）",
+            "head_course": 1,
+            "relative_score": 0.045662,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 7000
+          },
+          {
+            "combination": "1-3-5",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から5コース3着（攻め方未確定）",
+            "head_course": 1,
+            "relative_score": 0.037643,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 6000
+          },
+          {
+            "combination": "1-4-5",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から5コース3着（攻め方未確定）",
+            "head_course": 1,
+            "relative_score": 0.036062,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 6000
+          },
+          {
+            "combination": "1-3-6",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から6コース3着（攻め方未確定）",
+            "head_course": 1,
+            "relative_score": 0.033739,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 6000
+          },
+          {
+            "combination": "1-5-3",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 5コース2着 → 残り4艇から3コース3着（攻め方未確定）",
+            "head_course": 1,
+            "relative_score": 0.033499,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 5000
+          },
+          {
+            "combination": "3-1-4",
+            "conditional_reason": "3コース頭の条件で残り5艇を能力評価 → 1コース2着 → 残り4艇から4コース3着（攻め方未確定）",
+            "head_course": 3,
+            "relative_score": 0.017901,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 4000
+          },
+          {
+            "combination": "3-4-1",
+            "conditional_reason": "3コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から1コース3着（攻め方未確定）",
+            "head_course": 3,
+            "relative_score": 0.016116,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 3000
+          },
+          {
+            "combination": "4-1-3",
+            "conditional_reason": "4コース頭の条件で残り5艇を能力評価 → 1コース2着 → 残り4艇から3コース3着（攻め方未確定）",
+            "head_course": 4,
+            "relative_score": 0.011571,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 3000
+          },
+          {
+            "combination": "4-3-1",
+            "conditional_reason": "4コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から1コース3着（攻め方未確定）",
+            "head_course": 4,
+            "relative_score": 0.01067,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 3000
+          }
+        ],
+        "control_frozen_at_utc": "2026-11-26T10:45:43.643956+00:00",
+        "control_ranked_sha256": "d6319ee39646457270a232b42548256e9abdaed4e507540278499d216b31c760",
+        "formal_component": true,
+        "frozen_at_utc": "2026-11-26T10:45:43.643956+00:00",
+        "inside_head_rebalance": {
+          "applied": false,
+          "attacker_multiplier": 1,
+          "attacking_course": null,
+          "attacking_lane": null,
+          "calibrated": false,
+          "final_head_multiplier": 1,
+          "inside_lane": 1,
+          "odds_used": false,
+          "pre_cutoff_only": true,
+          "prior_v24_multiplier": 1,
+          "reason": "no_independent_legal_start_and_turn_support",
+          "reduction_vs_v24": 0,
+          "requested": true,
+          "result_data_used": false,
+          "version": "inside-challenger-head-switch-v2.5-forward"
+        },
+        "main_ranked_sha256": "d6319ee39646457270a232b42548256e9abdaed4e507540278499d216b31c760",
+        "no_additional_stake": true,
+        "odds_used": false,
+        "pre_cutoff_only": true,
+        "prior_model": "four-factor-v2.4-entry-exhibition-balance-untrained",
+        "result_data_used": false,
+        "same_point_count": false,
         "version": "four-factor-v2.5-evidence-head-switch-untrained"
       },
       "formal_insight_v24": {
-        "formal_component": false,
-        "frozen_at_utc": "2026-11-25T17:29:14.702505+00:00",
+        "actual_ticket_or_allocation_changed": false,
+        "calibrated": false,
+        "control_bets": [
+          {
+            "combination": "1-3-4",
+            "virtual_yen": 8000
+          },
+          {
+            "combination": "1-4-3",
+            "virtual_yen": 8000
+          },
+          {
+            "combination": "1-3-5",
+            "virtual_yen": 6000
+          },
+          {
+            "combination": "1-4-5",
+            "virtual_yen": 6000
+          },
+          {
+            "combination": "1-3-6",
+            "virtual_yen": 6000
+          },
+          {
+            "combination": "1-4-6",
+            "virtual_yen": 6000
+          },
+          {
+            "combination": "1-3-2",
+            "virtual_yen": 5000
+          },
+          {
+            "combination": "1-4-2",
+            "virtual_yen": 5000
+          }
+        ],
+        "control_frozen_at_utc": "2026-11-26T10:45:43.643956+00:00",
+        "control_ranked_sha256": "d6319ee39646457270a232b42548256e9abdaed4e507540278499d216b31c760",
+        "exhibition_balance": {
+          "applied": false,
+          "calibrated": false,
+          "exhibition_time_not_a_solo_head_signal": true,
+          "method": "redistribution_within_existing_10pct_exhibition_factor",
+          "metric_mix": null,
+          "original_four_factor_weights_unchanged": true,
+          "requested": true,
+          "result_data_used": false
+        },
+        "formal_component": true,
+        "frozen_at_utc": "2026-11-26T10:45:43.643956+00:00",
+        "inside_pressure": {
+          "applied": false,
+          "attacking_course": null,
+          "attacking_lane": null,
+          "head_multiplier": 1,
+          "inside_lane": 1,
+          "pre_cutoff_only": true,
+          "reason": "no_independent_st_and_turn_advantage",
+          "requested": true,
+          "result_data_used": false,
+          "version": "inside-head-pressure-v2.4-forward"
+        },
+        "main_ranked_sha256": "d6319ee39646457270a232b42548256e9abdaed4e507540278499d216b31c760",
         "no_additional_stake": true,
-        "reason": "six_boat_pre_cutoff_exhibition_unverified",
+        "odds_used": false,
+        "old_control_result_data_used": false,
+        "pre_cutoff_only": true,
+        "prior_model": "four-factor-v2.3-conditional-second-primary-untrained",
         "result_data_used": false,
-        "status": "NOT_ELIGIBLE",
+        "same_point_count": true,
         "version": "four-factor-v2.4-entry-exhibition-balance-untrained"
       },
-      "formal_snapshot_sha256": null,
+      "formal_snapshot_sha256": "2d2a7507471e5793b5b485e71a7d7f9199d062304614798e9d7ea41237552b46",
       "four_factor": {
         "calibrated": false,
         "chaser_policy": {
           "calibrated": false,
           "fixed_neighbor_bonus": false,
+          "inside_retention_policy": "conditional-course1-pack-v1",
           "interaction_bounds": [
             0.95,
             1.05
@@ -615332,32 +615604,32 @@
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.15830868992455044,
-                  "weight": 0.6655184223989975
+                  "relative_share": 0.15200471657876843,
+                  "weight": 0.6408094047878153
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.2516589626458956,
-                  "weight": 1.057956299698311
+                  "relative_share": 0.2553039233765783,
+                  "weight": 1.0762899919237803
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.24572235958417926,
-                  "weight": 1.032999244555441
+                  "relative_share": 0.24542697033279326,
+                  "weight": 1.034651518174018
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.18513912498903215,
-                  "weight": 0.7783116545639709
+                  "relative_share": 0.18617643982513588,
+                  "weight": 0.7848678401241388
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.1591708628563425,
-                  "weight": 0.6691429358080518
+                  "relative_share": 0.16108794988672395,
+                  "weight": 0.6791017779498258
                 }
               ],
               "head_course": 1
@@ -615367,32 +615639,32 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.25409360526353986,
-                  "weight": 1.534292679846529
+                  "relative_share": 0.2561359169458136,
+                  "weight": 1.5864356728257203
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.22839684960995865,
-                  "weight": 1.3791280346985235
+                  "relative_share": 0.2263495723155075,
+                  "weight": 1.401947217446012
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.22236534774960656,
-                  "weight": 1.3427080345052058
+                  "relative_share": 0.21763520619887028,
+                  "weight": 1.3479728219830682
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.16141360470286395,
-                  "weight": 0.9746633012128849
+                  "relative_share": 0.16340483324956695,
+                  "weight": 1.012084754338036
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.1337305926740308,
-                  "weight": 0.807505049953908
+                  "relative_share": 0.13647447129024173,
+                  "weight": 0.8452854729103535
                 }
               ],
               "head_course": 2
@@ -615402,32 +615674,32 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.2846288154185344,
-                  "weight": 1.2836397193400053
+                  "relative_share": 0.295063619828008,
+                  "weight": 1.3392739433173577
                 },
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.15005477725023125,
-                  "weight": 0.6767279408161114
+                  "relative_share": 0.14207511020262573,
+                  "weight": 0.6448693783368857
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.23829119056871564,
-                  "weight": 1.0746629308527265
+                  "relative_share": 0.23531452774466138,
+                  "weight": 1.068076829248401
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.17592895542998951,
-                  "weight": 0.7934171901740155
+                  "relative_share": 0.17567049055466294,
+                  "weight": 0.7973565522810878
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.1510962613325293,
-                  "weight": 0.6814249014282416
+                  "relative_share": 0.15187625167004215,
+                  "weight": 0.6893561008604197
                 }
               ],
               "head_course": 3
@@ -615437,32 +615709,32 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.2784460877793836,
-                  "weight": 1.243302336941778
+                  "relative_share": 0.28832395527987825,
+                  "weight": 1.3078078998697529
                 },
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.15112433716200216,
-                  "weight": 0.67479217632666
+                  "relative_share": 0.14219697749938595,
+                  "weight": 0.6449909107648704
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.24118801984611005,
-                  "weight": 1.0769396370712132
+                  "relative_share": 0.2416417613239617,
+                  "weight": 1.0960622543179057
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.17710685491912725,
-                  "weight": 0.7908079024038023
+                  "relative_share": 0.175827241810195,
+                  "weight": 0.7975343416348107
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.15213470029337686,
-                  "weight": 0.679303594865222
+                  "relative_share": 0.1520100640865789,
+                  "weight": 0.6895020654081923
                 }
               ],
               "head_course": 4
@@ -615472,32 +615744,32 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.26937169955608115,
-                  "weight": 1.4184805556196807
+                  "relative_share": 0.27714692712466993,
+                  "weight": 1.473707905285609
                 },
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.13488097267309107,
-                  "weight": 0.7102677726544787
+                  "relative_share": 0.1273254997981814,
+                  "weight": 0.6770437527261998
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.23192478134590203,
-                  "weight": 1.2212893679910006
+                  "relative_share": 0.2338633743010139,
+                  "weight": 1.2435508740428434
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.22743487918769273,
-                  "weight": 1.197646056839345
+                  "relative_share": 0.22475026735168335,
+                  "weight": 1.1950926144031817
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.1363876672372331,
-                  "weight": 0.7182018538739069
+                  "relative_share": 0.13691393142445143,
+                  "weight": 0.7280295155254688
                 }
               ],
               "head_course": 5
@@ -615507,32 +615779,32 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.2624787081599978,
-                  "weight": 1.49161429072351
+                  "relative_share": 0.2700593654651837,
+                  "weight": 1.5427842970842223
                 },
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.1282363563065492,
-                  "weight": 0.7287417063199031
+                  "relative_share": 0.12132841690572917,
+                  "weight": 0.6931201073875688
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.22856750980197052,
-                  "weight": 1.2989036954871152
+                  "relative_share": 0.23068116551247933,
+                  "weight": 1.317826097875585
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.2241800695963547,
-                  "weight": 1.2739707454727383
+                  "relative_share": 0.22168970104291696,
+                  "weight": 1.2664600207631067
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.15653735613512784,
-                  "weight": 0.8895706591976322
+                  "relative_share": 0.15624135107369064,
+                  "weight": 0.8925693155521723
                 }
               ],
               "head_course": 6
@@ -615544,26 +615816,26 @@
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.28930659199499725,
-                  "weight": 1.3113030462981465
+                  "relative_share": 0.2879326997372705,
+                  "weight": 1.3298932829707921
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.2893144500319587,
-                  "weight": 1.3113386634188435
+                  "relative_share": 0.284947965935195,
+                  "weight": 1.3161075009513898
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.22633881694816962,
-                  "weight": 1.0258970530639886
+                  "relative_share": 0.22733487468241356,
+                  "weight": 1.050006210135272
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.19504014102487457,
-                  "weight": 0.884033541416024
+                  "relative_share": 0.19978445964512082,
+                  "weight": 0.9227573358858896
                 }
               ],
               "head_course": 1,
@@ -615574,26 +615846,26 @@
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.20653627084610654,
-                  "weight": 0.690576618057289
+                  "relative_share": 0.1995625300291295,
+                  "weight": 0.6623783457773079
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.3180385713584098,
-                  "weight": 1.0633967589359266
+                  "relative_share": 0.31839067318604236,
+                  "weight": 1.0567869999699369
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.25138830852580224,
-                  "weight": 0.8405443131596247
+                  "relative_share": 0.25420510357984255,
+                  "weight": 0.8437453462470508
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.22403684926968143,
-                  "weight": 0.7490917166997147
+                  "relative_share": 0.2278416932049855,
+                  "weight": 0.756241183263162
                 }
               ],
               "head_course": 1,
@@ -615604,26 +615876,26 @@
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.20706191254899278,
-                  "weight": 0.6886530232520036
+                  "relative_share": 0.19886392844368064,
+                  "weight": 0.6624998663001511
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.31646553331199745,
-                  "weight": 1.0525110271972362
+                  "relative_share": 0.32076295332563404,
+                  "weight": 1.0685970822127095
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.251921518421843,
-                  "weight": 0.8378485118183624
+                  "relative_share": 0.25332382245691043,
+                  "weight": 0.8439288101254416
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.2245510357171668,
-                  "weight": 0.7468188993203027
+                  "relative_share": 0.2270492957737748,
+                  "weight": 0.7563972474589281
                 }
               ],
               "head_course": 1,
@@ -615634,26 +615906,26 @@
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.18557587953240554,
-                  "weight": 0.7239049146991053
+                  "relative_share": 0.17824743818324096,
+                  "weight": 0.694548950803181
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.30506383891056066,
-                  "weight": 1.190010322681877
+                  "relative_share": 0.31021123313380194,
+                  "weight": 1.2087516583489426
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.30722660230640286,
-                  "weight": 1.1984469527844874
+                  "relative_share": 0.306849776156792,
+                  "weight": 1.1956535939933013
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.20213367925063097,
-                  "weight": 0.7884945188159151
+                  "relative_share": 0.20469155252616517,
+                  "weight": 0.797589600694127
                 }
               ],
               "head_course": 1,
@@ -615664,26 +615936,26 @@
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.1777187213828133,
-                  "weight": 0.7422617947768819
+                  "relative_share": 0.17090558513738605,
+                  "weight": 0.710622964652883
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.29803935328551184,
-                  "weight": 1.2447941531568947
+                  "relative_share": 0.30289270174805344,
+                  "weight": 1.2594234969845837
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.2992303812463984,
-                  "weight": 1.2497686124879002
+                  "relative_share": 0.2996732146426045,
+                  "weight": 1.2460369159100289
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.22501154408527643,
-                  "weight": 0.9397854725642122
+                  "relative_share": 0.22652849847195602,
+                  "weight": 0.9419022382042298
                 }
               ],
               "head_course": 1,
@@ -615694,26 +615966,26 @@
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.28475389039156485,
-                  "weight": 1.0343958329723162
+                  "relative_share": 0.28646310463414504,
+                  "weight": 1.049774051174276
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.28556157862508796,
-                  "weight": 1.0373298379895899
+                  "relative_share": 0.28343997296606643,
+                  "weight": 1.0386954685327687
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.2270931993286656,
-                  "weight": 0.824937839335247
+                  "relative_share": 0.22672511962008055,
+                  "weight": 0.8308579481134849
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.20259133165468154,
-                  "weight": 0.7359324537120452
+                  "relative_share": 0.203371802779708,
+                  "weight": 0.7452772725176366
                 }
               ],
               "head_course": 2,
@@ -615724,26 +615996,26 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.30720465440820105,
-                  "weight": 1.1764282572067029
+                  "relative_share": 0.31336485044690127,
+                  "weight": 1.2124917290917852
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.2776883603623892,
-                  "weight": 1.0633967589359266
+                  "relative_share": 0.27312343025041785,
+                  "weight": 1.0567869999699369
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.2194941541544519,
-                  "weight": 0.8405443131596247
+                  "relative_share": 0.21806345387611384,
+                  "weight": 0.8437453462470508
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.19561283107495792,
-                  "weight": 0.7490917166997147
+                  "relative_share": 0.195448265426567,
+                  "weight": 0.756241183263162
                 }
               ],
               "head_course": 2,
@@ -615754,26 +616026,26 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.30689455010501665,
-                  "weight": 1.1676948875562505
+                  "relative_share": 0.3124801062831253,
+                  "weight": 1.2130345521735906
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.27662183128013795,
-                  "weight": 1.0525110271972362
+                  "relative_share": 0.2752727275783982,
+                  "weight": 1.0685970822127095
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.22020404887511122,
-                  "weight": 0.8378485118183624
+                  "relative_share": 0.2173977351352901,
+                  "weight": 0.8439288101254416
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.1962795697397341,
-                  "weight": 0.7468188993203027
+                  "relative_share": 0.1948494310031865,
+                  "weight": 0.7563972474589281
                 }
               ],
               "head_course": 2,
@@ -615784,26 +616056,26 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.2928771641544971,
-                  "weight": 1.3158345127581597
+                  "relative_share": 0.2962141883347751,
+                  "weight": 1.3476775046091223
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.26487133848700223,
-                  "weight": 1.190010322681877
+                  "relative_share": 0.2656788364809824,
+                  "weight": 1.2087516583489426
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.2667491553974993,
-                  "weight": 1.1984469527844874
+                  "relative_share": 0.26279993371040583,
+                  "weight": 1.1956535939933013
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.17550234196100123,
-                  "weight": 0.7884945188159151
+                  "relative_share": 0.17530704147383674,
+                  "weight": 0.797589600694127
                 }
               ],
               "head_course": 2,
@@ -615814,26 +616086,26 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.2843108622058706,
-                  "weight": 1.3643109237760807
+                  "relative_share": 0.28704341388342647,
+                  "weight": 1.3879424968294407
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.25940457764079955,
-                  "weight": 1.2447941531568947
+                  "relative_share": 0.26046411931710073,
+                  "weight": 1.2594234969845837
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.2604412129097541,
-                  "weight": 1.2497686124879002
+                  "relative_share": 0.2576956112984723,
+                  "weight": 1.2460369159100289
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.19584334724357585,
-                  "weight": 0.9397854725642122
+                  "relative_share": 0.19479685550100054,
+                  "weight": 0.9419022382042298
                 }
               ],
               "head_course": 2,
@@ -615844,26 +616116,26 @@
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.20729488285901546,
-                  "weight": 0.6794375110761129
+                  "relative_share": 0.2011229506712366,
+                  "weight": 0.6583021306623106
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.31648704074586304,
-                  "weight": 1.0373298379895899
+                  "relative_share": 0.3173398470850694,
+                  "weight": 1.0386954685327687
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.25168671140945104,
-                  "weight": 0.824937839335247
+                  "relative_share": 0.2538418065654917,
+                  "weight": 0.8308579481134849
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.22453136498567045,
-                  "weight": 0.7359324537120452
+                  "relative_share": 0.2276953956782022,
+                  "weight": 0.7452772725176366
                 }
               ],
               "head_course": 3,
@@ -615874,26 +616146,26 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.3034515382994662,
-                  "weight": 1.4033468815647785
+                  "relative_share": 0.3076335208867411,
+                  "weight": 1.4613171065393555
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.2835562182618109,
-                  "weight": 1.3113386634188435
+                  "relative_share": 0.27706428849104975,
+                  "weight": 1.3161075009513898
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.2218339905683443,
-                  "weight": 1.0258970530639886
+                  "relative_share": 0.22104518309637525,
+                  "weight": 1.050006210135272
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.19115825287037871,
-                  "weight": 0.884033541416024
+                  "relative_share": 0.1942570075258339,
+                  "weight": 0.9227573358858896
                 }
               ],
               "head_course": 3,
@@ -615904,26 +616176,26 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.34571537246138356,
-                  "weight": 1.2011925507955765
+                  "relative_share": 0.3582380252571187,
+                  "weight": 1.2631323175508815
                 },
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.19820130941749511,
-                  "weight": 0.6886530232520036
+                  "relative_share": 0.18789214759118936,
+                  "weight": 0.6624998663001511
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.24114128091924542,
-                  "weight": 0.8378485118183624
+                  "relative_share": 0.23934736384792857,
+                  "weight": 0.8439288101254416
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.21494203720187585,
-                  "weight": 0.7468188993203027
+                  "relative_share": 0.21452246330376334,
+                  "weight": 0.7563972474589281
                 }
               ],
               "head_course": 3,
@@ -615934,26 +616206,26 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.3267789392166868,
-                  "weight": 1.3158345127581597
+                  "relative_share": 0.3393553169519223,
+                  "weight": 1.3806461761344029
                 },
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.17977707517586383,
-                  "weight": 0.7239049146991053
+                  "relative_share": 0.17071635254034398,
+                  "weight": 0.694548950803181
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.29762650252841005,
-                  "weight": 1.1984469527844874
+                  "relative_share": 0.2938851469464417,
+                  "weight": 1.1956535939933013
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.19581748307903918,
-                  "weight": 0.7884945188159151
+                  "relative_share": 0.196043183561292,
+                  "weight": 0.797589600694127
                 }
               ],
               "head_course": 3,
@@ -615964,26 +616236,26 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.3175676571350793,
-                  "weight": 1.3643109237760807
+                  "relative_share": 0.3296587453426754,
+                  "weight": 1.4254476279533899
                 },
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.17277464765565495,
-                  "weight": 0.7422617947768819
+                  "relative_share": 0.1643435159210366,
+                  "weight": 0.710622964652883
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.29090589491892155,
-                  "weight": 1.2497686124879002
+                  "relative_share": 0.28816699982118765,
+                  "weight": 1.2460369159100289
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.21875180029034422,
-                  "weight": 0.9397854725642122
+                  "relative_share": 0.2178307389151005,
+                  "weight": 0.9419022382042298
                 }
               ],
               "head_course": 3,
@@ -615994,26 +616266,26 @@
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.20748061088016334,
-                  "weight": 0.6794375110761129
+                  "relative_share": 0.20044450554177848,
+                  "weight": 0.6583021306623106
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.3158746401520793,
-                  "weight": 1.0343958329723162
+                  "relative_share": 0.31964265466756836,
+                  "weight": 1.049774051174276
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.2519122127542724,
-                  "weight": 0.824937839335247
+                  "relative_share": 0.25298552568485405,
+                  "weight": 0.8308579481134849
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.224732536213485,
-                  "weight": 0.7359324537120452
+                  "relative_share": 0.2269273141057991,
+                  "weight": 0.7452772725176366
                 }
               ],
               "head_course": 4,
@@ -616024,26 +616296,26 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.30345387539144963,
-                  "weight": 1.4033468815647785
+                  "relative_share": 0.3067313733881083,
+                  "weight": 1.461235120269526
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.2835507004284586,
-                  "weight": 1.3113030462981465
+                  "relative_share": 0.27916109289106744,
+                  "weight": 1.3298932829707921
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.22183569906665646,
-                  "weight": 1.0258970530639886
+                  "relative_share": 0.22040932525727183,
+                  "weight": 1.050006210135272
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.19115972511343554,
-                  "weight": 0.884033541416024
+                  "relative_share": 0.1936982084635525,
+                  "weight": 0.9227573358858896
                 }
               ],
               "head_course": 4,
@@ -616054,26 +616326,26 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.340338579996272,
-                  "weight": 1.1764282572067029
+                  "relative_share": 0.3516936190601801,
+                  "weight": 1.227289001029221
                 },
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.19978257418458964,
-                  "weight": 0.690576618057289
+                  "relative_share": 0.18981204705506055,
+                  "weight": 0.6623783457773079
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.2431679587873287,
-                  "weight": 0.8405443131596247
+                  "relative_share": 0.24178482340993848,
+                  "weight": 0.8437453462470508
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.21671088703180974,
-                  "weight": 0.7490917166997147
+                  "relative_share": 0.21670951047482082,
+                  "weight": 0.756241183263162
                 }
               ],
               "head_course": 4,
@@ -616084,26 +616356,26 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.3274650381322741,
-                  "weight": 1.3158345127581597
+                  "relative_share": 0.3382662913104671,
+                  "weight": 1.3806461761344029
                 },
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.1801545317421324,
-                  "weight": 0.7239049146991053
+                  "relative_share": 0.17016850644498288,
+                  "weight": 0.694548950803181
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.29615181234149784,
-                  "weight": 1.190010322681877
+                  "relative_share": 0.2961511411489037,
+                  "weight": 1.2087516583489426
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.19622861778409578,
-                  "weight": 0.7884945188159151
+                  "relative_share": 0.19541406109564635,
+                  "weight": 0.797589600694127
                 }
               ],
               "head_course": 4,
@@ -616114,26 +616386,26 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.31793579307352227,
-                  "weight": 1.3643109237760807
+                  "relative_share": 0.3286279404076546,
+                  "weight": 1.4253612287392168
                 },
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.1729749342894629,
-                  "weight": 0.7422617947768819
+                  "relative_share": 0.1638395633132414,
+                  "weight": 0.710622964652883
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.290083887331079,
-                  "weight": 1.2447941531568947
+                  "relative_share": 0.2903697263332629,
+                  "weight": 1.2594234969845837
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.21900538530593575,
-                  "weight": 0.9397854725642122
+                  "relative_share": 0.21716276994584122,
+                  "weight": 0.9419022382042298
                 }
               ],
               "head_course": 4,
@@ -616144,26 +616416,26 @@
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.19484338316117558,
-                  "weight": 0.6794375110761129
+                  "relative_share": 0.1885145784607366,
+                  "weight": 0.6583021306623106
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.2966353495922462,
-                  "weight": 1.0343958329723162
+                  "relative_share": 0.30061836885904597,
+                  "weight": 1.049774051174276
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.2974767389098186,
-                  "weight": 1.0373298379895899
+                  "relative_share": 0.297445852412069,
+                  "weight": 1.0386954685327687
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.2110445283367596,
-                  "weight": 0.7359324537120452
+                  "relative_share": 0.21342120026814843,
+                  "weight": 0.7452772725176366
                 }
               ],
               "head_course": 5,
@@ -616174,26 +616446,26 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.2858127404801972,
-                  "weight": 1.4033468815647785
+                  "relative_share": 0.2880408446650189,
+                  "weight": 1.4438301629129355
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.267066626352997,
-                  "weight": 1.3113030462981465
+                  "relative_share": 0.26531069538567403,
+                  "weight": 1.3298932829707921
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.2670738803163671,
-                  "weight": 1.3113386634188435
+                  "relative_share": 0.26256046312205017,
+                  "weight": 1.3161075009513898
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.18004675285043883,
-                  "weight": 0.884033541416024
+                  "relative_share": 0.18408799682725682,
+                  "weight": 0.9227573358858896
                 }
               ],
               "head_course": 5,
@@ -616204,26 +616476,26 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.319725610298784,
-                  "weight": 1.1764282572067029
+                  "relative_share": 0.3314582554985519,
+                  "weight": 1.227289001029221
                 },
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.18768252914180253,
-                  "weight": 0.690576618057289
+                  "relative_share": 0.178890848681317,
+                  "weight": 0.6623783457773079
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.2890062999233106,
-                  "weight": 1.0633967589359266
+                  "relative_share": 0.2854101806093213,
+                  "weight": 1.0567869999699369
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.20358556063610292,
-                  "weight": 0.7490917166997147
+                  "relative_share": 0.20424071521080978,
+                  "weight": 0.756241183263162
                 }
               ],
               "head_course": 5,
@@ -616234,26 +616506,26 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.3194195275178965,
-                  "weight": 1.1676948875562505
+                  "relative_share": 0.3304911536233101,
+                  "weight": 1.227907339696994
                 },
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.1883790240542006,
-                  "weight": 0.6886530232520036
+                  "relative_share": 0.1783117813619839,
+                  "weight": 0.6624998663001511
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.28791131878490983,
-                  "weight": 1.0525110271972362
+                  "relative_share": 0.2876128116850657,
+                  "weight": 1.0685970822127095
                 },
                 {
                   "course": 6,
                   "lane": 6,
-                  "relative_share": 0.204290129642993,
-                  "weight": 0.7468188993203027
+                  "relative_share": 0.2035842533296403,
+                  "weight": 0.7563972474589281
                 }
               ],
               "head_course": 5,
@@ -616264,26 +616536,26 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.2965161379102399,
-                  "weight": 1.3643109237760807
+                  "relative_share": 0.3043517006378929,
+                  "weight": 1.4070622270584054
                 },
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.16132143844190688,
-                  "weight": 0.7422617947768819
+                  "relative_share": 0.15370983858801912,
+                  "weight": 0.710622964652883
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.2705406431590731,
-                  "weight": 1.2447941531568947
+                  "relative_share": 0.27241700882833064,
+                  "weight": 1.2594234969845837
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.27162178048878005,
-                  "weight": 1.2497686124879002
+                  "relative_share": 0.26952145194575744,
+                  "weight": 1.2460369159100289
                 }
               ],
               "head_course": 5,
@@ -616294,26 +616566,26 @@
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.1899939366967885,
-                  "weight": 0.6794375110761129
+                  "relative_share": 0.18400511079779633,
+                  "weight": 0.6583021306623106
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.28925240836040356,
-                  "weight": 1.0343958329723162
+                  "relative_share": 0.2934272602226491,
+                  "weight": 1.049774051174276
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.29007285638458913,
-                  "weight": 1.0373298379895899
+                  "relative_share": 0.2903306337171536,
+                  "weight": 1.0386954685327687
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.23068079855821885,
-                  "weight": 0.824937839335247
+                  "relative_share": 0.232236995262401,
+                  "weight": 0.8308579481134849
                 }
               ],
               "head_course": 6,
@@ -616324,26 +616596,26 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.27778674743666304,
-                  "weight": 1.4033468815647785
+                  "relative_share": 0.28001195825773345,
+                  "weight": 1.4374213127706061
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.25956704854667517,
-                  "weight": 1.3113030462981465
+                  "relative_share": 0.259065327006102,
+                  "weight": 1.3298932829707921
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.25957409880933047,
-                  "weight": 1.3113386634188435
+                  "relative_share": 0.2563798347394494,
+                  "weight": 1.3161075009513898
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.20307210520733138,
-                  "weight": 1.0258970530639886
+                  "relative_share": 0.20454287999671505,
+                  "weight": 1.050006210135272
                 }
               ],
               "head_course": 6,
@@ -616354,26 +616626,26 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.3119716574114383,
-                  "weight": 1.1764282572067029
+                  "relative_share": 0.32337818111927774,
+                  "weight": 1.2248931010224593
                 },
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.1831308715896175,
-                  "weight": 0.690576618057289
+                  "relative_share": 0.17487134550065064,
+                  "weight": 0.6623783457773079
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.28199734861766673,
-                  "weight": 1.0633967589359266
+                  "relative_share": 0.27899729176000176,
+                  "weight": 1.0567869999699369
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.22290012238127754,
-                  "weight": 0.8405443131596247
+                  "relative_share": 0.22275318162006988,
+                  "weight": 0.8437453462470508
                 }
               ],
               "head_course": 6,
@@ -616384,26 +616656,26 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.31165894407132005,
-                  "weight": 1.1676948875562505
+                  "relative_share": 0.32244396741219816,
+                  "weight": 1.2254359519651152
                 },
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.18380218698003226,
-                  "weight": 0.6886530232520036
+                  "relative_share": 0.1743208896044799,
+                  "weight": 0.6624998663001511
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.2809162554836564,
-                  "weight": 1.0525110271972362
+                  "relative_share": 0.28117559485766885,
+                  "weight": 1.0685970822127095
                 },
                 {
                   "course": 5,
                   "lane": 5,
-                  "relative_share": 0.2236226134649912,
-                  "weight": 0.8378485118183624
+                  "relative_share": 0.22205954812565315,
+                  "weight": 0.8439288101254416
                 }
               ],
               "head_course": 6,
@@ -616414,26 +616686,26 @@
                 {
                   "course": 1,
                   "lane": 1,
-                  "relative_share": 0.2971490656432236,
-                  "weight": 1.3158345127581597
+                  "relative_share": 0.30503201320949735,
+                  "weight": 1.3601781051742692
                 },
                 {
                   "course": 2,
                   "lane": 2,
-                  "relative_share": 0.16347623271142436,
-                  "weight": 0.7239049146991053
+                  "relative_share": 0.15575876712770234,
+                  "weight": 0.694548950803181
                 },
                 {
                   "course": 3,
                   "lane": 3,
-                  "relative_share": 0.2687347474641757,
-                  "weight": 1.190010322681877
+                  "relative_share": 0.27107328842736866,
+                  "weight": 1.2087516583489426
                 },
                 {
                   "course": 4,
                   "lane": 4,
-                  "relative_share": 0.2706399541811764,
-                  "weight": 1.1984469527844874
+                  "relative_share": 0.2681359312354317,
+                  "weight": 1.1956535939933013
                 }
               ],
               "head_course": 6,
@@ -616441,6 +616713,16 @@
             }
           ],
           "version": "ability-first-v1.1"
+        },
+        "formal_exhibition_balance_v24": {
+          "applied": false,
+          "calibrated": false,
+          "exhibition_time_not_a_solo_head_signal": true,
+          "method": "redistribution_within_existing_10pct_exhibition_factor",
+          "metric_mix": null,
+          "original_four_factor_weights_unchanged": true,
+          "requested": true,
+          "result_data_used": false
         },
         "formula": "athlete^0.60 * motor^0.25 * exhibition^0.10 * weather^0.05",
         "missing_policy": "Missing fields remain unavailable and contribute multiplier 1. No results, payouts, or odds used.",
@@ -616450,7 +616732,7 @@
             "available": {
               "average_st": true,
               "exhibition_st": false,
-              "exhibition_time": false,
+              "exhibition_time": true,
               "frame": false,
               "local_win": false,
               "motor_top2": true,
@@ -616460,17 +616742,17 @@
               "weather": true
             },
             "average_st_used": 0.14,
-            "combined_multiplier": 1.1801009669158433,
+            "combined_multiplier": 1.1818724466438606,
             "course": 1,
-            "exhibition_f_ignored": false,
+            "exhibition_f_ignored": true,
             "factors": {
               "athlete": {
                 "applied_multiplier": 1.1801009669158433,
                 "raw_multiplier": 1.3178478640273033
               },
               "exhibition": {
-                "applied_multiplier": 1,
-                "raw_multiplier": 1
+                "applied_multiplier": 1.0015011255627109,
+                "raw_multiplier": 1.0151130646157187
               },
               "motor": {
                 "applied_multiplier": 1,
@@ -616487,8 +616769,8 @@
           {
             "available": {
               "average_st": true,
-              "exhibition_st": false,
-              "exhibition_time": false,
+              "exhibition_st": true,
+              "exhibition_time": true,
               "frame": false,
               "local_win": false,
               "motor_top2": true,
@@ -616498,7 +616780,7 @@
               "weather": true
             },
             "average_st_used": 0.18,
-            "combined_multiplier": 0.7942158526165467,
+            "combined_multiplier": 0.7699728688614911,
             "course": 2,
             "exhibition_f_ignored": false,
             "factors": {
@@ -616507,8 +616789,8 @@
                 "raw_multiplier": 0.6811314271795471
               },
               "exhibition": {
-                "applied_multiplier": 1,
-                "raw_multiplier": 1
+                "applied_multiplier": 0.9694755730760258,
+                "raw_multiplier": 0.7334469562242882
               },
               "motor": {
                 "applied_multiplier": 1,
@@ -616525,8 +616807,8 @@
           {
             "available": {
               "average_st": true,
-              "exhibition_st": false,
-              "exhibition_time": false,
+              "exhibition_st": true,
+              "exhibition_time": true,
               "frame": false,
               "local_win": false,
               "motor_top2": true,
@@ -616536,7 +616818,7 @@
               "weather": true
             },
             "average_st_used": 0.13,
-            "combined_multiplier": 1.1147163746024054,
+            "combined_multiplier": 1.1277975574988042,
             "course": 3,
             "exhibition_f_ignored": false,
             "factors": {
@@ -616545,8 +616827,8 @@
                 "raw_multiplier": 1.1984151792931996
               },
               "exhibition": {
-                "applied_multiplier": 1,
-                "raw_multiplier": 1
+                "applied_multiplier": 1.0117349876564472,
+                "raw_multiplier": 1.123744785658114
               },
               "motor": {
                 "applied_multiplier": 1,
@@ -616563,8 +616845,8 @@
           {
             "available": {
               "average_st": true,
-              "exhibition_st": false,
-              "exhibition_time": false,
+              "exhibition_st": true,
+              "exhibition_time": true,
               "frame": false,
               "local_win": false,
               "motor_top2": true,
@@ -616574,7 +616856,7 @@
               "weather": true
             },
             "average_st_used": 0.15,
-            "combined_multiplier": 1.1254691826959984,
+            "combined_multiplier": 1.127064727282052,
             "course": 4,
             "exhibition_f_ignored": false,
             "factors": {
@@ -616583,8 +616865,8 @@
                 "raw_multiplier": 1.2177440407059086
               },
               "exhibition": {
-                "applied_multiplier": 1,
-                "raw_multiplier": 1
+                "applied_multiplier": 1.0014176706129185,
+                "raw_multiplier": 1.014267489433798
               },
               "motor": {
                 "applied_multiplier": 1,
@@ -616602,7 +616884,7 @@
             "available": {
               "average_st": true,
               "exhibition_st": false,
-              "exhibition_time": false,
+              "exhibition_time": true,
               "frame": false,
               "local_win": false,
               "motor_top2": true,
@@ -616612,17 +616894,17 @@
               "weather": true
             },
             "average_st_used": 0.17,
-            "combined_multiplier": 0.9571453674048964,
+            "combined_multiplier": 0.9629055027349201,
             "course": 5,
-            "exhibition_f_ignored": false,
+            "exhibition_f_ignored": true,
             "factors": {
               "athlete": {
                 "applied_multiplier": 0.9571453674048964,
                 "raw_multiplier": 0.9296008300257926
               },
               "exhibition": {
-                "applied_multiplier": 1,
-                "raw_multiplier": 1
+                "applied_multiplier": 1.0060180360540647,
+                "raw_multiplier": 1.0618365465453583
               },
               "motor": {
                 "applied_multiplier": 1,
@@ -616639,8 +616921,8 @@
           {
             "available": {
               "average_st": true,
-              "exhibition_st": false,
-              "exhibition_time": false,
+              "exhibition_st": true,
+              "exhibition_time": true,
               "frame": false,
               "local_win": false,
               "motor_top2": true,
@@ -616650,7 +616932,7 @@
               "weather": true
             },
             "average_st_used": 0.19,
-            "combined_multiplier": 0.8885183311768305,
+            "combined_multiplier": 0.8978221034804975,
             "course": 6,
             "exhibition_f_ignored": false,
             "factors": {
@@ -616659,8 +616941,8 @@
                 "raw_multiplier": 0.8211906333126578
               },
               "exhibition": {
-                "applied_multiplier": 1,
-                "raw_multiplier": 1
+                "applied_multiplier": 1.0104711090105976,
+                "raw_multiplier": 1.1097854037367072
               },
               "motor": {
                 "applied_multiplier": 1,
@@ -616692,7 +616974,7 @@
             3,
             4
           ],
-          "selected_relative_mass": 0.8911154683184292,
+          "selected_relative_mass": 0.8967565969820797,
           "target_relative_mass": 0.8,
           "tickets_per_selected_head": 2,
           "version": "head-coverage-v1"
@@ -616706,7 +616988,7 @@
           "weather": 0.05
         }
       },
-      "frozen_at_utc": "2026-11-25T17:29:14.702505+00:00",
+      "frozen_at_utc": "2026-11-26T10:45:43.643956+00:00",
       "grade_context": {
         "grade": "GENERAL",
         "grade_number": 5,
@@ -616719,44 +617001,64 @@
         {
           "course": 1,
           "lane": 1,
-          "relative_share": 0.5811,
+          "relative_share": 0.58,
           "tactic": "同一120展開・未校正"
         },
         {
           "course": 2,
           "lane": 2,
-          "relative_share": 0.0665,
+          "relative_share": 0.0599,
           "tactic": "同一120展開・未校正"
         },
         {
           "course": 3,
           "lane": 3,
-          "relative_share": 0.1841,
+          "relative_share": 0.1912,
           "tactic": "同一120展開・未校正"
         },
         {
           "course": 4,
           "lane": 4,
-          "relative_share": 0.126,
+          "relative_share": 0.1256,
           "tactic": "同一120展開・未校正"
         },
         {
           "course": 5,
           "lane": 5,
-          "relative_share": 0.0306,
+          "relative_share": 0.0311,
           "tactic": "同一120展開・未校正"
         },
         {
           "course": 6,
           "lane": 6,
-          "relative_share": 0.0118,
+          "relative_share": 0.0123,
           "tactic": "同一120展開・未校正"
         }
       ],
-      "head_weight_concentration": 0.5811,
-      "head_weight_gap": 0.397,
+      "head_weight_concentration": 0.58,
+      "head_weight_gap": 0.3888,
+      "hidden_path_shadow": {
+        "calibrated": false,
+        "candidate_count": 0,
+        "candidates": [],
+        "cutoff_at_utc": "2026-11-26T19:57:00+09:00",
+        "formal_bets_sha256": "9a69fc8f8b92431386be4d71a145e2a23aaf1269395a7f82a068da2dd6b29ff8",
+        "formal_bets_unchanged": true,
+        "forward_comparison_only": true,
+        "frozen_at_utc": "2026-11-26T10:45:43.643956+00:00",
+        "hypothesis_warning": "Scenarios are inferred, not observed. Model scores are not probabilities.",
+        "model_role": "research_shadow",
+        "no_additional_stake": true,
+        "not_formal": true,
+        "odds_used": false,
+        "ranked_source_sha256": "d6319ee39646457270a232b42548256e9abdaed4e507540278499d216b31c760",
+        "result_data_used": false,
+        "status": "NO_SUPPORTED_PATH",
+        "uncovered_count": 0,
+        "version": "hidden-1m-counterfactual-shadow-v0.1"
+      },
       "interaction_primary": {
-        "canonical_ranked_sha256": "5407cde89c8effce655702f4d0a27501c1ac04a05d61855aef9af471c0736dce",
+        "canonical_ranked_sha256": "d6319ee39646457270a232b42548256e9abdaed4e507540278499d216b31c760",
         "canonical_source": "linked-four-factor-venue-st-wake-120",
         "comparison": "prior frozen for audit; justified main limits expansion to verified pre-cutoff context",
         "conditional_coverage_applied": false,
@@ -616765,169 +617067,169 @@
         "conditional_places_by_head": [
           {
             "head_lane": 1,
-            "relative_head_share": 0.581058,
+            "relative_head_share": 0.5800247,
             "second_given_head": {
               "1": 0.0,
-              "2": 0.15830869,
-              "3": 0.25165896,
-              "4": 0.24572236,
-              "5": 0.18513912,
-              "6": 0.15917086
+              "2": 0.15200472,
+              "3": 0.25530392,
+              "4": 0.24542697,
+              "5": 0.18617644,
+              "6": 0.16108795
             },
             "third_given_head": {
               "1": 0.0,
-              "2": 0.16550144,
-              "3": 0.22748084,
-              "4": 0.23034667,
-              "5": 0.19681355,
-              "6": 0.17985749
+              "2": 0.16047197,
+              "3": 0.2290374,
+              "4": 0.23000177,
+              "5": 0.19811904,
+              "6": 0.18236982
             },
             "top3_partner_given_head": {
               "1": 0.0,
-              "2": 0.32381013,
-              "3": 0.4791398,
-              "4": 0.47606903,
-              "5": 0.38195268,
-              "6": 0.33902836
+              "2": 0.31247669,
+              "3": 0.48434132,
+              "4": 0.47542874,
+              "5": 0.38429548,
+              "6": 0.34345777
             }
           },
           {
             "head_lane": 2,
-            "relative_head_share": 0.06649941,
+            "relative_head_share": 0.05990136,
             "second_given_head": {
-              "1": 0.25409361,
+              "1": 0.25613592,
               "2": 0.0,
-              "3": 0.22839685,
-              "4": 0.22236535,
-              "5": 0.1614136,
-              "6": 0.13373059
+              "3": 0.22634957,
+              "4": 0.21763521,
+              "5": 0.16340483,
+              "6": 0.13647447
             },
             "third_given_head": {
-              "1": 0.22370271,
+              "1": 0.2265136,
               "2": 0.0,
-              "3": 0.21130942,
-              "4": 0.21386842,
-              "5": 0.1829907,
-              "6": 0.16812876
+              "3": 0.21224244,
+              "4": 0.21253218,
+              "5": 0.18132921,
+              "6": 0.16738257
             },
             "top3_partner_given_head": {
-              "1": 0.47779631,
+              "1": 0.48264952,
               "2": 0.0,
-              "3": 0.43970627,
-              "4": 0.43623377,
-              "5": 0.3444043,
-              "6": 0.30185935
+              "3": 0.43859201,
+              "4": 0.43016739,
+              "5": 0.34473405,
+              "6": 0.30385704
             }
           },
           {
             "head_lane": 3,
-            "relative_head_share": 0.18406941,
+            "relative_head_share": 0.19117433,
             "second_given_head": {
-              "1": 0.28462882,
-              "2": 0.15005478,
+              "1": 0.29506362,
+              "2": 0.14207511,
               "3": 0.0,
-              "4": 0.23829119,
-              "5": 0.17592896,
-              "6": 0.15109626
+              "4": 0.23531453,
+              "5": 0.17567049,
+              "6": 0.15187625
             },
             "third_given_head": {
-              "1": 0.23338844,
-              "2": 0.16396532,
+              "1": 0.23768773,
+              "2": 0.15850752,
               "3": 0.0,
-              "4": 0.22894621,
-              "5": 0.19543896,
-              "6": 0.17826106
+              "4": 0.22839206,
+              "5": 0.19570973,
+              "6": 0.17970297
             },
             "top3_partner_given_head": {
-              "1": 0.51801726,
-              "2": 0.3140201,
+              "1": 0.53275135,
+              "2": 0.30058263,
               "3": 0.0,
-              "4": 0.4672374,
-              "5": 0.37136792,
-              "6": 0.32935733
+              "4": 0.46370658,
+              "5": 0.37138022,
+              "6": 0.33157922
             }
           },
           {
             "head_lane": 4,
-            "relative_head_share": 0.12598805,
+            "relative_head_share": 0.12555757,
             "second_given_head": {
-              "1": 0.27844609,
-              "2": 0.15112434,
-              "3": 0.24118802,
+              "1": 0.28832396,
+              "2": 0.14219698,
+              "3": 0.24164176,
               "4": 0.0,
-              "5": 0.17710685,
-              "6": 0.1521347
+              "5": 0.17582724,
+              "6": 0.15201006
             },
             "third_given_head": {
-              "1": 0.23431022,
-              "2": 0.16417942,
-              "3": 0.22738781,
+              "1": 0.23803132,
+              "2": 0.15848499,
+              "3": 0.22806706,
               "4": 0.0,
-              "5": 0.19563626,
-              "6": 0.17848629
+              "5": 0.19571956,
+              "6": 0.17969706
             },
             "top3_partner_given_head": {
-              "1": 0.51275631,
-              "2": 0.31530376,
-              "3": 0.46857583,
+              "1": 0.52635528,
+              "2": 0.30068197,
+              "3": 0.46970882,
               "4": 0.0,
-              "5": 0.37274312,
-              "6": 0.33062099
+              "5": 0.37154681,
+              "6": 0.33170713
             }
           },
           {
             "head_lane": 5,
-            "relative_head_share": 0.03055496,
+            "relative_head_share": 0.03106894,
             "second_given_head": {
-              "1": 0.2693717,
-              "2": 0.13488097,
-              "3": 0.23192478,
-              "4": 0.22743488,
+              "1": 0.27714693,
+              "2": 0.1273255,
+              "3": 0.23386337,
+              "4": 0.22475027,
               "5": 0.0,
-              "6": 0.13638767
+              "6": 0.13691393
             },
             "third_given_head": {
-              "1": 0.22579128,
-              "2": 0.16085974,
-              "3": 0.21830686,
-              "4": 0.22022858,
+              "1": 0.23013885,
+              "2": 0.15520289,
+              "3": 0.21903501,
+              "4": 0.21951508,
               "5": 0.0,
-              "6": 0.17481354
+              "6": 0.17610816
             },
             "top3_partner_given_head": {
-              "1": 0.49516298,
-              "2": 0.29574071,
-              "3": 0.45023164,
-              "4": 0.44766346,
+              "1": 0.50728578,
+              "2": 0.28252839,
+              "3": 0.45289839,
+              "4": 0.44426534,
               "5": 0.0,
-              "6": 0.31120121
+              "6": 0.3130221
             }
           },
           {
             "head_lane": 6,
-            "relative_head_share": 0.01183017,
+            "relative_head_share": 0.0122731,
             "second_given_head": {
-              "1": 0.26247871,
-              "2": 0.12823636,
-              "3": 0.22856751,
-              "4": 0.22418007,
-              "5": 0.15653736,
+              "1": 0.27005937,
+              "2": 0.12132842,
+              "3": 0.23068117,
+              "4": 0.2216897,
+              "5": 0.15624135,
               "6": 0.0
             },
             "third_given_head": {
-              "1": 0.2233116,
-              "2": 0.15852205,
-              "3": 0.21425138,
-              "4": 0.21624548,
-              "5": 0.18766948,
+              "1": 0.22771178,
+              "2": 0.15301294,
+              "3": 0.21536136,
+              "4": 0.21576601,
+              "5": 0.18814792,
               "6": 0.0
             },
             "top3_partner_given_head": {
-              "1": 0.48579031,
-              "2": 0.28675841,
-              "3": 0.44281889,
-              "4": 0.44042555,
-              "5": 0.34420684,
+              "1": 0.49777115,
+              "2": 0.27434135,
+              "3": 0.44604252,
+              "4": 0.43745571,
+              "5": 0.34438927,
               "6": 0.0
             }
           }
@@ -616952,85 +617254,100 @@
         },
         "course1_outside_top3_by_path": {
           "head_course_1": 0.0,
-          "head_course_2": 0.5222036872197643,
-          "head_course_3": 0.4819827407478164,
-          "head_course_4": 0.4872436886649485,
-          "head_course_5": 0.5048370217473634,
-          "head_course_6": 0.5142096937691022
+          "head_course_2": 0.5173504826147581,
+          "head_course_3": 0.46724865248225594,
+          "head_course_4": 0.4736447216835053,
+          "head_course_5": 0.49271421929099063,
+          "head_course_6": 0.5022288505995497
         },
-        "course1_outside_top3_relative_mass": 0.2063398598101781,
+        "course1_outside_top3_relative_mass": 0.2012576379709601,
         "course1_outside_top3_selected": 0,
         "entry_aware": true,
-        "entry_evidence_status": "provisional_unverified",
+        "entry_evidence_status": "verified_exhibition",
         "fixed_five_path_mixture_used": false,
+        "formal_conditional_v26": {
+          "adjusted_outcome_count": 0,
+          "calibrated": false,
+          "evidence": [],
+          "frozen_at_utc": "2026-11-26T10:45:43.643956+00:00",
+          "generated_pre_cutoff": true,
+          "head_marginals_preserved": true,
+          "max_candidate_multiplier": 1.25,
+          "model_role": "formal_primary",
+          "no_additional_stake": true,
+          "odds_used": false,
+          "result_data_used": false,
+          "status": "NO_COMPLETE_PRE_CUTOFF_SIX_BOAT_EVIDENCE",
+          "version": "conditional-one-mark-v2.6-forward-untrained"
+        },
         "inside_lane": 1,
         "main_role_shares": {
           "1": {
-            "first": 0.581058,
-            "second": 0.11570522,
-            "third": 0.09689692
+            "first": 0.5800247,
+            "second": 0.11987786,
+            "third": 0.0988398
           },
           "2": {
-            "first": 0.06649941,
-            "second": 0.14428523,
-            "third": 0.15382199
+            "first": 0.05990136,
+            "second": 0.13862646,
+            "third": 0.1499792
           },
           "3": {
-            "first": 0.18406941,
-            "second": 0.20159396,
-            "third": 0.18408465
+            "first": 0.19117433,
+            "second": 0.20207824,
+            "third": 0.18364484
           },
           "4": {
-            "first": 0.12598805,
-            "second": 0.21102958,
-            "third": 0.19949619
+            "first": 0.12555757,
+            "second": 0.21008002,
+            "third": 0.19926859
           },
           "5": {
-            "first": 0.03055496,
-            "second": 0.17485883,
-            "third": 0.18937119
+            "first": 0.03106894,
+            "second": 0.1753528,
+            "third": 0.19007371
           },
           "6": {
-            "first": 0.01183017,
-            "second": 0.15252718,
-            "third": 0.17632907
+            "first": 0.0122731,
+            "second": 0.15398462,
+            "third": 0.17819386
           }
         },
         "new_head_course_shares": [
           {
             "course": 1,
             "lane": 1,
-            "relative_share": 0.5811,
+            "relative_share": 0.58,
             "tactic": "同一120展開・未校正"
           },
           {
             "course": 2,
             "lane": 2,
-            "relative_share": 0.0665,
+            "relative_share": 0.0599,
             "tactic": "同一120展開・未校正"
           },
           {
             "course": 3,
             "lane": 3,
-            "relative_share": 0.1841,
+            "relative_share": 0.1912,
             "tactic": "同一120展開・未校正"
           },
           {
             "course": 4,
             "lane": 4,
-            "relative_share": 0.126,
+            "relative_share": 0.1256,
             "tactic": "同一120展開・未校正"
           },
           {
             "course": 5,
             "lane": 5,
-            "relative_share": 0.0306,
+            "relative_share": 0.0311,
             "tactic": "同一120展開・未校正"
           },
           {
             "course": 6,
             "lane": 6,
-            "relative_share": 0.0118,
+            "relative_share": 0.0123,
             "tactic": "同一120展開・未校正"
           }
         ],
@@ -617039,7 +617356,7 @@
             "combination": "1-3-4",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から4コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.046506,
+            "relative_score": 0.047148,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 7000
           },
@@ -617047,7 +617364,7 @@
             "combination": "1-4-3",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から3コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.045185,
+            "relative_score": 0.045662,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 7000
           },
@@ -617055,7 +617372,7 @@
             "combination": "1-3-5",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から5コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.03676,
+            "relative_score": 0.037643,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 6000
           },
@@ -617063,15 +617380,15 @@
             "combination": "1-4-5",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から5コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.035969,
+            "relative_score": 0.036062,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 6000
           },
           {
-            "combination": "1-5-4",
-            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 5コース2着 → 残り4艇から4コース3着（攻め方未確定）",
+            "combination": "1-3-6",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から6コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.03305,
+            "relative_score": 0.033739,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 6000
           },
@@ -617079,7 +617396,7 @@
             "combination": "1-5-3",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 5コース2着 → 残り4艇から3コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.032818,
+            "relative_score": 0.033499,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 5000
           },
@@ -617087,7 +617404,7 @@
             "combination": "3-1-4",
             "conditional_reason": "3コース頭の条件で残り5艇を能力評価 → 1コース2着 → 残り4艇から4コース3着（攻め方未確定）",
             "head_course": 3,
-            "relative_score": 0.016581,
+            "relative_score": 0.017901,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 4000
           },
@@ -617095,7 +617412,7 @@
             "combination": "3-4-1",
             "conditional_reason": "3コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から1コース3着（攻め方未確定）",
             "head_course": 3,
-            "relative_score": 0.015164,
+            "relative_score": 0.016116,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 3000
           },
@@ -617103,7 +617420,7 @@
             "combination": "4-1-3",
             "conditional_reason": "4コース頭の条件で残り5艇を能力評価 → 1コース2着 → 残り4艇から3コース3着（攻め方未確定）",
             "head_course": 4,
-            "relative_score": 0.011081,
+            "relative_score": 0.011571,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 3000
           },
@@ -617111,7 +617428,7 @@
             "combination": "4-3-1",
             "conditional_reason": "4コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から1コース3着（攻め方未確定）",
             "head_course": 4,
-            "relative_score": 0.010342,
+            "relative_score": 0.01067,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 3000
           }
@@ -617122,26 +617439,28 @@
           "candidate_outcomes_analyzed": 120,
           "classification": "WATCH",
           "distinct_hypothetical_winner_heads": 6,
-          "exhibition_verified": false,
+          "exhibition_verified": true,
           "expansion_requires_pre_cutoff_sources": true,
-          "independent_sources": [],
+          "independent_sources": [
+            "site_observed_weather"
+          ],
           "max_issued_ticket_points": 24,
           "no_odds_edge_measured": true,
           "not_calibrated": true,
           "note": "Measured weather alone cannot justify >12 tickets; past course tactics required. 24 is temporary safety ceiling; no automatic BUY.",
-          "relative_30th_vs_top": 0.207243,
+          "relative_30th_vs_top": 0.209335,
           "selected_point_count": 8,
           "selection": "path_pair_and_verified_pre_cutoff_evidence",
-          "signal_quality": "NO_VERIFIED_EXHIBITION",
-          "skipped_low_relative_score": 0,
-          "skipped_unsupported_pair": 2,
+          "signal_quality": "EXHIBITION_ONLY",
+          "skipped_low_relative_score": 40,
+          "skipped_unsupported_pair": 72,
           "ticket_reasons": {
             "1-3-2": {
               "basis": "SUPPORTED_PAIR_IN_HYPOTHETICAL_PATH",
               "path_labels": [
                 "head_course_1"
               ],
-              "relative_score_vs_top": 0.6494
+              "relative_score_vs_top": 0.6268
             },
             "1-3-4": {
               "basis": "MINIMUM_MODEL_RANK_ONLY_NOT_OBSERVED_EVIDENCE",
@@ -617155,42 +617474,42 @@
               "path_labels": [
                 "head_course_1"
               ],
-              "relative_score_vs_top": 0.7904
+              "relative_score_vs_top": 0.7984
             },
             "1-3-6": {
               "basis": "SUPPORTED_PAIR_IN_HYPOTHETICAL_PATH",
               "path_labels": [
                 "head_course_1"
               ],
-              "relative_score_vs_top": 0.7044
+              "relative_score_vs_top": 0.7156
             },
             "1-4-2": {
-              "basis": "SUPPORTED_PAIR_IN_HYPOTHETICAL_PATH",
+              "basis": "VERIFIED_EXHIBITION_AND_SUPPORTED_PAIR",
               "path_labels": [
                 "head_course_1"
               ],
-              "relative_score_vs_top": 0.6357
+              "relative_score_vs_top": 0.6004
             },
             "1-4-3": {
               "basis": "MINIMUM_MODEL_RANK_ONLY_NOT_OBSERVED_EVIDENCE",
               "path_labels": [
                 "head_course_1"
               ],
-              "relative_score_vs_top": 0.9716
+              "relative_score_vs_top": 0.9685
             },
             "1-4-5": {
               "basis": "MINIMUM_MODEL_RANK_ONLY_NOT_OBSERVED_EVIDENCE",
               "path_labels": [
                 "head_course_1"
               ],
-              "relative_score_vs_top": 0.7734
+              "relative_score_vs_top": 0.7649
             },
             "1-4-6": {
               "basis": "SUPPORTED_PAIR_IN_HYPOTHETICAL_PATH",
               "path_labels": [
                 "head_course_1"
               ],
-              "relative_score_vs_top": 0.6894
+              "relative_score_vs_top": 0.6855
             }
           },
           "version": "justified-main-points-v2.0-conservative-untrained",
@@ -617200,37 +617519,37 @@
           {
             "course": 1,
             "lane": 1,
-            "relative_share": 0.5811,
+            "relative_share": 0.58,
             "tactic": "攻め方未確定"
           },
           {
             "course": 2,
             "lane": 2,
-            "relative_share": 0.0665,
+            "relative_share": 0.0599,
             "tactic": "攻め方未確定"
           },
           {
             "course": 3,
             "lane": 3,
-            "relative_share": 0.1841,
+            "relative_share": 0.1912,
             "tactic": "攻め方未確定"
           },
           {
             "course": 4,
             "lane": 4,
-            "relative_share": 0.126,
+            "relative_share": 0.1256,
             "tactic": "攻め方未確定"
           },
           {
             "course": 5,
             "lane": 5,
-            "relative_share": 0.0306,
+            "relative_share": 0.0311,
             "tactic": "攻め方未確定"
           },
           {
             "course": 6,
             "lane": 6,
-            "relative_share": 0.0118,
+            "relative_share": 0.0123,
             "tactic": "攻め方未確定"
           }
         ],
@@ -617241,483 +617560,483 @@
         "ranked_outcomes": [
           {
             "combination": "1-3-4",
-            "relative_score": 0.04650628863177306
+            "relative_score": 0.04714811307767253
           },
           {
             "combination": "1-4-3",
-            "relative_score": 0.045184614461793345
+            "relative_score": 0.045661795019271874
           },
           {
             "combination": "1-3-5",
-            "relative_score": 0.036760123732850584
+            "relative_score": 0.037643348181561266
           },
           {
             "combination": "1-4-5",
-            "relative_score": 0.03596908821441317
-          },
-          {
-            "combination": "1-5-4",
-            "relative_score": 0.03305038412321044
-          },
-          {
-            "combination": "1-5-3",
-            "relative_score": 0.03281772145512249
+            "relative_score": 0.036061584838891866
           },
           {
             "combination": "1-3-6",
-            "relative_score": 0.032760562128632924
+            "relative_score": 0.03373938629402022
+          },
+          {
+            "combination": "1-5-3",
+            "relative_score": 0.03349876002672153
+          },
+          {
+            "combination": "1-5-4",
+            "relative_score": 0.03313576659326183
           },
           {
             "combination": "1-4-6",
-            "relative_score": 0.03206115961409791
+            "relative_score": 0.03232130860313915
           },
           {
             "combination": "1-3-2",
-            "relative_score": 0.030201479600015495
+            "relative_score": 0.029551734784586302
           },
           {
             "combination": "1-4-2",
-            "relative_score": 0.029564081087541026
-          },
-          {
-            "combination": "1-6-4",
-            "relative_score": 0.027675070960960977
+            "relative_score": 0.02830901712051552
           },
           {
             "combination": "1-6-3",
-            "relative_score": 0.027564915758147925
+            "relative_score": 0.028300776647981262
           },
           {
-            "combination": "1-2-4",
-            "relative_score": 0.0266130326591974
+            "combination": "1-6-4",
+            "relative_score": 0.027999963901531682
           },
           {
             "combination": "1-2-3",
-            "relative_score": 0.02661230982563596
+            "relative_score": 0.025386015662553316
+          },
+          {
+            "combination": "1-2-4",
+            "relative_score": 0.02512286215787261
           },
           {
             "combination": "1-5-6",
-            "relative_score": 0.02174484791785212
-          },
-          {
-            "combination": "1-2-5",
-            "relative_score": 0.02082012262719804
+            "relative_score": 0.022104013218030412
           },
           {
             "combination": "1-6-5",
-            "relative_score": 0.02081075599227903
+            "relative_score": 0.021165688056062885
+          },
+          {
+            "combination": "1-2-5",
+            "relative_score": 0.020043318089950593
           },
           {
             "combination": "1-5-2",
-            "relative_score": 0.019963616615568076
-          },
-          {
-            "combination": "1-2-6",
-            "relative_score": 0.017941066000595824
+            "relative_score": 0.01924839438197519
           },
           {
             "combination": "3-1-4",
-            "relative_score": 0.016581217951670432
+            "relative_score": 0.01790069295700021
           },
           {
-            "combination": "1-6-2",
-            "relative_score": 0.016436760882614455
+            "combination": "1-2-6",
+            "relative_score": 0.017614294681755783
           },
           {
             "combination": "3-4-1",
-            "relative_score": 0.015163809132201193
+            "relative_score": 0.01611573033603403
+          },
+          {
+            "combination": "1-6-2",
+            "relative_score": 0.01596856168851811
           },
           {
             "combination": "3-1-5",
-            "relative_score": 0.013186234126946115
+            "relative_score": 0.014318858097139661
           },
           {
             "combination": "3-1-6",
-            "relative_score": 0.01176352589679339
+            "relative_score": 0.012843975955737892
           },
           {
             "combination": "4-1-3",
-            "relative_score": 0.011081160359188012
-          },
-          {
-            "combination": "3-1-2",
-            "relative_score": 0.010860481442939636
+            "relative_score": 0.011571465065065862
           },
           {
             "combination": "3-5-1",
-            "relative_score": 0.010582128081667705
+            "relative_score": 0.01139680299904207
+          },
+          {
+            "combination": "3-1-2",
+            "relative_score": 0.011345061830847193
           },
           {
             "combination": "3-4-5",
-            "relative_score": 0.010576967786303433
+            "relative_score": 0.010767303581593167
           },
           {
             "combination": "4-3-1",
-            "relative_score": 0.01034180331006602
+            "relative_score": 0.010670367419157717
           },
           {
             "combination": "3-5-4",
-            "relative_score": 0.009638080648049314
+            "relative_score": 0.009869747007876234
           },
           {
             "combination": "3-4-6",
-            "relative_score": 0.009427813416019858
-          },
-          {
-            "combination": "4-1-5",
-            "relative_score": 0.008837302116510555
+            "relative_score": 0.009650528212754285
           },
           {
             "combination": "3-6-1",
-            "relative_score": 0.008832255309455354
+            "relative_score": 0.009571588974335965
+          },
+          {
+            "combination": "4-1-5",
+            "relative_score": 0.009158393379863995
           },
           {
             "combination": "3-4-2",
-            "relative_score": 0.00869352960604886
-          },
-          {
-            "combination": "3-2-1",
-            "relative_score": 0.008381481696035052
+            "relative_score": 0.008452534263119078
           },
           {
             "combination": "3-6-4",
-            "relative_score": 0.008090733036634823
+            "relative_score": 0.008366882775667998
+          },
+          {
+            "combination": "3-2-1",
+            "relative_score": 0.008355668985603611
           },
           {
             "combination": "4-1-6",
-            "relative_score": 0.007883815144228385
+            "relative_score": 0.008215053432763615
           },
           {
             "combination": "3-2-4",
-            "relative_score": 0.007831963108431766
-          },
-          {
-            "combination": "4-3-5",
-            "relative_score": 0.007389098235987057
+            "relative_score": 0.0075253745940622365
           },
           {
             "combination": "4-5-1",
-            "relative_score": 0.0073068412078578
+            "relative_score": 0.007467715736869167
+          },
+          {
+            "combination": "4-3-5",
+            "relative_score": 0.007335739866576153
           },
           {
             "combination": "4-1-2",
-            "relative_score": 0.007278602421132809
-          },
-          {
-            "combination": "4-5-3",
-            "relative_score": 0.006608138317729482
-          },
-          {
-            "combination": "4-3-6",
-            "relative_score": 0.00658515225884019
+            "relative_score": 0.007256342542184578
           },
           {
             "combination": "3-5-6",
-            "relative_score": 0.006341184935416354
+            "relative_score": 0.006583853061213785
           },
           {
-            "combination": "3-2-5",
-            "relative_score": 0.006127164627098089
+            "combination": "4-3-6",
+            "relative_score": 0.00657495608300037
           },
           {
-            "combination": "4-6-1",
-            "relative_score": 0.006093924451718616
+            "combination": "4-5-3",
+            "relative_score": 0.006537963119770653
           },
           {
             "combination": "3-6-5",
-            "relative_score": 0.0060839688997217116
+            "relative_score": 0.00632468068366856
+          },
+          {
+            "combination": "4-6-1",
+            "relative_score": 0.006272197422826046
+          },
+          {
+            "combination": "3-2-5",
+            "relative_score": 0.0060038333127404595
           },
           {
             "combination": "4-3-2",
-            "relative_score": 0.00607075485540996
+            "relative_score": 0.005758888341711367
           },
           {
             "combination": "3-5-2",
-            "relative_score": 0.0058217461633814135
-          },
-          {
-            "combination": "4-2-1",
-            "relative_score": 0.005777719537563814
+            "relative_score": 0.0057332846766416186
           },
           {
             "combination": "4-6-3",
-            "relative_score": 0.005560082672565465
+            "relative_score": 0.00554200061904345
           },
           {
-            "combination": "4-2-3",
-            "relative_score": 0.0053987658573879296
+            "combination": "4-2-1",
+            "relative_score": 0.005476353283339017
           },
           {
             "combination": "3-2-6",
-            "relative_score": 0.00527988556742122
+            "relative_score": 0.005276236634880106
           },
           {
-            "combination": "2-1-4",
-            "relative_score": 0.00482515538796805
-          },
-          {
-            "combination": "2-1-3",
-            "relative_score": 0.0048115078193751515
+            "combination": "4-2-3",
+            "relative_score": 0.004984116071166052
           },
           {
             "combination": "3-6-2",
-            "relative_score": 0.004805243118466714
+            "relative_score": 0.00477168771408828
           },
           {
-            "combination": "2-3-1",
-            "relative_score": 0.00466590288038662
+            "combination": "2-1-3",
+            "relative_score": 0.004395171757101484
           },
           {
-            "combination": "2-4-1",
-            "relative_score": 0.00453810019757963
+            "combination": "2-1-4",
+            "relative_score": 0.004348788182007205
           },
           {
             "combination": "4-5-6",
-            "relative_score": 0.004378517348794483
+            "relative_score": 0.004314046940935364
           },
           {
-            "combination": "4-2-5",
-            "relative_score": 0.004223720824040141
-          },
-          {
-            "combination": "2-3-4",
-            "relative_score": 0.004217601855547019
+            "combination": "2-3-1",
+            "relative_score": 0.004248803379689289
           },
           {
             "combination": "4-6-5",
-            "relative_score": 0.004197710046019492
+            "relative_score": 0.004144771635358928
           },
           {
-            "combination": "2-4-3",
-            "relative_score": 0.004090452524352966
+            "combination": "2-4-1",
+            "relative_score": 0.004073692089116464
+          },
+          {
+            "combination": "4-2-5",
+            "relative_score": 0.003935167500860522
           },
           {
             "combination": "4-5-2",
-            "relative_score": 0.004019850680316037
+            "relative_score": 0.0037567149495613935
+          },
+          {
+            "combination": "2-3-4",
+            "relative_score": 0.003703184169715747
+          },
+          {
+            "combination": "2-4-3",
+            "relative_score": 0.003588632716572362
           },
           {
             "combination": "2-1-5",
-            "relative_score": 0.003837210802613715
+            "relative_score": 0.003478618454730159
           },
           {
             "combination": "4-2-6",
-            "relative_score": 0.0036396545509873065
-          },
-          {
-            "combination": "2-1-6",
-            "relative_score": 0.003423200908875098
-          },
-          {
-            "combination": "2-3-5",
-            "relative_score": 0.0033337333643924825
+            "relative_score": 0.0034582697171771795
           },
           {
             "combination": "4-6-2",
-            "relative_score": 0.0033154372818829506
+            "relative_score": 0.0031270441749277423
           },
           {
-            "combination": "2-4-5",
-            "relative_score": 0.0032561934950165205
+            "combination": "2-1-6",
+            "relative_score": 0.003120311095244768
+          },
+          {
+            "combination": "2-3-5",
+            "relative_score": 0.0029566453879374902
           },
           {
             "combination": "2-5-1",
-            "relative_score": 0.0031437169840512927
+            "relative_score": 0.002899395294836734
+          },
+          {
+            "combination": "2-4-5",
+            "relative_score": 0.002834137009061472
           },
           {
             "combination": "2-3-6",
-            "relative_score": 0.002971017720130161
-          },
-          {
-            "combination": "2-4-6",
-            "relative_score": 0.0029024182863851117
-          },
-          {
-            "combination": "2-5-4",
-            "relative_score": 0.0028632613017998583
+            "relative_score": 0.0026500140316136687
           },
           {
             "combination": "2-5-3",
-            "relative_score": 0.0028431049849647417
-          },
-          {
-            "combination": "2-6-1",
-            "relative_score": 0.0025283780772281544
-          },
-          {
-            "combination": "5-1-4",
-            "relative_score": 0.0024484240254764394
+            "relative_score": 0.0026005100321530596
           },
           {
             "combination": "5-1-3",
-            "relative_score": 0.002441498852679826
+            "relative_score": 0.0025885228908741533
           },
           {
-            "combination": "2-6-4",
-            "relative_score": 0.0023161051534180024
+            "combination": "2-5-4",
+            "relative_score": 0.0025723308379212544
           },
           {
-            "combination": "2-6-3",
-            "relative_score": 0.0023068863502116433
+            "combination": "5-1-4",
+            "relative_score": 0.002561205426955223
+          },
+          {
+            "combination": "2-4-6",
+            "relative_score": 0.00254018278183551
           },
           {
             "combination": "5-3-1",
-            "relative_score": 0.0022657199828064463
+            "relative_score": 0.002408338232016856
+          },
+          {
+            "combination": "2-6-1",
+            "relative_score": 0.0023465817128349815
           },
           {
             "combination": "5-4-1",
-            "relative_score": 0.0022197301731081195
+            "relative_score": 0.0023077379091660986
+          },
+          {
+            "combination": "2-6-3",
+            "relative_score": 0.0021292958126793906
+          },
+          {
+            "combination": "2-6-4",
+            "relative_score": 0.002106663242224425
           },
           {
             "combination": "5-3-4",
-            "relative_score": 0.0020480290843178928
+            "relative_score": 0.0020737581229780754
           },
           {
             "combination": "5-4-3",
-            "relative_score": 0.0020007713568808284
-          },
-          {
-            "combination": "2-5-6",
-            "relative_score": 0.0018838262612804176
-          },
-          {
-            "combination": "2-6-5",
-            "relative_score": 0.001741635975142893
+            "relative_score": 0.0020083290623990305
           },
           {
             "combination": "5-1-6",
-            "relative_score": 0.001737031592852419
+            "relative_score": 0.0018376976243623024
+          },
+          {
+            "combination": "2-5-6",
+            "relative_score": 0.0017159353981603947
           },
           {
             "combination": "5-1-2",
-            "relative_score": 0.0016036857950145688
+            "relative_score": 0.0016232351451481324
+          },
+          {
+            "combination": "2-6-5",
+            "relative_score": 0.0015924655182022241
           },
           {
             "combination": "5-3-6",
-            "relative_score": 0.0014426991710580093
+            "relative_score": 0.0014839899589672726
           },
           {
             "combination": "5-4-6",
-            "relative_score": 0.0014196657554423123
+            "relative_score": 0.0014215784415627043
           },
           {
             "combination": "5-3-2",
-            "relative_score": 0.0013300031120523986
-          },
-          {
-            "combination": "5-4-2",
-            "relative_score": 0.0013090953046079534
+            "relative_score": 0.0012998006931193788
           },
           {
             "combination": "5-6-1",
-            "relative_score": 0.0012356773618808722
+            "relative_score": 0.0012946423284757283
           },
           {
-            "combination": "5-2-1",
-            "relative_score": 0.0011779149325412577
-          },
-          {
-            "combination": "5-6-4",
-            "relative_score": 0.0011319346309756795
+            "combination": "5-4-2",
+            "relative_score": 0.0012451070262806685
           },
           {
             "combination": "5-6-3",
-            "relative_score": 0.001127429186743138
+            "relative_score": 0.0011587994740516088
           },
           {
-            "combination": "5-2-4",
-            "relative_score": 0.0011006868034918204
+            "combination": "5-6-4",
+            "relative_score": 0.0011464824391974203
+          },
+          {
+            "combination": "5-2-1",
+            "relative_score": 0.001139451628934027
           },
           {
             "combination": "5-2-3",
-            "relative_score": 0.0011006569078623974
+            "relative_score": 0.00104953415333301
           },
           {
-            "combination": "6-1-4",
-            "relative_score": 0.0009007245672675735
+            "combination": "5-2-4",
+            "relative_score": 0.001038654596871573
           },
           {
             "combination": "6-1-3",
-            "relative_score": 0.0008981769394034541
+            "relative_score": 0.0009725549321500991
+          },
+          {
+            "combination": "6-1-4",
+            "relative_score": 0.0009622912661953369
           },
           {
             "combination": "6-3-1",
-            "relative_score": 0.0008435687323044049
+            "relative_score": 0.0009155399299020344
           },
           {
             "combination": "6-4-1",
-            "relative_score": 0.0008265467668169229
+            "relative_score": 0.0008773122895130779
           },
           {
             "combination": "6-3-4",
-            "relative_score": 0.0007625184539532678
-          },
-          {
-            "combination": "6-4-3",
-            "relative_score": 0.0007450144689677137
-          },
-          {
-            "combination": "5-2-6",
-            "relative_score": 0.0007420234604719844
+            "relative_score": 0.0007898899055486777
           },
           {
             "combination": "6-1-5",
-            "relative_score": 0.0007163023284840134
+            "relative_score": 0.0007697418263006135
+          },
+          {
+            "combination": "6-4-3",
+            "relative_score": 0.0007650284384587037
+          },
+          {
+            "combination": "5-2-6",
+            "relative_score": 0.0007282278598230134
           },
           {
             "combination": "5-6-2",
-            "relative_score": 0.0006722779099769159
+            "relative_score": 0.0006538463984992936
           },
           {
             "combination": "6-3-5",
-            "relative_score": 0.0006027200522888812
-          },
-          {
-            "combination": "6-4-5",
-            "relative_score": 0.0005930667213720054
+            "relative_score": 0.0006306530378147902
           },
           {
             "combination": "6-1-2",
-            "relative_score": 0.0005899628408794798
+            "relative_score": 0.0006098788432657324
+          },
+          {
+            "combination": "6-4-5",
+            "relative_score": 0.0006041842622700168
           },
           {
             "combination": "6-5-1",
-            "relative_score": 0.0005502793305972802
-          },
-          {
-            "combination": "6-5-4",
-            "relative_score": 0.0005011880905542151
+            "relative_score": 0.000584919157877216
           },
           {
             "combination": "6-5-3",
-            "relative_score": 0.000497659908917126
+            "relative_score": 0.0005198010461972305
+          },
+          {
+            "combination": "6-5-4",
+            "relative_score": 0.0005141684685637729
           },
           {
             "combination": "6-3-2",
-            "relative_score": 0.0004951843333284491
+            "relative_score": 0.0004950912236793328
           },
           {
             "combination": "6-4-2",
-            "relative_score": 0.0004874594689875467
+            "relative_score": 0.00047429592185038104
           },
           {
             "combination": "6-2-1",
-            "relative_score": 0.00042141843415607156
-          },
-          {
-            "combination": "6-2-4",
-            "relative_score": 0.00039378880121933405
+            "relative_score": 0.00041695918865736247
           },
           {
             "combination": "6-2-3",
-            "relative_score": 0.00039377810556637
+            "relative_score": 0.00038576805515674894
+          },
+          {
+            "combination": "6-2-4",
+            "relative_score": 0.00038176915209697874
           },
           {
             "combination": "6-2-5",
-            "relative_score": 0.00030807203506626234
+            "relative_score": 0.0003045799680118308
           },
           {
             "combination": "6-5-2",
-            "relative_score": 0.0003027355704796889
+            "relative_score": 0.000298677787756516
           }
         ],
         "result_data_used": false,
@@ -617758,7 +618077,7 @@
         ],
         "scenario_assumptions": [
           {
-            "assumed_share": 0.5810580022895003,
+            "assumed_share": 0.580024703025874,
             "attack_course": 1,
             "attack_lane": 1,
             "defender_course": null,
@@ -617772,20 +618091,20 @@
             "top_3": [
               [
                 "1-3-4",
-                0.08003725694944004
+                0.08128638803090654
               ],
               [
                 "1-4-3",
-                0.0777626575724897
+                0.07872387982970955
               ],
               [
                 "1-3-5",
-                0.06326412094490973
+                0.06489956028628327
               ]
             ]
           },
           {
-            "assumed_share": 0.06649941033071952,
+            "assumed_share": 0.059901358903638076,
             "attack_course": 2,
             "attack_lane": 2,
             "defender_course": 1,
@@ -617798,21 +618117,21 @@
             "share_kind": "canonical_head_marginal_not_observed_probability",
             "top_3": [
               [
-                "2-1-4",
-                0.07255937103759642
+                "2-1-3",
+                0.07337348997661129
               ],
               [
-                "2-1-3",
-                0.0723541426224116
+                "2-1-4",
+                0.07259915737476004
               ],
               [
                 "2-3-1",
-                0.07016457525234925
+                0.07092999987736907
               ]
             ]
           },
           {
-            "assumed_share": 0.18406941455070244,
+            "assumed_share": 0.19117432665404643,
             "attack_course": 3,
             "attack_lane": 3,
             "defender_course": 2,
@@ -617826,20 +618145,20 @@
             "top_3": [
               [
                 "3-1-4",
-                0.09008133150281243
+                0.09363544399658709
               ],
               [
                 "3-4-1",
-                0.08238092770173004
+                0.08429861173355895
               ],
               [
                 "3-1-5",
-                0.07163729052505857
+                0.07489948230889498
               ]
             ]
           },
           {
-            "assumed_share": 0.1259880514782265,
+            "assumed_share": 0.1255575673021592,
             "attack_course": 4,
             "attack_lane": 4,
             "defender_course": 3,
@@ -617853,20 +618172,20 @@
             "top_3": [
               [
                 "4-1-3",
-                0.08795405777906709
+                0.09216063446991354
               ],
               [
                 "4-3-1",
-                0.08208558818653776
+                0.08498386555610034
               ],
               [
                 "4-1-5",
-                0.0701439701052749
+                0.07294178739401636
               ]
             ]
           },
           {
-            "assumed_share": 0.030554955400241283,
+            "assumed_share": 0.031068939413015563,
             "attack_course": 5,
             "attack_lane": 5,
             "defender_course": 4,
@@ -617879,21 +618198,21 @@
             "share_kind": "canonical_head_marginal_not_observed_probability",
             "top_3": [
               [
-                "5-1-4",
-                0.08013181473853845
+                "5-1-3",
+                0.08331545716651517
               ],
               [
-                "5-1-3",
-                0.07990516826807563
+                "5-1-4",
+                0.08243620398198302
               ],
               [
                 "5-3-1",
-                0.07415229225923055
+                0.07751594607081896
               ]
             ]
           },
           {
-            "assumed_share": 0.011830165950610063,
+            "assumed_share": 0.012273104701266453,
             "attack_course": 6,
             "attack_lane": 6,
             "defender_course": 5,
@@ -617906,16 +618225,16 @@
             "share_kind": "canonical_head_marginal_not_observed_probability",
             "top_3": [
               [
-                "6-1-4",
-                0.0761379486161075
+                "6-1-3",
+                0.07924277970591596
               ],
               [
-                "6-1-3",
-                0.07592259847860684
+                "6-1-4",
+                0.0784065067167592
               ],
               [
                 "6-3-1",
-                0.07130658486332589
+                0.07459725572190064
               ]
             ]
           }
@@ -617963,7 +618282,7 @@
             "combination": "1-3-4",
             "conditional_reason": "1コース 最短先マイを守る（ST差の仮説） → 3コース2着 → 4コース3着",
             "head_course": 1,
-            "relative_score": 0.067452,
+            "relative_score": 0.06389,
             "scenario": "先マイ・逃げ",
             "virtual_yen": 7000
           },
@@ -617971,7 +618290,15 @@
             "combination": "1-3-2",
             "conditional_reason": "1コース 最短先マイを守る（ST差の仮説） → 3コース2着 → 2コース3着",
             "head_course": 1,
-            "relative_score": 0.051012,
+            "relative_score": 0.049014,
+            "scenario": "先マイ・逃げ",
+            "virtual_yen": 6000
+          },
+          {
+            "combination": "1-3-5",
+            "conditional_reason": "1コース 最短先マイを守る（ST差の仮説） → 3コース2着 → 5コース3着",
+            "head_course": 1,
+            "relative_score": 0.04486,
             "scenario": "先マイ・逃げ",
             "virtual_yen": 6000
           },
@@ -617979,31 +618306,23 @@
             "combination": "1-4-3",
             "conditional_reason": "1コース 最短先マイを守る（ST差の仮説） → 4コース2着 → 3コース3着",
             "head_course": 1,
-            "relative_score": 0.048412,
+            "relative_score": 0.043756,
             "scenario": "先マイ・逃げ",
             "virtual_yen": 5000
           },
           {
-            "combination": "1-3-5",
-            "conditional_reason": "1コース 最短先マイを守る（ST差の仮説） → 3コース2着 → 5コース3着",
-            "head_course": 1,
-            "relative_score": 0.047449,
-            "scenario": "先マイ・逃げ",
-            "virtual_yen": 5000
-          },
-          {
-            "combination": "1-2-3",
-            "conditional_reason": "1コース 最短先マイを守る（ST差の仮説） → 2コース2着 → 3コース3着",
-            "head_course": 1,
-            "relative_score": 0.043032,
-            "scenario": "先マイ・逃げ",
+            "combination": "3-4-1",
+            "conditional_reason": "3コース 外からのまくり（ST差の仮説） → 4コース2着 → 1コース3着",
+            "head_course": 3,
+            "relative_score": 0.039445,
+            "scenario": "まくり差し",
             "virtual_yen": 5000
           },
           {
             "combination": "1-4-5",
             "conditional_reason": "1コース 最短先マイを守る（ST差の仮説） → 4コース2着 → 5コース3着",
             "head_course": 1,
-            "relative_score": 0.041864,
+            "relative_score": 0.036863,
             "scenario": "先マイ・逃げ",
             "virtual_yen": 5000
           },
@@ -618011,54 +618330,61 @@
             "combination": "1-3-6",
             "conditional_reason": "1コース 最短先マイを守る（ST差の仮説） → 3コース2着 → 6コース3着",
             "head_course": 1,
-            "relative_score": 0.037216,
+            "relative_score": 0.035721,
             "scenario": "先マイ・逃げ",
             "virtual_yen": 5000
           },
           {
-            "combination": "1-4-2",
-            "conditional_reason": "1コース 最短先マイを守る（ST差の仮説） → 4コース2着 → 2コース3着",
+            "combination": "1-2-3",
+            "conditional_reason": "1コース 最短先マイを守る（ST差の仮説） → 2コース2着 → 3コース3着",
             "head_course": 1,
-            "relative_score": 0.035834,
+            "relative_score": 0.035017,
             "scenario": "先マイ・逃げ",
-            "virtual_yen": 4000
+            "virtual_yen": 5000
           },
           {
-            "combination": "1-2-4",
-            "conditional_reason": "1コース 最短先マイを守る（ST差の仮説） → 2コース2着 → 4コース3着",
-            "head_course": 1,
-            "relative_score": 0.034512,
-            "scenario": "先マイ・逃げ",
-            "virtual_yen": 4000
+            "combination": "4-3-1",
+            "conditional_reason": "4コース まくり差し・差し場探索（ST差の仮説） → 3コース2着 → 1コース3着",
+            "head_course": 4,
+            "relative_score": 0.018496,
+            "scenario": "カドまくり",
+            "virtual_yen": 3000
           },
           {
-            "combination": "3-4-1",
-            "conditional_reason": "3コース 外からのまくり（ST差の仮説） → 4コース2着 → 1コース3着",
-            "head_course": 3,
-            "relative_score": 0.028357,
-            "scenario": "まくり差し",
-            "virtual_yen": 4000
+            "combination": "1-6-3",
+            "conditional_reason": "1コース 最短先マイを守る（ST差の仮説） → 6コース2着 → 3コース3着",
+            "head_course": 1,
+            "relative_score": 0.015466,
+            "scenario": "先マイ・逃げ",
+            "virtual_yen": 3000
           }
         ],
-        "frozen_at_utc": "2026-11-25T17:29:14.702505+00:00",
+        "frozen_at_utc": "2026-11-26T10:45:43.643956+00:00",
         "model_role": "shadow_validation",
         "model_version": "tactical-outside-start-wake-v0.9-untrained",
         "point_count": 10,
-        "sha256": "9806cf27de06fe96065f5fade7fab72e82f0d9af216b89067ce03a46fc9c5d2b",
+        "sha256": "7c5978c018143b4cd3941c158d3c41ca880376c268b6d53fd2990636cfcc1620",
         "source_note": "v0.9 previous main frozen at same pre-cutoff instant; no result"
       },
       "model_role": "main",
-      "model_version": "four-factor-v2.5-evidence-head-switch-untrained",
-      "phase": "baseline",
+      "model_upgrade": {
+        "new_model": "four-factor-v2.5-evidence-head-switch-untrained",
+        "previous_model": "four-factor-v2.6-evidence-conditional-pairs-untrained",
+        "previous_sha256": "993a60eb008065cc956c1bc8fa0de636bda28f8cf703559f07ca913eb65f57ab",
+        "revision_at_utc": "2026-11-26T10:45:43.643956+00:00",
+        "same_race_pre_cutoff_revision": true
+      },
+      "model_version": "four-factor-v2.6-evidence-conditional-pairs-untrained",
+      "phase": "exhibition",
       "point_count": 8,
-      "point_reason": "v2.5対象・展示未確認のため旧v2.3相当／仮想5万円・暫定",
+      "point_reason": "正式v2.6：1着頭評価を維持し、実進入・平均ST・まわり足で条件付き2/3着を再評価／8点・仮想5万円・未校正",
       "postrace_conditional_control": {
         "bets": [
           {
             "combination": "1-3-4",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から4コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.046479,
+            "relative_score": 0.047119,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 7000
           },
@@ -618066,7 +618392,7 @@
             "combination": "1-4-3",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から3コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.045158,
+            "relative_score": 0.045634,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 7000
           },
@@ -618074,7 +618400,7 @@
             "combination": "1-3-5",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から5コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.036738,
+            "relative_score": 0.03762,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 6000
           },
@@ -618082,15 +618408,15 @@
             "combination": "1-4-5",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から5コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.035948,
+            "relative_score": 0.03604,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 6000
           },
           {
-            "combination": "1-5-4",
-            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 5コース2着 → 残り4艇から4コース3着（攻め方未確定）",
+            "combination": "1-3-6",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から6コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.033031,
+            "relative_score": 0.033719,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 6000
           },
@@ -618098,7 +618424,7 @@
             "combination": "1-5-3",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 5コース2着 → 残り4艇から3コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.032798,
+            "relative_score": 0.033478,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 5000
           },
@@ -618106,7 +618432,7 @@
             "combination": "3-1-4",
             "conditional_reason": "3コース頭の条件で残り5艇を能力評価 → 1コース2着 → 残り4艇から4コース3着（攻め方未確定）",
             "head_course": 3,
-            "relative_score": 0.016392,
+            "relative_score": 0.0177,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 4000
           },
@@ -618114,7 +618440,7 @@
             "combination": "3-4-1",
             "conditional_reason": "3コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から1コース3着（攻め方未確定）",
             "head_course": 3,
-            "relative_score": 0.014865,
+            "relative_score": 0.015807,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 3000
           },
@@ -618122,7 +618448,7 @@
             "combination": "4-1-3",
             "conditional_reason": "4コース頭の条件で残り5艇を能力評価 → 1コース2着 → 残り4艇から3コース3着（攻め方未確定）",
             "head_course": 4,
-            "relative_score": 0.011075,
+            "relative_score": 0.011564,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 3000
           },
@@ -618130,12 +618456,12 @@
             "combination": "4-3-1",
             "conditional_reason": "4コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から1コース3着（攻め方未確定）",
             "head_course": 4,
-            "relative_score": 0.010336,
+            "relative_score": 0.010664,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 3000
           }
         ],
-        "frozen_at_utc": "2026-11-25T17:29:14.702505+00:00",
+        "frozen_at_utc": "2026-11-26T10:45:43.643956+00:00",
         "generated_pre_cutoff": true,
         "model_version": "four-factor-v1.2-head-coverage-untrained",
         "scope": "same-input v1.2 head-coverage research control, no extra stake"
@@ -618149,8 +618475,8 @@
             "adjacent_follow_supported": false,
             "course": 3,
             "exhibition_f_ignored": false,
-            "exhibition_lead_sec": null,
-            "go_ratio": 1.404,
+            "exhibition_lead_sec": 0.01,
+            "go_ratio": 1.465,
             "head_multiplier": 1,
             "inside_one_survivor_supported": false,
             "lane": 3,
@@ -618160,8 +618486,8 @@
             "adjacent_follow_supported": false,
             "course": 4,
             "exhibition_f_ignored": false,
-            "exhibition_lead_sec": null,
-            "go_ratio": 1.01,
+            "exhibition_lead_sec": -0.11,
+            "go_ratio": 0.999,
             "head_multiplier": 1,
             "inside_one_survivor_supported": false,
             "lane": 4,
@@ -618170,9 +618496,9 @@
           {
             "adjacent_follow_supported": false,
             "course": 5,
-            "exhibition_f_ignored": false,
-            "exhibition_lead_sec": null,
-            "go_ratio": 0.85,
+            "exhibition_f_ignored": true,
+            "exhibition_lead_sec": -0.01,
+            "go_ratio": 0.854,
             "head_multiplier": 1,
             "inside_one_survivor_supported": false,
             "lane": 5,
@@ -618182,8 +618508,8 @@
             "adjacent_follow_supported": false,
             "course": 6,
             "exhibition_f_ignored": false,
-            "exhibition_lead_sec": null,
-            "go_ratio": 0.928,
+            "exhibition_lead_sec": -0.05,
+            "go_ratio": 0.932,
             "head_multiplier": 1,
             "inside_one_survivor_supported": false,
             "lane": 6,
@@ -618203,8 +618529,8 @@
           "average_start_timing_imputed": false,
           "average_start_timing_source_value": 0.14,
           "course": 1,
-          "exhibition_st": null,
-          "exhibition_time": null,
+          "exhibition_st": -0.08,
+          "exhibition_time": 6.85,
           "lane": 1,
           "motor_top_2_percent": 0.0,
           "name": "濱野谷 憲吾",
@@ -618212,16 +618538,16 @@
           "original_exhibition": {},
           "racer_context": null,
           "racer_id": 3590,
-          "relative_weight": 2.02965,
-          "tilt": null
+          "relative_weight": 1.97282,
+          "tilt": 0.0
         },
         {
           "average_start_timing": 0.18,
           "average_start_timing_imputed": false,
           "average_start_timing_source_value": 0.18,
           "course": 2,
-          "exhibition_st": null,
-          "exhibition_time": null,
+          "exhibition_st": 0.18,
+          "exhibition_time": 6.9,
           "lane": 2,
           "motor_top_2_percent": 0.0,
           "name": "藤山 翔大",
@@ -618229,16 +618555,16 @@
           "original_exhibition": {},
           "racer_context": null,
           "racer_id": 4561,
-          "relative_weight": 1.05131,
-          "tilt": null
+          "relative_weight": 0.98153,
+          "tilt": -0.5
         },
         {
           "average_start_timing": 0.13,
           "average_start_timing_imputed": false,
           "average_start_timing_source_value": 0.13,
           "course": 3,
-          "exhibition_st": null,
-          "exhibition_time": null,
+          "exhibition_st": 0.04,
+          "exhibition_time": 6.81,
           "lane": 3,
           "motor_top_2_percent": 0.0,
           "name": "渡辺 浩司",
@@ -618246,16 +618572,16 @@
           "original_exhibition": {},
           "racer_context": null,
           "racer_id": 4256,
-          "relative_weight": 1.15479,
-          "tilt": null
+          "relative_weight": 1.17973,
+          "tilt": 0.0
         },
         {
           "average_start_timing": 0.15,
           "average_start_timing_imputed": false,
           "average_start_timing_source_value": 0.15,
           "course": 4,
-          "exhibition_st": null,
-          "exhibition_time": null,
+          "exhibition_st": 0.01,
+          "exhibition_time": 6.92,
           "lane": 4,
           "motor_top_2_percent": 0.0,
           "name": "山田 祐也",
@@ -618263,16 +618589,16 @@
           "original_exhibition": {},
           "racer_context": null,
           "racer_id": 4757,
-          "relative_weight": 1.01169,
-          "tilt": null
+          "relative_weight": 0.959,
+          "tilt": 0.0
         },
         {
           "average_start_timing": 0.17,
           "average_start_timing_imputed": false,
           "average_start_timing_source_value": 0.17,
           "course": 5,
-          "exhibition_st": null,
-          "exhibition_time": null,
+          "exhibition_st": -0.03,
+          "exhibition_time": 6.82,
           "lane": 5,
           "motor_top_2_percent": 0.0,
           "name": "佐々木 翔斗",
@@ -618280,16 +618606,16 @@
           "original_exhibition": {},
           "racer_context": null,
           "racer_id": 4934,
-          "relative_weight": 0.78297,
-          "tilt": null
+          "relative_weight": 0.77749,
+          "tilt": 0.0
         },
         {
           "average_start_timing": 0.19,
           "average_start_timing_imputed": false,
           "average_start_timing_source_value": 0.19,
           "course": 6,
-          "exhibition_st": null,
-          "exhibition_time": null,
+          "exhibition_st": 0.01,
+          "exhibition_time": 6.86,
           "lane": 6,
           "motor_top_2_percent": 0.0,
           "name": "田村 慶",
@@ -618297,42 +618623,42 @@
           "original_exhibition": {},
           "racer_context": null,
           "racer_id": 5172,
-          "relative_weight": 0.6475,
-          "tilt": null
+          "relative_weight": 0.6417,
+          "tilt": 0.0
         }
       ],
       "relative_scores_uncalibrated": true,
       "role_changes": [],
       "role_coverage": {
         "1": {
-          "first": 0.581058,
-          "second": 0.11570522,
-          "third": 0.09689692
+          "first": 0.5800247,
+          "second": 0.11987786,
+          "third": 0.0988398
         },
         "2": {
-          "first": 0.06649941,
-          "second": 0.14428523,
-          "third": 0.15382199
+          "first": 0.05990136,
+          "second": 0.13862646,
+          "third": 0.1499792
         },
         "3": {
-          "first": 0.18406941,
-          "second": 0.20159396,
-          "third": 0.18408465
+          "first": 0.19117433,
+          "second": 0.20207824,
+          "third": 0.18364484
         },
         "4": {
-          "first": 0.12598805,
-          "second": 0.21102958,
-          "third": 0.19949619
+          "first": 0.12555757,
+          "second": 0.21008002,
+          "third": 0.19926859
         },
         "5": {
-          "first": 0.03055496,
-          "second": 0.17485883,
-          "third": 0.18937119
+          "first": 0.03106894,
+          "second": 0.1753528,
+          "third": 0.19007371
         },
         "6": {
-          "first": 0.01183017,
-          "second": 0.15252718,
-          "third": 0.17632907
+          "first": 0.0122731,
+          "second": 0.15398462,
+          "third": 0.17819386
         }
       },
       "role_skill_shadow": {
@@ -618358,7 +618684,7 @@
             "virtual_yen": 6000
           },
           {
-            "combination": "1-4-6",
+            "combination": "1-5-3",
             "virtual_yen": 5000
           },
           {
@@ -618387,7 +618713,7 @@
           "frame_order_boats": 0,
           "top3_residual_boats": 0
         },
-        "frozen_at_utc": "2026-11-25T17:29:14.702505+00:00",
+        "frozen_at_utc": "2026-11-26T10:45:43.643956+00:00",
         "generated_pre_cutoff": true,
         "head_candidate_counts_preserved": true,
         "head_stake_distribution_preserved": true,
@@ -618471,7 +618797,7 @@
         "version": "racer-role-suitability-shadow-v0.2-head-preserved"
       },
       "scenario": "イン残存／イン着外の両分岐を評価：先頭候補1号艇、対抗3号艇",
-      "sha256": "04d7128905c6fab48adb00f8e7de8e3452fbd4df598e0c9e7b815bb764e5681d",
+      "sha256": "2d2a7507471e5793b5b485e71a7d7f9199d062304614798e9d7ea41237552b46",
       "source_url": "https://boatraceopenapi.github.io/api/v1/2026/20261126.json",
       "start_v07": {
         "calibrated": false,
@@ -618480,27 +618806,27 @@
         "prediction_only": true,
         "second_given_inside_first": [
           {
-            "conditional_relative_weight": 0.15831,
+            "conditional_relative_weight": 0.152,
             "course": 2,
             "lane": 2
           },
           {
-            "conditional_relative_weight": 0.25166,
+            "conditional_relative_weight": 0.2553,
             "course": 3,
             "lane": 3
           },
           {
-            "conditional_relative_weight": 0.24572,
+            "conditional_relative_weight": 0.24543,
             "course": 4,
             "lane": 4
           },
           {
-            "conditional_relative_weight": 0.18514,
+            "conditional_relative_weight": 0.18618,
             "course": 5,
             "lane": 5
           },
           {
-            "conditional_relative_weight": 0.15917,
+            "conditional_relative_weight": 0.16109,
             "course": 6,
             "lane": 6
           }
@@ -618510,7 +618836,7 @@
             "confidence": 0,
             "course": 1,
             "estimated_st": 0.14,
-            "exhibition_f_ignored": false,
+            "exhibition_f_ignored": true,
             "head_evidence": false,
             "inside_mean_gap_sec": null,
             "lane": 1,
@@ -618531,13 +618857,13 @@
             "lane": 2,
             "nearest_gap_sec": -0.04,
             "second_evidence": false,
-            "speed_ratio": 0.673,
+            "speed_ratio": 0.651,
             "tactic_candidates": [],
-            "turn_ratio": 0.673,
+            "turn_ratio": 0.651,
             "wall_hole": false
           },
           {
-            "confidence": 0.64,
+            "confidence": 0.88,
             "course": 3,
             "estimated_st": 0.13,
             "exhibition_f_ignored": false,
@@ -618546,13 +618872,13 @@
             "lane": 3,
             "nearest_gap_sec": 0.05,
             "second_evidence": false,
-            "speed_ratio": 1.404,
+            "speed_ratio": 1.465,
             "tactic_candidates": [],
-            "turn_ratio": 1.404,
+            "turn_ratio": 1.465,
             "wall_hole": true
           },
           {
-            "confidence": 0.64,
+            "confidence": 0.88,
             "course": 4,
             "estimated_st": 0.15,
             "exhibition_f_ignored": false,
@@ -618561,24 +618887,24 @@
             "lane": 4,
             "nearest_gap_sec": -0.02,
             "second_evidence": false,
-            "speed_ratio": 1.01,
+            "speed_ratio": 0.999,
             "tactic_candidates": [],
-            "turn_ratio": 1.01,
+            "turn_ratio": 0.999,
             "wall_hole": false
           },
           {
             "confidence": 0.64,
             "course": 5,
             "estimated_st": 0.17,
-            "exhibition_f_ignored": false,
+            "exhibition_f_ignored": true,
             "head_evidence": false,
             "inside_mean_gap_sec": -0.02,
             "lane": 5,
             "nearest_gap_sec": -0.02,
             "second_evidence": false,
-            "speed_ratio": 0.85,
+            "speed_ratio": 0.854,
             "tactic_candidates": [],
-            "turn_ratio": 0.85,
+            "turn_ratio": 0.854,
             "wall_hole": false
           },
           {
@@ -618591,9 +618917,9 @@
             "lane": 6,
             "nearest_gap_sec": -0.02,
             "second_evidence": false,
-            "speed_ratio": 0.928,
+            "speed_ratio": 0.932,
             "tactic_candidates": [],
-            "turn_ratio": 0.928,
+            "turn_ratio": 0.932,
             "wall_hole": false
           }
         ]
@@ -618612,15 +618938,15 @@
         ],
         "head_coverage_outside_parity_warning": true,
         "head_coverage_warning": false,
-        "head_gap": 0.397,
+        "head_gap": 0.3888,
         "head_marginal_top_two": [
           {
             "lane": 1,
-            "relative_share": 0.5811
+            "relative_share": 0.58
           },
           {
             "lane": 3,
-            "relative_share": 0.1841
+            "relative_share": 0.1912
           }
         ],
         "head_warning_is_not_calibrated": true,
@@ -618636,7 +618962,7 @@
         "national_win_rate_top_four_spread": 1.37,
         "not_formal_model": true,
         "odds_used": false,
-        "phase": "baseline",
+        "phase": "exhibition",
         "recommendation": "KEEP_DEFAULT",
         "results_used": false,
         "second_pair_coverage_status": "ASSESSED",
@@ -618664,12 +618990,30 @@
         "uncovered_top_two_heads": [
           {
             "lane": 3,
-            "model_relative_share": 0.1841
+            "model_relative_share": 0.1912
           }
         ],
         "version": "strong-field-parity-diagnostic-v0.2-readonly-coverage"
       },
-      "ticket_status": "provisional",
+      "three_leg_primary": {
+        "activation_utc": "2026-11-10T01:30:00+00:00",
+        "applied": false,
+        "calibrated": false,
+        "formal_component": true,
+        "frozen_at_utc": "2026-11-26T10:45:43.643956+00:00",
+        "max_abs_stage_log": 0.012,
+        "method": "bounded_log_stage_redistribution_without_extra_factor",
+        "model_role": "formal_component",
+        "no_additional_stake": true,
+        "original_prior_snapshot_immutable": true,
+        "pre_cutoff_only": true,
+        "result_data_used": false,
+        "rows": [],
+        "same_input_prior_v23_control": false,
+        "status": "incomplete_required_exhibition",
+        "version": "three-leg-formal-redistribution-v0.1-untrained"
+      },
+      "ticket_status": "formal",
       "venue": "若松",
       "venue_adjustment": {
         "applied": true,
@@ -618693,6 +619037,348 @@
         "reference_type": "uncalibrated_weak_prior_third_party",
         "tide_data_status": "未取得。潮向・潮位の数値補正なし",
         "wind_risk": null
+      },
+      "venue_motor_exhibition_shadow": {
+        "ablated_metric": null,
+        "applied": false,
+        "bet_changes": false,
+        "calibrated": false,
+        "claim": "Relative 6-boat concordance trial only; no independent proof, no calibrated probabilities",
+        "control_bets": [
+          {
+            "combination": "1-3-4",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から4コース3着（攻め方未確定）",
+            "head_course": 1,
+            "relative_score": 0.047148,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 7000
+          },
+          {
+            "combination": "1-4-3",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から3コース3着（攻め方未確定）",
+            "head_course": 1,
+            "relative_score": 0.045662,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 7000
+          },
+          {
+            "combination": "1-3-5",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から5コース3着（攻め方未確定）",
+            "head_course": 1,
+            "relative_score": 0.037643,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 6000
+          },
+          {
+            "combination": "1-4-5",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から5コース3着（攻め方未確定）",
+            "head_course": 1,
+            "relative_score": 0.036062,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 6000
+          },
+          {
+            "combination": "1-3-6",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から6コース3着（攻め方未確定）",
+            "head_course": 1,
+            "relative_score": 0.033739,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 6000
+          },
+          {
+            "combination": "1-5-3",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 5コース2着 → 残り4艇から3コース3着（攻め方未確定）",
+            "head_course": 1,
+            "relative_score": 0.033499,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 5000
+          },
+          {
+            "combination": "3-1-4",
+            "conditional_reason": "3コース頭の条件で残り5艇を能力評価 → 1コース2着 → 残り4艇から4コース3着（攻め方未確定）",
+            "head_course": 3,
+            "relative_score": 0.017901,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 4000
+          },
+          {
+            "combination": "3-4-1",
+            "conditional_reason": "3コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から1コース3着（攻め方未確定）",
+            "head_course": 3,
+            "relative_score": 0.016116,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 3000
+          },
+          {
+            "combination": "4-1-3",
+            "conditional_reason": "4コース頭の条件で残り5艇を能力評価 → 1コース2着 → 残り4艇から3コース3着（攻め方未確定）",
+            "head_course": 4,
+            "relative_score": 0.011571,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 3000
+          },
+          {
+            "combination": "4-3-1",
+            "conditional_reason": "4コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から1コース3着（攻め方未確定）",
+            "head_course": 4,
+            "relative_score": 0.01067,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 3000
+          }
+        ],
+        "control_model_version": "four-factor-v1.4-venue-aware-23-untrained",
+        "eligible": true,
+        "excluded": false,
+        "expected_metrics": [
+          "exhibition_time",
+          "lap_time",
+          "turn_time",
+          "straight_time"
+        ],
+        "frozen_at_utc": "2026-11-26T10:45:43.643956+00:00",
+        "metric_ablation_protocol": "venue-shadow-v0.2-one-metric-removed",
+        "metric_ablations": [],
+        "metric_coverage": [
+          "exhibition_time"
+        ],
+        "metric_coverage_count": 1,
+        "metric_scheme": "lap_turn_straight",
+        "missing_expected_metrics": [
+          "lap_time",
+          "turn_time",
+          "straight_time"
+        ],
+        "model_role": "shadow_validation",
+        "motor_history_maintenance_unavailable": true,
+        "no_additional_stake": true,
+        "not_formal": true,
+        "not_measured_by_venue": [
+          "half_lap_time"
+        ],
+        "per_race_metric_mix": {
+          "go": {
+            "exhibition_time": 0.55,
+            "lap_time": 0.45
+          },
+          "straight": {
+            "exhibition_time": 0.25,
+            "straight_time": 0.75
+          },
+          "turn": {
+            "lap_time": 0.2,
+            "turn_time": 0.8
+          }
+        },
+        "point_count_equal": true,
+        "pre_cutoff_only": true,
+        "result_data_used": false,
+        "rows": [
+          {
+            "course": 1,
+            "lane": 1,
+            "metric_edges": {
+              "exhibition_time": 0.0333
+            },
+            "motor_relative": null,
+            "motor_top2_pct": null,
+            "multipliers": {
+              "go": 1,
+              "overall": 1,
+              "straight": 1,
+              "turn": 1
+            },
+            "observed_agreement": {
+              "exhibition_time": 0
+            }
+          },
+          {
+            "course": 2,
+            "lane": 2,
+            "metric_edges": {
+              "exhibition_time": -0.1333
+            },
+            "motor_relative": null,
+            "motor_top2_pct": null,
+            "multipliers": {
+              "go": 1,
+              "overall": 1,
+              "straight": 1,
+              "turn": 1
+            },
+            "observed_agreement": {
+              "exhibition_time": 0
+            }
+          },
+          {
+            "course": 3,
+            "lane": 3,
+            "metric_edges": {
+              "exhibition_time": 0.1667
+            },
+            "motor_relative": null,
+            "motor_top2_pct": null,
+            "multipliers": {
+              "go": 1,
+              "overall": 1,
+              "straight": 1,
+              "turn": 1
+            },
+            "observed_agreement": {
+              "exhibition_time": 0
+            }
+          },
+          {
+            "course": 4,
+            "lane": 4,
+            "metric_edges": {
+              "exhibition_time": -0.2
+            },
+            "motor_relative": null,
+            "motor_top2_pct": null,
+            "multipliers": {
+              "go": 1,
+              "overall": 1,
+              "straight": 1,
+              "turn": 1
+            },
+            "observed_agreement": {
+              "exhibition_time": 0
+            }
+          },
+          {
+            "course": 5,
+            "lane": 5,
+            "metric_edges": {
+              "exhibition_time": 0.1333
+            },
+            "motor_relative": null,
+            "motor_top2_pct": null,
+            "multipliers": {
+              "go": 1,
+              "overall": 1,
+              "straight": 1,
+              "turn": 1
+            },
+            "observed_agreement": {
+              "exhibition_time": 0
+            }
+          },
+          {
+            "course": 6,
+            "lane": 6,
+            "metric_edges": {
+              "exhibition_time": 0
+            },
+            "motor_relative": null,
+            "motor_top2_pct": null,
+            "multipliers": {
+              "go": 1,
+              "overall": 1,
+              "straight": 1,
+              "turn": 1
+            },
+            "observed_agreement": {
+              "exhibition_time": 0
+            }
+          }
+        ],
+        "same_inputs_except_shadow": true,
+        "score_or_order_changes": false,
+        "six_boat_motor_complete": false,
+        "source_notes": "motor top-2 rates / exhibition supplied through existing pre-cutoff validated race feed; no verified motor sample size, replacement, repair, tide or measured water flow",
+        "status": "motor_missing",
+        "tide_unobserved": true,
+        "trial_bets": [
+          {
+            "combination": "1-3-4",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から4コース3着（攻め方未確定）",
+            "head_course": 1,
+            "relative_score": 0.047148,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 7000
+          },
+          {
+            "combination": "1-4-3",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から3コース3着（攻め方未確定）",
+            "head_course": 1,
+            "relative_score": 0.045662,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 7000
+          },
+          {
+            "combination": "1-3-5",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から5コース3着（攻め方未確定）",
+            "head_course": 1,
+            "relative_score": 0.037643,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 6000
+          },
+          {
+            "combination": "1-4-5",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から5コース3着（攻め方未確定）",
+            "head_course": 1,
+            "relative_score": 0.036062,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 6000
+          },
+          {
+            "combination": "1-3-6",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から6コース3着（攻め方未確定）",
+            "head_course": 1,
+            "relative_score": 0.033739,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 6000
+          },
+          {
+            "combination": "1-5-3",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 5コース2着 → 残り4艇から3コース3着（攻め方未確定）",
+            "head_course": 1,
+            "relative_score": 0.033499,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 5000
+          },
+          {
+            "combination": "3-1-4",
+            "conditional_reason": "3コース頭の条件で残り5艇を能力評価 → 1コース2着 → 残り4艇から4コース3着（攻め方未確定）",
+            "head_course": 3,
+            "relative_score": 0.017901,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 4000
+          },
+          {
+            "combination": "3-4-1",
+            "conditional_reason": "3コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から1コース3着（攻め方未確定）",
+            "head_course": 3,
+            "relative_score": 0.016116,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 3000
+          },
+          {
+            "combination": "4-1-3",
+            "conditional_reason": "4コース頭の条件で残り5艇を能力評価 → 1コース2着 → 残り4艇から3コース3着（攻め方未確定）",
+            "head_course": 4,
+            "relative_score": 0.011571,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 3000
+          },
+          {
+            "combination": "4-3-1",
+            "conditional_reason": "4コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から1コース3着（攻め方未確定）",
+            "head_course": 4,
+            "relative_score": 0.01067,
+            "scenario": "攻め方未確定・全艇の残存評価",
+            "virtual_yen": 3000
+          }
+        ],
+        "trial_model_version": "venue-motor-exhibition-v0.1-shadow-untrained",
+        "venue": "若松",
+        "venue_focus": {
+          "go": 1,
+          "straight": 1.25,
+          "turn": 1.15
+        },
+        "version": "venue-motor-exhibition-shadow-v0.1",
+        "wind_caution_from_nearby_forecast": false
       },
       "venue_profile": {
         "code": "20",
@@ -618735,7 +619421,7 @@
             "combination": "1-3-4",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から4コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.046479,
+            "relative_score": 0.047119,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 7000
           },
@@ -618743,7 +619429,7 @@
             "combination": "1-4-3",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から3コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.045158,
+            "relative_score": 0.045634,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 7000
           },
@@ -618751,7 +619437,7 @@
             "combination": "1-3-5",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から5コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.036738,
+            "relative_score": 0.03762,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 6000
           },
@@ -618759,15 +619445,15 @@
             "combination": "1-4-5",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から5コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.035948,
+            "relative_score": 0.03604,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 6000
           },
           {
-            "combination": "1-5-4",
-            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 5コース2着 → 残り4艇から4コース3着（攻め方未確定）",
+            "combination": "1-3-6",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から6コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.033031,
+            "relative_score": 0.033719,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 6000
           },
@@ -618775,7 +619461,7 @@
             "combination": "1-5-3",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 5コース2着 → 残り4艇から3コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.032798,
+            "relative_score": 0.033478,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 5000
           },
@@ -618783,7 +619469,7 @@
             "combination": "3-1-4",
             "conditional_reason": "3コース頭の条件で残り5艇を能力評価 → 1コース2着 → 残り4艇から4コース3着（攻め方未確定）",
             "head_course": 3,
-            "relative_score": 0.016392,
+            "relative_score": 0.0177,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 4000
           },
@@ -618791,7 +619477,7 @@
             "combination": "3-4-1",
             "conditional_reason": "3コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から1コース3着（攻め方未確定）",
             "head_course": 3,
-            "relative_score": 0.014865,
+            "relative_score": 0.015807,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 3000
           },
@@ -618799,7 +619485,7 @@
             "combination": "4-1-3",
             "conditional_reason": "4コース頭の条件で残り5艇を能力評価 → 1コース2着 → 残り4艇から3コース3着（攻め方未確定）",
             "head_course": 4,
-            "relative_score": 0.011075,
+            "relative_score": 0.011564,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 3000
           },
@@ -618807,13 +619493,13 @@
             "combination": "4-3-1",
             "conditional_reason": "4コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から1コース3着（攻め方未確定）",
             "head_course": 4,
-            "relative_score": 0.010336,
+            "relative_score": 0.010664,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 3000
           }
         ],
         "control_model": "four-factor-v1.4-without-venue-tactics",
-        "frozen_at_utc": "2026-11-25T17:29:14.702505+00:00",
+        "frozen_at_utc": "2026-11-26T10:45:43.643956+00:00",
         "generated_pre_cutoff": true,
         "no_additional_stake": true,
         "point_count_unchanged": true,
@@ -618822,7 +619508,7 @@
             "combination": "1-3-4",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から4コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.046479,
+            "relative_score": 0.047119,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 7000
           },
@@ -618830,7 +619516,7 @@
             "combination": "1-4-3",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から3コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.045158,
+            "relative_score": 0.045634,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 7000
           },
@@ -618838,7 +619524,7 @@
             "combination": "1-3-5",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から5コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.036738,
+            "relative_score": 0.03762,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 6000
           },
@@ -618846,15 +619532,15 @@
             "combination": "1-4-5",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から5コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.035948,
+            "relative_score": 0.03604,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 6000
           },
           {
-            "combination": "1-5-4",
-            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 5コース2着 → 残り4艇から4コース3着（攻め方未確定）",
+            "combination": "1-3-6",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から6コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.033031,
+            "relative_score": 0.033719,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 6000
           },
@@ -618862,7 +619548,7 @@
             "combination": "1-5-3",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 5コース2着 → 残り4艇から3コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.032798,
+            "relative_score": 0.033478,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 5000
           },
@@ -618870,7 +619556,7 @@
             "combination": "3-1-4",
             "conditional_reason": "3コース頭の条件で残り5艇を能力評価 → 1コース2着 → 残り4艇から4コース3着（攻め方未確定）",
             "head_course": 3,
-            "relative_score": 0.016392,
+            "relative_score": 0.0177,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 4000
           },
@@ -618878,7 +619564,7 @@
             "combination": "3-4-1",
             "conditional_reason": "3コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から1コース3着（攻め方未確定）",
             "head_course": 3,
-            "relative_score": 0.014865,
+            "relative_score": 0.015807,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 3000
           },
@@ -618886,7 +619572,7 @@
             "combination": "4-1-3",
             "conditional_reason": "4コース頭の条件で残り5艇を能力評価 → 1コース2着 → 残り4艇から3コース3着（攻め方未確定）",
             "head_course": 4,
-            "relative_score": 0.011075,
+            "relative_score": 0.011564,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 3000
           },
@@ -618894,7 +619580,7 @@
             "combination": "4-3-1",
             "conditional_reason": "4コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から1コース3着（攻め方未確定）",
             "head_course": 4,
-            "relative_score": 0.010336,
+            "relative_score": 0.010664,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 3000
           }
@@ -618906,7 +619592,7 @@
             "combination": "1-3-4",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から4コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.046506,
+            "relative_score": 0.047148,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 7000
           },
@@ -618914,7 +619600,7 @@
             "combination": "1-4-3",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から3コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.045185,
+            "relative_score": 0.045662,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 7000
           },
@@ -618922,7 +619608,7 @@
             "combination": "1-3-5",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から5コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.03676,
+            "relative_score": 0.037643,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 6000
           },
@@ -618930,15 +619616,15 @@
             "combination": "1-4-5",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から5コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.035969,
+            "relative_score": 0.036062,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 6000
           },
           {
-            "combination": "1-5-4",
-            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 5コース2着 → 残り4艇から4コース3着（攻め方未確定）",
+            "combination": "1-3-6",
+            "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から6コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.03305,
+            "relative_score": 0.033739,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 6000
           },
@@ -618946,7 +619632,7 @@
             "combination": "1-5-3",
             "conditional_reason": "1コース頭の条件で残り5艇を能力評価 → 5コース2着 → 残り4艇から3コース3着（攻め方未確定）",
             "head_course": 1,
-            "relative_score": 0.032818,
+            "relative_score": 0.033499,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 5000
           },
@@ -618954,7 +619640,7 @@
             "combination": "3-1-4",
             "conditional_reason": "3コース頭の条件で残り5艇を能力評価 → 1コース2着 → 残り4艇から4コース3着（攻め方未確定）",
             "head_course": 3,
-            "relative_score": 0.016581,
+            "relative_score": 0.017901,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 4000
           },
@@ -618962,7 +619648,7 @@
             "combination": "3-4-1",
             "conditional_reason": "3コース頭の条件で残り5艇を能力評価 → 4コース2着 → 残り4艇から1コース3着（攻め方未確定）",
             "head_course": 3,
-            "relative_score": 0.015164,
+            "relative_score": 0.016116,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 3000
           },
@@ -618970,7 +619656,7 @@
             "combination": "4-1-3",
             "conditional_reason": "4コース頭の条件で残り5艇を能力評価 → 1コース2着 → 残り4艇から3コース3着（攻め方未確定）",
             "head_course": 4,
-            "relative_score": 0.011081,
+            "relative_score": 0.011571,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 3000
           },
@@ -618978,7 +619664,7 @@
             "combination": "4-3-1",
             "conditional_reason": "4コース頭の条件で残り5艇を能力評価 → 3コース2着 → 残り4艇から1コース3着（攻め方未確定）",
             "head_course": 4,
-            "relative_score": 0.010342,
+            "relative_score": 0.01067,
             "scenario": "攻め方未確定・全艇の残存評価",
             "virtual_yen": 3000
           }
@@ -618995,8 +619681,8 @@
             "method_scenario_mix": {
               "sashi": 1
             },
-            "relative_go": 0.673,
-            "relative_turn": 0.673,
+            "relative_go": 0.651,
+            "relative_turn": 0.651,
             "st_gap_sec": -0.04
           },
           {
@@ -619008,8 +619694,8 @@
               "makuri": 0.6,
               "makurizashi": 0.4
             },
-            "relative_go": 1.404,
-            "relative_turn": 1.404,
+            "relative_go": 1.465,
+            "relative_turn": 1.465,
             "st_gap_sec": 0.05
           },
           {
@@ -619021,8 +619707,8 @@
               "makuri": 0.75,
               "makurizashi": 0.25
             },
-            "relative_go": 1.01,
-            "relative_turn": 1.01,
+            "relative_go": 0.999,
+            "relative_turn": 0.999,
             "st_gap_sec": -0.02
           },
           {
@@ -619034,8 +619720,8 @@
               "makuri": 0.3,
               "makurizashi": 0.7
             },
-            "relative_go": 0.85,
-            "relative_turn": 0.85,
+            "relative_go": 0.854,
+            "relative_turn": 0.854,
             "st_gap_sec": -0.02
           },
           {
@@ -619047,8 +619733,8 @@
               "makuri": 0.15,
               "makurizashi": 0.85
             },
-            "relative_go": 0.928,
-            "relative_turn": 0.928,
+            "relative_go": 0.932,
+            "relative_turn": 0.932,
             "st_gap_sec": -0.02
           }
         ],
@@ -619081,7 +619767,7 @@
         "venue": "若松",
         "version": "venue-tactics-v2-23venues-ex-edogawa"
       },
-      "version_count": 1,
+      "version_count": 3,
       "wake_v09": {
         "applied_to_chaser_scores": true,
         "applies_to_all_head_courses": true,
@@ -619093,11 +619779,11 @@
             "second_chasers": [
               {
                 "course": 2,
-                "relative_multiplier": 0.8017
+                "relative_multiplier": 0.8008
               },
               {
                 "course": 3,
-                "relative_multiplier": 0.8833
+                "relative_multiplier": 0.8862
               },
               {
                 "course": 4,
@@ -619105,11 +619791,11 @@
               },
               {
                 "course": 5,
-                "relative_multiplier": 0.8432
+                "relative_multiplier": 0.8443
               },
               {
                 "course": 6,
-                "relative_multiplier": 0.8257
+                "relative_multiplier": 0.8277
               }
             ]
           },
@@ -619131,11 +619817,11 @@
               },
               {
                 "course": 5,
-                "relative_multiplier": 1.0353
+                "relative_multiplier": 1.0653
               },
               {
                 "course": 6,
-                "relative_multiplier": 0.9783
+                "relative_multiplier": 1.0095
               }
             ]
           },
@@ -619148,29 +619834,29 @@
               },
               {
                 "course": 2,
-                "relative_risk": 0.1692
+                "relative_risk": 0.1934
               }
             ],
             "second_chasers": [
               {
                 "course": 1,
-                "relative_multiplier": 0.9387
+                "relative_multiplier": 0.9316
               },
               {
                 "course": 2,
-                "relative_multiplier": 0.8135
+                "relative_multiplier": 0.8046
               },
               {
                 "course": 4,
-                "relative_multiplier": 0.9064
+                "relative_multiplier": 0.8998
               },
               {
                 "course": 5,
-                "relative_multiplier": 0.8575
+                "relative_multiplier": 0.856
               },
               {
                 "course": 6,
-                "relative_multiplier": 0.839
+                "relative_multiplier": 0.8387
               }
             ]
           },
@@ -619183,33 +619869,33 @@
               },
               {
                 "course": 2,
-                "relative_risk": 0.3866
+                "relative_risk": 0.4274
               },
               {
                 "course": 3,
-                "relative_risk": 0.0327
+                "relative_risk": 0.023
               }
             ],
             "second_chasers": [
               {
                 "course": 1,
-                "relative_multiplier": 0.932
+                "relative_multiplier": 0.9321
               },
               {
                 "course": 2,
-                "relative_multiplier": 0.8115
+                "relative_multiplier": 0.8047
               },
               {
                 "course": 3,
-                "relative_multiplier": 0.8971
+                "relative_multiplier": 0.9004
               },
               {
                 "course": 5,
-                "relative_multiplier": 0.855
+                "relative_multiplier": 0.8562
               },
               {
                 "course": 6,
-                "relative_multiplier": 0.8367
+                "relative_multiplier": 0.8388
               }
             ]
           },
@@ -619222,7 +619908,7 @@
               },
               {
                 "course": 2,
-                "relative_risk": 0.0893
+                "relative_risk": 0.107
               },
               {
                 "course": 3,
@@ -619236,23 +619922,23 @@
             "second_chasers": [
               {
                 "course": 1,
-                "relative_multiplier": 1.0536
+                "relative_multiplier": 1.05
               },
               {
                 "course": 2,
-                "relative_multiplier": 0.8488
+                "relative_multiplier": 0.8398
               },
               {
                 "course": 3,
-                "relative_multiplier": 1.0086
+                "relative_multiplier": 1.013
               },
               {
                 "course": 4,
-                "relative_multiplier": 1.016
+                "relative_multiplier": 1.0125
               },
               {
                 "course": 6,
-                "relative_multiplier": 0.8784
+                "relative_multiplier": 0.8797
               }
             ]
           },
@@ -619265,7 +619951,7 @@
               },
               {
                 "course": 2,
-                "relative_risk": 0.0513
+                "relative_risk": 0.0681
               },
               {
                 "course": 3,
@@ -619283,23 +619969,23 @@
             "second_chasers": [
               {
                 "course": 1,
-                "relative_multiplier": 1.1028
+                "relative_multiplier": 1.0985
               },
               {
                 "course": 2,
-                "relative_multiplier": 0.8681
+                "relative_multiplier": 0.8572
               },
               {
                 "course": 3,
-                "relative_multiplier": 1.0679
+                "relative_multiplier": 1.069
               },
               {
                 "course": 4,
-                "relative_multiplier": 1.0759
+                "relative_multiplier": 1.0684
               },
               {
                 "course": 5,
-                "relative_multiplier": 0.9509
+                "relative_multiplier": 0.9478
               }
             ]
           }
@@ -619324,29 +620010,43 @@
         "local_tide_current_verified": false,
         "relative_wind_verified": false,
         "result_data_used": false,
-        "site_wave_applied": false,
+        "site_wave_applied": true,
         "version": "weather-lab-live-precutoff-v1",
-        "wave_source": "unavailable",
+        "wave_source": "boatrace_official_beforeinfo_wave",
         "weather_is_supplement": true,
-        "wind_source": "open-meteo-jma"
+        "wind_source": "boatrace_preview"
       },
-      "weather_observed": null,
+      "weather_observed": {
+        "air_temperature": 14.0,
+        "water_temperature": 15.0,
+        "wave_height": 1.0,
+        "wave_source": "boatrace_official_beforeinfo_wave",
+        "weather_number": 2.0,
+        "wind_direction_number": 4.0,
+        "wind_speed": 1.0
+      },
       "weather_used": {
-        "air_temperature": 13.3,
-        "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
-        "forecast_hour_jst": "2026-11-26T20:00+09:00",
-        "grid_reference": "会場近隣の概算地点・気象庁MSM/GSM格子予報",
-        "issued_at_utc": "2026-11-25T17:29:07.111320+00:00",
-        "precipitation_mm": 0.0,
-        "site_observed": false,
-        "source": "open-meteo-jma",
-        "source_label": "気象庁モデルによる近隣格子予報（場内実測ではない）",
-        "source_url": "https://api.open-meteo.com/v1/jma",
-        "wave_height": null,
-        "wave_source": "unavailable",
-        "wind_direction_degrees": 167.0,
-        "wind_source": "open-meteo-jma",
-        "wind_speed": 3.18
+        "air_temperature": 14.0,
+        "site_observed": true,
+        "site_wave_observed": true,
+        "source": "boatrace_preview",
+        "source_label": "展示時の場内観測（非公式API経由）",
+        "source_note": "発走時の実測ではなく、取得時点の展示観測。風向コードは未検証",
+        "tide_current_integrated": false,
+        "water_temperature": 15.0,
+        "wave_collected_at_utc": "2026-11-26T10:45:42.399365+00:00",
+        "wave_evidence_quality": "official_pre_cutoff_wave_with_observation_label",
+        "wave_height": 1.0,
+        "wave_observation_label": "10R時点",
+        "wave_observed_at_jst": null,
+        "wave_site_observed": true,
+        "wave_source": "boatrace_official_beforeinfo_wave",
+        "wave_source_captured_at_jst": "2026-11-26T19:45:42.399365+09:00",
+        "wave_source_url": "https://www.boatrace.jp/owpc/pc/race/beforeinfo?rno=11&jcd=20&hd=20261126",
+        "weather_number": 2.0,
+        "wind_direction_number": 4.0,
+        "wind_source": "boatrace_preview",
+        "wind_speed": 1.0
       }
     },
     {
@@ -649263,10 +649963,10 @@
       }
     }
   ],
-  "forecast_updated_at_utc": "2026-11-26T10:41:44.810344+00:00",
+  "forecast_updated_at_utc": "2026-11-26T10:45:33.449283+00:00",
   "four_leg_exhibition_research": {
     "captures_in_current_run": 1,
-    "checked_at_utc": "2026-11-26T10:41:54.413289+00:00",
+    "checked_at_utc": "2026-11-26T10:45:43.726642+00:00",
     "deashi_acceleration_independently_measured": 0,
     "errors": {},
     "event_date": "2026-11-26",
@@ -649291,7 +649991,7 @@
     "venues_with_evidence": 0
   },
   "freeze_reference": "GitHub app/data/live/{date}.json のcommit履歴＋SHA256",
-  "jma_regional_wind_race_count": 32,
+  "jma_regional_wind_race_count": 31,
   "learned_formal_model_sha256": null,
   "learned_formal_races": 0,
   "learned_formal_status": "awaiting_fresh_model",
@@ -649414,26 +650114,26 @@
       },
       "若松": {
         "actual_ticket_changes": 0,
-        "baseline_or_unverified": 4,
+        "baseline_or_unverified": 3,
         "csv_source": 0,
         "listed_races": 12,
-        "openapi_source": 8,
-        "six_boat_input_checked": 8,
+        "openapi_source": 9,
+        "six_boat_input_checked": 9,
         "unknown_source": 0,
-        "verified_exhibition": 8
+        "verified_exhibition": 9
       }
     },
     "note": "A score/order change is not a ticket/allocation change. Old frozen snapshots are never labeled input-checked retrospectively.",
     "scope": "immutable latest snapshots; pre-cutoff six-boat eligibility, not source availability",
     "total": {
       "actual_ticket_changes": 0,
-      "baseline_or_unverified": 32,
+      "baseline_or_unverified": 31,
       "csv_source": 0,
       "listed_races": 132,
-      "openapi_source": 100,
-      "six_boat_input_checked": 100,
+      "openapi_source": 101,
+      "six_boat_input_checked": 101,
       "unknown_source": 0,
-      "verified_exhibition": 100
+      "verified_exhibition": 101
     }
   },
   "official_pay_info": {
@@ -649443,7 +650143,7 @@
     "needs_review": 4,
     "newly_confirmed": 0,
     "pending_on_page": 10,
-    "retrieved_at_utc": "2026-11-26T10:41:56.141747+00:00",
+    "retrieved_at_utc": "2026-11-26T10:45:45.461914+00:00",
     "source_url": "https://www.boatrace.jp/owpc/pc/race/pay?hd=20261126",
     "verified_on_page": 130
   },
@@ -653131,7 +653831,7 @@
     "attempted": 1,
     "capture_mode": "research_only",
     "captured_race_ids": [
-      "15-10"
+      "20-11"
     ],
     "captured_six_boat": 1,
     "eligible_targets": 1,
@@ -653171,17 +653871,15 @@
       "formal_input": false,
       "status": "NO_TARGET"
     },
-    "remaining": 3,
+    "remaining": 2,
     "remaining_ids": [
       "12-11",
-      "19-11",
-      "20-11"
+      "19-11"
     ],
-    "target_count": 3,
+    "target_count": 2,
     "target_ids": [
       "12-11",
-      "19-11",
-      "20-11"
+      "19-11"
     ],
     "updated": []
   },
@@ -653249,14 +653947,14 @@
   },
   "timezone": "Asia/Tokyo",
   "unforecast_races": [],
-  "updated_at_utc": "2026-11-26T10:41:44.810344+00:00",
+  "updated_at_utc": "2026-11-26T10:45:33.449283+00:00",
   "venue_weather": {
     "びわこ": {
       "air_temperature": 11.7,
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-11-26T20:00+09:00",
       "grid_reference": "会場近隣の概算地点・気象庁MSM/GSM格子予報",
-      "issued_at_utc": "2026-11-26T10:41:45.407118+00:00",
+      "issued_at_utc": "2026-11-26T10:45:35.098001+00:00",
       "precipitation_mm": 0.0,
       "site_observed": false,
       "source": "open-meteo-jma",
@@ -653270,7 +653968,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-11-26T20:00+09:00",
       "grid_reference": "会場近隣の概算地点・気象庁MSM/GSM格子予報",
-      "issued_at_utc": "2026-11-26T10:41:45.407118+00:00",
+      "issued_at_utc": "2026-11-26T10:45:35.098001+00:00",
       "precipitation_mm": 0.0,
       "site_observed": false,
       "source": "open-meteo-jma",
@@ -653284,7 +653982,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-11-26T20:00+09:00",
       "grid_reference": "会場近隣の概算地点・気象庁MSM/GSM格子予報",
-      "issued_at_utc": "2026-11-26T10:41:45.407118+00:00",
+      "issued_at_utc": "2026-11-26T10:45:35.098001+00:00",
       "precipitation_mm": 0.0,
       "site_observed": false,
       "source": "open-meteo-jma",
@@ -653298,7 +653996,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-11-26T20:00+09:00",
       "grid_reference": "会場近隣の概算地点・気象庁MSM/GSM格子予報",
-      "issued_at_utc": "2026-11-26T10:41:45.407118+00:00",
+      "issued_at_utc": "2026-11-26T10:45:35.098001+00:00",
       "precipitation_mm": 0.0,
       "site_observed": false,
       "source": "open-meteo-jma",
@@ -653312,7 +654010,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-11-26T20:00+09:00",
       "grid_reference": "会場近隣の概算地点・気象庁MSM/GSM格子予報",
-      "issued_at_utc": "2026-11-26T10:41:45.407118+00:00",
+      "issued_at_utc": "2026-11-26T10:45:35.098001+00:00",
       "precipitation_mm": 0.0,
       "site_observed": false,
       "source": "open-meteo-jma",
@@ -653326,7 +654024,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-11-26T20:00+09:00",
       "grid_reference": "会場近隣の概算地点・気象庁MSM/GSM格子予報",
-      "issued_at_utc": "2026-11-26T10:41:45.407118+00:00",
+      "issued_at_utc": "2026-11-26T10:45:35.098001+00:00",
       "precipitation_mm": 0.0,
       "site_observed": false,
       "source": "open-meteo-jma",
@@ -653340,7 +654038,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-11-26T20:00+09:00",
       "grid_reference": "会場近隣の概算地点・気象庁MSM/GSM格子予報",
-      "issued_at_utc": "2026-11-26T10:41:45.407118+00:00",
+      "issued_at_utc": "2026-11-26T10:45:35.098001+00:00",
       "precipitation_mm": 0.0,
       "site_observed": false,
       "source": "open-meteo-jma",
@@ -653354,7 +654052,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-11-26T20:00+09:00",
       "grid_reference": "会場近隣の概算地点・気象庁MSM/GSM格子予報",
-      "issued_at_utc": "2026-11-26T10:41:45.407118+00:00",
+      "issued_at_utc": "2026-11-26T10:45:35.098001+00:00",
       "precipitation_mm": 0.0,
       "site_observed": false,
       "source": "open-meteo-jma",
@@ -653368,7 +654066,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-11-26T20:00+09:00",
       "grid_reference": "会場近隣の概算地点・気象庁MSM/GSM格子予報",
-      "issued_at_utc": "2026-11-26T10:41:45.407118+00:00",
+      "issued_at_utc": "2026-11-26T10:45:35.098001+00:00",
       "precipitation_mm": 0.0,
       "site_observed": false,
       "source": "open-meteo-jma",
@@ -653382,7 +654080,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-11-26T20:00+09:00",
       "grid_reference": "会場近隣の概算地点・気象庁MSM/GSM格子予報",
-      "issued_at_utc": "2026-11-26T10:41:45.407118+00:00",
+      "issued_at_utc": "2026-11-26T10:45:35.098001+00:00",
       "precipitation_mm": 0.0,
       "site_observed": false,
       "source": "open-meteo-jma",
@@ -653396,7 +654094,7 @@
       "credit": "Weather data by Open-Meteo.com (CC BY 4.0)",
       "forecast_hour_jst": "2026-11-26T20:00+09:00",
       "grid_reference": "会場近隣の概算地点・気象庁MSM/GSM格子予報",
-      "issued_at_utc": "2026-11-26T10:41:45.407118+00:00",
+      "issued_at_utc": "2026-11-26T10:45:35.098001+00:00",
       "precipitation_mm": 0.0,
       "site_observed": false,
       "source": "open-meteo-jma",
@@ -653422,10 +654120,10 @@
   "weather_fixed_race_count": 132,
   "weather_lab_bridge": {
     "all_sources_are_prediction_inputs_not_observed_race_outcomes": true,
-    "collection_completed_at_utc": "2026-11-26T10:41:53.673659+00:00",
+    "collection_completed_at_utc": "2026-11-26T10:45:42.400109+00:00",
     "errors": {},
-    "formal_jma_wind_races": 32,
-    "formal_wave_applied_races": 83,
+    "formal_jma_wind_races": 31,
+    "formal_wave_applied_races": 84,
     "grid_fallback_venues": 1,
     "jma_grid_venues": 11,
     "new_weather_revisions": 0,
@@ -653435,7 +654133,7 @@
     "status": "ok",
     "tide_current_applied": false
   },
-  "weather_lab_site_wave_applied_race_count": 83,
+  "weather_lab_site_wave_applied_race_count": 84,
   "weather_source_note": "場内実測は展示時だけ。周辺値はOpen-Meteo近隣気象予報で実測ではない。",
   "weather_venue_count": 11
 }
